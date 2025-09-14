@@ -1,3 +1,5 @@
+use crate::validate;
+use nonempty;
 /// AST is tree-sitter like
 use pulldown_cmark::{
     Alignment, BlockQuoteKind, CodeBlockKind, CowStr, Event, HeadingLevel,
@@ -6,13 +8,13 @@ use pulldown_cmark::{
 use std::ops::Range;
 
 /// A tree that represents the syntactic structure of a source code file.
-struct Tree {
-    root_node: Node,
+struct Tree<'a> {
+    root_node: Node<'a>,
     /// the options that were used to parse the syntax tree.
     opts: Options,
 }
 
-impl Tree {
+impl Tree<'_> {
     /// Copied from tree-sitter's Tree struct
     /// We may want something in other format
     fn print_dot_graph(&self) {
@@ -80,7 +82,7 @@ enum NodeKind<'a> {
     TaskListMarker(bool),
 }
 
-impl NodeKind {
+impl NodeKind<'_> {
     fn from_tag(tag: Tag) -> Self {
         todo!()
     }
@@ -94,14 +96,28 @@ impl NodeKind {
     }
 }
 
-struct Node {
-    children: Vec<Node>,
+struct Node<'a> {
+    children: Vec<Node<'a>>,
     range: Range<usize>,
-    kind: NodeKind,
+    kind: NodeKind<'a>,
 }
 
-impl Node {
-    fn child(&self, i: usize) -> Option<&Node> {
+enum InvalidNode {
+    InvalidNode,
+}
+
+impl validate::Validate for Node<'_> {
+    type ValidationError = InvalidNode;
+
+    fn validate(
+        &self,
+    ) -> Result<(), nonempty::NonEmpty<Self::ValidationError>> {
+        todo!()
+    }
+}
+
+impl Node<'_> {
+    fn child(&self, i: usize) -> Option<&Node<'_>> {
         todo!()
     }
 
