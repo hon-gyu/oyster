@@ -1,4 +1,26 @@
-use pulldown_cmark::{Parser, Tag};
+use pulldown_cmark::{Event, Options, Parser, Tag};
+
+/// Default options for parsing markdown
+/// Enable all features except old footnotes
+pub fn default_opts() -> Options {
+    let mut opts = Options::empty();
+    opts.insert(Options::ENABLE_TABLES);
+    opts.insert(Options::ENABLE_FOOTNOTES);
+    opts.insert(Options::ENABLE_STRIKETHROUGH);
+    opts.insert(Options::ENABLE_TASKLISTS);
+    opts.insert(Options::ENABLE_SMART_PUNCTUATION);
+    opts.insert(Options::ENABLE_HEADING_ATTRIBUTES);
+    opts.insert(Options::ENABLE_YAML_STYLE_METADATA_BLOCKS);
+    opts.insert(Options::ENABLE_PLUSES_DELIMITED_METADATA_BLOCKS);
+    // opts.insert(Options::ENABLE_OLD_FOOTNOTES);
+    opts.insert(Options::ENABLE_MATH);
+    opts.insert(Options::ENABLE_GFM);
+    opts.insert(Options::ENABLE_DEFINITION_LIST);
+    opts.insert(Options::ENABLE_SUPERSCRIPT);
+    opts.insert(Options::ENABLE_SUBSCRIPT);
+    opts.insert(Options::ENABLE_WIKILINKS);
+    opts
+}
 
 #[cfg(test)]
 mod tests {
@@ -6,28 +28,6 @@ mod tests {
     use insta::{assert_debug_snapshot, assert_snapshot};
     use pulldown_cmark::{Event, Options, Parser};
     use std::fs;
-
-    /// Default options for parsing markdown
-    /// Enable all features except old footnotes
-    fn default_opts() -> Options {
-        let mut opts = Options::empty();
-        opts.insert(Options::ENABLE_TABLES);
-        opts.insert(Options::ENABLE_FOOTNOTES);
-        opts.insert(Options::ENABLE_STRIKETHROUGH);
-        opts.insert(Options::ENABLE_TASKLISTS);
-        opts.insert(Options::ENABLE_SMART_PUNCTUATION);
-        opts.insert(Options::ENABLE_HEADING_ATTRIBUTES);
-        opts.insert(Options::ENABLE_YAML_STYLE_METADATA_BLOCKS);
-        opts.insert(Options::ENABLE_PLUSES_DELIMITED_METADATA_BLOCKS);
-        // opts.insert(Options::ENABLE_OLD_FOOTNOTES);
-        opts.insert(Options::ENABLE_MATH);
-        opts.insert(Options::ENABLE_GFM);
-        opts.insert(Options::ENABLE_DEFINITION_LIST);
-        opts.insert(Options::ENABLE_SUPERSCRIPT);
-        opts.insert(Options::ENABLE_SUBSCRIPT);
-        opts.insert(Options::ENABLE_WIKILINKS);
-        opts
-    }
 
     fn basic_data() -> String {
         // A markdown file with multiple features enabled in options
@@ -47,7 +47,8 @@ mod tests {
         let parser = Parser::new_ext(&text, opts);
 
         let events = parser.into_offset_iter().collect::<Vec<_>>();
-        let event_strs: Vec<String> = events.iter().map(|e| format!("{:?}", e)).collect();
+        let event_strs: Vec<String> =
+            events.iter().map(|e| format!("{:?}", e)).collect();
         let events_str = event_strs.join("\n");
         assert_snapshot!(events_str, @r#"
         (Start(MetadataBlock(YamlStyle)), 0..52)
