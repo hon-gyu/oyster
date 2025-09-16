@@ -28,6 +28,8 @@ impl Tree<'_> {
 
 /// including Tag + Event that is not start or end
 enum NodeKind<'a> {
+    /// Root node
+    Document,
     /// Tag
     Paragraph,
     Heading {
@@ -165,6 +167,7 @@ impl<'a> NodeKind<'a> {
 
     fn into_static(self) -> NodeKind<'static> {
         match self {
+            NodeKind::Document => NodeKind::Document,
             NodeKind::Paragraph => NodeKind::Paragraph,
             NodeKind::Heading {
                 level,
@@ -272,6 +275,67 @@ impl Node<'_> {
     }
 }
 
-fn build_ast(events_with_offset: Vec<Event>) -> Tree {
-    todo!()
+fn build_ast<'a>(
+    events_with_offset: Vec<(Event<'a>, Range<usize>)>,
+    opts: Options,
+) -> Tree<'a> {
+    // Stack to keep track of nodes we are working on (excluding the root node)
+    let mut stack: Vec<Node<'a>> = Vec::new();
+    let mut curr_children: Vec<Node<'a>> = Vec::new();
+
+    let doc_start = events_with_offset
+        .first()
+        .map(|(_, r)| r.start)
+        .expect("No events found");
+    let doc_end = events_with_offset
+        .last()
+        .map(|(_, r)| r.end)
+        .expect("No events found");
+
+    let mut root_node = Node {
+        children: Vec::new(),
+        range: doc_start..doc_end,
+        kind: NodeKind::Document,
+    };
+
+    for (event, offset) in events_with_offset {
+        match event {
+            Event::Start(tag) => {
+                let node = Node {
+                    children: Vec::new(),
+                    range: offset.clone(),
+                    kind: NodeKind::from_tag(tag),
+                };
+                stack.push(node);
+            }
+            Event::End(_tag) => {
+                // Wrap up the current node
+                let mut node = stack.pop().expect("Unbalanced tags");
+
+                node.children = curr_children;
+                curr_children = Vec::new();
+
+                // Push the wrapped node to its parent
+                if let Some(parent) = stack.last_mut() {
+                    parent.children.push(node);
+                } else {
+                    // Current node does not have a parent, it is the child of the root node
+                    root_node.children.push(node);
+                }
+            }
+            inline_event => {
+                let leaf_node = Node {
+                    children: Vec::new(),
+                    range: offset.clone(),
+                    kind: NodeKind::from_event(inline_event),
+                };
+                curr_children.push(leaf_node);
+            }
+        }
+    }
+
+    Tree {
+        root_node: root_node,
+        opts: opts,
+    }
 }
