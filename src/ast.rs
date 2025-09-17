@@ -3,9 +3,9 @@ use nonempty;
 /// AST is tree-sitter like
 use pulldown_cmark::{
     Alignment, BlockQuoteKind, CodeBlockKind, CowStr, Event, HeadingLevel,
-    LinkType, MetadataBlockKind, Options, Tag, TagEnd,
+    LinkType, MetadataBlockKind, Options, Tag,
 };
-use std::fmt::{Display, Write};
+use std::fmt::Display;
 use std::ops::Range;
 
 /// A tree that represents the syntactic structure of a source code file.
@@ -50,18 +50,6 @@ impl<'a> Node<'a> {
         }
 
         Ok(())
-    }
-}
-
-impl Tree<'_> {
-    /// Copied from tree-sitter's Tree struct
-    /// We may want something in other format
-    fn print_dot_graph(&self) {
-        todo!()
-    }
-
-    fn into_string(&self) -> String {
-        todo!()
     }
 }
 
@@ -295,17 +283,17 @@ impl validate::Validate for Node<'_> {
     fn validate(
         &self,
     ) -> Result<(), nonempty::NonEmpty<Self::ValidationError>> {
-        todo!()
+        Ok(())
     }
 }
 
 impl Node<'_> {
-    fn child(&self, i: usize) -> Option<&Node<'_>> {
-        todo!()
+    pub fn child(&self, i: usize) -> Option<&Node<'_>> {
+        self.children.get(i)
     }
 
-    fn child_count(&self) -> usize {
-        todo!()
+    pub fn child_count(&self) -> usize {
+        self.children.len()
     }
 }
 
@@ -376,8 +364,8 @@ pub fn build_ast<'a>(
 mod tests {
     use super::*;
     use crate::parse;
-    use insta::{assert_debug_snapshot, assert_snapshot};
-    use pulldown_cmark::{Event, Options, Parser};
+    use insta::assert_snapshot;
+    use pulldown_cmark::Parser;
     use std::fs;
 
     fn data() -> String {
