@@ -1,4 +1,4 @@
-use pulldown_cmark::{Event, Options, Parser, Tag};
+use pulldown_cmark::Options;
 
 /// Default options for parsing markdown
 /// Enable all features except old footnotes
@@ -25,8 +25,8 @@ pub fn default_opts() -> Options {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use insta::{assert_debug_snapshot, assert_snapshot};
-    use pulldown_cmark::{Event, Options, Parser};
+    use insta::assert_snapshot;
+    use pulldown_cmark::Parser;
     use std::fs;
 
     fn basic_data() -> String {
