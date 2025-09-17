@@ -5,6 +5,7 @@ use pulldown_cmark::{
     Alignment, BlockQuoteKind, CodeBlockKind, CowStr, Event, HeadingLevel,
     LinkType, MetadataBlockKind, Options, Tag, TagEnd,
 };
+use std::fmt::{Display, Write};
 use std::ops::Range;
 
 /// A tree that represents the syntactic structure of a source code file.
@@ -20,6 +21,36 @@ pub struct Node<'a> {
     children: Vec<Node<'a>>,
     range: Range<usize>,
     kind: NodeKind<'a>,
+}
+
+impl<'a> Display for Node<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.fmt_with_indent(f, 0)
+    }
+}
+
+impl<'a> Node<'a> {
+    fn fmt_with_indent(
+        &self,
+        f: &mut std::fmt::Formatter<'_>,
+        indent: usize,
+    ) -> std::fmt::Result {
+        // Print indentation
+        f.write_str(&" ".repeat(indent))?;
+
+        // Print node kind and range
+        writeln!(
+            f,
+            "{:?} [{}..{}]",
+            self.kind, self.range.start, self.range.end
+        )?;
+
+        for child in self.children.iter() {
+            child.fmt_with_indent(f, indent + 2)?;
+        }
+
+        Ok(())
+    }
 }
 
 impl Tree<'_> {
@@ -362,536 +393,71 @@ mod tests {
         let events_with_offsets = parser.into_offset_iter().collect::<Vec<_>>();
 
         let ast = build_ast(events_with_offsets, opts);
-        assert_debug_snapshot!(ast, @r#"
-        Tree {
-            root_node: Node {
-                children: [
-                    Node {
-                        children: [
-                            Node {
-                                children: [],
-                                range: 4..49,
-                                kind: Text(
-                                    Borrowed(
-                                        "title: \"Test Document\"\nauthor: \"Test Author\"\n",
-                                    ),
-                                ),
-                            },
-                        ],
-                        range: 0..52,
-                        kind: MetadataBlock(
-                            YamlStyle,
-                        ),
-                    },
-                    Node {
-                        children: [
-                            Node {
-                                children: [],
-                                range: 56..65,
-                                kind: Text(
-                                    Borrowed(
-                                        "Heading 1",
-                                    ),
-                                ),
-                            },
-                        ],
-                        range: 54..66,
-                        kind: Heading {
-                            level: H1,
-                            id: None,
-                            classes: [],
-                            attrs: [],
-                        },
-                    },
-                    Node {
-                        children: [
-                            Node {
-                                children: [],
-                                range: 67..83,
-                                kind: Text(
-                                    Borrowed(
-                                        "Basic text with ",
-                                    ),
-                                ),
-                            },
-                            Node {
-                                children: [
-                                    Node {
-                                        children: [],
-                                        range: 85..89,
-                                        kind: Text(
-                                            Borrowed(
-                                                "bold",
-                                            ),
-                                        ),
-                                    },
-                                ],
-                                range: 83..91,
-                                kind: Strong,
-                            },
-                            Node {
-                                children: [],
-                                range: 91..96,
-                                kind: Text(
-                                    Borrowed(
-                                        " and ",
-                                    ),
-                                ),
-                            },
-                            Node {
-                                children: [
-                                    Node {
-                                        children: [],
-                                        range: 97..103,
-                                        kind: Text(
-                                            Borrowed(
-                                                "italic",
-                                            ),
-                                        ),
-                                    },
-                                ],
-                                range: 96..104,
-                                kind: Emphasis,
-                            },
-                            Node {
-                                children: [],
-                                range: 104..116,
-                                kind: Text(
-                                    Borrowed(
-                                        " formatting.",
-                                    ),
-                                ),
-                            },
-                        ],
-                        range: 67..117,
-                        kind: Paragraph,
-                    },
-                    Node {
-                        children: [
-                            Node {
-                                children: [],
-                                range: 121..127,
-                                kind: Text(
-                                    Borrowed(
-                                        "A List",
-                                    ),
-                                ),
-                            },
-                        ],
-                        range: 118..128,
-                        kind: Heading {
-                            level: H2,
-                            id: None,
-                            classes: [],
-                            attrs: [],
-                        },
-                    },
-                    Node {
-                        children: [
-                            Node {
-                                children: [
-                                    Node {
-                                        children: [],
-                                        range: 131..137,
-                                        kind: Text(
-                                            Borrowed(
-                                                "item 1",
-                                            ),
-                                        ),
-                                    },
-                                    Node {
-                                        children: [
-                                            Node {
-                                                children: [
-                                                    Node {
-                                                        children: [],
-                                                        range: 142..150,
-                                                        kind: Text(
-                                                            Borrowed(
-                                                                "item 1.1",
-                                                            ),
-                                                        ),
-                                                    },
-                                                ],
-                                                range: 140..151,
-                                                kind: Item,
-                                            },
-                                            Node {
-                                                children: [
-                                                    Node {
-                                                        children: [],
-                                                        range: 155..163,
-                                                        kind: Text(
-                                                            Borrowed(
-                                                                "item 1.2",
-                                                            ),
-                                                        ),
-                                                    },
-                                                ],
-                                                range: 153..164,
-                                                kind: Item,
-                                            },
-                                        ],
-                                        range: 140..164,
-                                        kind: List(
-                                            None,
-                                        ),
-                                    },
-                                ],
-                                range: 129..164,
-                                kind: Item,
-                            },
-                            Node {
-                                children: [
-                                    Node {
-                                        children: [],
-                                        range: 166..172,
-                                        kind: Text(
-                                            Borrowed(
-                                                "item 2",
-                                            ),
-                                        ),
-                                    },
-                                    Node {
-                                        children: [
-                                            Node {
-                                                children: [
-                                                    Node {
-                                                        children: [],
-                                                        range: 177..185,
-                                                        kind: Text(
-                                                            Borrowed(
-                                                                "item 2.1",
-                                                            ),
-                                                        ),
-                                                    },
-                                                ],
-                                                range: 175..187,
-                                                kind: Item,
-                                            },
-                                        ],
-                                        range: 175..187,
-                                        kind: List(
-                                            None,
-                                        ),
-                                    },
-                                ],
-                                range: 164..187,
-                                kind: Item,
-                            },
-                        ],
-                        range: 129..187,
-                        kind: List(
-                            None,
-                        ),
-                    },
-                    Node {
-                        children: [
-                            Node {
-                                children: [],
-                                range: 190..200,
-                                kind: Text(
-                                    Borrowed(
-                                        "Task Lists",
-                                    ),
-                                ),
-                            },
-                        ],
-                        range: 187..206,
-                        kind: Heading {
-                            level: H2,
-                            id: None,
-                            classes: [],
-                            attrs: [],
-                        },
-                    },
-                    Node {
-                        children: [
-                            Node {
-                                children: [
-                                    Node {
-                                        children: [],
-                                        range: 209..212,
-                                        kind: TaskListMarker(
-                                            true,
-                                        ),
-                                    },
-                                    Node {
-                                        children: [],
-                                        range: 213..227,
-                                        kind: Text(
-                                            Borrowed(
-                                                "Completed task",
-                                            ),
-                                        ),
-                                    },
-                                ],
-                                range: 207..228,
-                                kind: Item,
-                            },
-                            Node {
-                                children: [
-                                    Node {
-                                        children: [],
-                                        range: 230..233,
-                                        kind: TaskListMarker(
-                                            false,
-                                        ),
-                                    },
-                                    Node {
-                                        children: [],
-                                        range: 234..249,
-                                        kind: Text(
-                                            Borrowed(
-                                                "Incomplete task",
-                                            ),
-                                        ),
-                                    },
-                                    Node {
-                                        children: [
-                                            Node {
-                                                children: [
-                                                    Node {
-                                                        children: [],
-                                                        range: 254..257,
-                                                        kind: TaskListMarker(
-                                                            true,
-                                                        ),
-                                                    },
-                                                    Node {
-                                                        children: [],
-                                                        range: 258..274,
-                                                        kind: Text(
-                                                            Borrowed(
-                                                                "Nested completed",
-                                                            ),
-                                                        ),
-                                                    },
-                                                ],
-                                                range: 252..275,
-                                                kind: Item,
-                                            },
-                                            Node {
-                                                children: [
-                                                    Node {
-                                                        children: [],
-                                                        range: 279..282,
-                                                        kind: TaskListMarker(
-                                                            false,
-                                                        ),
-                                                    },
-                                                    Node {
-                                                        children: [],
-                                                        range: 283..300,
-                                                        kind: Text(
-                                                            Borrowed(
-                                                                "Nested incomplete",
-                                                            ),
-                                                        ),
-                                                    },
-                                                ],
-                                                range: 277..302,
-                                                kind: Item,
-                                            },
-                                        ],
-                                        range: 252..302,
-                                        kind: List(
-                                            None,
-                                        ),
-                                    },
-                                ],
-                                range: 228..302,
-                                kind: Item,
-                            },
-                        ],
-                        range: 207..302,
-                        kind: List(
-                            None,
-                        ),
-                    },
-                    Node {
-                        children: [
-                            Node {
-                                children: [],
-                                range: 305..318,
-                                kind: Text(
-                                    Borrowed(
-                                        "Strikethrough",
-                                    ),
-                                ),
-                            },
-                        ],
-                        range: 302..319,
-                        kind: Heading {
-                            level: H2,
-                            id: None,
-                            classes: [],
-                            attrs: [],
-                        },
-                    },
-                    Node {
-                        children: [
-                            Node {
-                                children: [
-                                    Node {
-                                        children: [],
-                                        range: 322..346,
-                                        kind: Text(
-                                            Borrowed(
-                                                "This text is crossed out",
-                                            ),
-                                        ),
-                                    },
-                                ],
-                                range: 320..348,
-                                kind: Strikethrough,
-                            },
-                        ],
-                        range: 320..349,
-                        kind: Paragraph,
-                    },
-                    Node {
-                        children: [
-                            Node {
-                                children: [],
-                                range: 353..363,
-                                kind: Text(
-                                    Borrowed(
-                                        "Code Block",
-                                    ),
-                                ),
-                            },
-                        ],
-                        range: 350..364,
-                        kind: Heading {
-                            level: H2,
-                            id: None,
-                            classes: [],
-                            attrs: [],
-                        },
-                    },
-                    Node {
-                        children: [
-                            Node {
-                                children: [],
-                                range: 375..399,
-                                kind: Text(
-                                    Borrowed(
-                                        "def foo():\n    return 1\n",
-                                    ),
-                                ),
-                            },
-                        ],
-                        range: 365..402,
-                        kind: CodeBlock(
-                            Fenced(
-                                Borrowed(
-                                    "python",
-                                ),
-                            ),
-                        ),
-                    },
-                    Node {
-                        children: [
-                            Node {
-                                children: [],
-                                range: 407..411,
-                                kind: Text(
-                                    Borrowed(
-                                        "Math",
-                                    ),
-                                ),
-                            },
-                        ],
-                        range: 404..412,
-                        kind: Heading {
-                            level: H2,
-                            id: None,
-                            classes: [],
-                            attrs: [],
-                        },
-                    },
-                    Node {
-                        children: [
-                            Node {
-                                children: [],
-                                range: 413..426,
-                                kind: Text(
-                                    Borrowed(
-                                        "Inline math: ",
-                                    ),
-                                ),
-                            },
-                            Node {
-                                children: [],
-                                range: 426..436,
-                                kind: InlineMath(
-                                    Borrowed(
-                                        "E = mc^2",
-                                    ),
-                                ),
-                            },
-                        ],
-                        range: 413..437,
-                        kind: Paragraph,
-                    },
-                    Node {
-                        children: [
-                            Node {
-                                children: [],
-                                range: 438..449,
-                                kind: Text(
-                                    Borrowed(
-                                        "Block math:",
-                                    ),
-                                ),
-                            },
-                            Node {
-                                children: [],
-                                range: 449..450,
-                                kind: SoftBreak,
-                            },
-                            Node {
-                                children: [],
-                                range: 450..504,
-                                kind: DisplayMath(
-                                    Boxed(
-                                        "\n\\int_{-\\infty}^{\\infty} e^{-x^2} dx = \\sqrt{\\pi}\n",
-                                    ),
-                                ),
-                            },
-                        ],
-                        range: 438..505,
-                        kind: Paragraph,
-                    },
-                    Node {
-                        children: [
-                            Node {
-                                children: [],
-                                range: 510..521,
-                                kind: Text(
-                                    Borrowed(
-                                        "Heading 3.1",
-                                    ),
-                                ),
-                            },
-                        ],
-                        range: 506..522,
-                        kind: Heading {
-                            level: H3,
-                            id: None,
-                            classes: [],
-                            attrs: [],
-                        },
-                    },
-                ],
-                range: 0..522,
-                kind: Document,
-            },
-            opts: Options(
-                ENABLE_TABLES | ENABLE_FOOTNOTES | ENABLE_STRIKETHROUGH | ENABLE_TASKLISTS | ENABLE_SMART_PUNCTUATION | ENABLE_HEADING_ATTRIBUTES | ENABLE_YAML_STYLE_METADATA_BLOCKS | ENABLE_PLUSES_DELIMITED_METADATA_BLOCKS | ENABLE_MATH | ENABLE_GFM | ENABLE_DEFINITION_LIST | ENABLE_SUPERSCRIPT | ENABLE_SUBSCRIPT | ENABLE_WIKILINKS,
-            ),
-        }
+        assert_snapshot!(ast.root_node, @r#"
+        Document [0..522]
+          MetadataBlock(YamlStyle) [0..52]
+            Text(Borrowed("title: \"Test Document\"\nauthor: \"Test Author\"\n")) [4..49]
+          Heading { level: H1, id: None, classes: [], attrs: [] } [54..66]
+            Text(Borrowed("Heading 1")) [56..65]
+          Paragraph [67..117]
+            Text(Borrowed("Basic text with ")) [67..83]
+            Strong [83..91]
+              Text(Borrowed("bold")) [85..89]
+            Text(Borrowed(" and ")) [91..96]
+            Emphasis [96..104]
+              Text(Borrowed("italic")) [97..103]
+            Text(Borrowed(" formatting.")) [104..116]
+          Heading { level: H2, id: None, classes: [], attrs: [] } [118..128]
+            Text(Borrowed("A List")) [121..127]
+          List(None) [129..187]
+            Item [129..164]
+              Text(Borrowed("item 1")) [131..137]
+              List(None) [140..164]
+                Item [140..151]
+                  Text(Borrowed("item 1.1")) [142..150]
+                Item [153..164]
+                  Text(Borrowed("item 1.2")) [155..163]
+            Item [164..187]
+              Text(Borrowed("item 2")) [166..172]
+              List(None) [175..187]
+                Item [175..187]
+                  Text(Borrowed("item 2.1")) [177..185]
+          Heading { level: H2, id: None, classes: [], attrs: [] } [187..206]
+            Text(Borrowed("Task Lists")) [190..200]
+          List(None) [207..302]
+            Item [207..228]
+              TaskListMarker(true) [209..212]
+              Text(Borrowed("Completed task")) [213..227]
+            Item [228..302]
+              TaskListMarker(false) [230..233]
+              Text(Borrowed("Incomplete task")) [234..249]
+              List(None) [252..302]
+                Item [252..275]
+                  TaskListMarker(true) [254..257]
+                  Text(Borrowed("Nested completed")) [258..274]
+                Item [277..302]
+                  TaskListMarker(false) [279..282]
+                  Text(Borrowed("Nested incomplete")) [283..300]
+          Heading { level: H2, id: None, classes: [], attrs: [] } [302..319]
+            Text(Borrowed("Strikethrough")) [305..318]
+          Paragraph [320..349]
+            Strikethrough [320..348]
+              Text(Borrowed("This text is crossed out")) [322..346]
+          Heading { level: H2, id: None, classes: [], attrs: [] } [350..364]
+            Text(Borrowed("Code Block")) [353..363]
+          CodeBlock(Fenced(Borrowed("python"))) [365..402]
+            Text(Borrowed("def foo():\n    return 1\n")) [375..399]
+          Heading { level: H2, id: None, classes: [], attrs: [] } [404..412]
+            Text(Borrowed("Math")) [407..411]
+          Paragraph [413..437]
+            Text(Borrowed("Inline math: ")) [413..426]
+            InlineMath(Borrowed("E = mc^2")) [426..436]
+          Paragraph [438..505]
+            Text(Borrowed("Block math:")) [438..449]
+            SoftBreak [449..450]
+            DisplayMath(Boxed("\n\\int_{-\\infty}^{\\infty} e^{-x^2} dx = \\sqrt{\\pi}\n")) [450..504]
+          Heading { level: H3, id: None, classes: [], attrs: [] } [506..522]
+            Text(Borrowed("Heading 3.1")) [510..521]
         "#);
     }
 }
