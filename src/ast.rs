@@ -23,6 +23,7 @@ pub struct Node<'a> {
     // byte range
     range: Range<usize>,
     kind: NodeKind<'a>,
+    parent: Option<*const Node<'a>>,
 }
 
 impl<'a> Display for Node<'a> {
@@ -355,13 +356,30 @@ impl Node<'_> {
     }
 }
 
-impl Tree<'_> {
-    fn edit(&mut self, edit: &InputEdit) {
+impl<'a> Tree<'a> {
+    pub fn new(
+        events_with_offset: Vec<(Event<'a>, Range<usize>)>,
+        opts: Options,
+    ) -> Self {
+        let mut tree = build_ast_structure(events_with_offset, opts);
+        setup_parent_pointers(&mut tree.root_node);
+        tree
+    }
+
+    pub fn edit(&mut self, edit: &InputEdit) {
         todo!()
     }
 }
 
-pub fn build_ast<'a>(
+fn setup_parent_pointers<'a>(node: &mut Node<'a>) {
+    let parent_ptr = node as *const Node;
+    for child in node.children.iter_mut() {
+        child.parent = Some(parent_ptr);
+        setup_parent_pointers(child);
+    }
+}
+
+fn build_ast_structure<'a>(
     events_with_offset: Vec<(Event<'a>, Range<usize>)>,
     opts: Options,
 ) -> Tree<'a> {
@@ -388,6 +406,7 @@ pub fn build_ast<'a>(
                     children: Vec::new(),
                     range: offset.clone(),
                     kind: NodeKind::from_tag(tag),
+                    parent: None,
                 };
                 stack.push((node, curr_children));
                 curr_children = Vec::new();
@@ -406,6 +425,7 @@ pub fn build_ast<'a>(
                     children: Vec::new(),
                     range: offset.clone(),
                     kind: NodeKind::from_event(inline_event),
+                    parent: None,
                 };
                 curr_children.push(leaf_node);
             }
@@ -416,6 +436,7 @@ pub fn build_ast<'a>(
         children: curr_children,
         range: doc_start..doc_end,
         kind: NodeKind::Document,
+        parent: None,
     };
 
     Tree {
@@ -444,9 +465,9 @@ mod tests {
         let parser = Parser::new_ext(&md, opts);
         let events_with_offsets = parser.into_offset_iter().collect::<Vec<_>>();
 
-        let ast = build_ast(events_with_offsets, opts);
+        let ast = Tree::new(events_with_offsets, opts);
         assert_snapshot!(ast.root_node, @r#"
-        Document [0..522]
+        Document [0..535]
           MetadataBlock(YamlStyle) [0..52]
             Text(Borrowed("title: \"Test Document\"\nauthor: \"Test Author\"\n")) [4..49]
           Heading { level: H1, id: None, classes: [], attrs: [] } [54..66]
@@ -510,6 +531,8 @@ mod tests {
             DisplayMath(Boxed("\n\\int_{-\\infty}^{\\infty} e^{-x^2} dx = \\sqrt{\\pi}\n")) [450..504]
           Heading { level: H3, id: None, classes: [], attrs: [] } [506..522]
             Text(Borrowed("Heading 3.1")) [510..521]
+          Paragraph [523..535]
+            Text(Borrowed("emoji: 😀")) [523..534]
         "#);
     }
 }
