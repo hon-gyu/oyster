@@ -310,7 +310,69 @@ fn byte_to_point(text: &str, byte: usize) -> Point {
     Point { row, column: col }
 }
 
-impl Node<'_> {
+impl<'a> Node<'a> {
+    pub fn parent(&self) -> Option<&Node<'a>> {
+        // Deref pointer in unsafe block
+        self.parent.map(|ptr| unsafe { &*ptr })
+    }
+
+    pub fn next_sibling(&self) -> Option<&Node<'a>> {
+        let parent = self.parent()?;
+        let my_index = parent
+            .children
+            .iter()
+            .position(
+                // convert reference to raw pointer and compare their addresses
+                // equivalent to
+                // child as *const Node == self as *const Node
+                |child| std::ptr::eq(child, self),
+            )
+            .expect("A node's parent should contains itself");
+        parent.children.get(my_index + 1)
+    }
+
+    pub fn prev_sibling(&self) -> Option<&Node<'a>> {
+        let parent = self.parent()?;
+        let my_index = parent
+            .children
+            .iter()
+            .position(|child| std::ptr::eq(child, self))
+            .expect("A node's parent should contains itself");
+        parent.children.get(my_index - 1)
+    }
+
+    /// Get the node that contains descendant.
+    ///
+    /// Note that this can return descendant itself.
+    ///
+    /// Use Cases
+    /// This method is useful for:
+    /// 1. Finding editing boundaries: "Which top-level section contains
+    /// this text I'm editing?"
+    /// 2. Navigation: "Which main child should I expand to show this
+    /// nested element?"
+    /// 3. Structural queries: "Which paragraph contains this specific
+    /// word?"
+    ///
+    /// Why "can return descendant itself"
+    /// The note mentions it can return the descendant itself because if
+    /// you call:
+    /// node.child_with_descendant(&node)  // descendant is the node itself
+    pub fn child_with_descendant(
+        &self,
+        descendant: &Node<'a>,
+    ) -> Option<&Node<'a>> {
+        if std::ptr::eq(self, descendant) {
+            return Some(self);
+        }
+        if !range_contain(&self.range, &descendant.range) {
+            return None;
+        }
+        self.children
+            .iter()
+            .find(|child| range_contain(&child.range, &descendant.range))
+    }
+
     // Get this node's start position in terms of rows and columns
     pub fn start_position(&self, text: &str) -> Point {
         byte_to_point(text, self.range.start)
@@ -321,7 +383,7 @@ impl Node<'_> {
         byte_to_point(text, self.range.end)
     }
 
-    pub fn child(&self, i: usize) -> Option<&Node<'_>> {
+    pub fn child(&self, i: usize) -> Option<&Node<'a>> {
         self.children.get(i)
     }
 
@@ -354,6 +416,10 @@ impl Node<'_> {
     fn to_sexp(&self) -> String {
         todo!()
     }
+}
+
+fn range_contain(range: &Range<usize>, other: &Range<usize>) -> bool {
+    range.start <= other.start && range.end >= other.end
 }
 
 impl<'a> Tree<'a> {
