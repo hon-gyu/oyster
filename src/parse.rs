@@ -144,9 +144,15 @@ mod tests {
         (Start(Heading { level: H3, id: None, classes: [], attrs: [] }), 506..522)
         (Text(Borrowed("Heading 3.1")), 510..521)
         (End(Heading(H3)), 506..522)
+        (Start(Paragraph), 523..535)
+        (Text(Borrowed("emoji: 😀")), 523..534)
+        (End(Paragraph), 523..535)
         "#);
 
-        let text_len = text.len();
-        assert_snapshot!(text_len, @"522");
+        let char_len = text.chars().count();
+        let byte_len = text.as_bytes().len();
+        let offset_end = events.last().unwrap().1.end;
+        assert_eq!(byte_len, offset_end, "Offsets should be in terms of bytes");
+        assert!(offset_end >= char_len);
     }
 }

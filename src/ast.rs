@@ -7,6 +7,7 @@ use pulldown_cmark::{
 };
 use std::fmt::Display;
 use std::ops::Range;
+use tree_sitter::{InputEdit, Point, Range as TSRange};
 
 /// A tree that represents the syntactic structure of a source code file.
 #[derive(Clone, Debug, PartialEq)]
@@ -19,7 +20,7 @@ pub struct Tree<'a> {
 #[derive(Clone, Debug, PartialEq)]
 pub struct Node<'a> {
     children: Vec<Node<'a>>,
-    range: Range<usize>,
+    byte_range: Range<usize>,
     kind: NodeKind<'a>,
 }
 
@@ -42,7 +43,7 @@ impl<'a> Node<'a> {
         writeln!(
             f,
             "{:?} [{}..{}]",
-            self.kind, self.range.start, self.range.end
+            self.kind, self.byte_range.start, self.byte_range.end
         )?;
 
         for child in self.children.iter() {
@@ -288,12 +289,54 @@ impl validate::Validate for Node<'_> {
 }
 
 impl Node<'_> {
+    // TODO: validate that children range is a partition of the parent's range
+
+    pub fn start_byte(&self) -> usize {
+        self.byte_range.start
+    }
+
+    pub fn end_byte(&self) -> usize {
+        self.byte_range.end
+    }
+
+    pub fn byte_range(&self) -> Range<usize> {
+        self.byte_range.clone()
+    }
+
+    pub fn range(&self) -> TSRange {
+        todo!()
+    }
+
+    // Get this node's start position in terms of rows and columns
+    fn start_position(&self) -> Point {
+        todo!()
+    }
+
+    // Get this node's end position in terms of rows and columns
+    fn end_position(&self) -> Point {
+        todo!()
+    }
+
     pub fn child(&self, i: usize) -> Option<&Node<'_>> {
         self.children.get(i)
     }
 
     pub fn child_count(&self) -> usize {
         self.children.len()
+    }
+
+    fn first_child_for_byte(&self, byte: usize) -> Option<&Node<'_>> {
+        todo!()
+    }
+
+    fn to_sexp(&self) -> String {
+        todo!()
+    }
+}
+
+impl Tree<'_> {
+    fn edit(&mut self, edit: &InputEdit) {
+        todo!()
     }
 }
 
@@ -322,7 +365,7 @@ pub fn build_ast<'a>(
             Event::Start(tag) => {
                 let node = Node {
                     children: Vec::new(),
-                    range: offset.clone(),
+                    byte_range: offset.clone(),
                     kind: NodeKind::from_tag(tag),
                 };
                 stack.push((node, curr_children));
@@ -340,7 +383,7 @@ pub fn build_ast<'a>(
             inline_event => {
                 let leaf_node = Node {
                     children: Vec::new(),
-                    range: offset.clone(),
+                    byte_range: offset.clone(),
                     kind: NodeKind::from_event(inline_event),
                 };
                 curr_children.push(leaf_node);
@@ -350,7 +393,7 @@ pub fn build_ast<'a>(
 
     let root_node = Node {
         children: curr_children,
-        range: doc_start..doc_end,
+        byte_range: doc_start..doc_end,
         kind: NodeKind::Document,
     };
 
