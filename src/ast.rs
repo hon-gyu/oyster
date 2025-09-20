@@ -20,7 +20,8 @@ pub struct Tree<'a> {
 #[derive(Clone, Debug, PartialEq)]
 pub struct Node<'a> {
     children: Vec<Node<'a>>,
-    byte_range: Range<usize>,
+    // byte range
+    range: Range<usize>,
     kind: NodeKind<'a>,
 }
 
@@ -43,7 +44,7 @@ impl<'a> Node<'a> {
         writeln!(
             f,
             "{:?} [{}..{}]",
-            self.kind, self.byte_range.start, self.byte_range.end
+            self.kind, self.range.start, self.range.end
         )?;
 
         for child in self.children.iter() {
@@ -281,6 +282,7 @@ pub enum InvalidNode {
 impl validate::Validate for Node<'_> {
     type ValidationError = InvalidNode;
 
+    // TODO: validate that children range is a partition of the parent's range
     fn validate(
         &self,
     ) -> Result<(), nonempty::NonEmpty<Self::ValidationError>> {
@@ -288,33 +290,34 @@ impl validate::Validate for Node<'_> {
     }
 }
 
+fn byte_to_point(text: &str, byte: usize) -> Point {
+    let mut row = 0;
+    let mut col = 0;
+
+    for (i, c) in text.char_indices() {
+        if i == byte {
+            break;
+        }
+        if c == '\n' {
+            row += 1;
+            col = 0;
+        } else {
+            col += 1;
+        }
+    }
+
+    Point { row, column: col }
+}
+
 impl Node<'_> {
-    // TODO: validate that children range is a partition of the parent's range
-
-    pub fn start_byte(&self) -> usize {
-        self.byte_range.start
-    }
-
-    pub fn end_byte(&self) -> usize {
-        self.byte_range.end
-    }
-
-    pub fn byte_range(&self) -> Range<usize> {
-        self.byte_range.clone()
-    }
-
-    pub fn range(&self) -> TSRange {
-        todo!()
-    }
-
     // Get this node's start position in terms of rows and columns
-    fn start_position(&self) -> Point {
-        todo!()
+    pub fn start_position(&self, text: &str) -> Point {
+        byte_to_point(text, self.range.start)
     }
 
     // Get this node's end position in terms of rows and columns
-    fn end_position(&self) -> Point {
-        todo!()
+    pub fn end_position(&self, text: &str) -> Point {
+        byte_to_point(text, self.range.end)
     }
 
     pub fn child(&self, i: usize) -> Option<&Node<'_>> {
@@ -325,8 +328,26 @@ impl Node<'_> {
         self.children.len()
     }
 
-    fn first_child_for_byte(&self, byte: usize) -> Option<&Node<'_>> {
-        todo!()
+    // Get this node’s first child that contains or starts after
+    // the given byte offset.
+    pub fn first_child_for_byte(&self, byte: usize) -> Option<&Node<'_>> {
+        use std::cmp::Ordering;
+
+        // Find containment
+        match self.children.binary_search_by(|child| {
+            if child.range.start > byte {
+                Ordering::Greater
+            } else if child.range.end <= byte {
+                Ordering::Less
+            } else {
+                Ordering::Equal
+            }
+        }) {
+            Ok(containing_child_idx) => {
+                Some(&self.children[containing_child_idx])
+            }
+            Err(insertion_idx) => self.children.get(insertion_idx),
+        }
     }
 
     fn to_sexp(&self) -> String {
@@ -365,7 +386,7 @@ pub fn build_ast<'a>(
             Event::Start(tag) => {
                 let node = Node {
                     children: Vec::new(),
-                    byte_range: offset.clone(),
+                    range: offset.clone(),
                     kind: NodeKind::from_tag(tag),
                 };
                 stack.push((node, curr_children));
@@ -383,7 +404,7 @@ pub fn build_ast<'a>(
             inline_event => {
                 let leaf_node = Node {
                     children: Vec::new(),
-                    byte_range: offset.clone(),
+                    range: offset.clone(),
                     kind: NodeKind::from_event(inline_event),
                 };
                 curr_children.push(leaf_node);
@@ -393,7 +414,7 @@ pub fn build_ast<'a>(
 
     let root_node = Node {
         children: curr_children,
-        byte_range: doc_start..doc_end,
+        range: doc_start..doc_end,
         kind: NodeKind::Document,
     };
 
