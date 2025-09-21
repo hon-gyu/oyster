@@ -7,22 +7,22 @@ use pulldown_cmark::{
 };
 use std::fmt::Display;
 use std::ops::Range;
-use tree_sitter::{InputEdit, Point, Range as TSRange};
+use tree_sitter::{InputEdit, Point};
 
 /// A tree that represents the syntactic structure of a source code file.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Tree<'a> {
-    root_node: Node<'a>,
+    pub root_node: Node<'a>,
     /// the options that were used to parse the syntax tree.
-    opts: Options,
+    pub opts: Options,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Node<'a> {
-    children: Vec<Node<'a>>,
+    pub children: Vec<Node<'a>>,
     // byte range
-    range: Range<usize>,
-    kind: NodeKind<'a>,
+    pub range: Range<usize>,
+    pub kind: NodeKind<'a>,
     parent: Option<*const Node<'a>>,
 }
 
@@ -433,6 +433,14 @@ impl<'a> Tree<'a> {
     }
 
     pub fn edit(&mut self, edit: &InputEdit) {
+        todo!()
+    }
+
+    /// Compare this old edited syntax tree to a new syntax tree representing
+    /// the same document, returning a sequence of ranges whose syntactic
+    /// structure has changed.
+    pub fn changed_ranges(&self, other: &Self) {
+        // ) -> impl ExactSizeIterator<Item = TSRange> {
         todo!()
     }
 }

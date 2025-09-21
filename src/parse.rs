@@ -1,4 +1,5 @@
-use pulldown_cmark::Options;
+use crate::ast::Tree;
+use pulldown_cmark::{Options, Parser};
 
 /// Default options for parsing markdown
 /// Enable all features except old footnotes
@@ -20,6 +21,13 @@ pub fn default_opts() -> Options {
     opts.insert(Options::ENABLE_SUBSCRIPT);
     opts.insert(Options::ENABLE_WIKILINKS);
     opts
+}
+
+pub fn parse(text: &str) -> Tree {
+    let opts = default_opts();
+    let parser = Parser::new_ext(text, opts);
+    let events_with_offsets = parser.into_offset_iter().collect::<Vec<_>>();
+    Tree::new(events_with_offsets, opts)
 }
 
 #[cfg(test)]
