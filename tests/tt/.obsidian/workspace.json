@@ -112,8 +112,7 @@
       }
     ],
     "direction": "horizontal",
-    "width": 300,
-    "collapsed": true
+    "width": 300
   },
   "right": {
     "id": "e18ade6d36cc2de1",
@@ -206,8 +205,10 @@
   },
   "active": "6fa7b9b17dd31f64",
   "lastOpenFiles": [
-    "Note 2.md",
+    "empty_video.mp4",
     "Note 1.md",
+    "Note 2.md",
+    "text_file.txt",
     "Three laws of motion.md",
     "().md",
     "Figure 1.jpg"
