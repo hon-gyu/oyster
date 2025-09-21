@@ -122,7 +122,11 @@ fn extract_reference_and_referenceable_helper(
                     references.push(reference);
                 }
                 LinkType::Inline => {
-                    let dest = percent_decode(dest_url);
+                    let mut dest = percent_decode(dest_url);
+                    // `[text]()` points to file `().md`
+                    if dest.is_empty() {
+                        dest = "()".to_string();
+                    }
                     let dest = dest.strip_suffix(".md").unwrap_or(&dest);
                     let dest = dest.strip_suffix(".markdown").unwrap_or(&dest);
                     // Take out the text from the link's first child
