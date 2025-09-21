@@ -55,6 +55,95 @@ fn percent_encode(url: &str) -> String {
 fn extract_reference_and_referenceable(
     node: &Node,
 ) -> (Vec<Reference>, Vec<Referenceable>) {
+    let mut references = Vec::new();
+    let mut referenceables = Vec::new();
+
+    extract_reference_and_referenceable_helper(
+        node,
+        &mut references,
+        &mut referenceables,
+    );
+
+    (references, referenceables)
+}
+
+fn extract_reference_and_referenceable_helper(
+    node: &Node,
+    references: &mut Vec<Reference>,
+    referenceables: &mut Vec<Referenceable>,
+) {
+    // Sometimes we know that a node's children cannot contains more references
+    // or referenceables.
+    let skip_children = false;
+
+    match &node.kind {
+        // Reference
+        NodeKind::Link {
+            link_type,
+            dest_url,
+            ..
+        }
+        | NodeKind::Image {
+            link_type,
+            dest_url,
+            ..
+        } => {
+            match link_type {
+                LinkType::WikiLink { has_pothole } => {
+                    let display_text = {
+                        if !has_pothole {
+                            None
+                        } else {
+                            // Take out the text from the link's first child
+                            assert_eq!(node.child_count(), 1);
+                            let text_node = &node.children[0];
+                            let text =
+                                if let NodeKind::Text(text) = &text_node.kind {
+                                    Some(text.to_string())
+                                } else {
+                                    None
+                                };
+                            Some(text.expect("Wikilink should have text"))
+                        }
+                    };
+                    let reference = Reference {
+                        range: node.range.clone(),
+                        dest: dest_url.to_string(),
+                        kind: ReferenceKind::WikiLink,
+                        display_text,
+                    };
+                    references.push(reference);
+                }
+                LinkType::Inline => {
+                    let dest = percent_decode(dest_url);
+                    todo!()
+                }
+                _ => {}
+            }
+            todo!()
+        }
+        // Referenceable
+        NodeKind::Heading { level, .. } => {
+            todo!()
+        }
+        NodeKind::List { .. } => {
+            todo!("Block")
+        }
+        NodeKind::Paragraph { .. } => {
+            todo!("Block")
+        }
+        _ => {}
+    }
+
+    if !skip_children {
+        for child in node.children.iter() {
+            extract_reference_and_referenceable_helper(
+                child,
+                references,
+                referenceables,
+            );
+        }
+    }
     todo!()
 }
 
@@ -78,7 +167,7 @@ mod tests {
 
         let tree = parse(&text);
         assert_snapshot!(tree.root_node, @r##"
-        Document [1..920]
+        Document [1..941]
           Heading { level: H3, id: None, classes: [], attrs: [] } [1..19]
             Text(Borrowed("Level 3 title")) [5..18]
           Heading { level: H4, id: None, classes: [], attrs: [] } [19..38]
@@ -165,9 +254,12 @@ mod tests {
           Paragraph [882..900]
             Image { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("Figure 1.jpg"), title: Borrowed(""), id: Borrowed("") } [882..898]
               Text(Borrowed("Figure 1.jpg")) [885..897]
-          Paragraph [901..920]
+          Paragraph [901..921]
             Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("empty_video.mp4"), title: Borrowed(""), id: Borrowed("") } [901..919]
               Text(Borrowed("empty_video.mp4")) [903..918]
+          Paragraph [923..938]
+            Text(Borrowed("empty heading?")) [923..937]
+          Heading { level: H2, id: None, classes: [], attrs: [] } [938..941]
         "##);
     }
 }
