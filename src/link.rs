@@ -28,7 +28,7 @@ pub struct Reference {
     range: Range<usize>,
     dest: String,
     kind: ReferenceKind,
-    display_text: Option<String>,
+    display_text: String,
 }
 
 pub struct Link {
@@ -90,20 +90,16 @@ fn extract_reference_and_referenceable_helper(
         } => {
             match link_type {
                 LinkType::WikiLink { has_pothole } => {
-                    let display_text = {
-                        if !has_pothole {
-                            None
+                    let display_text = if !has_pothole {
+                        dest_url.to_string()
+                    } else {
+                        // Take out the text from the link's first child
+                        assert_eq!(node.child_count(), 1);
+                        let text_node = &node.children[0];
+                        if let NodeKind::Text(text) = &text_node.kind {
+                            text.to_string()
                         } else {
-                            // Take out the text from the link's first child
-                            assert_eq!(node.child_count(), 1);
-                            let text_node = &node.children[0];
-                            let text =
-                                if let NodeKind::Text(text) = &text_node.kind {
-                                    Some(text.to_string())
-                                } else {
-                                    None
-                                };
-                            Some(text.expect("Wikilink should have text"))
+                            panic!("Wikilink should have text");
                         }
                     };
                     let reference = Reference {
