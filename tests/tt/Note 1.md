@@ -11,6 +11,7 @@
 - empty link 1 [www]()
 - empty link 2 [](ww)
 - empty link 3 []()
+- empty link 4 [](Three%20laws%20of%20motion.md)
 
 ###### Wiki link
 - [[Three laws of motion]]
