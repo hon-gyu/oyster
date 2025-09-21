@@ -58,7 +58,7 @@ impl<'a> Node<'a> {
 
 /// including Tag + Event that is not start or end
 #[derive(Clone, Debug, PartialEq)]
-enum NodeKind<'a> {
+pub enum NodeKind<'a> {
     /// Root node
     Document,
     /// Tag

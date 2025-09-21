@@ -1,6 +1,6 @@
-use crate::ast::{Node, Tree};
+use crate::ast::{Node, NodeKind, Tree};
 use crate::parse::parse;
-use pulldown_cmark::HeadingLevel;
+use pulldown_cmark::{HeadingLevel, LinkType};
 use std::ops::Range;
 
 pub enum Referenceable {
@@ -19,9 +19,51 @@ pub enum Referenceable {
     Block,
 }
 
-fn decode_url(url: &str) -> String {}
+pub enum ReferenceKind {
+    WikiLink,
+    MarkdownLink,
+}
 
-fn encode_url(url: &str) -> String {}
+pub struct Reference {
+    range: Range<usize>,
+    dest: String,
+    kind: ReferenceKind,
+    display_text: Option<String>,
+}
+
+pub struct Link {
+    from: Reference,
+    to: Referenceable,
+}
+
+fn percent_decode(url: &str) -> String {
+    percent_encoding::percent_decode_str(url)
+        .decode_utf8_lossy()
+        .to_string()
+}
+
+fn percent_encode(url: &str) -> String {
+    percent_encoding::utf8_percent_encode(
+        url,
+        percent_encoding::NON_ALPHANUMERIC,
+    )
+    .to_string()
+    .replace("%23", "#") // Preserve # for heading anchors
+    .replace("%2F", "/") // Preserve / for file paths
+}
+
+fn extract_reference_and_referenceable(
+    node: &Node,
+) -> (Vec<Reference>, Vec<Referenceable>) {
+    todo!()
+}
+
+fn build_links(
+    references: Vec<Reference>,
+    referenceable: Vec<Referenceable>,
+) -> Vec<Link> {
+    todo!()
+}
 
 #[cfg(test)]
 mod tests {
@@ -36,7 +78,7 @@ mod tests {
 
         let tree = parse(&text);
         assert_snapshot!(tree.root_node, @r##"
-        Document [1..821]
+        Document [1..920]
           Heading { level: H3, id: None, classes: [], attrs: [] } [1..19]
             Text(Borrowed("Level 3 title")) [5..18]
           Heading { level: H4, id: None, classes: [], attrs: [] } [19..38]
@@ -45,7 +87,7 @@ mod tests {
             Text(Borrowed("Example (level 3)")) [43..60]
           Heading { level: H6, id: None, classes: [], attrs: [] } [62..83]
             Text(Borrowed("Markdown link")) [69..82]
-          List(None) [83..263]
+          List(None) [83..328]
             Item [83..139]
               Link { link_type: Inline, dest_url: Borrowed("Three%20laws%20of%20motion.md"), title: Borrowed(""), id: Borrowed("") } [85..138]
                 Text(Borrowed("Three laws of motion")) [86..106]
@@ -53,61 +95,79 @@ mod tests {
               Text(Borrowed("same file heading:  ")) [141..161]
               Link { link_type: Inline, dest_url: Borrowed("#Level%203%20title"), title: Borrowed(""), id: Borrowed("") } [161..196]
                 Text(Borrowed("Level 3 title")) [162..175]
-            Item [197..263]
+            Item [197..262]
               Text(Borrowed("different file heading ")) [199..222]
               Link { link_type: Inline, dest_url: Borrowed("Note%202#Some%20level%202%20title"), title: Borrowed(""), id: Borrowed("") } [222..261]
                 Text(Borrowed("22")) [223..225]
-          Heading { level: H6, id: None, classes: [], attrs: [] } [263..280]
-            Text(Borrowed("Wiki link")) [270..279]
-          List(None) [280..759]
-            Item [280..307]
-              Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("Three laws of motion"), title: Borrowed(""), id: Borrowed("") } [282..305]
-                Text(Borrowed("Three laws of motion")) [284..304]
-            Item [307..337]
-              Text(Borrowed("pipe: ")) [309..315]
-              Link { link_type: WikiLink { has_pothole: true }, dest_url: Borrowed("Note 2 "), title: Borrowed(""), id: Borrowed("") } [315..335]
-                Text(Borrowed(" Note two")) [325..334]
-            Item [337..384]
-              Text(Borrowed("heading in the same file: ")) [339..365]
-              Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("#Level 3 title"), title: Borrowed(""), id: Borrowed("") } [365..382]
-                Text(Borrowed("#Level 3 title")) [367..381]
-            Item [384..438]
-              Text(Borrowed("nested heading in the same file: ")) [386..419]
-              Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("#Level 4 title"), title: Borrowed(""), id: Borrowed("") } [419..436]
-                Text(Borrowed("#Level 4 title")) [421..435]
-            Item [438..495]
-              Text(Borrowed("heading in another file: ")) [440..465]
-              Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("Note 2#Some level 2 title"), title: Borrowed(""), id: Borrowed("") } [465..493]
-                Text(Borrowed("Note 2#Some level 2 title")) [467..492]
-            Item [495..566]
-              Text(Borrowed("heading in another file: ")) [497..522]
-              Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("Note 2#Some level 2 title#Level 3 title"), title: Borrowed(""), id: Borrowed("") } [522..564]
-                Text(Borrowed("Note 2#Some level 2 title#Level 3 title")) [524..563]
-            Item [566..618]
-              Text(Borrowed("heading in another file: ")) [568..593]
-              Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("Note 2#Level 3 title"), title: Borrowed(""), id: Borrowed("") } [593..616]
-                Text(Borrowed("Note 2#Level 3 title")) [595..615]
-            Item [618..659]
-              Text(Borrowed("heading in another file: ")) [620..645]
-              Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("Note 2#L4"), title: Borrowed(""), id: Borrowed("") } [645..657]
-                Text(Borrowed("Note 2#L4")) [647..656]
-            Item [659..719]
-              Text(Borrowed("heading in another file: ")) [661..686]
-              Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("Note 2#Some level 2 title#L4"), title: Borrowed(""), id: Borrowed("") } [686..717]
-                Text(Borrowed("Note 2#Some level 2 title#L4")) [688..716]
-            Item [719..759]
-              Text(Borrowed("broken link: ")) [721..734]
-              Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("Non-existing note 4"), title: Borrowed(""), id: Borrowed("") } [734..756]
-                Text(Borrowed("Non-existing note 4")) [736..755]
-          Heading { level: H6, id: None, classes: [], attrs: [] } [759..781]
-            Text(Borrowed("Link to figure")) [766..780]
-          Paragraph [781..798]
-            Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("Figure 1.jpg"), title: Borrowed(""), id: Borrowed("") } [781..796]
-              Text(Borrowed("Figure 1.jpg")) [783..795]
-          Paragraph [799..817]
-            Image { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("Figure 1.jpg"), title: Borrowed(""), id: Borrowed("") } [799..815]
-              Text(Borrowed("Figure 1.jpg")) [802..814]
-          Rule [817..821]
+            Item [262..285]
+              Text(Borrowed("empty link 1 ")) [264..277]
+              Link { link_type: Inline, dest_url: Borrowed(""), title: Borrowed(""), id: Borrowed("") } [277..284]
+                Text(Borrowed("www")) [278..281]
+            Item [285..307]
+              Text(Borrowed("empty link 2 ")) [287..300]
+              Link { link_type: Inline, dest_url: Borrowed("ww"), title: Borrowed(""), id: Borrowed("") } [300..306]
+            Item [307..328]
+              Text(Borrowed("empty link 3 ")) [309..322]
+              Link { link_type: Inline, dest_url: Borrowed(""), title: Borrowed(""), id: Borrowed("") } [322..326]
+          Heading { level: H6, id: None, classes: [], attrs: [] } [328..345]
+            Text(Borrowed("Wiki link")) [335..344]
+          List(None) [345..842]
+            Item [345..372]
+              Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("Three laws of motion"), title: Borrowed(""), id: Borrowed("") } [347..370]
+                Text(Borrowed("Three laws of motion")) [349..369]
+            Item [372..402]
+              Text(Borrowed("pipe: ")) [374..380]
+              Link { link_type: WikiLink { has_pothole: true }, dest_url: Borrowed("Note 2 "), title: Borrowed(""), id: Borrowed("") } [380..400]
+                Text(Borrowed(" Note two")) [390..399]
+            Item [402..449]
+              Text(Borrowed("heading in the same file: ")) [404..430]
+              Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("#Level 3 title"), title: Borrowed(""), id: Borrowed("") } [430..447]
+                Text(Borrowed("#Level 3 title")) [432..446]
+            Item [449..503]
+              Text(Borrowed("nested heading in the same file: ")) [451..484]
+              Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("#Level 4 title"), title: Borrowed(""), id: Borrowed("") } [484..501]
+                Text(Borrowed("#Level 4 title")) [486..500]
+            Item [503..560]
+              Text(Borrowed("heading in another file: ")) [505..530]
+              Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("Note 2#Some level 2 title"), title: Borrowed(""), id: Borrowed("") } [530..558]
+                Text(Borrowed("Note 2#Some level 2 title")) [532..557]
+            Item [560..631]
+              Text(Borrowed("heading in another file: ")) [562..587]
+              Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("Note 2#Some level 2 title#Level 3 title"), title: Borrowed(""), id: Borrowed("") } [587..629]
+                Text(Borrowed("Note 2#Some level 2 title#Level 3 title")) [589..628]
+            Item [631..683]
+              Text(Borrowed("heading in another file: ")) [633..658]
+              Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("Note 2#Level 3 title"), title: Borrowed(""), id: Borrowed("") } [658..681]
+                Text(Borrowed("Note 2#Level 3 title")) [660..680]
+            Item [683..724]
+              Text(Borrowed("heading in another file: ")) [685..710]
+              Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("Note 2#L4"), title: Borrowed(""), id: Borrowed("") } [710..722]
+                Text(Borrowed("Note 2#L4")) [712..721]
+            Item [724..784]
+              Text(Borrowed("heading in another file: ")) [726..751]
+              Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("Note 2#Some level 2 title#L4"), title: Borrowed(""), id: Borrowed("") } [751..782]
+                Text(Borrowed("Note 2#Some level 2 title#L4")) [753..781]
+            Item [784..823]
+              Text(Borrowed("broken link: ")) [786..799]
+              Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("Non-existing note 4"), title: Borrowed(""), id: Borrowed("") } [799..821]
+                Text(Borrowed("Non-existing note 4")) [801..820]
+            Item [823..842]
+              Text(Borrowed("empty link ")) [825..836]
+              Text(Borrowed("[")) [836..837]
+              Text(Borrowed("[")) [837..838]
+              Text(Borrowed("]")) [838..839]
+              Text(Borrowed("]")) [839..840]
+          Heading { level: H6, id: None, classes: [], attrs: [] } [842..864]
+            Text(Borrowed("Link to figure")) [849..863]
+          Paragraph [864..881]
+            Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("Figure 1.jpg"), title: Borrowed(""), id: Borrowed("") } [864..879]
+              Text(Borrowed("Figure 1.jpg")) [866..878]
+          Paragraph [882..900]
+            Image { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("Figure 1.jpg"), title: Borrowed(""), id: Borrowed("") } [882..898]
+              Text(Borrowed("Figure 1.jpg")) [885..897]
+          Paragraph [901..920]
+            Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("empty_video.mp4"), title: Borrowed(""), id: Borrowed("") } [901..919]
+              Text(Borrowed("empty_video.mp4")) [903..918]
         "##);
     }
 }
