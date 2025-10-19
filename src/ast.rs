@@ -1,6 +1,6 @@
+//! Define the AST for the Markdown
 use crate::validate;
 use nonempty;
-/// AST is tree-sitter like
 use pulldown_cmark::{
     Alignment, BlockQuoteKind, CodeBlockKind, CowStr, Event, HeadingLevel,
     LinkType, MetadataBlockKind, Options, Tag,
@@ -291,6 +291,8 @@ impl validate::Validate for Node<'_> {
     }
 }
 
+/// TODO:
+// Byte location to point location (col, row) could be wrong as escaped line break is not considered"
 fn byte_to_point(text: &str, byte: usize) -> Point {
     let mut row = 0;
     let mut col = 0;
@@ -306,7 +308,6 @@ fn byte_to_point(text: &str, byte: usize) -> Point {
             col += 1;
         }
     }
-
     Point { row, column: col }
 }
 

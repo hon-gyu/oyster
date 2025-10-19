@@ -334,7 +334,7 @@ mod tests {
             },
             Reference {
                 range: 277..284,
-                dest: "",
+                dest: "()",
                 kind: MarkdownLink,
                 display_text: "www",
             },
@@ -346,7 +346,7 @@ mod tests {
             },
             Reference {
                 range: 322..326,
-                dest: "",
+                dest: "()",
                 kind: MarkdownLink,
                 display_text: "",
             },
