@@ -459,7 +459,7 @@ impl<'a> Tree<'a> {
         let opts = default_opts();
         let parser = Parser::new_ext(text, opts);
         let events_with_offsets = parser.into_offset_iter().collect::<Vec<_>>();
-        let mut tree = build_ast_structure(text, events_with_offsets, opts);
+        let mut tree = build_ast(text, events_with_offsets, opts);
         setup_parent_pointers(&mut tree.root_node);
         tree
     }
@@ -485,7 +485,7 @@ fn setup_parent_pointers<'a>(node: &mut Node<'a>) {
     }
 }
 
-fn build_ast_structure<'a>(
+fn build_ast<'a>(
     text: &str,
     events_with_offset: Vec<(Event<'a>, Range<usize>)>,
     opts: Options,
