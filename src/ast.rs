@@ -22,7 +22,8 @@ pub struct Tree<'a> {
 pub struct Node<'a> {
     pub children: Vec<Node<'a>>,
     // byte range
-    pub range: Range<usize>,
+    pub start_byte: usize,
+    pub end_byte: usize,
     pub kind: NodeKind<'a>,
     parent: Option<*const Node<'a>>,
 }
@@ -46,7 +47,7 @@ impl<'a> Node<'a> {
         writeln!(
             f,
             "{:?} [{}..{}]",
-            self.kind, self.range.start, self.range.end
+            self.kind, self.start_byte, self.end_byte
         )?;
 
         for child in self.children.iter() {
@@ -54,6 +55,10 @@ impl<'a> Node<'a> {
         }
 
         Ok(())
+    }
+
+    pub fn byte_range(&self) -> Range<usize> {
+        self.start_byte..self.end_byte
     }
 }
 
@@ -368,23 +373,29 @@ impl<'a> Node<'a> {
         if std::ptr::eq(self, descendant) {
             return Some(self);
         }
-        if !range_contain(&self.range, &descendant.range) {
+        if !range_contain(
+            &(self.start_byte..self.end_byte),
+            &(descendant.start_byte..descendant.end_byte),
+        ) {
             return None;
         }
-        self.children
-            .iter()
-            .find(|child| range_contain(&child.range, &descendant.range))
+        self.children.iter().find(|child| {
+            range_contain(
+                &(child.start_byte..child.end_byte),
+                &(descendant.start_byte..descendant.end_byte),
+            )
+        })
     }
 
-    // Get this node's start position in terms of rows and columns
-    pub fn start_position(&self, text: &str) -> Point {
-        byte_to_point(text, self.range.start)
-    }
+    // // Get this node's start position in terms of rows and columns
+    // pub fn start_position(&self, text: &str) -> Point {
+    //     byte_to_point(text, self.range.start)
+    // }
 
-    // Get this node's end position in terms of rows and columns
-    pub fn end_position(&self, text: &str) -> Point {
-        byte_to_point(text, self.range.end)
-    }
+    // // Get this node's end position in terms of rows and columns
+    // pub fn end_position(&self, text: &str) -> Point {
+    //     byte_to_point(text, self.range.end)
+    // }
 
     pub fn child(&self, i: usize) -> Option<&Node<'a>> {
         self.children.get(i)
@@ -401,9 +412,9 @@ impl<'a> Node<'a> {
 
         // Find containment
         match self.children.binary_search_by(|child| {
-            if child.range.start > byte {
+            if child.start_byte > byte {
                 Ordering::Greater
-            } else if child.range.end <= byte {
+            } else if child.end_byte <= byte {
                 Ordering::Less
             } else {
                 Ordering::Equal
@@ -481,7 +492,8 @@ fn build_ast_structure<'a>(
             Event::Start(tag) => {
                 let node = Node {
                     children: Vec::new(),
-                    range: offset.clone(),
+                    start_byte: offset.start,
+                    end_byte: offset.end,
                     kind: NodeKind::from_tag(tag),
                     parent: None,
                 };
@@ -500,7 +512,8 @@ fn build_ast_structure<'a>(
             inline_event => {
                 let leaf_node = Node {
                     children: Vec::new(),
-                    range: offset.clone(),
+                    start_byte: offset.start,
+                    end_byte: offset.end,
                     kind: NodeKind::from_event(inline_event),
                     parent: None,
                 };
@@ -511,7 +524,8 @@ fn build_ast_structure<'a>(
 
     let root_node = Node {
         children: curr_children,
-        range: doc_start..doc_end,
+        start_byte: doc_start,
+        end_byte: doc_end,
         kind: NodeKind::Document,
         parent: None,
     };

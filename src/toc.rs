@@ -108,7 +108,7 @@ fn extract_toc_from_node(node: &Node, toc_entries: &mut Vec<TOCEntry>) {
                         ..
                     },
                 ] => {
-                    let range = child.range.start..child.range.end;
+                    let range = child.byte_range();
                     let entry = TOCEntry {
                         level,
                         text: text.to_string(),

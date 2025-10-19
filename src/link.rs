@@ -114,7 +114,7 @@ fn extract_reference_and_referenceable_helper(
                         }
                     };
                     let reference = Reference {
-                        range: node.range.clone(),
+                        range: node.byte_range().clone(),
                         dest: dest_url.to_string(),
                         kind: ReferenceKind::WikiLink,
                         display_text,
@@ -150,7 +150,7 @@ fn extract_reference_and_referenceable_helper(
                     };
 
                     let reference = Reference {
-                        range: node.range.clone(),
+                        range: node.byte_range().clone(),
                         dest: dest.to_string(),
                         kind: ReferenceKind::MarkdownLink,
                         display_text,
@@ -164,7 +164,7 @@ fn extract_reference_and_referenceable_helper(
         NodeKind::Heading { level, .. } => {
             let referenceable = InNoteReferenceable::Heading {
                 level: level.clone(),
-                range: node.range.clone(),
+                range: node.byte_range().clone(),
             };
             referenceables.push(referenceable);
         }
