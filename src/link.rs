@@ -1,5 +1,5 @@
+#![allow(dead_code)] // reason: WIP
 use crate::ast::{Node, NodeKind, Tree};
-use crate::parse::parse;
 use pulldown_cmark::{HeadingLevel, LinkType};
 use std::ops::Range;
 
@@ -203,7 +203,7 @@ mod tests {
         use std::fs;
         let path = "tests/tt/Note 1.md";
         let text = fs::read_to_string(path).unwrap();
-        let tree = parse(&text);
+        let tree = Tree::new(&text);
         assert_snapshot!(tree.root_node, @r##"
         Document [1..990]
           Heading { level: H3, id: None, classes: [], attrs: [] } [1..19]
@@ -309,7 +309,7 @@ mod tests {
         use std::fs;
         let path = "tests/tt/Note 1.md";
         let text = fs::read_to_string(path).unwrap();
-        let tree = parse(&text);
+        let tree = Tree::new(&text);
         let (references, referenceables) =
             extract_reference_and_referenceable(&tree.root_node);
         assert_debug_snapshot!(references, @r##"

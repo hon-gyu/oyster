@@ -1,9 +1,10 @@
 //! Define the AST for the Markdown
+use crate::parse::default_opts;
 use crate::validate;
 use nonempty;
 use pulldown_cmark::{
     Alignment, BlockQuoteKind, CodeBlockKind, CowStr, Event, HeadingLevel,
-    LinkType, MetadataBlockKind, Options, Tag,
+    LinkType, MetadataBlockKind, Options, Parser, Tag,
 };
 use std::fmt::Display;
 use std::ops::Range;
@@ -56,6 +57,7 @@ impl<'a> Node<'a> {
     }
 }
 
+/// Node kind
 /// including Tag + Event that is not start or end
 #[derive(Clone, Debug, PartialEq)]
 pub enum NodeKind<'a> {
@@ -424,11 +426,11 @@ fn range_contain(range: &Range<usize>, other: &Range<usize>) -> bool {
 }
 
 impl<'a> Tree<'a> {
-    pub fn new(
-        events_with_offset: Vec<(Event<'a>, Range<usize>)>,
-        opts: Options,
-    ) -> Self {
-        let mut tree = build_ast_structure(events_with_offset, opts);
+    pub fn new(text: &'a str) -> Self {
+        let opts = default_opts();
+        let parser = Parser::new_ext(text, opts);
+        let events_with_offsets = parser.into_offset_iter().collect::<Vec<_>>();
+        let mut tree = build_ast_structure(events_with_offsets, opts);
         setup_parent_pointers(&mut tree.root_node);
         tree
     }
@@ -523,9 +525,7 @@ fn build_ast_structure<'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::parse;
     use insta::assert_snapshot;
-    use pulldown_cmark::Parser;
     use std::fs;
 
     fn data() -> String {
@@ -536,11 +536,7 @@ mod tests {
     #[test]
     fn test_build_ast() {
         let md = data();
-        let opts = parse::default_opts();
-        let parser = Parser::new_ext(&md, opts);
-        let events_with_offsets = parser.into_offset_iter().collect::<Vec<_>>();
-
-        let ast = Tree::new(events_with_offsets, opts);
+        let ast = Tree::new(&md);
         assert_snapshot!(ast.root_node, @r#"
         Document [0..535]
           MetadataBlock(YamlStyle) [0..52]

@@ -1,14 +1,14 @@
 //! Table of contents based on heading levels
 use crate::ast::Tree;
-use crate::parse::parse;
+
+pub struct TOC {}
+
+fn extract_toc() {}
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::parse;
     use insta::assert_snapshot;
-    use pulldown_cmark::Parser;
-    use std::fs;
 
     fn data() -> String {
         // let md = fs::read_to_string("src/basic.md").unwrap();
@@ -47,7 +47,7 @@ some text
     #[test]
     fn test_doc() {
         let md = data();
-        let tree = parse(&md);
+        let tree = Tree::new(&md);
         assert_snapshot!(tree.root_node, @r#"
         Document [1..179]
           Heading { level: H1, id: None, classes: [], attrs: [] } [1..11]

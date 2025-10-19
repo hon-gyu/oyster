@@ -1,5 +1,5 @@
-use crate::ast::Tree;
-use pulldown_cmark::{Options, Parser};
+//! Utilities related to pulldown-cmark
+use pulldown_cmark::Options;
 
 /// Default options for parsing markdown
 /// Enable all features except old footnotes
@@ -23,13 +23,6 @@ pub fn default_opts() -> Options {
     opts
 }
 
-pub fn parse(text: &str) -> Tree {
-    let opts = default_opts();
-    let parser = Parser::new_ext(text, opts);
-    let events_with_offsets = parser.into_offset_iter().collect::<Vec<_>>();
-    Tree::new(events_with_offsets, opts)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -43,6 +36,7 @@ mod tests {
         markdown.to_owned()
     }
 
+    #[allow(dead_code)]
     fn extended_data() -> String {
         let more = fs::read_to_string("src/extended.md").unwrap();
         basic_data() + more.as_str()
