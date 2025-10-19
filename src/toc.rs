@@ -3,13 +3,16 @@ use crate::ast::{Node, NodeKind, Tree};
 use ptree::TreeBuilder;
 use pulldown_cmark::HeadingLevel;
 use std::collections::{HashMap, HashSet};
-use std::ops::Range;
+use tree_sitter::Point;
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct TOCEntry {
     pub level: HeadingLevel,
     pub text: String,
-    pub range: Range<usize>,
+    pub start_byte: usize,
+    pub end_byte: usize,
+    pub start_point: Point,
+    pub end_point: Point,
 }
 
 type Depth = usize;
@@ -17,6 +20,12 @@ type Depth = usize;
 #[derive(Debug, PartialEq, Clone)]
 pub struct TOC {
     entries: Vec<(TOCEntry, Depth)>,
+}
+
+impl TOCEntry {
+    fn to_tree_label(&self) -> String {
+        format!("{:?} {} (L{})", self.level, self.text, self.start_point.row,)
+    }
 }
 
 impl TOC {
@@ -33,7 +42,7 @@ impl TOC {
         let mut depth_stack: Vec<Depth> = vec![];
 
         for (entry, depth) in self.entries.iter() {
-            let label = format!("{:?} {}", entry.level, entry.text);
+            let label = entry.to_tree_label();
 
             // End children until we're at the right depth
             while let Some(&stack_depth) = depth_stack.last() {
@@ -81,14 +90,11 @@ pub fn extract_toc(tree: &Tree) -> TOC {
         .collect();
     unique_levels.sort();
 
-    dbg!(&unique_levels);
     let level_to_depth: HashMap<HeadingLevel, Depth> = unique_levels
         .into_iter()
         .enumerate()
         .map(|(i, level)| (level, i))
         .collect();
-
-    dbg!(&level_to_depth);
 
     TOC {
         entries: entries
@@ -108,11 +114,13 @@ fn extract_toc_from_node(node: &Node, toc_entries: &mut Vec<TOCEntry>) {
                         ..
                     },
                 ] => {
-                    let range = child.byte_range();
                     let entry = TOCEntry {
                         level,
                         text: text.to_string(),
-                        range,
+                        start_byte: child.start_byte,
+                        end_byte: child.end_byte,
+                        start_point: child.start_point,
+                        end_point: child.end_point,
                     };
                     toc_entries.push(entry);
                 }
@@ -205,7 +213,16 @@ some text
                     TOCEntry {
                         level: H1,
                         text: "Heading",
-                        range: 1..11,
+                        start_byte: 1,
+                        end_byte: 11,
+                        start_point: Point {
+                            row: 1,
+                            column: 0,
+                        },
+                        end_point: Point {
+                            row: 2,
+                            column: 0,
+                        },
                     },
                     0,
                 ),
@@ -213,7 +230,16 @@ some text
                     TOCEntry {
                         level: H2,
                         text: "Heading 2",
-                        range: 23..36,
+                        start_byte: 23,
+                        end_byte: 36,
+                        start_point: Point {
+                            row: 5,
+                            column: 0,
+                        },
+                        end_point: Point {
+                            row: 6,
+                            column: 0,
+                        },
                     },
                     1,
                 ),
@@ -221,7 +247,16 @@ some text
                     TOCEntry {
                         level: H3,
                         text: "Heading 3",
-                        range: 48..62,
+                        start_byte: 48,
+                        end_byte: 62,
+                        start_point: Point {
+                            row: 9,
+                            column: 0,
+                        },
+                        end_point: Point {
+                            row: 10,
+                            column: 0,
+                        },
                     },
                     2,
                 ),
@@ -229,7 +264,16 @@ some text
                     TOCEntry {
                         level: H4,
                         text: "Heading 4",
-                        range: 74..89,
+                        start_byte: 74,
+                        end_byte: 89,
+                        start_point: Point {
+                            row: 13,
+                            column: 0,
+                        },
+                        end_point: Point {
+                            row: 14,
+                            column: 0,
+                        },
                     },
                     3,
                 ),
@@ -237,7 +281,16 @@ some text
                     TOCEntry {
                         level: H5,
                         text: "Heading 5",
-                        range: 101..117,
+                        start_byte: 101,
+                        end_byte: 117,
+                        start_point: Point {
+                            row: 17,
+                            column: 0,
+                        },
+                        end_point: Point {
+                            row: 18,
+                            column: 0,
+                        },
                     },
                     4,
                 ),
@@ -245,7 +298,16 @@ some text
                     TOCEntry {
                         level: H6,
                         text: "Heading 6",
-                        range: 129..146,
+                        start_byte: 129,
+                        end_byte: 146,
+                        start_point: Point {
+                            row: 21,
+                            column: 0,
+                        },
+                        end_point: Point {
+                            row: 22,
+                            column: 0,
+                        },
                     },
                     5,
                 ),
@@ -253,7 +315,16 @@ some text
                     TOCEntry {
                         level: H1,
                         text: "Heading",
-                        range: 158..168,
+                        start_byte: 158,
+                        end_byte: 168,
+                        start_point: Point {
+                            row: 25,
+                            column: 0,
+                        },
+                        end_point: Point {
+                            row: 26,
+                            column: 0,
+                        },
                     },
                     0,
                 ),
@@ -280,7 +351,16 @@ some text
                     TOCEntry {
                         level: H3,
                         text: "Heading 3",
-                        range: 2..16,
+                        start_byte: 2,
+                        end_byte: 16,
+                        start_point: Point {
+                            row: 2,
+                            column: 0,
+                        },
+                        end_point: Point {
+                            row: 3,
+                            column: 0,
+                        },
                     },
                     1,
                 ),
@@ -288,7 +368,16 @@ some text
                     TOCEntry {
                         level: H4,
                         text: "Heading 4",
-                        range: 18..33,
+                        start_byte: 18,
+                        end_byte: 33,
+                        start_point: Point {
+                            row: 5,
+                            column: 0,
+                        },
+                        end_point: Point {
+                            row: 6,
+                            column: 0,
+                        },
                     },
                     2,
                 ),
@@ -296,7 +385,16 @@ some text
                     TOCEntry {
                         level: H5,
                         text: "Heading 5",
-                        range: 45..61,
+                        start_byte: 45,
+                        end_byte: 61,
+                        start_point: Point {
+                            row: 9,
+                            column: 0,
+                        },
+                        end_point: Point {
+                            row: 10,
+                            column: 0,
+                        },
                     },
                     3,
                 ),
@@ -304,7 +402,16 @@ some text
                     TOCEntry {
                         level: H2,
                         text: "Heading 2",
-                        range: 62..75,
+                        start_byte: 62,
+                        end_byte: 75,
+                        start_point: Point {
+                            row: 11,
+                            column: 0,
+                        },
+                        end_point: Point {
+                            row: 12,
+                            column: 0,
+                        },
                     },
                     0,
                 ),
@@ -312,7 +419,16 @@ some text
                     TOCEntry {
                         level: H6,
                         text: "Heading 6",
-                        range: 76..93,
+                        start_byte: 76,
+                        end_byte: 93,
+                        start_point: Point {
+                            row: 13,
+                            column: 0,
+                        },
+                        end_point: Point {
+                            row: 14,
+                            column: 0,
+                        },
                     },
                     4,
                 ),
@@ -330,13 +446,13 @@ some text
         let output = toc.render_tree();
         assert_snapshot!(output, @r"
         TOC
-        ├─ H1 Heading
-        │  └─ H2 Heading 2
-        │     └─ H3 Heading 3
-        │        └─ H4 Heading 4
-        │           └─ H5 Heading 5
-        │              └─ H6 Heading 6
-        └─ H1 Heading
+        ├─ H1 Heading (L1)
+        │  └─ H2 Heading 2 (L5)
+        │     └─ H3 Heading 3 (L9)
+        │        └─ H4 Heading 4 (L13)
+        │           └─ H5 Heading 5 (L17)
+        │              └─ H6 Heading 6 (L21)
+        └─ H1 Heading (L25)
         ")
     }
 
@@ -349,11 +465,11 @@ some text
         let output = toc.render_tree();
         assert_snapshot!(output, @r"
         TOC
-        ├─ H3 Heading 3
-        │  └─ H4 Heading 4
-        │     └─ H5 Heading 5
-        └─ H2 Heading 2
-           └─ H6 Heading 6
+        ├─ H3 Heading 3 (L2)
+        │  └─ H4 Heading 4 (L5)
+        │     └─ H5 Heading 5 (L9)
+        └─ H2 Heading 2 (L11)
+           └─ H6 Heading 6 (L13)
         ")
     }
 }

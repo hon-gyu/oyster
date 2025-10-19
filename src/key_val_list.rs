@@ -60,7 +60,7 @@ Empty line between list items won't break the list
         let md = data();
         let tree = Tree::new(&md);
         assert_snapshot!(tree.root_node, @r#"
-        Document [1..349]
+        Document [1..347]
           Paragraph [1..10]
             Text(Borrowed("Cluster1")) [1..9]
           List(None) [10..58]
@@ -117,7 +117,7 @@ Empty line between list items won't break the list
               Paragraph [249..254]
                 Text(Borrowed("asdf")) [249..253]
           Rule [255..259]
-          List(None) [260..349]
+          List(None) [260..347]
             Item [260..304]
               Paragraph [262..266]
                 Text(Borrowed("asf")) [262..265]
@@ -128,19 +128,19 @@ Empty line between list items won't break the list
                   Text(Borrowed("dasfw")) [286..291]
                   SoftBreak [291..292]
                   Text(Borrowed("some_text")) [293..302]
-            Item [304..341]
+            Item [304..339]
               Paragraph [306..312]
                 Text(Borrowed("gdklj")) [306..311]
-              List(None) [314..341]
-                Item [314..328]
-                  Paragraph [318..327]
+              List(None) [314..339]
+                Item [314..326]
+                  Paragraph [318..325]
                     Text(Borrowed("vcxoiu")) [318..324]
-                Item [330..341]
-                  Paragraph [334..341]
-                    Text(Borrowed("qsdoij")) [334..340]
-            Item [341..349]
-              Paragraph [343..348]
-                Text(Borrowed("asdf")) [343..347]
+                Item [328..339]
+                  Paragraph [332..339]
+                    Text(Borrowed("qsdoij")) [332..338]
+            Item [339..347]
+              Paragraph [341..346]
+                Text(Borrowed("asdf")) [341..345]
         "#)
     }
 }
