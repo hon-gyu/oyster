@@ -24,6 +24,9 @@ pub struct Node<'a> {
     // byte range
     pub start_byte: usize,
     pub end_byte: usize,
+    // position in rows and columns
+    pub start_point: Point,
+    pub end_point: Point,
     pub kind: NodeKind<'a>,
     parent: Option<*const Node<'a>>,
 }
@@ -298,24 +301,39 @@ impl validate::Validate for Node<'_> {
     }
 }
 
-/// TODO:
-// Byte location to point location (col, row) could be wrong as escaped line break is not considered"
-fn byte_to_point(text: &str, byte: usize) -> Point {
-    let mut row = 0;
-    let mut col = 0;
+/// Index for efficiently converting byte offsets to line/column positions
+struct LineIndex {
+    /// Byte offset where each line starts
+    line_starts: Vec<usize>,
+}
 
-    for (i, c) in text.char_indices() {
-        if i == byte {
-            break;
+impl LineIndex {
+    /// Build a line index from the source text
+    fn new(text: &str) -> Self {
+        let mut line_starts = vec![0];
+        for (i, c) in text.char_indices() {
+            if c == '\n' {
+                line_starts.push(i + 1);
+            }
         }
-        if c == '\n' {
-            row += 1;
-            col = 0;
-        } else {
-            col += 1;
-        }
+        Self { line_starts }
     }
-    Point { row, column: col }
+
+    /// Convert a byte offset to a Point (row, column)
+    fn byte_to_point(&self, text: &str, byte: usize) -> Point {
+        // Binary search to find which line contains this byte
+        let row = match self.line_starts.binary_search(&byte) {
+            Ok(line) => line,
+            Err(line) => line.saturating_sub(1),
+        };
+
+        let line_start = self.line_starts[row];
+
+        // Count characters from line start to byte position
+        let column = text[line_start..byte.min(text.len())].chars().count();
+
+        Point { row, column }
+    }
 }
 
 impl<'a> Node<'a> {
@@ -441,7 +459,7 @@ impl<'a> Tree<'a> {
         let opts = default_opts();
         let parser = Parser::new_ext(text, opts);
         let events_with_offsets = parser.into_offset_iter().collect::<Vec<_>>();
-        let mut tree = build_ast_structure(events_with_offsets, opts);
+        let mut tree = build_ast_structure(text, events_with_offsets, opts);
         setup_parent_pointers(&mut tree.root_node);
         tree
     }
@@ -468,9 +486,13 @@ fn setup_parent_pointers<'a>(node: &mut Node<'a>) {
 }
 
 fn build_ast_structure<'a>(
+    text: &str,
     events_with_offset: Vec<(Event<'a>, Range<usize>)>,
     opts: Options,
 ) -> Tree<'a> {
+    // Build line index for efficient byte-to-point conversion
+    let line_index = LineIndex::new(text);
+
     // Stack to keep track of the things we are working on (excluding the root)
     // Each item in the stack is a tuple containing the current node and its previous
     // siblings.
@@ -494,6 +516,8 @@ fn build_ast_structure<'a>(
                     children: Vec::new(),
                     start_byte: offset.start,
                     end_byte: offset.end,
+                    start_point: line_index.byte_to_point(text, offset.start),
+                    end_point: line_index.byte_to_point(text, offset.end),
                     kind: NodeKind::from_tag(tag),
                     parent: None,
                 };
@@ -514,6 +538,8 @@ fn build_ast_structure<'a>(
                     children: Vec::new(),
                     start_byte: offset.start,
                     end_byte: offset.end,
+                    start_point: line_index.byte_to_point(text, offset.start),
+                    end_point: line_index.byte_to_point(text, offset.end),
                     kind: NodeKind::from_event(inline_event),
                     parent: None,
                 };
@@ -526,6 +552,8 @@ fn build_ast_structure<'a>(
         children: curr_children,
         start_byte: doc_start,
         end_byte: doc_end,
+        start_point: line_index.byte_to_point(text, doc_start),
+        end_point: line_index.byte_to_point(text, doc_end),
         kind: NodeKind::Document,
         parent: None,
     };
@@ -545,6 +573,34 @@ mod tests {
     fn data() -> String {
         let md = fs::read_to_string("src/basic.md").unwrap();
         md
+    }
+
+    #[test]
+    fn test_positions_match_editor() {
+        // Line 0: "First line"
+        // Line 1: "Second line"
+        // Line 2: "Third line"
+        let text = r#"First line
+Second line
+Third line"#;
+        let tree = Tree::new(text);
+
+        // Root should span from (0,0) to (2,10)
+        assert_eq!(tree.root_node.start_point.row, 0);
+        assert_eq!(tree.root_node.start_point.column, 0);
+        assert_eq!(tree.root_node.end_point.row, 2);
+        assert_eq!(tree.root_node.end_point.column, 10);
+
+        // Test with escaped newline - it should still count as a new line
+        let text = r#"line 1\
+line 2"#;
+        let tree = Tree::new(text);
+
+        // The \n creates a new line in the source, so positions should reflect that
+        // Line 0: "line 1\"
+        // Line 1: "line 2"
+        assert_eq!(tree.root_node.start_point.row, 0);
+        assert_eq!(tree.root_node.end_point.row, 1);
     }
 
     #[test]
