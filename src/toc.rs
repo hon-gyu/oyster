@@ -1,5 +1,6 @@
 //! Table of contents based on heading levels
 use crate::ast::{Node, NodeKind, Tree};
+use ptree::TreeBuilder;
 use pulldown_cmark::HeadingLevel;
 use std::collections::{HashMap, HashSet};
 use std::ops::Range;
@@ -18,7 +19,54 @@ pub struct TOC {
     entries: Vec<(TOCEntry, Depth)>,
 }
 
-fn extract_toc(tree: &Tree) -> TOC {
+impl TOC {
+    /// Convert the TOC to a `ptree::Tree`
+    /// #implmented_by_AI
+    pub fn to_tree(&self) -> TreeBuilder {
+        let mut builder = TreeBuilder::new("TOC".to_string());
+
+        if self.entries.is_empty() {
+            return builder;
+        }
+
+        // Track depth and use the builder stack
+        let mut depth_stack: Vec<Depth> = vec![];
+
+        for (entry, depth) in self.entries.iter() {
+            let label = format!("{:?} {}", entry.level, entry.text);
+
+            // End children until we're at the right depth
+            while let Some(&stack_depth) = depth_stack.last() {
+                if stack_depth < *depth {
+                    break;
+                }
+                builder.end_child();
+                depth_stack.pop();
+            }
+
+            // Begin this child
+            builder.begin_child(label);
+            depth_stack.push(*depth);
+        }
+
+        // Close all remaining children
+        while depth_stack.pop().is_some() {
+            builder.end_child();
+        }
+
+        builder
+    }
+
+    /// Render the TOC as a tree string
+    pub fn render_tree(&self) -> String {
+        let tree = self.to_tree().build();
+        let mut output = Vec::new();
+        ptree::write_tree(&tree, &mut output).expect("Failed to write tree");
+        String::from_utf8(output).expect("Invalid UTF-8")
+    }
+}
+
+pub fn extract_toc(tree: &Tree) -> TOC {
     let root_node = &tree.root_node;
     let mut entries: Vec<TOCEntry> = vec![];
     extract_toc_from_node(root_node, &mut entries);
@@ -52,7 +100,7 @@ fn extract_toc(tree: &Tree) -> TOC {
 
 fn extract_toc_from_node(node: &Node, toc_entries: &mut Vec<TOCEntry>) {
     for child in node.children.iter() {
-        if let NodeKind::Heading { level: level, .. } = child.kind {
+        if let NodeKind::Heading { level, .. } = child.kind {
             match &child.children[..] {
                 [
                     Node {
@@ -83,7 +131,7 @@ fn extract_toc_from_node(node: &Node, toc_entries: &mut Vec<TOCEntry>) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use insta::assert_debug_snapshot;
+    use insta::{assert_debug_snapshot, assert_snapshot};
 
     fn data() -> String {
         let md = r#######"
@@ -121,7 +169,7 @@ some text
     fn data_sparse_headings() -> String {
         r#######"
 
-### Heading 2
+### Heading 3
 
 
 #### Heading 4
@@ -130,7 +178,7 @@ some text
 
 ##### Heading 5
 
-## Heading 3
+## Heading 2
 
 ###### Heading 6
 
@@ -231,7 +279,7 @@ some text
                 (
                     TOCEntry {
                         level: H3,
-                        text: "Heading 2",
+                        text: "Heading 3",
                         range: 2..16,
                     },
                     1,
@@ -255,7 +303,7 @@ some text
                 (
                     TOCEntry {
                         level: H2,
-                        text: "Heading 3",
+                        text: "Heading 2",
                         range: 62..75,
                     },
                     0,
@@ -271,5 +319,41 @@ some text
             ],
         }
         "#);
+    }
+
+    #[test]
+    fn test_print_tree() {
+        let md = data();
+        let tree = Tree::new(&md);
+        let toc = extract_toc(&tree);
+
+        let output = toc.render_tree();
+        assert_snapshot!(output, @r"
+        TOC
+        ├─ H1 Heading
+        │  └─ H2 Heading 2
+        │     └─ H3 Heading 3
+        │        └─ H4 Heading 4
+        │           └─ H5 Heading 5
+        │              └─ H6 Heading 6
+        └─ H1 Heading
+        ")
+    }
+
+    #[test]
+    fn test_print_tree_sparse() {
+        let md = data_sparse_headings();
+        let tree = Tree::new(&md);
+        let toc = extract_toc(&tree);
+
+        let output = toc.render_tree();
+        assert_snapshot!(output, @r"
+        TOC
+        ├─ H3 Heading 3
+        │  └─ H4 Heading 4
+        │     └─ H5 Heading 5
+        └─ H2 Heading 2
+           └─ H6 Heading 6
+        ")
     }
 }
