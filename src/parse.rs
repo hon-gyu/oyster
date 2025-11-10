@@ -32,14 +32,8 @@ mod tests {
 
     fn basic_data() -> String {
         // A markdown file with multiple features enabled in options
-        let markdown = fs::read_to_string("src/basic.md").unwrap();
+        let markdown = fs::read_to_string("tests/data/notes/basic.md").unwrap();
         markdown.to_owned()
-    }
-
-    #[allow(dead_code)]
-    fn extended_data() -> String {
-        let more = fs::read_to_string("src/extended.md").unwrap();
-        basic_data() + more.as_str()
     }
 
     #[test]

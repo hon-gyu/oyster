@@ -571,7 +571,7 @@ mod tests {
     use std::fs;
 
     fn data() -> String {
-        let md = fs::read_to_string("src/basic.md").unwrap();
+        let md = fs::read_to_string("tests/data/notes/basic.md").unwrap();
         md
     }
 
