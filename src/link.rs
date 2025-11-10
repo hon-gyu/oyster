@@ -7,6 +7,7 @@
 use crate::ast::{Node, NodeKind, Tree};
 use pulldown_cmark::{HeadingLevel, LinkType};
 use std::fs;
+use std::path::PathBuf;
 use std::{ops::Range, path::Path};
 
 #[derive(Clone, Debug, PartialEq)]
@@ -22,18 +23,18 @@ pub enum InNoteReferenceable {
 #[derive(Clone, Debug, PartialEq)]
 pub enum Referenceable {
     Asset {
-        path: String,
+        path: PathBuf,
     },
     Note {
-        path: String,
+        path: PathBuf,
     },
     Heading {
-        note_path: String,
+        note_path: PathBuf,
         level: HeadingLevel,
         range: Range<usize>,
     },
     Block {
-        note_path: String,
+        note_path: PathBuf,
     },
 }
 
@@ -203,12 +204,9 @@ fn scan_dir_for_assets_and_notes(dir: &Path) -> Vec<Referenceable> {
             if path.is_dir() {
                 aux(&path, referenceables);
             } else if path.is_file() {
-                if let Some(path_str) = path.to_str() {
                 let item = match path.extension().and_then(|ext| ext.to_str()) {
-                    Some("md") => Referenceable::Note {
-                        path: path_str.to_string(),
-                    },
-                    _ => Referenceable::Asset { path: path_str.to_string()},
+                    Some("md") => Referenceable::Note { path },
+                    _ => Referenceable::Asset { path },
                 };
                 referenceables.push(item);
             }
