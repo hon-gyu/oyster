@@ -206,7 +206,7 @@ impl<'a> NodeKind<'a> {
         }
     }
 
-    fn into_static(self) -> NodeKind<'static> {
+    pub fn into_static(self) -> NodeKind<'static> {
         match self {
             NodeKind::Document => NodeKind::Document,
             NodeKind::Paragraph => NodeKind::Paragraph,
@@ -445,6 +445,7 @@ impl<'a> Node<'a> {
         }
     }
 
+    #[allow(dead_code)]
     fn to_sexp(&self) -> String {
         todo!()
     }
@@ -464,6 +465,7 @@ impl<'a> Tree<'a> {
         tree
     }
 
+    #[allow(warnings)]
     pub fn edit(&mut self, edit: &InputEdit) {
         todo!()
     }
@@ -471,6 +473,7 @@ impl<'a> Tree<'a> {
     /// Compare this old edited syntax tree to a new syntax tree representing
     /// the same document, returning a sequence of ranges whose syntactic
     /// structure has changed.
+    #[allow(warnings)]
     pub fn changed_ranges(&self, other: &Self) {
         // ) -> impl ExactSizeIterator<Item = TSRange> {
         todo!()

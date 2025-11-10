@@ -1,4 +1,4 @@
-#![allow(dead_code)] // reason: WIP
+#![allow(warnings)] // reason: WIP
 use crate::ast::{Node, NodeKind, Tree};
 use pulldown_cmark::{HeadingLevel, LinkType};
 use std::ops::Range;

@@ -1,3 +1,4 @@
+#![allow(warnings)] // reason: WIP
 /// Custom syntax parsing a list block as nested key-value pairs
 /// #WIP
 use crate::ast::Tree;
