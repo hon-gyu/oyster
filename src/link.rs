@@ -1,7 +1,13 @@
 #![allow(warnings)] // reason: WIP
+/// Extracts references and referenceables from a Markdown AST.
+/// Referenceable can be
+///     - items in a note: headings, block
+///     - notes: markdown files
+///     - assets other than notes: images, videos, audios, PDFs, etc.
 use crate::ast::{Node, NodeKind, Tree};
 use pulldown_cmark::{HeadingLevel, LinkType};
-use std::ops::Range;
+use std::fs;
+use std::{ops::Range, path::Path};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum InNoteReferenceable {
@@ -67,7 +73,8 @@ fn percent_encode(url: &str) -> String {
     .replace("%2F", "/") // Preserve / for file paths
 }
 
-fn extract_reference_and_referenceable(
+/// Extracts all references and referenceables from a node.
+pub fn extract_reference_and_referenceable_from_note(
     node: &Node,
 ) -> (Vec<Reference>, Vec<InNoteReferenceable>) {
     let mut references = Vec::new();
@@ -184,6 +191,31 @@ fn extract_reference_and_referenceable_helper(
             referenceables,
         );
     }
+}
+
+fn scan_dir_for_assets_and_notes(dir: &Path) -> Vec<Referenceable> {
+    fn aux<'a>(dir: &Path, referenceables: &'a mut Vec<Referenceable>) {
+        for entry in fs::read_dir(dir)
+            .expect("Failed to read directory")
+            .flatten()
+        {
+            let path = entry.path();
+            if path.is_dir() {
+                aux(&path, referenceables);
+            } else if path.is_file() {
+                if let Some(path_str) = path.to_str() {
+                let item = match path.extension().and_then(|ext| ext.to_str()) {
+                    Some("md") => Referenceable::Note {
+                        path: path_str.to_string(),
+                    },
+                    _ => Referenceable::Asset { path: path_str.to_string()},
+                };
+                referenceables.push(item);
+            }
+        }
+    }
+    let mut referenceables = Vec::<Referenceable>::new();
+    referenceables
 }
 
 fn build_links(
@@ -310,8 +342,10 @@ mod tests {
         let path = "tests/tt/Note 1.md";
         let text = fs::read_to_string(path).unwrap();
         let tree = Tree::new(&text);
-        let (references, referenceables) =
-            extract_reference_and_referenceable(&tree.root_node);
+        let (references, referenceables): (
+            Vec<Reference>,
+            Vec<InNoteReferenceable>,
+        ) = extract_reference_and_referenceable_from_note(&tree.root_node);
         assert_debug_snapshot!(references, @r##"
         [
             Reference {
