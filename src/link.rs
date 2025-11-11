@@ -66,6 +66,10 @@ fn percent_encode(url: &str) -> String {
 
 pub fn scan_note(path: &PathBuf) -> (Vec<Reference>, Vec<Referenceable>) {
     let text = fs::read_to_string(path).unwrap();
+    if text.is_empty() {
+        return (Vec::new(), Vec::new());
+    }
+
     let tree = Tree::new(&text);
 
     let mut references = Vec::new();
@@ -208,6 +212,7 @@ fn scan_dir_for_assets_and_notes(dir: &Path) -> Vec<Referenceable> {
         }
     }
     let mut referenceables = Vec::<Referenceable>::new();
+    aux(dir, &mut referenceables);
     referenceables
 }
 
@@ -230,6 +235,19 @@ fn scan_vault(dir: &Path) -> (Vec<Referenceable>, Vec<Reference>) {
     (file_referenceables, references)
 }
 
+fn parse_destination(dest: &str) -> Referenceable {
+    //! If the destination string ends with `.md`, it is targeting a note.
+    if dest.ends_with(".md") {
+        Referenceable::Note {
+            path: PathBuf::from(dest),
+        }
+    } else {
+        Referenceable::Asset {
+            path: PathBuf::from(dest),
+        }
+    }
+}
+
 /// Builds links from references and referenceables.
 /// Return a tuple of matched links and unresolved references.
 fn build_links(
@@ -247,6 +265,392 @@ fn build_links(
 mod tests {
     use super::*;
     use insta::{assert_debug_snapshot, assert_snapshot};
+
+    #[test]
+    fn test_scan_vault() {
+        let dir = PathBuf::from("tests/data/vaults/tt");
+        let (referenceables, references) = scan_vault(&dir);
+        assert_debug_snapshot!(references, @r########"
+        [
+            Reference {
+                range: 169..225,
+                dest: "Three laws of motion",
+                kind: MarkdownLink,
+                display_text: "Three laws of motion 11",
+            },
+            Reference {
+                range: 256..291,
+                dest: "#Level 3 title",
+                kind: MarkdownLink,
+                display_text: "Level 3 title",
+            },
+            Reference {
+                range: 358..397,
+                dest: "Note 2#Some level 2 title",
+                kind: MarkdownLink,
+                display_text: "22",
+            },
+            Reference {
+                range: 516..523,
+                dest: "()",
+                kind: MarkdownLink,
+                display_text: "www",
+            },
+            Reference {
+                range: 592..598,
+                dest: "ww",
+                kind: MarkdownLink,
+                display_text: "",
+            },
+            Reference {
+                range: 649..653,
+                dest: "()",
+                kind: MarkdownLink,
+                display_text: "",
+            },
+            Reference {
+                range: 702..735,
+                dest: "Three laws of motion",
+                kind: MarkdownLink,
+                display_text: "",
+            },
+            Reference {
+                range: 953..976,
+                dest: "Three laws of motion",
+                kind: WikiLink,
+                display_text: "Three laws of motion",
+            },
+            Reference {
+                range: 1017..1043,
+                dest: "Three laws of motion.md",
+                kind: WikiLink,
+                display_text: "Three laws of motion.md",
+            },
+            Reference {
+                range: 1077..1097,
+                dest: "Note 2 ",
+                kind: WikiLink,
+                display_text: " Note two",
+            },
+            Reference {
+                range: 1127..1144,
+                dest: "#Level 3 title",
+                kind: WikiLink,
+                display_text: "#Level 3 title",
+            },
+            Reference {
+                range: 1205..1222,
+                dest: "#Level 4 title",
+                kind: WikiLink,
+                display_text: "#Level 4 title",
+            },
+            Reference {
+                range: 1284..1294,
+                dest: "#random",
+                kind: WikiLink,
+                display_text: "#random",
+            },
+            Reference {
+                range: 1360..1388,
+                dest: "Note 2#Some level 2 title",
+                kind: WikiLink,
+                display_text: "Note 2#Some level 2 title",
+            },
+            Reference {
+                range: 1459..1501,
+                dest: "Note 2#Some level 2 title#Level 3 title",
+                kind: WikiLink,
+                display_text: "Note 2#Some level 2 title#Level 3 title",
+            },
+            Reference {
+                range: 1538..1568,
+                dest: "Note 2#random#Level 3 title",
+                kind: WikiLink,
+                display_text: "Note 2#random#Level 3 title",
+            },
+            Reference {
+                range: 1647..1670,
+                dest: "Note 2#Level 3 title",
+                kind: WikiLink,
+                display_text: "Note 2#Level 3 title",
+            },
+            Reference {
+                range: 1699..1711,
+                dest: "Note 2#L4",
+                kind: WikiLink,
+                display_text: "Note 2#L4",
+            },
+            Reference {
+                range: 1747..1778,
+                dest: "Note 2#Some level 2 title#L4",
+                kind: WikiLink,
+                display_text: "Note 2#Some level 2 title#L4",
+            },
+            Reference {
+                range: 1944..1966,
+                dest: "Non-existing note 4",
+                kind: WikiLink,
+                display_text: "Non-existing note 4",
+            },
+            Reference {
+                range: 2030..2034,
+                dest: "#",
+                kind: WikiLink,
+                display_text: "#",
+            },
+            Reference {
+                range: 2128..2152,
+                dest: "#######Link to figure",
+                kind: WikiLink,
+                display_text: "#######Link to figure",
+            },
+            Reference {
+                range: 2185..2208,
+                dest: "######Link to figure",
+                kind: WikiLink,
+                display_text: "######Link to figure",
+            },
+            Reference {
+                range: 2239..2260,
+                dest: "####Link to figure",
+                kind: WikiLink,
+                display_text: "####Link to figure",
+            },
+            Reference {
+                range: 2290..2310,
+                dest: "###Link to figure",
+                kind: WikiLink,
+                display_text: "###Link to figure",
+            },
+            Reference {
+                range: 2338..2356,
+                dest: "#Link to figure",
+                kind: WikiLink,
+                display_text: "#Link to figure",
+            },
+            Reference {
+                range: 2389..2401,
+                dest: "#L2 ",
+                kind: WikiLink,
+                display_text: " #L4",
+            },
+            Reference {
+                range: 2526..2537,
+                dest: "###L2#L4",
+                kind: WikiLink,
+                display_text: "###L2#L4",
+            },
+            Reference {
+                range: 2597..2612,
+                dest: "##L2######L4",
+                kind: WikiLink,
+                display_text: "##L2######L4",
+            },
+            Reference {
+                range: 2671..2685,
+                dest: "##L2#####L4",
+                kind: WikiLink,
+                display_text: "##L2#####L4",
+            },
+            Reference {
+                range: 2747..2764,
+                dest: "##L2#####L4#L3",
+                kind: WikiLink,
+                display_text: "##L2#####L4#L3",
+            },
+            Reference {
+                range: 2820..2845,
+                dest: "##L2#####L4#Another L3",
+                kind: WikiLink,
+                display_text: "##L2#####L4#Another L3",
+            },
+            Reference {
+                range: 3186..3203,
+                dest: "##L2######L4",
+                kind: MarkdownLink,
+                display_text: "1",
+            },
+            Reference {
+                range: 3262..3278,
+                dest: "##L2#####L4",
+                kind: MarkdownLink,
+                display_text: "2",
+            },
+            Reference {
+                range: 3340..3359,
+                dest: "##L2#####L4#L3",
+                kind: MarkdownLink,
+                display_text: "3",
+            },
+            Reference {
+                range: 3433..3448,
+                dest: "Figure 1.jpg",
+                kind: WikiLink,
+                display_text: "Figure 1.jpg",
+            },
+            Reference {
+                range: 3560..3578,
+                dest: "Figure 1.jpg.md",
+                kind: WikiLink,
+                display_text: "Figure 1.jpg.md",
+            },
+            Reference {
+                range: 3671..3692,
+                dest: "Figure 1.jpg.md.md",
+                kind: WikiLink,
+                display_text: "Figure 1.jpg.md.md",
+            },
+            Reference {
+                range: 3770..3786,
+                dest: "Figure 1.jpg",
+                kind: WikiLink,
+                display_text: "Figure 1.jpg",
+            },
+            Reference {
+                range: 3789..3807,
+                dest: "empty_video.mp4",
+                kind: WikiLink,
+                display_text: "empty_video.mp4",
+            },
+            Reference {
+                range: 50..61,
+                dest: "#^c93d41",
+                kind: WikiLink,
+                display_text: "#^c93d41",
+            },
+            Reference {
+                range: 117..126,
+                dest: "#^9afo",
+                kind: WikiLink,
+                display_text: "#^9afo",
+            },
+        ]
+        "########);
+        assert_debug_snapshot!(referenceables, @r#"
+        [
+            Note {
+                path: "tests/data/vaults/tt/Note 1.md",
+            },
+            Asset {
+                path: "tests/data/vaults/tt/.DS_Store",
+            },
+            Note {
+                path: "tests/data/vaults/tt/Three laws of motion.md",
+            },
+            Note {
+                path: "tests/data/vaults/tt/ww.md",
+            },
+            Note {
+                path: "tests/data/vaults/tt/Figure 1.jpg.md",
+            },
+            Asset {
+                path: "tests/data/vaults/tt/Figure 1.jpg",
+            },
+            Note {
+                path: "tests/data/vaults/tt/().md",
+            },
+            Asset {
+                path: "tests/data/vaults/tt/.obsidian/workspace.json",
+            },
+            Asset {
+                path: "tests/data/vaults/tt/.obsidian/app.json",
+            },
+            Asset {
+                path: "tests/data/vaults/tt/.obsidian/core-plugins.json",
+            },
+            Asset {
+                path: "tests/data/vaults/tt/.obsidian/appearance.json",
+            },
+            Note {
+                path: "tests/data/vaults/tt/Figure 1.jpg.md.md",
+            },
+            Asset {
+                path: "tests/data/vaults/tt/empty_video.mp4",
+            },
+            Note {
+                path: "tests/data/vaults/tt/block note.md",
+            },
+            Note {
+                path: "tests/data/vaults/tt/Note 2.md",
+            },
+            Heading {
+                note_path: "tests/data/vaults/tt/Note 1.md",
+                level: H3,
+                range: 57..75,
+            },
+            Heading {
+                note_path: "tests/data/vaults/tt/Note 1.md",
+                level: H4,
+                range: 75..94,
+            },
+            Heading {
+                note_path: "tests/data/vaults/tt/Note 1.md",
+                level: H3,
+                range: 95..117,
+            },
+            Heading {
+                note_path: "tests/data/vaults/tt/Note 1.md",
+                level: H6,
+                range: 118..149,
+            },
+            Heading {
+                note_path: "tests/data/vaults/tt/Note 1.md",
+                level: H6,
+                range: 889..944,
+            },
+            Heading {
+                note_path: "tests/data/vaults/tt/Note 1.md",
+                level: H5,
+                range: 3390..3411,
+            },
+            Heading {
+                note_path: "tests/data/vaults/tt/Note 1.md",
+                level: H2,
+                range: 3810..3816,
+            },
+            Heading {
+                note_path: "tests/data/vaults/tt/Note 1.md",
+                level: H3,
+                range: 3817..3824,
+            },
+            Heading {
+                note_path: "tests/data/vaults/tt/Note 1.md",
+                level: H4,
+                range: 3824..3832,
+            },
+            Heading {
+                note_path: "tests/data/vaults/tt/Note 1.md",
+                level: H3,
+                range: 3832..3847,
+            },
+            Heading {
+                note_path: "tests/data/vaults/tt/Note 1.md",
+                level: H2,
+                range: 3852..3856,
+            },
+            Heading {
+                note_path: "tests/data/vaults/tt/Note 2.md",
+                level: H2,
+                range: 1..23,
+            },
+            Heading {
+                note_path: "tests/data/vaults/tt/Note 2.md",
+                level: H4,
+                range: 24..32,
+            },
+            Heading {
+                note_path: "tests/data/vaults/tt/Note 2.md",
+                level: H3,
+                range: 33..51,
+            },
+            Heading {
+                note_path: "tests/data/vaults/tt/Note 2.md",
+                level: H2,
+                range: 53..77,
+            },
+        ]
+        "#);
+    }
 
     #[test]
     fn test_exract_references_and_referenceables() {
