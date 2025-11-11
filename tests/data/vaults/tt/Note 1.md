@@ -60,6 +60,9 @@
 	 - `[[#L2 | #L4]]`
 	 - points to L2
 	 - things after the pipe is escaped 
+ - multiple pipe: [[Note 2 | 2 | 3]]
+	 - `[[Note 2 | 2 | 3]]`
+	 - this points to Note 2
 - incorrect nested heading 
 	- `[[###L2#L4]]`:  [[###L2#L4]]
 		- points to L4 heading correctly
@@ -81,12 +84,18 @@
 	- `[3](##L2#####L4#L3)`: [3](##L2#####L4#L3)
 		- fallback to current note
 
-##### Link to figure
+##### Link to asset
 - `[[Figure 1.jpg]]`: [[Figure 1.jpg]]
 	- even if there exists a note called `Figure 1.jpg`, the asset will take precedence
 - `[[Figure 1.jpg.md]]`: [[Figure 1.jpg.md]]
 	- with explicit `.md` ending, we seek for note `Figure 1.jpg`
 - `[[Figure 1.jpg.md.md]]`: [[Figure 1.jpg.md.md]]
+- `[[Figure1#2.jpg]]`: [[Figure1#2.jpg]]
+	- understood as note and points to note Figure 1 (fallback to note after failing finding heading)
+- `[[Figure1|2.jpg]]`: [[Figure1|2.jpg]]
+	- understood as note and points to note Figure 1 (fallback to note after failing finding heading)
+- `[[Figure1^2.jpg]]`: [[Figure1^2.jpg]]
+	- points to image
 - ↳ when there's `.md`, it's removed and limit to the searching of notes
 
 `![[Figure 1.jpg]]`: ![[Figure 1.jpg]]
