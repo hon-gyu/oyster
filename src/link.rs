@@ -255,6 +255,12 @@ fn scan_vault(dir: &Path) -> (Vec<Referenceable>, Vec<Reference>) {
 
 fn parse_destination(dest: &str) -> Referenceable {
     //! If the destination string ends with `.md`, it is targeting a note.
+    // TODO:
+    // if there's # or |, it's forced to be a note
+    // find first # and first |, split into three parts
+    // the first part is note name
+    //     if it's empty, it's current note
+    // the second part is nested heading, only taking ancestor-descendant relationship into account
     if dest.ends_with(".md") {
         Referenceable::Note {
             path: PathBuf::from(dest),
