@@ -11,16 +11,6 @@ use std::path::PathBuf;
 use std::{ops::Range, path::Path};
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum InNoteReferenceable {
-    Heading {
-        level: HeadingLevel,
-        range: Range<usize>,
-    },
-    // TODO: figure out what exactly blocks can be referenced
-    Block,
-}
-
-#[derive(Clone, Debug, PartialEq)]
 pub enum Referenceable {
     Asset {
         path: PathBuf,
@@ -74,15 +64,15 @@ fn percent_encode(url: &str) -> String {
     .replace("%2F", "/") // Preserve / for file paths
 }
 
-/// Extracts all references and referenceables from a node.
-pub fn extract_reference_and_referenceable_from_note(
-    node: &Node,
-) -> (Vec<Reference>, Vec<InNoteReferenceable>) {
+pub fn scan_note(path: &PathBuf) -> (Vec<Reference>, Vec<Referenceable>) {
+    let text = fs::read_to_string(path).unwrap();
+    let tree = Tree::new(&text);
+
     let mut references = Vec::new();
     let mut referenceables = Vec::new();
-
-    extract_reference_and_referenceable_helper(
-        node,
+    extract_reference_and_referenceable(
+        &tree.root_node,
+        path,
         &mut references,
         &mut referenceables,
     );
@@ -90,10 +80,12 @@ pub fn extract_reference_and_referenceable_from_note(
     (references, referenceables)
 }
 
-fn extract_reference_and_referenceable_helper(
+/// Extracts all references and referenceables from a node.
+fn extract_reference_and_referenceable(
     node: &Node,
+    path: &PathBuf,
     references: &mut Vec<Reference>,
-    referenceables: &mut Vec<InNoteReferenceable>,
+    referenceables: &mut Vec<Referenceable>,
 ) {
     match &node.kind {
         // Reference
@@ -170,7 +162,8 @@ fn extract_reference_and_referenceable_helper(
         }
         // Referenceable
         NodeKind::Heading { level, .. } => {
-            let referenceable = InNoteReferenceable::Heading {
+            let referenceable = Referenceable::Heading {
+                note_path: path.clone(),
                 level: level.clone(),
                 range: node.byte_range().clone(),
             };
@@ -186,8 +179,9 @@ fn extract_reference_and_referenceable_helper(
     }
 
     for child in node.children.iter() {
-        extract_reference_and_referenceable_helper(
+        extract_reference_and_referenceable(
             child,
+            path,
             references,
             referenceables,
         );
@@ -216,6 +210,24 @@ fn scan_dir_for_assets_and_notes(dir: &Path) -> Vec<Referenceable> {
     referenceables
 }
 
+fn scan_dir_for_referenceables(dir: &Path) -> Vec<Referenceable> {
+    let file_referenceables = scan_dir_for_assets_and_notes(dir);
+
+    let mut in_note_referenceables = Vec::<Referenceable>::new();
+
+    for note in file_referenceables.iter() {
+        if let Referenceable::Note { path } = note {
+            let (references, referenceables) = scan_note(path);
+            todo!()
+        }
+    }
+
+    let mut referenceables = Vec::<Referenceable>::new();
+    referenceables.extend(file_referenceables);
+
+    todo!()
+}
+
 fn build_links(
     references: Vec<Reference>,
     referenceable: Vec<Referenceable>,
@@ -231,7 +243,7 @@ mod tests {
     #[test]
     fn test_parse_ast_with_links() {
         use std::fs;
-        let path = "tests/tt/Note 1.md";
+        let path = "tests/data/vaults/tt/Note 1.md";
         let text = fs::read_to_string(path).unwrap();
         let tree = Tree::new(&text);
         assert_snapshot!(tree.root_node, @r##"
@@ -337,13 +349,9 @@ mod tests {
     #[test]
     fn test_exract_references_and_referenceables() {
         use std::fs;
-        let path = "tests/tt/Note 1.md";
-        let text = fs::read_to_string(path).unwrap();
-        let tree = Tree::new(&text);
-        let (references, referenceables): (
-            Vec<Reference>,
-            Vec<InNoteReferenceable>,
-        ) = extract_reference_and_referenceable_from_note(&tree.root_node);
+        let path = PathBuf::from("tests/data/vaults/tt/Note 1.md");
+        let (references, referenceables): (Vec<Reference>, Vec<Referenceable>) =
+            scan_note(&path);
         assert_debug_snapshot!(references, @r##"
         [
             Reference {
@@ -468,37 +476,44 @@ mod tests {
             },
         ]
         "##);
-        assert_debug_snapshot!(referenceables, @r"
+        assert_debug_snapshot!(referenceables, @r#"
         [
             Heading {
+                note_path: "tests/data/vaults/tt/Note 1.md",
                 level: H3,
                 range: 1..19,
             },
             Heading {
+                note_path: "tests/data/vaults/tt/Note 1.md",
                 level: H4,
                 range: 19..38,
             },
             Heading {
+                note_path: "tests/data/vaults/tt/Note 1.md",
                 level: H3,
                 range: 39..61,
             },
             Heading {
+                note_path: "tests/data/vaults/tt/Note 1.md",
                 level: H6,
                 range: 62..83,
             },
             Heading {
+                note_path: "tests/data/vaults/tt/Note 1.md",
                 level: H6,
                 range: 377..394,
             },
             Heading {
+                note_path: "tests/data/vaults/tt/Note 1.md",
                 level: H6,
                 range: 891..913,
             },
             Heading {
+                note_path: "tests/data/vaults/tt/Note 1.md",
                 level: H2,
                 range: 987..990,
             },
         ]
-        ");
+        "#);
     }
 }
