@@ -89,9 +89,9 @@
 - `[[Figure 1.jpg.md.md]]`: [[Figure 1.jpg.md.md]]
 - ↳ when there's `.md`, it's removed and limit to the searching of notes
 
-![[Figure 1.jpg]]
+`![[Figure 1.jpg]]`: ![[Figure 1.jpg]]
 
-[[empty_video.mp4]]
+`[[empty_video.mp4]]`: [[empty_video.mp4]]
 
 ## L2
 

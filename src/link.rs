@@ -194,25 +194,43 @@ fn extract_reference_and_referenceable(
 }
 
 fn scan_dir_for_assets_and_notes(dir: &Path) -> Vec<Referenceable> {
-    fn aux<'a>(dir: &Path, referenceables: &'a mut Vec<Referenceable>) {
+    fn aux<'a>(
+        dir: &Path,
+        referenceables: &'a mut Vec<Referenceable>,
+        ignores: &[&str],
+    ) {
         for entry in fs::read_dir(dir)
             .expect("Failed to read directory")
             .flatten()
         {
             let path = entry.path();
             if path.is_dir() {
-                aux(&path, referenceables);
+                if ignores.iter().any(|ignore| {
+                    path.file_name().and_then(|n| n.to_str()) == Some(ignore)
+                }) {
+                    continue;
+                }
+                aux(&path, referenceables, ignores);
             } else if path.is_file() {
                 let item = match path.extension().and_then(|ext| ext.to_str()) {
                     Some("md") => Referenceable::Note { path },
-                    _ => Referenceable::Asset { path },
+                    _ => {
+                        if ignores.iter().any(|ignore| {
+                            path.file_name().and_then(|n| n.to_str())
+                                == Some(ignore)
+                        }) {
+                            continue;
+                        }
+                        Referenceable::Asset { path }
+                    }
                 };
                 referenceables.push(item);
             }
         }
     }
+    let ignores = vec![".obsidian", ".DS_Store"];
     let mut referenceables = Vec::<Referenceable>::new();
-    aux(dir, &mut referenceables);
+    aux(dir, &mut referenceables, &ignores);
     referenceables
 }
 
@@ -501,13 +519,13 @@ mod tests {
                 display_text: "Figure 1.jpg.md.md",
             },
             Reference {
-                range: 3770..3786,
+                range: 3791..3807,
                 dest: "Figure 1.jpg",
                 kind: WikiLink,
                 display_text: "Figure 1.jpg",
             },
             Reference {
-                range: 3789..3807,
+                range: 3833..3851,
                 dest: "empty_video.mp4",
                 kind: WikiLink,
                 display_text: "empty_video.mp4",
@@ -531,9 +549,6 @@ mod tests {
             Note {
                 path: "tests/data/vaults/tt/Note 1.md",
             },
-            Asset {
-                path: "tests/data/vaults/tt/.DS_Store",
-            },
             Note {
                 path: "tests/data/vaults/tt/Three laws of motion.md",
             },
@@ -548,18 +563,6 @@ mod tests {
             },
             Note {
                 path: "tests/data/vaults/tt/().md",
-            },
-            Asset {
-                path: "tests/data/vaults/tt/.obsidian/workspace.json",
-            },
-            Asset {
-                path: "tests/data/vaults/tt/.obsidian/app.json",
-            },
-            Asset {
-                path: "tests/data/vaults/tt/.obsidian/core-plugins.json",
-            },
-            Asset {
-                path: "tests/data/vaults/tt/.obsidian/appearance.json",
             },
             Note {
                 path: "tests/data/vaults/tt/Figure 1.jpg.md.md",
@@ -606,27 +609,27 @@ mod tests {
             Heading {
                 note_path: "tests/data/vaults/tt/Note 1.md",
                 level: H2,
-                range: 3810..3816,
+                range: 3854..3860,
             },
             Heading {
                 note_path: "tests/data/vaults/tt/Note 1.md",
                 level: H3,
-                range: 3817..3824,
+                range: 3861..3868,
             },
             Heading {
                 note_path: "tests/data/vaults/tt/Note 1.md",
                 level: H4,
-                range: 3824..3832,
+                range: 3868..3876,
             },
             Heading {
                 note_path: "tests/data/vaults/tt/Note 1.md",
                 level: H3,
-                range: 3832..3847,
+                range: 3876..3891,
             },
             Heading {
                 note_path: "tests/data/vaults/tt/Note 1.md",
                 level: H2,
-                range: 3852..3856,
+                range: 3896..3900,
             },
             Heading {
                 note_path: "tests/data/vaults/tt/Note 2.md",
@@ -889,13 +892,13 @@ mod tests {
                 display_text: "Figure 1.jpg.md.md",
             },
             Reference {
-                range: 3770..3786,
+                range: 3791..3807,
                 dest: "Figure 1.jpg",
                 kind: WikiLink,
                 display_text: "Figure 1.jpg",
             },
             Reference {
-                range: 3789..3807,
+                range: 3833..3851,
                 dest: "empty_video.mp4",
                 kind: WikiLink,
                 display_text: "empty_video.mp4",
@@ -937,27 +940,27 @@ mod tests {
             Heading {
                 note_path: "tests/data/vaults/tt/Note 1.md",
                 level: H2,
-                range: 3810..3816,
+                range: 3854..3860,
             },
             Heading {
                 note_path: "tests/data/vaults/tt/Note 1.md",
                 level: H3,
-                range: 3817..3824,
+                range: 3861..3868,
             },
             Heading {
                 note_path: "tests/data/vaults/tt/Note 1.md",
                 level: H4,
-                range: 3824..3832,
+                range: 3868..3876,
             },
             Heading {
                 note_path: "tests/data/vaults/tt/Note 1.md",
                 level: H3,
-                range: 3832..3847,
+                range: 3876..3891,
             },
             Heading {
                 note_path: "tests/data/vaults/tt/Note 1.md",
                 level: H2,
-                range: 3852..3856,
+                range: 3896..3900,
             },
         ]
         "#);
@@ -970,7 +973,7 @@ mod tests {
         let text = fs::read_to_string(path).unwrap();
         let tree = Tree::new(&text);
         assert_snapshot!(tree.root_node, @r########"
-        Document [0..3856]
+        Document [0..3900]
           List(None) [0..57]
             Item [0..57]
               Text(Borrowed("Note in Obsidian cannot have # ^ ")) [2..35]
@@ -1312,22 +1315,26 @@ mod tests {
               Text(Borrowed(", it")) [3718..3722]
               Text(Inlined(InlineStr { inner: [226, 128, 153, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], len: 3 })) [3722..3723]
               Text(Borrowed("s removed and limit to the searching of notes")) [3723..3768]
-          Paragraph [3770..3788]
-            Image { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("Figure 1.jpg"), title: Borrowed(""), id: Borrowed("") } [3770..3786]
-              Text(Borrowed("Figure 1.jpg")) [3773..3785]
-          Paragraph [3789..3809]
-            Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("empty_video.mp4"), title: Borrowed(""), id: Borrowed("") } [3789..3807]
-              Text(Borrowed("empty_video.mp4")) [3791..3806]
-          Heading { level: H2, id: None, classes: [], attrs: [] } [3810..3816]
-            Text(Borrowed("L2")) [3813..3815]
-          Heading { level: H3, id: None, classes: [], attrs: [] } [3817..3824]
-            Text(Borrowed("L3")) [3821..3823]
-          Heading { level: H4, id: None, classes: [], attrs: [] } [3824..3832]
-            Text(Borrowed("L4")) [3829..3831]
-          Heading { level: H3, id: None, classes: [], attrs: [] } [3832..3847]
-            Text(Borrowed("Another L3")) [3836..3846]
-          Rule [3848..3852]
-          Heading { level: H2, id: None, classes: [], attrs: [] } [3852..3856]
+          Paragraph [3770..3809]
+            Code(Borrowed("![[Figure 1.jpg]]")) [3770..3789]
+            Text(Borrowed(": ")) [3789..3791]
+            Image { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("Figure 1.jpg"), title: Borrowed(""), id: Borrowed("") } [3791..3807]
+              Text(Borrowed("Figure 1.jpg")) [3794..3806]
+          Paragraph [3810..3853]
+            Code(Borrowed("[[empty_video.mp4]]")) [3810..3831]
+            Text(Borrowed(": ")) [3831..3833]
+            Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("empty_video.mp4"), title: Borrowed(""), id: Borrowed("") } [3833..3851]
+              Text(Borrowed("empty_video.mp4")) [3835..3850]
+          Heading { level: H2, id: None, classes: [], attrs: [] } [3854..3860]
+            Text(Borrowed("L2")) [3857..3859]
+          Heading { level: H3, id: None, classes: [], attrs: [] } [3861..3868]
+            Text(Borrowed("L3")) [3865..3867]
+          Heading { level: H4, id: None, classes: [], attrs: [] } [3868..3876]
+            Text(Borrowed("L4")) [3873..3875]
+          Heading { level: H3, id: None, classes: [], attrs: [] } [3876..3891]
+            Text(Borrowed("Another L3")) [3880..3890]
+          Rule [3892..3896]
+          Heading { level: H2, id: None, classes: [], attrs: [] } [3896..3900]
         "########);
     }
 }
