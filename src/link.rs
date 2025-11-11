@@ -110,7 +110,7 @@ fn extract_reference_and_referenceable(
                         if let NodeKind::Text(text) = &text_node.kind {
                             text.to_string()
                         } else {
-                            panic!("Wikilink should have text");
+                            panic!("Never: Wikilink should have text");
                         }
                     };
                     let reference = Reference {
@@ -122,6 +122,7 @@ fn extract_reference_and_referenceable(
                     references.push(reference);
                 }
                 LinkType::Inline => {
+                    // Decode the destination URL. Eg, from `Note%201` to `Note 1`
                     let mut dest = percent_decode(dest_url);
                     // `[text]()` points to file `().md`
                     if dest.is_empty() {
@@ -210,28 +211,35 @@ fn scan_dir_for_assets_and_notes(dir: &Path) -> Vec<Referenceable> {
     referenceables
 }
 
-fn scan_dir_for_referenceables(dir: &Path) -> Vec<Referenceable> {
-    let file_referenceables = scan_dir_for_assets_and_notes(dir);
+fn scan_vault(dir: &Path) -> (Vec<Referenceable>, Vec<Reference>) {
+    let mut file_referenceables = scan_dir_for_assets_and_notes(dir);
 
     let mut in_note_referenceables = Vec::<Referenceable>::new();
+    let mut references = Vec::<Reference>::new();
 
     for note in file_referenceables.iter() {
         if let Referenceable::Note { path } = note {
-            let (references, referenceables) = scan_note(path);
-            todo!()
+            let (note_references, note_referenceables) = scan_note(path);
+            references.extend(note_references);
+            in_note_referenceables.extend(note_referenceables);
         }
     }
 
-    let mut referenceables = Vec::<Referenceable>::new();
-    referenceables.extend(file_referenceables);
-
-    todo!()
+    // Merge referenceables
+    file_referenceables.extend(in_note_referenceables);
+    (file_referenceables, references)
 }
 
+/// Builds links from references and referenceables.
+/// Return a tuple of matched links and unresolved references.
 fn build_links(
     references: Vec<Reference>,
     referenceable: Vec<Referenceable>,
-) -> Vec<Link> {
+) -> (Vec<Link>, Vec<Referenceable>) {
+    let mut links = Vec::<Link>::new();
+    for reference in references {
+        for referenceable in referenceable.iter() {}
+    }
     todo!()
 }
 
