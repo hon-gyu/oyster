@@ -48,8 +48,11 @@
 - non-existing note: [[Non-existing note 4]]
 - empty link: [[]]
 	- points to current note
-- empty heading: [[#]]
-	- `[[#]]` points to current note
+- empty heading:
+	- `[[#]]`: [[#]] 
+		- points to current note
+	- `[[Note 2##]]`:  [[Note 2##]]
+		- points to Note 2
 - incorrect heading level
 	- `[[#######Link to figure]]`: [[#######Link to figure]]
 	- `[[######Link to figure]]`: [[######Link to figure]]
