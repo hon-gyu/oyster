@@ -1,4 +1,4 @@
-- Note in Obsidian cannot have # ^ [ ] | in the heading.
+- Note in Obsidian cannot have # ^ [ ] | in the title.
 ### Level 3 title
 #### Level 4 title
 
@@ -88,31 +88,56 @@
 		- fallback to current note
 
 ##### Link to asset
-- `[[Figure 1.jpg]]`: [[Figure 1.jpg]]
-	- even if there exists a note called `Figure 1.jpg`, the asset will take precedence
-- `[[Figure 1.jpg#2]]`: [[Figure 1.jpg#2]]
+- `[[Figure1.jpg]]`: [[Figure1.jpg]]
+	- even if there exists a note called `Figure1.jpg`, the asset will take precedence
+- `[[Figure1.jpg#2]]`: [[Figure1.jpg#2]]
 	- points to image
-- `[[Figure 1.jpg | 2]]`: [[Figure 1.jpg | 2]]
+- `[[Figure1.jpg | 2]]`: [[Figure1.jpg | 2]]
 	- points to image
-- `[[Figure 1.jpg.md]]`: [[Figure 1.jpg.md]]
-	- with explicit `.md` ending, we seek for note `Figure 1.jpg`
-- `[[Figure 1.jpg.md.md]]`: [[Figure 1.jpg.md.md]]
+	- leading and ending spaces are stripped
+- `[[Figure1.jpg.md]]`: [[Figure1.jpg.md]]
+	- with explicit `.md` ending, we seek for note `Figure1.jpg`
+- `[[Figure1.jpg.md.md]]`: [[Figure1.jpg.md.md]]
 - `[[Figure1#2.jpg]]`: [[Figure1#2.jpg]]
-	- understood as note and points to note Figure 1 (fallback to note after failing finding heading)
+	- understood as note and points to note Figure1 (fallback to note after failing finding heading)
 - `[[Figure1|2.jpg]]`: [[Figure1|2.jpg]]
-	- understood as note and points to note Figure 1 (fallback to note after failing finding heading)
+	- understood as note and points to note Figure1 (fallback to note after failing finding heading)
 - `[[Figure1^2.jpg]]`: [[Figure1^2.jpg]]
 	- points to image
 - ↳ when there's `.md`, it's removed and limit to the searching of notes
 - `[[dir/]]`: [[dir/]]
-	- points to note `dir`
+	- BUG
+	- when clicking it, it will create `dir` note if not exists
+	- create `dir 1.md` if `dir` exists
+	- create `dir {n+1}.md` if `dir {n}.md` exists
+	- I guess the logic is:
+		- there's no file named `dir/`, Obsidian try to create a note
+		- it removes `/` and `\`
+		- if there exists one, it add integer suffix
+- matching of nested dirs only match ancestor-descendant relationship
+	- `[[dir/inner_dir/note_in_inner_dir]]`: [[dir/inner_dir/note_in_inner_dir]]
+	- `[[inner_dir/note_in_inner_dir]]`: [[inner_dir/note_in_inner_dir]]
+	- `[[dir/note_in_inner_dir]]`: [[dir/note_in_inner_dir]]
+	- ↳ all points to the same note
+	- `[[random/note_in_inner_dir]]`: [[random/note_in_inner_dir]]
+		- this has no match
+		- it will try to understand the file name and path
+		- mkdir and touch file (in contrast to the case of `dir/`)
 - `[[dir/indir_same_name]]`: [[dir/indir_same_name]]
 - `[[indir_same_name]]`: [[indir_same_name]]
 	- points to `indir_same_name`, not the in dir one
 -  `[[indir2]]`: [[indir2]]
 	- points to `dir/indir2`
+- `[[Something]]`: [[Something]]
+	- there exists a `Something` file, but this will points to note `Something.md`
+- `[[unsupported_text_file.txt]]`: [[unsupported_text_file.txt]]
+	- points to text file, which is of unsupported format
+- `[[a.joiwduvqneoi]]`: [[a.joiwduvqneoi]]
+	- points to file
+- `[[Note 1]]`: [[Note 1]]
+	- even if there exists a file named `Note 1`, this points to the note
 
-`![[Figure 1.jpg]]`: ![[Figure 1.jpg]]
+`![[Figure1.jpg]]`: ![[Figure1.jpg]]
 `[[empty_video.mp4]]`: [[empty_video.mp4]]
 
 ## L2

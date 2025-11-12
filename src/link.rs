@@ -19,13 +19,24 @@ pub enum Referenceable {
         path: PathBuf,
     },
     Heading {
-        note_path: PathBuf,
+        path: PathBuf,
         level: HeadingLevel,
         range: Range<usize>,
     },
     Block {
-        note_path: PathBuf,
+        path: PathBuf,
     },
+}
+
+impl Referenceable {
+    pub fn path(&self) -> &PathBuf {
+        match self {
+            Referenceable::Asset { path, .. } => path,
+            Referenceable::Note { path, .. } => path,
+            Referenceable::Heading { path, .. } => path,
+            Referenceable::Block { path, .. } => path,
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -168,7 +179,7 @@ fn extract_reference_and_referenceable(
         // Referenceable
         NodeKind::Heading { level, .. } => {
             let referenceable = Referenceable::Heading {
-                note_path: path.clone(),
+                path: path.clone(),
                 level: level.clone(),
                 range: node.byte_range().clone(),
             };
@@ -286,7 +297,7 @@ pub fn parse_nested_heading(s: &str) -> Vec<&str> {
     s.split('#').filter(|part| !part.is_empty()).collect()
 }
 
-fn match_file(file_name: &str, paths: Vec<PathBuf>) -> Option<PathBuf> {
+fn match_file(file_name: &str, paths: &Vec<PathBuf>) -> Option<PathBuf> {
     todo!()
 }
 
@@ -375,7 +386,97 @@ mod tests {
     }
 
     #[test]
-    fn test_match_file() {}
+    fn test_match_file() {
+        let paths = vec![
+            "Note 1.md",
+            "Three laws of motion.md",
+            "indir_same_name.md",
+            "ww.md",
+            "Figure 1.jpg.md",
+            "Figure 1.jpg",
+            "().md",
+            "Figure1#2.jpg",
+            "Figure 1.jpg.md.md",
+            "dir.md",
+            "empty_video.mp4",
+            "Hi.txt.md",
+            "block note.md",
+            "dir/indir_same_name.md",
+            "dir/indir2.md",
+            "dir/inner_dir/note_in_inner_dir.md",
+            "unsupported_text_file.txt",
+            "unsupported_text_file.txt.md",
+            "unsupported.unsupported",
+            "Figure1.md",
+            "Figure1^2.jpg",
+            "Note 2.md",
+            "Figure1|2.jpg",
+            "Note 1",
+            "Something",
+            "a.joiwduvqneoi",
+            "a.joiwduvqneoi.md",
+        ]
+        .iter()
+        .map(|s| PathBuf::from(s))
+        .collect::<Vec<_>>();
+
+        let assert_match = |input: &str, expected: &str| {
+            let matched = match_file(input, &paths)
+                .and_then(|p| p.as_path().to_str().map(|s| s.to_string()));
+            assert_eq!(matched, Some(expected.to_string()));
+        };
+        let assert_no_match = |input: &str| {
+            let matched = match_file(input, &paths)
+                .and_then(|p| p.as_path().to_str().map(|s| s.to_string()));
+            assert_eq!(matched, None);
+        };
+
+        // Logic:
+        // If the file name has no extension, we add `.md` to it.
+        // So, a file called `Note 1` will never be matched as any attempt
+        // to match it will understood as `Note 1.md`.
+        //
+        // Space is stipped
+        //
+        // Examples:
+        // Basic
+        assert_match("Note 1.md", "Note 1.md");
+        assert_match("Note 1", "Note 1.md");
+        // There exist both `Figure 1.jpg` and `Figure 1.jpg.md`, but `Figure 1.jpg` is matched
+        assert_match("Figure 1.jpg", "Figure 1.jpg");
+        assert_match("Figure 1.jpg.md", "Figure 1.jpg.md");
+        assert_match("Figure 1.jpg.md.md", "Figure 1.jpg.md.md");
+        assert_match("Figure1^2.jpg", "Figure1^2.jpg");
+        assert_no_match("dir/");
+        // `indir_same_name.md` at the top level won't be matched
+        assert_match("dir/indir_same_name", "dir/indir_same_name.md");
+        // matching of nested dirs only match ancestor-descendant relationship
+        // All of the following 3 will match to `dir/inner_dir/note_in_inner_dir.md`
+        assert_match(
+            "dir/inner_dir/note_in_inner_dir",
+            "dir/inner_dir/note_in_inner_dir.md",
+        );
+        assert_match(
+            "inner_dir/note_in_inner_dir",
+            "dir/inner_dir/note_in_inner_dir.md",
+        );
+        assert_match(
+            "dir/note_in_inner_dir",
+            "dir/inner_dir/note_in_inner_dir.md",
+        );
+        // This won't be matched as there's no dir named `random` in the vault
+        assert_no_match("random/note_in_inner_dir");
+        // Find note in the root-level first, and then fallback to note in subdirectory
+        assert_match("dir/indir_same_name.md", "dir/indir_same_name.md");
+        assert_match("indir_same_name.md", "indir_same_name.md"); // root, not dir version
+        // There exist no note named `indir2.md` in root-level, but there's one in subdirectory
+        assert_match("indir2.md", "dir/indir2.md"); // finds in subdirectory
+        // File with no extension will never be matched
+        assert_no_match("Something"); // no matched although there exist a file named `Something`
+        // Points to file although the extension makes no sense
+        // Explanation: it doesn't matter if the file is a supported format or not in https://help.obsidian.md/file-formats
+        assert_match("a.joiwduvqneoi", "a.joiwduvqneoi");
+    }
 
     #[test]
     fn test_parse_nested_heading() {
@@ -423,61 +524,69 @@ mod tests {
             ],
         );
         assert_snapshot!(table, @r"
-        +-----+-----------------------------------------+-------------------------+----------------------------------+
-        | Idx |           Destination string            |          Note           |             Headings             |
-        +-----+-----------------------------------------+-------------------------+----------------------------------+
-        |   0 | Three laws of motion                    | Three laws of motion    |                                  |
-        |   1 | #Level 3 title                          |                         | Level 3 title                    |
-        |   2 | Note 2#Some level 2 title               | Note 2                  | Some level 2 title               |
-        |   3 | ()                                      | ()                      |                                  |
-        |   4 | ww                                      | ww                      |                                  |
-        |   5 | ()                                      | ()                      |                                  |
-        |   6 | Three laws of motion                    | Three laws of motion    |                                  |
-        |   7 | Three laws of motion                    | Three laws of motion    |                                  |
-        |   8 | Three laws of motion.md                 | Three laws of motion.md |                                  |
-        |   9 | Note 2                                  | Note 2                  |                                  |
-        |  10 | #Level 3 title                          |                         | Level 3 title                    |
-        |  11 | #Level 4 title                          |                         | Level 4 title                    |
-        |  12 | #random                                 |                         | random                           |
-        |  13 | Note 2#Some level 2 title               | Note 2                  | Some level 2 title               |
-        |  14 | Note 2#Some level 2 title#Level 3 title | Note 2                  | Some level 2 title#Level 3 title |
-        |  15 | Note 2#random#Level 3 title             | Note 2                  | random#Level 3 title             |
-        |  16 | Note 2#Level 3 title                    | Note 2                  | Level 3 title                    |
-        |  17 | Note 2#L4                               | Note 2                  | L4                               |
-        |  18 | Note 2#Some level 2 title#L4            | Note 2                  | Some level 2 title#L4            |
-        |  19 | Non-existing note 4                     | Non-existing note 4     |                                  |
-        |  20 | #                                       |                         |                                  |
-        |  21 | Note 2##                                | Note 2                  |                                  |
-        |  22 | #######Link to figure                   |                         | Link to figure                   |
-        |  23 | ######Link to figure                    |                         | Link to figure                   |
-        |  24 | ####Link to figure                      |                         | Link to figure                   |
-        |  25 | ###Link to figure                       |                         | Link to figure                   |
-        |  26 | #Link to figure                         |                         | Link to figure                   |
-        |  27 | #L2                                     |                         | L2                               |
-        |  28 | Note 2                                  | Note 2                  |                                  |
-        |  29 | ###L2#L4                                |                         | L2#L4                            |
-        |  30 | ##L2######L4                            |                         | L2#L4                            |
-        |  31 | ##L2#####L4                             |                         | L2#L4                            |
-        |  32 | ##L2#####L4#L3                          |                         | L2#L4#L3                         |
-        |  33 | ##L2#####L4#Another L3                  |                         | L2#L4#Another L3                 |
-        |  34 | ##L2######L4                            |                         | L2#L4                            |
-        |  35 | ##L2#####L4                             |                         | L2#L4                            |
-        |  36 | ##L2#####L4#L3                          |                         | L2#L4#L3                         |
-        |  37 | Figure 1.jpg                            | Figure 1.jpg            |                                  |
-        |  38 | Figure 1.jpg#2                          | Figure 1.jpg            | 2                                |
-        |  39 | Figure 1.jpg                            | Figure 1.jpg            |                                  |
-        |  40 | Figure 1.jpg.md                         | Figure 1.jpg.md         |                                  |
-        |  41 | Figure 1.jpg.md.md                      | Figure 1.jpg.md.md      |                                  |
-        |  42 | Figure1#2.jpg                           | Figure1                 | 2.jpg                            |
-        |  43 | Figure1                                 | Figure1                 |                                  |
-        |  44 | Figure1^2.jpg                           | Figure1^2.jpg           |                                  |
-        |  45 | dir/                                    | dir/                    |                                  |
-        |  46 | dir/indir_same_name                     | dir/indir_same_name     |                                  |
-        |  47 | indir_same_name                         | indir_same_name         |                                  |
-        |  48 | indir2                                  | indir2                  |                                  |
-        |  49 | Figure 1.jpg                            | Figure 1.jpg            |                                  |
-        |  50 | empty_video.mp4                         | empty_video.mp4         |                                  |
-        +-----+-----------------------------------------+-------------------------+----------------------------------+
+        +-----+-----------------------------------------+---------------------------------+----------------------------------+
+        | Idx |           Destination string            |              Note               |             Headings             |
+        +-----+-----------------------------------------+---------------------------------+----------------------------------+
+        |   0 | Three laws of motion                    | Three laws of motion            |                                  |
+        |   1 | #Level 3 title                          |                                 | Level 3 title                    |
+        |   2 | Note 2#Some level 2 title               | Note 2                          | Some level 2 title               |
+        |   3 | ()                                      | ()                              |                                  |
+        |   4 | ww                                      | ww                              |                                  |
+        |   5 | ()                                      | ()                              |                                  |
+        |   6 | Three laws of motion                    | Three laws of motion            |                                  |
+        |   7 | Three laws of motion                    | Three laws of motion            |                                  |
+        |   8 | Three laws of motion.md                 | Three laws of motion.md         |                                  |
+        |   9 | Note 2                                  | Note 2                          |                                  |
+        |  10 | #Level 3 title                          |                                 | Level 3 title                    |
+        |  11 | #Level 4 title                          |                                 | Level 4 title                    |
+        |  12 | #random                                 |                                 | random                           |
+        |  13 | Note 2#Some level 2 title               | Note 2                          | Some level 2 title               |
+        |  14 | Note 2#Some level 2 title#Level 3 title | Note 2                          | Some level 2 title#Level 3 title |
+        |  15 | Note 2#random#Level 3 title             | Note 2                          | random#Level 3 title             |
+        |  16 | Note 2#Level 3 title                    | Note 2                          | Level 3 title                    |
+        |  17 | Note 2#L4                               | Note 2                          | L4                               |
+        |  18 | Note 2#Some level 2 title#L4            | Note 2                          | Some level 2 title#L4            |
+        |  19 | Non-existing note 4                     | Non-existing note 4             |                                  |
+        |  20 | #                                       |                                 |                                  |
+        |  21 | Note 2##                                | Note 2                          |                                  |
+        |  22 | #######Link to figure                   |                                 | Link to figure                   |
+        |  23 | ######Link to figure                    |                                 | Link to figure                   |
+        |  24 | ####Link to figure                      |                                 | Link to figure                   |
+        |  25 | ###Link to figure                       |                                 | Link to figure                   |
+        |  26 | #Link to figure                         |                                 | Link to figure                   |
+        |  27 | #L2                                     |                                 | L2                               |
+        |  28 | Note 2                                  | Note 2                          |                                  |
+        |  29 | ###L2#L4                                |                                 | L2#L4                            |
+        |  30 | ##L2######L4                            |                                 | L2#L4                            |
+        |  31 | ##L2#####L4                             |                                 | L2#L4                            |
+        |  32 | ##L2#####L4#L3                          |                                 | L2#L4#L3                         |
+        |  33 | ##L2#####L4#Another L3                  |                                 | L2#L4#Another L3                 |
+        |  34 | ##L2######L4                            |                                 | L2#L4                            |
+        |  35 | ##L2#####L4                             |                                 | L2#L4                            |
+        |  36 | ##L2#####L4#L3                          |                                 | L2#L4#L3                         |
+        |  37 | Figure1.jpg                             | Figure1.jpg                     |                                  |
+        |  38 | Figure1.jpg#2                           | Figure1.jpg                     | 2                                |
+        |  39 | Figure1.jpg                             | Figure1.jpg                     |                                  |
+        |  40 | Figure1.jpg.md                          | Figure1.jpg.md                  |                                  |
+        |  41 | Figure1.jpg.md.md                       | Figure1.jpg.md.md               |                                  |
+        |  42 | Figure1#2.jpg                           | Figure1                         | 2.jpg                            |
+        |  43 | Figure1                                 | Figure1                         |                                  |
+        |  44 | Figure1^2.jpg                           | Figure1^2.jpg                   |                                  |
+        |  45 | dir/                                    | dir/                            |                                  |
+        |  46 | dir/inner_dir/note_in_inner_dir         | dir/inner_dir/note_in_inner_dir |                                  |
+        |  47 | inner_dir/note_in_inner_dir             | inner_dir/note_in_inner_dir     |                                  |
+        |  48 | dir/note_in_inner_dir                   | dir/note_in_inner_dir           |                                  |
+        |  49 | random/note_in_inner_dir                | random/note_in_inner_dir        |                                  |
+        |  50 | dir/indir_same_name                     | dir/indir_same_name             |                                  |
+        |  51 | indir_same_name                         | indir_same_name                 |                                  |
+        |  52 | indir2                                  | indir2                          |                                  |
+        |  53 | Something                               | Something                       |                                  |
+        |  54 | unsupported_text_file.txt               | unsupported_text_file.txt       |                                  |
+        |  55 | a.joiwduvqneoi                          | a.joiwduvqneoi                  |                                  |
+        |  56 | Note 1                                  | Note 1                          |                                  |
+        |  57 | Figure1.jpg                             | Figure1.jpg                     |                                  |
+        |  58 | empty_video.mp4                         | empty_video.mp4                 |                                  |
+        +-----+-----------------------------------------+---------------------------------+----------------------------------+
         ");
     }
 
@@ -488,307 +597,355 @@ mod tests {
         assert_debug_snapshot!(references, @r########"
         [
             Reference {
-                range: 169..225,
+                range: 167..223,
                 dest: "Three laws of motion",
                 kind: MarkdownLink,
                 display_text: "Three laws of motion 11",
             },
             Reference {
-                range: 256..291,
+                range: 254..289,
                 dest: "#Level 3 title",
                 kind: MarkdownLink,
                 display_text: "Level 3 title",
             },
             Reference {
-                range: 358..397,
+                range: 356..395,
                 dest: "Note 2#Some level 2 title",
                 kind: MarkdownLink,
                 display_text: "22",
             },
             Reference {
-                range: 516..523,
+                range: 514..521,
                 dest: "()",
                 kind: MarkdownLink,
                 display_text: "www",
             },
             Reference {
-                range: 592..598,
+                range: 590..596,
                 dest: "ww",
                 kind: MarkdownLink,
                 display_text: "",
             },
             Reference {
-                range: 649..653,
+                range: 647..651,
                 dest: "()",
                 kind: MarkdownLink,
                 display_text: "",
             },
             Reference {
-                range: 702..735,
+                range: 700..733,
                 dest: "Three laws of motion",
                 kind: MarkdownLink,
                 display_text: "",
             },
             Reference {
-                range: 953..976,
+                range: 951..974,
                 dest: "Three laws of motion",
                 kind: WikiLink,
                 display_text: "Three laws of motion",
             },
             Reference {
-                range: 1017..1043,
+                range: 1015..1041,
                 dest: "Three laws of motion.md",
                 kind: WikiLink,
                 display_text: "Three laws of motion.md",
             },
             Reference {
-                range: 1077..1097,
+                range: 1075..1095,
                 dest: "Note 2 ",
                 kind: WikiLink,
                 display_text: " Note two",
             },
             Reference {
-                range: 1127..1144,
+                range: 1125..1142,
                 dest: "#Level 3 title",
                 kind: WikiLink,
                 display_text: "#Level 3 title",
             },
             Reference {
-                range: 1205..1222,
+                range: 1203..1220,
                 dest: "#Level 4 title",
                 kind: WikiLink,
                 display_text: "#Level 4 title",
             },
             Reference {
-                range: 1284..1294,
+                range: 1282..1292,
                 dest: "#random",
                 kind: WikiLink,
                 display_text: "#random",
             },
             Reference {
-                range: 1360..1388,
+                range: 1358..1386,
                 dest: "Note 2#Some level 2 title",
                 kind: WikiLink,
                 display_text: "Note 2#Some level 2 title",
             },
             Reference {
-                range: 1459..1501,
+                range: 1457..1499,
                 dest: "Note 2#Some level 2 title#Level 3 title",
                 kind: WikiLink,
                 display_text: "Note 2#Some level 2 title#Level 3 title",
             },
             Reference {
-                range: 1538..1568,
+                range: 1536..1566,
                 dest: "Note 2#random#Level 3 title",
                 kind: WikiLink,
                 display_text: "Note 2#random#Level 3 title",
             },
             Reference {
-                range: 1647..1670,
+                range: 1645..1668,
                 dest: "Note 2#Level 3 title",
                 kind: WikiLink,
                 display_text: "Note 2#Level 3 title",
             },
             Reference {
-                range: 1699..1711,
+                range: 1697..1709,
                 dest: "Note 2#L4",
                 kind: WikiLink,
                 display_text: "Note 2#L4",
             },
             Reference {
-                range: 1747..1778,
+                range: 1745..1776,
                 dest: "Note 2#Some level 2 title#L4",
                 kind: WikiLink,
                 display_text: "Note 2#Some level 2 title#L4",
             },
             Reference {
-                range: 1944..1966,
+                range: 1942..1964,
                 dest: "Non-existing note 4",
                 kind: WikiLink,
                 display_text: "Non-existing note 4",
             },
             Reference {
-                range: 2042..2046,
+                range: 2040..2044,
                 dest: "#",
                 kind: WikiLink,
                 display_text: "#",
             },
             Reference {
-                range: 2096..2107,
+                range: 2094..2105,
                 dest: "Note 2##",
                 kind: WikiLink,
                 display_text: "Note 2##",
             },
             Reference {
-                range: 2188..2212,
+                range: 2186..2210,
                 dest: "#######Link to figure",
                 kind: WikiLink,
                 display_text: "#######Link to figure",
             },
             Reference {
-                range: 2245..2268,
+                range: 2243..2266,
                 dest: "######Link to figure",
                 kind: WikiLink,
                 display_text: "######Link to figure",
             },
             Reference {
-                range: 2299..2320,
+                range: 2297..2318,
                 dest: "####Link to figure",
                 kind: WikiLink,
                 display_text: "####Link to figure",
             },
             Reference {
-                range: 2350..2370,
+                range: 2348..2368,
                 dest: "###Link to figure",
                 kind: WikiLink,
                 display_text: "###Link to figure",
             },
             Reference {
-                range: 2398..2416,
+                range: 2396..2414,
                 dest: "#Link to figure",
                 kind: WikiLink,
                 display_text: "#Link to figure",
             },
             Reference {
-                range: 2449..2461,
+                range: 2447..2459,
                 dest: "#L2 ",
                 kind: WikiLink,
                 display_text: " #L4",
             },
             Reference {
-                range: 2556..2573,
+                range: 2554..2571,
                 dest: "Note 2 ",
                 kind: WikiLink,
                 display_text: " 2 | 3",
             },
             Reference {
-                range: 2674..2685,
+                range: 2672..2683,
                 dest: "###L2#L4",
                 kind: WikiLink,
                 display_text: "###L2#L4",
             },
             Reference {
-                range: 2745..2760,
+                range: 2743..2758,
                 dest: "##L2######L4",
                 kind: WikiLink,
                 display_text: "##L2######L4",
             },
             Reference {
-                range: 2819..2833,
+                range: 2817..2831,
                 dest: "##L2#####L4",
                 kind: WikiLink,
                 display_text: "##L2#####L4",
             },
             Reference {
-                range: 2895..2912,
+                range: 2893..2910,
                 dest: "##L2#####L4#L3",
                 kind: WikiLink,
                 display_text: "##L2#####L4#L3",
             },
             Reference {
-                range: 2968..2993,
+                range: 2966..2991,
                 dest: "##L2#####L4#Another L3",
                 kind: WikiLink,
                 display_text: "##L2#####L4#Another L3",
             },
             Reference {
-                range: 3334..3351,
+                range: 3332..3349,
                 dest: "##L2######L4",
                 kind: MarkdownLink,
                 display_text: "1",
             },
             Reference {
-                range: 3410..3426,
+                range: 3408..3424,
                 dest: "##L2#####L4",
                 kind: MarkdownLink,
                 display_text: "2",
             },
             Reference {
-                range: 3488..3507,
+                range: 3486..3505,
                 dest: "##L2#####L4#L3",
                 kind: MarkdownLink,
                 display_text: "3",
             },
             Reference {
-                range: 3580..3595,
-                dest: "Figure 1.jpg",
+                range: 3577..3591,
+                dest: "Figure1.jpg",
                 kind: WikiLink,
-                display_text: "Figure 1.jpg",
+                display_text: "Figure1.jpg",
             },
             Reference {
-                range: 3706..3723,
-                dest: "Figure 1.jpg#2",
+                range: 3700..3716,
+                dest: "Figure1.jpg#2",
                 kind: WikiLink,
-                display_text: "Figure 1.jpg#2",
+                display_text: "Figure1.jpg#2",
             },
             Reference {
-                range: 3770..3789,
-                dest: "Figure 1.jpg ",
+                range: 3762..3780,
+                dest: "Figure1.jpg ",
                 kind: WikiLink,
                 display_text: " 2",
             },
             Reference {
-                range: 3835..3853,
-                dest: "Figure 1.jpg.md",
+                range: 3867..3884,
+                dest: "Figure1.jpg.md",
                 kind: WikiLink,
-                display_text: "Figure 1.jpg.md",
+                display_text: "Figure1.jpg.md",
             },
             Reference {
-                range: 3946..3967,
-                dest: "Figure 1.jpg.md.md",
+                range: 3975..3995,
+                dest: "Figure1.jpg.md.md",
                 kind: WikiLink,
-                display_text: "Figure 1.jpg.md.md",
+                display_text: "Figure1.jpg.md.md",
             },
             Reference {
-                range: 3992..4008,
+                range: 4020..4036,
                 dest: "Figure1#2.jpg",
                 kind: WikiLink,
                 display_text: "Figure1#2.jpg",
             },
             Reference {
-                range: 4132..4148,
+                range: 4159..4175,
                 dest: "Figure1",
                 kind: WikiLink,
                 display_text: "2.jpg",
             },
             Reference {
-                range: 4272..4288,
+                range: 4298..4314,
                 dest: "Figure1^2.jpg",
                 kind: WikiLink,
                 display_text: "Figure1^2.jpg",
             },
             Reference {
-                range: 4398..4405,
+                range: 4424..4431,
                 dest: "dir/",
                 kind: WikiLink,
                 display_text: "dir/",
             },
             Reference {
-                range: 4460..4482,
+                range: 4861..4895,
+                dest: "dir/inner_dir/note_in_inner_dir",
+                kind: WikiLink,
+                display_text: "dir/inner_dir/note_in_inner_dir",
+            },
+            Reference {
+                range: 4935..4965,
+                dest: "inner_dir/note_in_inner_dir",
+                kind: WikiLink,
+                display_text: "inner_dir/note_in_inner_dir",
+            },
+            Reference {
+                range: 4999..5023,
+                dest: "dir/note_in_inner_dir",
+                kind: WikiLink,
+                display_text: "dir/note_in_inner_dir",
+            },
+            Reference {
+                range: 5095..5122,
+                dest: "random/note_in_inner_dir",
+                kind: WikiLink,
+                display_text: "random/note_in_inner_dir",
+            },
+            Reference {
+                range: 5289..5311,
                 dest: "dir/indir_same_name",
                 kind: WikiLink,
                 display_text: "dir/indir_same_name",
             },
             Reference {
-                range: 4509..4527,
+                range: 5338..5356,
                 dest: "indir_same_name",
                 kind: WikiLink,
                 display_text: "indir_same_name",
             },
             Reference {
-                range: 4597..4606,
+                range: 5426..5435,
                 dest: "indir2",
                 kind: WikiLink,
                 display_text: "indir2",
             },
             Reference {
-                range: 4656..4672,
-                dest: "Figure 1.jpg",
+                range: 5482..5494,
+                dest: "Something",
                 kind: WikiLink,
-                display_text: "Figure 1.jpg",
+                display_text: "Something",
             },
             Reference {
-                range: 4697..4715,
+                range: 5611..5639,
+                dest: "unsupported_text_file.txt",
+                kind: WikiLink,
+                display_text: "unsupported_text_file.txt",
+            },
+            Reference {
+                range: 5720..5737,
+                dest: "a.joiwduvqneoi",
+                kind: WikiLink,
+                display_text: "a.joiwduvqneoi",
+            },
+            Reference {
+                range: 5773..5782,
+                dest: "Note 1",
+                kind: WikiLink,
+                display_text: "Note 1",
+            },
+            Reference {
+                range: 5876..5891,
+                dest: "Figure1.jpg",
+                kind: WikiLink,
+                display_text: "Figure1.jpg",
+            },
+            Reference {
+                range: 5916..5934,
                 dest: "empty_video.mp4",
                 kind: WikiLink,
                 display_text: "empty_video.mp4",
@@ -812,6 +969,15 @@ mod tests {
             Note {
                 path: "tests/data/vaults/tt/Note 1.md",
             },
+            Asset {
+                path: "tests/data/vaults/tt/a.joiwduvqneoi",
+            },
+            Note {
+                path: "tests/data/vaults/tt/Figure1.jpg.md",
+            },
+            Asset {
+                path: "tests/data/vaults/tt/Something",
+            },
             Note {
                 path: "tests/data/vaults/tt/Three laws of motion.md",
             },
@@ -822,10 +988,10 @@ mod tests {
                 path: "tests/data/vaults/tt/ww.md",
             },
             Note {
-                path: "tests/data/vaults/tt/Figure 1.jpg.md",
+                path: "tests/data/vaults/tt/unsupported_text_file.txt.md",
             },
-            Asset {
-                path: "tests/data/vaults/tt/Figure 1.jpg",
+            Note {
+                path: "tests/data/vaults/tt/Figure1.jpg.md.md",
             },
             Note {
                 path: "tests/data/vaults/tt/().md",
@@ -833,11 +999,14 @@ mod tests {
             Asset {
                 path: "tests/data/vaults/tt/Figure1#2.jpg",
             },
-            Note {
-                path: "tests/data/vaults/tt/Figure 1.jpg.md.md",
+            Asset {
+                path: "tests/data/vaults/tt/Note 1",
             },
             Note {
                 path: "tests/data/vaults/tt/dir.md",
+            },
+            Note {
+                path: "tests/data/vaults/tt/a.joiwduvqneoi.md",
             },
             Asset {
                 path: "tests/data/vaults/tt/empty_video.mp4",
@@ -847,6 +1016,9 @@ mod tests {
             },
             Note {
                 path: "tests/data/vaults/tt/block note.md",
+            },
+            Note {
+                path: "tests/data/vaults/tt/dir/inner_dir/note_in_inner_dir.md",
             },
             Note {
                 path: "tests/data/vaults/tt/dir/indir_same_name.md",
@@ -866,6 +1038,9 @@ mod tests {
             Asset {
                 path: "tests/data/vaults/tt/Figure1^2.jpg",
             },
+            Asset {
+                path: "tests/data/vaults/tt/Figure1.jpg",
+            },
             Note {
                 path: "tests/data/vaults/tt/Note 2.md",
             },
@@ -873,77 +1048,77 @@ mod tests {
                 path: "tests/data/vaults/tt/Figure1|2.jpg",
             },
             Heading {
-                note_path: "tests/data/vaults/tt/Note 1.md",
+                path: "tests/data/vaults/tt/Note 1.md",
                 level: H3,
-                range: 57..75,
+                range: 55..73,
             },
             Heading {
-                note_path: "tests/data/vaults/tt/Note 1.md",
+                path: "tests/data/vaults/tt/Note 1.md",
                 level: H4,
-                range: 75..94,
+                range: 73..92,
             },
             Heading {
-                note_path: "tests/data/vaults/tt/Note 1.md",
+                path: "tests/data/vaults/tt/Note 1.md",
                 level: H3,
-                range: 95..117,
+                range: 93..115,
             },
             Heading {
-                note_path: "tests/data/vaults/tt/Note 1.md",
+                path: "tests/data/vaults/tt/Note 1.md",
                 level: H6,
-                range: 118..149,
+                range: 116..147,
             },
             Heading {
-                note_path: "tests/data/vaults/tt/Note 1.md",
+                path: "tests/data/vaults/tt/Note 1.md",
                 level: H6,
-                range: 889..944,
+                range: 887..942,
             },
             Heading {
-                note_path: "tests/data/vaults/tt/Note 1.md",
+                path: "tests/data/vaults/tt/Note 1.md",
                 level: H5,
-                range: 3538..3558,
+                range: 3536..3556,
             },
             Heading {
-                note_path: "tests/data/vaults/tt/Note 1.md",
+                path: "tests/data/vaults/tt/Note 1.md",
                 level: H2,
-                range: 4718..4724,
+                range: 5937..5943,
             },
             Heading {
-                note_path: "tests/data/vaults/tt/Note 1.md",
+                path: "tests/data/vaults/tt/Note 1.md",
                 level: H3,
-                range: 4725..4732,
+                range: 5944..5951,
             },
             Heading {
-                note_path: "tests/data/vaults/tt/Note 1.md",
+                path: "tests/data/vaults/tt/Note 1.md",
                 level: H4,
-                range: 4732..4740,
+                range: 5951..5959,
             },
             Heading {
-                note_path: "tests/data/vaults/tt/Note 1.md",
+                path: "tests/data/vaults/tt/Note 1.md",
                 level: H3,
-                range: 4740..4755,
+                range: 5959..5974,
             },
             Heading {
-                note_path: "tests/data/vaults/tt/Note 1.md",
+                path: "tests/data/vaults/tt/Note 1.md",
                 level: H2,
-                range: 4760..4764,
+                range: 5979..5983,
             },
             Heading {
-                note_path: "tests/data/vaults/tt/Note 2.md",
+                path: "tests/data/vaults/tt/Note 2.md",
                 level: H2,
                 range: 1..23,
             },
             Heading {
-                note_path: "tests/data/vaults/tt/Note 2.md",
+                path: "tests/data/vaults/tt/Note 2.md",
                 level: H4,
                 range: 24..32,
             },
             Heading {
-                note_path: "tests/data/vaults/tt/Note 2.md",
+                path: "tests/data/vaults/tt/Note 2.md",
                 level: H3,
                 range: 33..51,
             },
             Heading {
-                note_path: "tests/data/vaults/tt/Note 2.md",
+                path: "tests/data/vaults/tt/Note 2.md",
                 level: H2,
                 range: 53..77,
             },
@@ -959,307 +1134,355 @@ mod tests {
         assert_debug_snapshot!(references, @r########"
         [
             Reference {
-                range: 169..225,
+                range: 167..223,
                 dest: "Three laws of motion",
                 kind: MarkdownLink,
                 display_text: "Three laws of motion 11",
             },
             Reference {
-                range: 256..291,
+                range: 254..289,
                 dest: "#Level 3 title",
                 kind: MarkdownLink,
                 display_text: "Level 3 title",
             },
             Reference {
-                range: 358..397,
+                range: 356..395,
                 dest: "Note 2#Some level 2 title",
                 kind: MarkdownLink,
                 display_text: "22",
             },
             Reference {
-                range: 516..523,
+                range: 514..521,
                 dest: "()",
                 kind: MarkdownLink,
                 display_text: "www",
             },
             Reference {
-                range: 592..598,
+                range: 590..596,
                 dest: "ww",
                 kind: MarkdownLink,
                 display_text: "",
             },
             Reference {
-                range: 649..653,
+                range: 647..651,
                 dest: "()",
                 kind: MarkdownLink,
                 display_text: "",
             },
             Reference {
-                range: 702..735,
+                range: 700..733,
                 dest: "Three laws of motion",
                 kind: MarkdownLink,
                 display_text: "",
             },
             Reference {
-                range: 953..976,
+                range: 951..974,
                 dest: "Three laws of motion",
                 kind: WikiLink,
                 display_text: "Three laws of motion",
             },
             Reference {
-                range: 1017..1043,
+                range: 1015..1041,
                 dest: "Three laws of motion.md",
                 kind: WikiLink,
                 display_text: "Three laws of motion.md",
             },
             Reference {
-                range: 1077..1097,
+                range: 1075..1095,
                 dest: "Note 2 ",
                 kind: WikiLink,
                 display_text: " Note two",
             },
             Reference {
-                range: 1127..1144,
+                range: 1125..1142,
                 dest: "#Level 3 title",
                 kind: WikiLink,
                 display_text: "#Level 3 title",
             },
             Reference {
-                range: 1205..1222,
+                range: 1203..1220,
                 dest: "#Level 4 title",
                 kind: WikiLink,
                 display_text: "#Level 4 title",
             },
             Reference {
-                range: 1284..1294,
+                range: 1282..1292,
                 dest: "#random",
                 kind: WikiLink,
                 display_text: "#random",
             },
             Reference {
-                range: 1360..1388,
+                range: 1358..1386,
                 dest: "Note 2#Some level 2 title",
                 kind: WikiLink,
                 display_text: "Note 2#Some level 2 title",
             },
             Reference {
-                range: 1459..1501,
+                range: 1457..1499,
                 dest: "Note 2#Some level 2 title#Level 3 title",
                 kind: WikiLink,
                 display_text: "Note 2#Some level 2 title#Level 3 title",
             },
             Reference {
-                range: 1538..1568,
+                range: 1536..1566,
                 dest: "Note 2#random#Level 3 title",
                 kind: WikiLink,
                 display_text: "Note 2#random#Level 3 title",
             },
             Reference {
-                range: 1647..1670,
+                range: 1645..1668,
                 dest: "Note 2#Level 3 title",
                 kind: WikiLink,
                 display_text: "Note 2#Level 3 title",
             },
             Reference {
-                range: 1699..1711,
+                range: 1697..1709,
                 dest: "Note 2#L4",
                 kind: WikiLink,
                 display_text: "Note 2#L4",
             },
             Reference {
-                range: 1747..1778,
+                range: 1745..1776,
                 dest: "Note 2#Some level 2 title#L4",
                 kind: WikiLink,
                 display_text: "Note 2#Some level 2 title#L4",
             },
             Reference {
-                range: 1944..1966,
+                range: 1942..1964,
                 dest: "Non-existing note 4",
                 kind: WikiLink,
                 display_text: "Non-existing note 4",
             },
             Reference {
-                range: 2042..2046,
+                range: 2040..2044,
                 dest: "#",
                 kind: WikiLink,
                 display_text: "#",
             },
             Reference {
-                range: 2096..2107,
+                range: 2094..2105,
                 dest: "Note 2##",
                 kind: WikiLink,
                 display_text: "Note 2##",
             },
             Reference {
-                range: 2188..2212,
+                range: 2186..2210,
                 dest: "#######Link to figure",
                 kind: WikiLink,
                 display_text: "#######Link to figure",
             },
             Reference {
-                range: 2245..2268,
+                range: 2243..2266,
                 dest: "######Link to figure",
                 kind: WikiLink,
                 display_text: "######Link to figure",
             },
             Reference {
-                range: 2299..2320,
+                range: 2297..2318,
                 dest: "####Link to figure",
                 kind: WikiLink,
                 display_text: "####Link to figure",
             },
             Reference {
-                range: 2350..2370,
+                range: 2348..2368,
                 dest: "###Link to figure",
                 kind: WikiLink,
                 display_text: "###Link to figure",
             },
             Reference {
-                range: 2398..2416,
+                range: 2396..2414,
                 dest: "#Link to figure",
                 kind: WikiLink,
                 display_text: "#Link to figure",
             },
             Reference {
-                range: 2449..2461,
+                range: 2447..2459,
                 dest: "#L2 ",
                 kind: WikiLink,
                 display_text: " #L4",
             },
             Reference {
-                range: 2556..2573,
+                range: 2554..2571,
                 dest: "Note 2 ",
                 kind: WikiLink,
                 display_text: " 2 | 3",
             },
             Reference {
-                range: 2674..2685,
+                range: 2672..2683,
                 dest: "###L2#L4",
                 kind: WikiLink,
                 display_text: "###L2#L4",
             },
             Reference {
-                range: 2745..2760,
+                range: 2743..2758,
                 dest: "##L2######L4",
                 kind: WikiLink,
                 display_text: "##L2######L4",
             },
             Reference {
-                range: 2819..2833,
+                range: 2817..2831,
                 dest: "##L2#####L4",
                 kind: WikiLink,
                 display_text: "##L2#####L4",
             },
             Reference {
-                range: 2895..2912,
+                range: 2893..2910,
                 dest: "##L2#####L4#L3",
                 kind: WikiLink,
                 display_text: "##L2#####L4#L3",
             },
             Reference {
-                range: 2968..2993,
+                range: 2966..2991,
                 dest: "##L2#####L4#Another L3",
                 kind: WikiLink,
                 display_text: "##L2#####L4#Another L3",
             },
             Reference {
-                range: 3334..3351,
+                range: 3332..3349,
                 dest: "##L2######L4",
                 kind: MarkdownLink,
                 display_text: "1",
             },
             Reference {
-                range: 3410..3426,
+                range: 3408..3424,
                 dest: "##L2#####L4",
                 kind: MarkdownLink,
                 display_text: "2",
             },
             Reference {
-                range: 3488..3507,
+                range: 3486..3505,
                 dest: "##L2#####L4#L3",
                 kind: MarkdownLink,
                 display_text: "3",
             },
             Reference {
-                range: 3580..3595,
-                dest: "Figure 1.jpg",
+                range: 3577..3591,
+                dest: "Figure1.jpg",
                 kind: WikiLink,
-                display_text: "Figure 1.jpg",
+                display_text: "Figure1.jpg",
             },
             Reference {
-                range: 3706..3723,
-                dest: "Figure 1.jpg#2",
+                range: 3700..3716,
+                dest: "Figure1.jpg#2",
                 kind: WikiLink,
-                display_text: "Figure 1.jpg#2",
+                display_text: "Figure1.jpg#2",
             },
             Reference {
-                range: 3770..3789,
-                dest: "Figure 1.jpg ",
+                range: 3762..3780,
+                dest: "Figure1.jpg ",
                 kind: WikiLink,
                 display_text: " 2",
             },
             Reference {
-                range: 3835..3853,
-                dest: "Figure 1.jpg.md",
+                range: 3867..3884,
+                dest: "Figure1.jpg.md",
                 kind: WikiLink,
-                display_text: "Figure 1.jpg.md",
+                display_text: "Figure1.jpg.md",
             },
             Reference {
-                range: 3946..3967,
-                dest: "Figure 1.jpg.md.md",
+                range: 3975..3995,
+                dest: "Figure1.jpg.md.md",
                 kind: WikiLink,
-                display_text: "Figure 1.jpg.md.md",
+                display_text: "Figure1.jpg.md.md",
             },
             Reference {
-                range: 3992..4008,
+                range: 4020..4036,
                 dest: "Figure1#2.jpg",
                 kind: WikiLink,
                 display_text: "Figure1#2.jpg",
             },
             Reference {
-                range: 4132..4148,
+                range: 4159..4175,
                 dest: "Figure1",
                 kind: WikiLink,
                 display_text: "2.jpg",
             },
             Reference {
-                range: 4272..4288,
+                range: 4298..4314,
                 dest: "Figure1^2.jpg",
                 kind: WikiLink,
                 display_text: "Figure1^2.jpg",
             },
             Reference {
-                range: 4398..4405,
+                range: 4424..4431,
                 dest: "dir/",
                 kind: WikiLink,
                 display_text: "dir/",
             },
             Reference {
-                range: 4460..4482,
+                range: 4861..4895,
+                dest: "dir/inner_dir/note_in_inner_dir",
+                kind: WikiLink,
+                display_text: "dir/inner_dir/note_in_inner_dir",
+            },
+            Reference {
+                range: 4935..4965,
+                dest: "inner_dir/note_in_inner_dir",
+                kind: WikiLink,
+                display_text: "inner_dir/note_in_inner_dir",
+            },
+            Reference {
+                range: 4999..5023,
+                dest: "dir/note_in_inner_dir",
+                kind: WikiLink,
+                display_text: "dir/note_in_inner_dir",
+            },
+            Reference {
+                range: 5095..5122,
+                dest: "random/note_in_inner_dir",
+                kind: WikiLink,
+                display_text: "random/note_in_inner_dir",
+            },
+            Reference {
+                range: 5289..5311,
                 dest: "dir/indir_same_name",
                 kind: WikiLink,
                 display_text: "dir/indir_same_name",
             },
             Reference {
-                range: 4509..4527,
+                range: 5338..5356,
                 dest: "indir_same_name",
                 kind: WikiLink,
                 display_text: "indir_same_name",
             },
             Reference {
-                range: 4597..4606,
+                range: 5426..5435,
                 dest: "indir2",
                 kind: WikiLink,
                 display_text: "indir2",
             },
             Reference {
-                range: 4656..4672,
-                dest: "Figure 1.jpg",
+                range: 5482..5494,
+                dest: "Something",
                 kind: WikiLink,
-                display_text: "Figure 1.jpg",
+                display_text: "Something",
             },
             Reference {
-                range: 4697..4715,
+                range: 5611..5639,
+                dest: "unsupported_text_file.txt",
+                kind: WikiLink,
+                display_text: "unsupported_text_file.txt",
+            },
+            Reference {
+                range: 5720..5737,
+                dest: "a.joiwduvqneoi",
+                kind: WikiLink,
+                display_text: "a.joiwduvqneoi",
+            },
+            Reference {
+                range: 5773..5782,
+                dest: "Note 1",
+                kind: WikiLink,
+                display_text: "Note 1",
+            },
+            Reference {
+                range: 5876..5891,
+                dest: "Figure1.jpg",
+                kind: WikiLink,
+                display_text: "Figure1.jpg",
+            },
+            Reference {
+                range: 5916..5934,
                 dest: "empty_video.mp4",
                 kind: WikiLink,
                 display_text: "empty_video.mp4",
@@ -1269,59 +1492,59 @@ mod tests {
         assert_debug_snapshot!(referenceables, @r#"
         [
             Heading {
-                note_path: "tests/data/vaults/tt/Note 1.md",
+                path: "tests/data/vaults/tt/Note 1.md",
                 level: H3,
-                range: 57..75,
+                range: 55..73,
             },
             Heading {
-                note_path: "tests/data/vaults/tt/Note 1.md",
+                path: "tests/data/vaults/tt/Note 1.md",
                 level: H4,
-                range: 75..94,
+                range: 73..92,
             },
             Heading {
-                note_path: "tests/data/vaults/tt/Note 1.md",
+                path: "tests/data/vaults/tt/Note 1.md",
                 level: H3,
-                range: 95..117,
+                range: 93..115,
             },
             Heading {
-                note_path: "tests/data/vaults/tt/Note 1.md",
+                path: "tests/data/vaults/tt/Note 1.md",
                 level: H6,
-                range: 118..149,
+                range: 116..147,
             },
             Heading {
-                note_path: "tests/data/vaults/tt/Note 1.md",
+                path: "tests/data/vaults/tt/Note 1.md",
                 level: H6,
-                range: 889..944,
+                range: 887..942,
             },
             Heading {
-                note_path: "tests/data/vaults/tt/Note 1.md",
+                path: "tests/data/vaults/tt/Note 1.md",
                 level: H5,
-                range: 3538..3558,
+                range: 3536..3556,
             },
             Heading {
-                note_path: "tests/data/vaults/tt/Note 1.md",
+                path: "tests/data/vaults/tt/Note 1.md",
                 level: H2,
-                range: 4718..4724,
+                range: 5937..5943,
             },
             Heading {
-                note_path: "tests/data/vaults/tt/Note 1.md",
+                path: "tests/data/vaults/tt/Note 1.md",
                 level: H3,
-                range: 4725..4732,
+                range: 5944..5951,
             },
             Heading {
-                note_path: "tests/data/vaults/tt/Note 1.md",
+                path: "tests/data/vaults/tt/Note 1.md",
                 level: H4,
-                range: 4732..4740,
+                range: 5951..5959,
             },
             Heading {
-                note_path: "tests/data/vaults/tt/Note 1.md",
+                path: "tests/data/vaults/tt/Note 1.md",
                 level: H3,
-                range: 4740..4755,
+                range: 5959..5974,
             },
             Heading {
-                note_path: "tests/data/vaults/tt/Note 1.md",
+                path: "tests/data/vaults/tt/Note 1.md",
                 level: H2,
-                range: 4760..4764,
+                range: 5979..5983,
             },
         ]
         "#);
@@ -1333,461 +1556,604 @@ mod tests {
         let text = fs::read_to_string(path).unwrap();
         let tree = Tree::new(&text);
         assert_snapshot!(tree.root_node, @r########"
-        Document [0..4764]
-          List(None) [0..57]
-            Item [0..57]
+        Document [0..5983]
+          List(None) [0..55]
+            Item [0..55]
               Text(Borrowed("Note in Obsidian cannot have # ^ ")) [2..35]
               Text(Borrowed("[")) [35..36]
               Text(Borrowed(" ")) [36..37]
               Text(Borrowed("]")) [37..38]
-              Text(Borrowed(" | in the heading.")) [38..56]
-          Heading { level: H3, id: None, classes: [], attrs: [] } [57..75]
-            Text(Borrowed("Level 3 title")) [61..74]
-          Heading { level: H4, id: None, classes: [], attrs: [] } [75..94]
-            Text(Borrowed("Level 4 title")) [80..93]
-          Heading { level: H3, id: None, classes: [], attrs: [] } [95..117]
-            Text(Borrowed("Example (level 3)")) [99..116]
-          Heading { level: H6, id: None, classes: [], attrs: [] } [118..149]
-            Text(Borrowed("Markdown link: ")) [125..140]
-            Code(Borrowed("[x](y)")) [140..148]
-          List(None) [149..889]
-            Item [149..226]
-              Text(Borrowed("percent encoding: ")) [151..169]
-              Link { link_type: Inline, dest_url: Borrowed("Three%20laws%20of%20motion.md"), title: Borrowed(""), id: Borrowed("") } [169..225]
-                Text(Borrowed("Three laws of motion 11")) [170..193]
-            Item [226..333]
-              Text(Borrowed("heading  in the same file:  ")) [228..256]
-              Link { link_type: Inline, dest_url: Borrowed("#Level%203%20title"), title: Borrowed(""), id: Borrowed("") } [256..291]
-                Text(Borrowed("Level 3 title")) [257..270]
-              List(None) [291..333]
-                Item [291..333]
-                  Code(Borrowed("[Level 3 title](#Level%203%20title)")) [295..332]
-            Item [333..501]
-              Text(Borrowed("different file heading ")) [335..358]
-              Link { link_type: Inline, dest_url: Borrowed("Note%202#Some%20level%202%20title"), title: Borrowed(""), id: Borrowed("") } [358..397]
-                Text(Borrowed("22")) [359..361]
-              List(None) [397..501]
-                Item [397..443]
-                  Code(Borrowed("[22](Note%202#Some%20level%202%20title)")) [401..442]
-                Item [442..501]
-                  Text(Borrowed("the heading is level 2 but we don")) [446..479]
-                  Text(Inlined(InlineStr { inner: [226, 128, 153, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], len: 3 })) [479..480]
-                  Text(Borrowed("t need to specify it")) [480..500]
-            Item [501..577]
-              Text(Borrowed("empty link 1 ")) [503..516]
-              Link { link_type: Inline, dest_url: Borrowed(""), title: Borrowed(""), id: Borrowed("") } [516..523]
-                Text(Borrowed("www")) [517..520]
-              List(None) [523..577]
-                Item [523..577]
-                  Text(Borrowed("empty markdown link ")) [527..547]
-                  Code(Borrowed("[]()")) [547..553]
-                  Text(Borrowed(" points to note ")) [553..569]
-                  Code(Borrowed("().md")) [569..576]
-            Item [577..634]
-              Text(Borrowed("empty link 2 ")) [579..592]
-              Link { link_type: Inline, dest_url: Borrowed("ww"), title: Borrowed(""), id: Borrowed("") } [592..598]
-              List(None) [598..634]
-                Item [598..611]
-                  Code(Borrowed("[](ww)")) [602..610]
-                Item [610..634]
-                  Text(Borrowed("points to note ")) [614..629]
-                  Code(Borrowed("ww")) [629..633]
-            Item [634..687]
-              Text(Borrowed("empty link 3 ")) [636..649]
-              Link { link_type: Inline, dest_url: Borrowed(""), title: Borrowed(""), id: Borrowed("") } [649..653]
-              List(None) [653..687]
-                Item [653..664]
-                  Code(Borrowed("[]()")) [657..663]
-                Item [663..687]
-                  Text(Borrowed("points to note ")) [667..682]
-                  Code(Borrowed("()")) [682..686]
-            Item [687..889]
-              Text(Borrowed("empty link 4 ")) [689..702]
-              Link { link_type: Inline, dest_url: Borrowed("Three%20laws%20of%20motion.md"), title: Borrowed(""), id: Borrowed("") } [702..735]
-              List(None) [735..889]
-                Item [735..775]
-                  Code(Borrowed("[](Three%20laws%20of%20motion.md)")) [739..774]
-                Item [774..816]
-                  Text(Borrowed("points to note ")) [778..793]
-                  Code(Borrowed("Three laws of motion")) [793..815]
-                Item [815..889]
-                  Text(Borrowed("the first part of markdown link is displayed text and doesn")) [819..878]
-                  Text(Inlined(InlineStr { inner: [226, 128, 153, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], len: 3 })) [878..879]
-                  Text(Borrowed("t matter")) [879..887]
-          Heading { level: H6, id: None, classes: [], attrs: [] } [889..944]
-            Text(Borrowed("Wiki link: ")) [896..907]
-            Code(Borrowed("[[x#]]")) [907..915]
-            Text(Borrowed(" | ")) [915..918]
-            Code(Borrowed("[[x#^block_identifier]]")) [918..943]
-          List(None) [944..3538]
-            Item [944..978]
-              Text(Borrowed("basic: ")) [946..953]
-              Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("Three laws of motion"), title: Borrowed(""), id: Borrowed("") } [953..976]
-                Text(Borrowed("Three laws of motion")) [955..975]
-            Item [978..1045]
-              Text(Borrowed("explicit markdown extension in name: ")) [980..1017]
-              Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("Three laws of motion.md"), title: Borrowed(""), id: Borrowed("") } [1017..1043]
-                Text(Borrowed("Three laws of motion.md")) [1019..1042]
-            Item [1045..1099]
-              Text(Borrowed("with pipe for displayed text: ")) [1047..1077]
-              Link { link_type: WikiLink { has_pothole: true }, dest_url: Borrowed("Note 2 "), title: Borrowed(""), id: Borrowed("") } [1077..1097]
-                Text(Borrowed(" Note two")) [1087..1096]
-            Item [1099..1170]
-              Text(Borrowed("heading in the same note: ")) [1101..1127]
-              Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("#Level 3 title"), title: Borrowed(""), id: Borrowed("") } [1127..1144]
-                Text(Borrowed("#Level 3 title")) [1129..1143]
-              List(None) [1145..1170]
-                Item [1145..1170]
-                  Code(Borrowed("[[#Level 3 title]]")) [1149..1169]
-            Item [1170..1248]
-              Text(Borrowed("nested heading in the same note: ")) [1172..1205]
-              Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("#Level 4 title"), title: Borrowed(""), id: Borrowed("") } [1205..1222]
-                Text(Borrowed("#Level 4 title")) [1207..1221]
-              List(None) [1223..1248]
-                Item [1223..1248]
-                  Code(Borrowed("[[#Level 4 title]]")) [1227..1247]
-            Item [1248..1333]
-              Text(Borrowed("invalid heading in the same note: ")) [1250..1284]
-              Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("#random"), title: Borrowed(""), id: Borrowed("") } [1284..1294]
-                Text(Borrowed("#random")) [1286..1293]
-              List(None) [1295..1333]
-                Item [1295..1313]
-                  Code(Borrowed("[[#random]]")) [1299..1312]
-                Item [1312..1333]
-                  Text(Borrowed("fallback to note")) [1316..1332]
-            Item [1333..1425]
-              Text(Borrowed("heading in another note: ")) [1335..1360]
-              Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("Note 2#Some level 2 title"), title: Borrowed(""), id: Borrowed("") } [1360..1388]
-                Text(Borrowed("Note 2#Some level 2 title")) [1362..1387]
-              List(None) [1389..1425]
-                Item [1389..1425]
-                  Code(Borrowed("[[Note 2#Some level 2 title]]")) [1393..1424]
-            Item [1425..1503]
-              Text(Borrowed("nested heading in another note: ")) [1427..1459]
-              Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("Note 2#Some level 2 title#Level 3 title"), title: Borrowed(""), id: Borrowed("") } [1459..1501]
-                Text(Borrowed("Note 2#Some level 2 title#Level 3 title")) [1461..1500]
-            Item [1503..1620]
-              Text(Borrowed("invalid heading in another note: ")) [1505..1538]
-              Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("Note 2#random#Level 3 title"), title: Borrowed(""), id: Borrowed("") } [1538..1568]
-                Text(Borrowed("Note 2#random#Level 3 title")) [1540..1567]
-              List(None) [1569..1620]
-                Item [1569..1620]
-                  Text(Borrowed("fallback to note if the heading doesn")) [1573..1610]
-                  Text(Inlined(InlineStr { inner: [226, 128, 153, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], len: 3 })) [1610..1611]
-                  Text(Borrowed("t exist")) [1611..1618]
-            Item [1620..1672]
-              Text(Borrowed("heading in another note: ")) [1622..1647]
-              Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("Note 2#Level 3 title"), title: Borrowed(""), id: Borrowed("") } [1647..1670]
-                Text(Borrowed("Note 2#Level 3 title")) [1649..1669]
-            Item [1672..1713]
-              Text(Borrowed("heading in another note: ")) [1674..1699]
-              Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("Note 2#L4"), title: Borrowed(""), id: Borrowed("") } [1699..1711]
-                Text(Borrowed("Note 2#L4")) [1701..1710]
-            Item [1713..1923]
-              Text(Borrowed("nested heading in another note: ")) [1715..1747]
-              Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("Note 2#Some level 2 title#L4"), title: Borrowed(""), id: Borrowed("") } [1747..1778]
-                Text(Borrowed("Note 2#Some level 2 title#L4")) [1749..1777]
-              List(None) [1779..1923]
-                Item [1779..1852]
-                  Text(Borrowed("when there")) [1783..1793]
-                  Text(Inlined(InlineStr { inner: [226, 128, 153, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], len: 3 })) [1793..1794]
-                  Text(Borrowed("s multiple levels, the level doesn")) [1794..1828]
-                  Text(Inlined(InlineStr { inner: [226, 128, 153, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], len: 3 })) [1828..1829]
-                  Text(Borrowed("t need to be specified")) [1829..1851]
-                Item [1851..1923]
-                  Text(Borrowed("it will match as long as the ancestor-descendant relationship holds")) [1855..1922]
-            Item [1923..1968]
-              Text(Borrowed("non-existing note: ")) [1925..1944]
-              Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("Non-existing note 4"), title: Borrowed(""), id: Borrowed("") } [1944..1966]
-                Text(Borrowed("Non-existing note 4")) [1946..1965]
-            Item [1968..2013]
-              Text(Borrowed("empty link: ")) [1970..1982]
-              Text(Borrowed("[")) [1982..1983]
-              Text(Borrowed("[")) [1983..1984]
-              Text(Borrowed("]")) [1984..1985]
-              Text(Borrowed("]")) [1985..1986]
-              List(None) [1986..2013]
-                Item [1986..2013]
-                  Text(Borrowed("points to current note")) [1990..2012]
-            Item [2013..2130]
-              Text(Borrowed("empty heading:")) [2015..2029]
-              List(None) [2029..2130]
-                Item [2029..2076]
-                  Code(Borrowed("[[#]]")) [2033..2040]
-                  Text(Borrowed(": ")) [2040..2042]
-                  Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("#"), title: Borrowed(""), id: Borrowed("") } [2042..2046]
-                    Text(Borrowed("#")) [2044..2045]
-                  List(None) [2049..2076]
-                    Item [2049..2076]
-                      Text(Borrowed("points to current note")) [2053..2075]
-                Item [2075..2130]
-                  Code(Borrowed("[[Note 2##]]")) [2079..2093]
-                  Text(Borrowed(":  ")) [2093..2096]
-                  Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("Note 2##"), title: Borrowed(""), id: Borrowed("") } [2096..2107]
-                    Text(Borrowed("Note 2##")) [2098..2106]
-                  List(None) [2109..2130]
-                    Item [2109..2130]
-                      Text(Borrowed("points to Note 2")) [2113..2129]
-            Item [2130..2418]
-              Text(Borrowed("incorrect heading level")) [2132..2155]
-              List(None) [2155..2418]
-                Item [2155..2214]
-                  Code(Borrowed("[[#######Link to figure]]")) [2159..2186]
-                  Text(Borrowed(": ")) [2186..2188]
-                  Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("#######Link to figure"), title: Borrowed(""), id: Borrowed("") } [2188..2212]
-                    Text(Borrowed("#######Link to figure")) [2190..2211]
-                Item [2213..2270]
-                  Code(Borrowed("[[######Link to figure]]")) [2217..2243]
-                  Text(Borrowed(": ")) [2243..2245]
-                  Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("######Link to figure"), title: Borrowed(""), id: Borrowed("") } [2245..2268]
-                    Text(Borrowed("######Link to figure")) [2247..2267]
-                Item [2269..2322]
-                  Code(Borrowed("[[####Link to figure]]")) [2273..2297]
-                  Text(Borrowed(": ")) [2297..2299]
-                  Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("####Link to figure"), title: Borrowed(""), id: Borrowed("") } [2299..2320]
-                    Text(Borrowed("####Link to figure")) [2301..2319]
-                Item [2321..2372]
-                  Code(Borrowed("[[###Link to figure]]")) [2325..2348]
-                  Text(Borrowed(": ")) [2348..2350]
-                  Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("###Link to figure"), title: Borrowed(""), id: Borrowed("") } [2350..2370]
-                    Text(Borrowed("###Link to figure")) [2352..2369]
-                Item [2371..2418]
-                  Code(Borrowed("[[#Link to figure]]")) [2375..2396]
-                  Text(Borrowed(": ")) [2396..2398]
-                  Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("#Link to figure"), title: Borrowed(""), id: Borrowed("") } [2398..2416]
-                    Text(Borrowed("#Link to figure")) [2400..2415]
-            Item [2418..2538]
-              Text(Borrowed("ambiguous pipe and heading: ")) [2421..2449]
-              Link { link_type: WikiLink { has_pothole: true }, dest_url: Borrowed("#L2 "), title: Borrowed(""), id: Borrowed("") } [2449..2461]
-                Text(Borrowed(" #L4")) [2456..2460]
-              List(None) [2463..2538]
-                Item [2463..2483]
-                  Code(Borrowed("[[#L2 | #L4]]")) [2467..2482]
-                Item [2483..2500]
-                  Text(Borrowed("points to L2")) [2487..2499]
-                Item [2500..2538]
-                  Text(Borrowed("things after the pipe is escaped")) [2504..2536]
-            Item [2538..2626]
-              Text(Borrowed("multiple pipe: ")) [2541..2556]
-              Link { link_type: WikiLink { has_pothole: true }, dest_url: Borrowed("Note 2 "), title: Borrowed(""), id: Borrowed("") } [2556..2573]
-                Text(Borrowed(" 2 | 3")) [2566..2572]
-              List(None) [2575..2626]
-                Item [2575..2600]
-                  Code(Borrowed("[[Note 2 | 2 | 3]]")) [2579..2599]
-                Item [2600..2626]
-                  Text(Borrowed("this points to Note 2")) [2604..2625]
-            Item [2626..3119]
-              Text(Borrowed("incorrect nested heading")) [2628..2652]
-              List(None) [2653..3119]
-                Item [2653..2722]
-                  Code(Borrowed("[[###L2#L4]]")) [2657..2671]
-                  Text(Borrowed(":  ")) [2671..2674]
-                  Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("###L2#L4"), title: Borrowed(""), id: Borrowed("") } [2674..2685]
-                    Text(Borrowed("###L2#L4")) [2676..2684]
-                  List(None) [2687..2722]
-                    Item [2687..2722]
-                      Text(Borrowed("points to L4 heading correctly")) [2691..2721]
-                Item [2721..2797]
-                  Code(Borrowed("[[##L2######L4]]")) [2725..2743]
-                  Text(Borrowed(": ")) [2743..2745]
-                  Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("##L2######L4"), title: Borrowed(""), id: Borrowed("") } [2745..2760]
-                    Text(Borrowed("##L2######L4")) [2747..2759]
-                  List(None) [2762..2797]
-                    Item [2762..2797]
-                      Text(Borrowed("points to L4 heading correctly")) [2766..2796]
-                Item [2796..2870]
-                  Code(Borrowed("[[##L2#####L4]]")) [2800..2817]
-                  Text(Borrowed(": ")) [2817..2819]
-                  Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("##L2#####L4"), title: Borrowed(""), id: Borrowed("") } [2819..2833]
-                    Text(Borrowed("##L2#####L4")) [2821..2832]
-                  List(None) [2835..2870]
-                    Item [2835..2870]
-                      Text(Borrowed("points to L4 heading correctly")) [2839..2869]
-                Item [2869..2943]
-                  Code(Borrowed("[[##L2#####L4#L3]]")) [2873..2893]
-                  Text(Borrowed(": ")) [2893..2895]
-                  Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("##L2#####L4#L3"), title: Borrowed(""), id: Borrowed("") } [2895..2912]
-                    Text(Borrowed("##L2#####L4#L3")) [2897..2911]
-                  List(None) [2914..2943]
-                    Item [2914..2943]
-                      Text(Borrowed("fallback to current note")) [2918..2942]
-                Item [2942..3024]
-                  Code(Borrowed("[[##L2#####L4#L3]]")) [2946..2966]
-                  Text(Borrowed(": ")) [2966..2968]
-                  Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("##L2#####L4#Another L3"), title: Borrowed(""), id: Borrowed("") } [2968..2993]
-                    Text(Borrowed("##L2#####L4#Another L3")) [2970..2992]
-                  List(None) [2995..3024]
-                    Item [2995..3024]
-                      Text(Borrowed("fallback to current note")) [2999..3023]
-                Item [3023..3119]
-                  Text(Borrowed("for displayed text, the first hash is removed, the subsequent nesting ones are not affected")) [3027..3118]
-            Item [3119..3239]
-              Text(Borrowed("↳ it looks like whenever there")) [3121..3153]
-              Text(Inlined(InlineStr { inner: [226, 128, 153, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], len: 3 })) [3153..3154]
-              Text(Borrowed("s multiple hash, it")) [3154..3173]
-              Text(Inlined(InlineStr { inner: [226, 128, 153, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], len: 3 })) [3173..3174]
-              Text(Borrowed("s all stripped. only the ancestor-descendant relationship matter")) [3174..3238]
-            Item [3239..3538]
-              Text(Borrowed("I don")) [3241..3246]
-              Text(Inlined(InlineStr { inner: [226, 128, 153, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], len: 3 })) [3246..3247]
-              Text(Borrowed("t think there")) [3247..3260]
-              Text(Inlined(InlineStr { inner: [226, 128, 153, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], len: 3 })) [3260..3261]
-              Text(Borrowed("s a different between Wikilink and Markdown link")) [3261..3309]
-              List(None) [3309..3538]
-                Item [3309..3387]
-                  Code(Borrowed("[1](##L2######L4)")) [3313..3332]
-                  Text(Borrowed(": ")) [3332..3334]
-                  Link { link_type: Inline, dest_url: Borrowed("##L2######L4"), title: Borrowed(""), id: Borrowed("") } [3334..3351]
-                    Text(Borrowed("1")) [3335..3336]
-                  List(None) [3352..3387]
-                    Item [3352..3387]
-                      Text(Borrowed("points to L4 heading correctly")) [3356..3386]
-                Item [3386..3462]
-                  Code(Borrowed("[2](##L2#####L4)")) [3390..3408]
-                  Text(Borrowed(": ")) [3408..3410]
-                  Link { link_type: Inline, dest_url: Borrowed("##L2#####L4"), title: Borrowed(""), id: Borrowed("") } [3410..3426]
-                    Text(Borrowed("2")) [3411..3412]
-                  List(None) [3427..3462]
-                    Item [3427..3462]
-                      Text(Borrowed("points to L4 heading correctly")) [3431..3461]
-                Item [3461..3538]
-                  Code(Borrowed("[3](##L2#####L4#L3)")) [3465..3486]
-                  Text(Borrowed(": ")) [3486..3488]
-                  Link { link_type: Inline, dest_url: Borrowed("##L2#####L4#L3"), title: Borrowed(""), id: Borrowed("") } [3488..3507]
-                    Text(Borrowed("3")) [3489..3490]
-                  List(None) [3508..3538]
-                    Item [3508..3538]
-                      Text(Borrowed("fallback to current note")) [3512..3536]
-          Heading { level: H5, id: None, classes: [], attrs: [] } [3538..3558]
-            Text(Borrowed("Link to asset")) [3544..3557]
-          List(None) [3558..4635]
-            Item [3558..3682]
-              Code(Borrowed("[[Figure 1.jpg]]")) [3560..3578]
-              Text(Borrowed(": ")) [3578..3580]
-              Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("Figure 1.jpg"), title: Borrowed(""), id: Borrowed("") } [3580..3595]
-                Text(Borrowed("Figure 1.jpg")) [3582..3594]
-              List(None) [3596..3682]
-                Item [3596..3682]
-                  Text(Borrowed("even if there exists a note called ")) [3600..3635]
-                  Code(Borrowed("Figure 1.jpg")) [3635..3649]
-                  Text(Borrowed(", the asset will take precedence")) [3649..3681]
-            Item [3682..3744]
-              Code(Borrowed("[[Figure 1.jpg#2]]")) [3684..3704]
-              Text(Borrowed(": ")) [3704..3706]
-              Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("Figure 1.jpg#2"), title: Borrowed(""), id: Borrowed("") } [3706..3723]
-                Text(Borrowed("Figure 1.jpg#2")) [3708..3722]
-              List(None) [3724..3744]
-                Item [3724..3744]
-                  Text(Borrowed("points to image")) [3728..3743]
-            Item [3744..3810]
-              Code(Borrowed("[[Figure 1.jpg | 2]]")) [3746..3768]
-              Text(Borrowed(": ")) [3768..3770]
-              Link { link_type: WikiLink { has_pothole: true }, dest_url: Borrowed("Figure 1.jpg "), title: Borrowed(""), id: Borrowed("") } [3770..3789]
-                Text(Borrowed(" 2")) [3786..3788]
-              List(None) [3790..3810]
-                Item [3790..3810]
-                  Text(Borrowed("points to image")) [3794..3809]
-            Item [3810..3918]
-              Code(Borrowed("[[Figure 1.jpg.md]]")) [3812..3833]
-              Text(Borrowed(": ")) [3833..3835]
-              Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("Figure 1.jpg.md"), title: Borrowed(""), id: Borrowed("") } [3835..3853]
-                Text(Borrowed("Figure 1.jpg.md")) [3837..3852]
-              List(None) [3854..3918]
-                Item [3854..3918]
-                  Text(Borrowed("with explicit ")) [3858..3872]
-                  Code(Borrowed(".md")) [3872..3877]
-                  Text(Borrowed(" ending, we seek for note ")) [3877..3903]
-                  Code(Borrowed("Figure 1.jpg")) [3903..3917]
-            Item [3918..3969]
-              Code(Borrowed("[[Figure 1.jpg.md.md]]")) [3920..3944]
-              Text(Borrowed(": ")) [3944..3946]
-              Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("Figure 1.jpg.md.md"), title: Borrowed(""), id: Borrowed("") } [3946..3967]
-                Text(Borrowed("Figure 1.jpg.md.md")) [3948..3966]
-            Item [3969..4109]
-              Code(Borrowed("[[Figure1#2.jpg]]")) [3971..3990]
-              Text(Borrowed(": ")) [3990..3992]
-              Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("Figure1#2.jpg"), title: Borrowed(""), id: Borrowed("") } [3992..4008]
-                Text(Borrowed("Figure1#2.jpg")) [3994..4007]
-              List(None) [4009..4109]
-                Item [4009..4109]
-                  Text(Borrowed("understood as note and points to note Figure 1 (fallback to note after failing finding heading)")) [4013..4108]
-            Item [4109..4249]
-              Code(Borrowed("[[Figure1|2.jpg]]")) [4111..4130]
-              Text(Borrowed(": ")) [4130..4132]
-              Link { link_type: WikiLink { has_pothole: true }, dest_url: Borrowed("Figure1"), title: Borrowed(""), id: Borrowed("") } [4132..4148]
-                Text(Borrowed("2.jpg")) [4142..4147]
-              List(None) [4149..4249]
-                Item [4149..4249]
-                  Text(Borrowed("understood as note and points to note Figure 1 (fallback to note after failing finding heading)")) [4153..4248]
-            Item [4249..4309]
-              Code(Borrowed("[[Figure1^2.jpg]]")) [4251..4270]
-              Text(Borrowed(": ")) [4270..4272]
-              Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("Figure1^2.jpg"), title: Borrowed(""), id: Borrowed("") } [4272..4288]
-                Text(Borrowed("Figure1^2.jpg")) [4274..4287]
-              List(None) [4289..4309]
-                Item [4289..4309]
-                  Text(Borrowed("points to image")) [4293..4308]
-            Item [4309..4384]
-              Text(Borrowed("↳ when there")) [4311..4325]
-              Text(Inlined(InlineStr { inner: [226, 128, 153, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], len: 3 })) [4325..4326]
-              Text(Borrowed("s ")) [4326..4328]
-              Code(Borrowed(".md")) [4328..4333]
-              Text(Borrowed(", it")) [4333..4337]
-              Text(Inlined(InlineStr { inner: [226, 128, 153, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], len: 3 })) [4337..4338]
-              Text(Borrowed("s removed and limit to the searching of notes")) [4338..4383]
-            Item [4384..4431]
-              Code(Borrowed("[[dir/]]")) [4386..4396]
-              Text(Borrowed(": ")) [4396..4398]
-              Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("dir/"), title: Borrowed(""), id: Borrowed("") } [4398..4405]
-                Text(Borrowed("dir/")) [4400..4404]
-              List(None) [4406..4431]
-                Item [4406..4431]
-                  Text(Borrowed("points to note ")) [4410..4425]
-                  Code(Borrowed("dir")) [4425..4430]
-            Item [4431..4484]
-              Code(Borrowed("[[dir/indir_same_name]]")) [4433..4458]
-              Text(Borrowed(": ")) [4458..4460]
-              Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("dir/indir_same_name"), title: Borrowed(""), id: Borrowed("") } [4460..4482]
-                Text(Borrowed("dir/indir_same_name")) [4462..4481]
-            Item [4484..4580]
-              Code(Borrowed("[[indir_same_name]]")) [4486..4507]
-              Text(Borrowed(": ")) [4507..4509]
-              Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("indir_same_name"), title: Borrowed(""), id: Borrowed("") } [4509..4527]
-                Text(Borrowed("indir_same_name")) [4511..4526]
-              List(None) [4528..4580]
-                Item [4528..4580]
-                  Text(Borrowed("points to ")) [4532..4542]
-                  Code(Borrowed("indir_same_name")) [4542..4559]
-                  Text(Borrowed(", not the in dir one")) [4559..4579]
-            Item [4580..4635]
-              Code(Borrowed("[[indir2]]")) [4583..4595]
-              Text(Borrowed(": ")) [4595..4597]
-              Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("indir2"), title: Borrowed(""), id: Borrowed("") } [4597..4606]
-                Text(Borrowed("indir2")) [4599..4605]
-              List(None) [4608..4635]
-                Item [4608..4635]
-                  Text(Borrowed("points to ")) [4611..4621]
-                  Code(Borrowed("dir/indir2")) [4621..4633]
-          Paragraph [4635..4717]
-            Code(Borrowed("![[Figure 1.jpg]]")) [4635..4654]
-            Text(Borrowed(": ")) [4654..4656]
-            Image { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("Figure 1.jpg"), title: Borrowed(""), id: Borrowed("") } [4656..4672]
-              Text(Borrowed("Figure 1.jpg")) [4659..4671]
-            SoftBreak [4673..4674]
-            Code(Borrowed("[[empty_video.mp4]]")) [4674..4695]
-            Text(Borrowed(": ")) [4695..4697]
-            Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("empty_video.mp4"), title: Borrowed(""), id: Borrowed("") } [4697..4715]
-              Text(Borrowed("empty_video.mp4")) [4699..4714]
-          Heading { level: H2, id: None, classes: [], attrs: [] } [4718..4724]
-            Text(Borrowed("L2")) [4721..4723]
-          Heading { level: H3, id: None, classes: [], attrs: [] } [4725..4732]
-            Text(Borrowed("L3")) [4729..4731]
-          Heading { level: H4, id: None, classes: [], attrs: [] } [4732..4740]
-            Text(Borrowed("L4")) [4737..4739]
-          Heading { level: H3, id: None, classes: [], attrs: [] } [4740..4755]
-            Text(Borrowed("Another L3")) [4744..4754]
-          Rule [4756..4760]
-          Heading { level: H2, id: None, classes: [], attrs: [] } [4760..4764]
+              Text(Borrowed(" | in the title.")) [38..54]
+          Heading { level: H3, id: None, classes: [], attrs: [] } [55..73]
+            Text(Borrowed("Level 3 title")) [59..72]
+          Heading { level: H4, id: None, classes: [], attrs: [] } [73..92]
+            Text(Borrowed("Level 4 title")) [78..91]
+          Heading { level: H3, id: None, classes: [], attrs: [] } [93..115]
+            Text(Borrowed("Example (level 3)")) [97..114]
+          Heading { level: H6, id: None, classes: [], attrs: [] } [116..147]
+            Text(Borrowed("Markdown link: ")) [123..138]
+            Code(Borrowed("[x](y)")) [138..146]
+          List(None) [147..887]
+            Item [147..224]
+              Text(Borrowed("percent encoding: ")) [149..167]
+              Link { link_type: Inline, dest_url: Borrowed("Three%20laws%20of%20motion.md"), title: Borrowed(""), id: Borrowed("") } [167..223]
+                Text(Borrowed("Three laws of motion 11")) [168..191]
+            Item [224..331]
+              Text(Borrowed("heading  in the same file:  ")) [226..254]
+              Link { link_type: Inline, dest_url: Borrowed("#Level%203%20title"), title: Borrowed(""), id: Borrowed("") } [254..289]
+                Text(Borrowed("Level 3 title")) [255..268]
+              List(None) [289..331]
+                Item [289..331]
+                  Code(Borrowed("[Level 3 title](#Level%203%20title)")) [293..330]
+            Item [331..499]
+              Text(Borrowed("different file heading ")) [333..356]
+              Link { link_type: Inline, dest_url: Borrowed("Note%202#Some%20level%202%20title"), title: Borrowed(""), id: Borrowed("") } [356..395]
+                Text(Borrowed("22")) [357..359]
+              List(None) [395..499]
+                Item [395..441]
+                  Code(Borrowed("[22](Note%202#Some%20level%202%20title)")) [399..440]
+                Item [440..499]
+                  Text(Borrowed("the heading is level 2 but we don")) [444..477]
+                  Text(Inlined(InlineStr { inner: [226, 128, 153, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], len: 3 })) [477..478]
+                  Text(Borrowed("t need to specify it")) [478..498]
+            Item [499..575]
+              Text(Borrowed("empty link 1 ")) [501..514]
+              Link { link_type: Inline, dest_url: Borrowed(""), title: Borrowed(""), id: Borrowed("") } [514..521]
+                Text(Borrowed("www")) [515..518]
+              List(None) [521..575]
+                Item [521..575]
+                  Text(Borrowed("empty markdown link ")) [525..545]
+                  Code(Borrowed("[]()")) [545..551]
+                  Text(Borrowed(" points to note ")) [551..567]
+                  Code(Borrowed("().md")) [567..574]
+            Item [575..632]
+              Text(Borrowed("empty link 2 ")) [577..590]
+              Link { link_type: Inline, dest_url: Borrowed("ww"), title: Borrowed(""), id: Borrowed("") } [590..596]
+              List(None) [596..632]
+                Item [596..609]
+                  Code(Borrowed("[](ww)")) [600..608]
+                Item [608..632]
+                  Text(Borrowed("points to note ")) [612..627]
+                  Code(Borrowed("ww")) [627..631]
+            Item [632..685]
+              Text(Borrowed("empty link 3 ")) [634..647]
+              Link { link_type: Inline, dest_url: Borrowed(""), title: Borrowed(""), id: Borrowed("") } [647..651]
+              List(None) [651..685]
+                Item [651..662]
+                  Code(Borrowed("[]()")) [655..661]
+                Item [661..685]
+                  Text(Borrowed("points to note ")) [665..680]
+                  Code(Borrowed("()")) [680..684]
+            Item [685..887]
+              Text(Borrowed("empty link 4 ")) [687..700]
+              Link { link_type: Inline, dest_url: Borrowed("Three%20laws%20of%20motion.md"), title: Borrowed(""), id: Borrowed("") } [700..733]
+              List(None) [733..887]
+                Item [733..773]
+                  Code(Borrowed("[](Three%20laws%20of%20motion.md)")) [737..772]
+                Item [772..814]
+                  Text(Borrowed("points to note ")) [776..791]
+                  Code(Borrowed("Three laws of motion")) [791..813]
+                Item [813..887]
+                  Text(Borrowed("the first part of markdown link is displayed text and doesn")) [817..876]
+                  Text(Inlined(InlineStr { inner: [226, 128, 153, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], len: 3 })) [876..877]
+                  Text(Borrowed("t matter")) [877..885]
+          Heading { level: H6, id: None, classes: [], attrs: [] } [887..942]
+            Text(Borrowed("Wiki link: ")) [894..905]
+            Code(Borrowed("[[x#]]")) [905..913]
+            Text(Borrowed(" | ")) [913..916]
+            Code(Borrowed("[[x#^block_identifier]]")) [916..941]
+          List(None) [942..3536]
+            Item [942..976]
+              Text(Borrowed("basic: ")) [944..951]
+              Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("Three laws of motion"), title: Borrowed(""), id: Borrowed("") } [951..974]
+                Text(Borrowed("Three laws of motion")) [953..973]
+            Item [976..1043]
+              Text(Borrowed("explicit markdown extension in name: ")) [978..1015]
+              Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("Three laws of motion.md"), title: Borrowed(""), id: Borrowed("") } [1015..1041]
+                Text(Borrowed("Three laws of motion.md")) [1017..1040]
+            Item [1043..1097]
+              Text(Borrowed("with pipe for displayed text: ")) [1045..1075]
+              Link { link_type: WikiLink { has_pothole: true }, dest_url: Borrowed("Note 2 "), title: Borrowed(""), id: Borrowed("") } [1075..1095]
+                Text(Borrowed(" Note two")) [1085..1094]
+            Item [1097..1168]
+              Text(Borrowed("heading in the same note: ")) [1099..1125]
+              Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("#Level 3 title"), title: Borrowed(""), id: Borrowed("") } [1125..1142]
+                Text(Borrowed("#Level 3 title")) [1127..1141]
+              List(None) [1143..1168]
+                Item [1143..1168]
+                  Code(Borrowed("[[#Level 3 title]]")) [1147..1167]
+            Item [1168..1246]
+              Text(Borrowed("nested heading in the same note: ")) [1170..1203]
+              Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("#Level 4 title"), title: Borrowed(""), id: Borrowed("") } [1203..1220]
+                Text(Borrowed("#Level 4 title")) [1205..1219]
+              List(None) [1221..1246]
+                Item [1221..1246]
+                  Code(Borrowed("[[#Level 4 title]]")) [1225..1245]
+            Item [1246..1331]
+              Text(Borrowed("invalid heading in the same note: ")) [1248..1282]
+              Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("#random"), title: Borrowed(""), id: Borrowed("") } [1282..1292]
+                Text(Borrowed("#random")) [1284..1291]
+              List(None) [1293..1331]
+                Item [1293..1311]
+                  Code(Borrowed("[[#random]]")) [1297..1310]
+                Item [1310..1331]
+                  Text(Borrowed("fallback to note")) [1314..1330]
+            Item [1331..1423]
+              Text(Borrowed("heading in another note: ")) [1333..1358]
+              Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("Note 2#Some level 2 title"), title: Borrowed(""), id: Borrowed("") } [1358..1386]
+                Text(Borrowed("Note 2#Some level 2 title")) [1360..1385]
+              List(None) [1387..1423]
+                Item [1387..1423]
+                  Code(Borrowed("[[Note 2#Some level 2 title]]")) [1391..1422]
+            Item [1423..1501]
+              Text(Borrowed("nested heading in another note: ")) [1425..1457]
+              Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("Note 2#Some level 2 title#Level 3 title"), title: Borrowed(""), id: Borrowed("") } [1457..1499]
+                Text(Borrowed("Note 2#Some level 2 title#Level 3 title")) [1459..1498]
+            Item [1501..1618]
+              Text(Borrowed("invalid heading in another note: ")) [1503..1536]
+              Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("Note 2#random#Level 3 title"), title: Borrowed(""), id: Borrowed("") } [1536..1566]
+                Text(Borrowed("Note 2#random#Level 3 title")) [1538..1565]
+              List(None) [1567..1618]
+                Item [1567..1618]
+                  Text(Borrowed("fallback to note if the heading doesn")) [1571..1608]
+                  Text(Inlined(InlineStr { inner: [226, 128, 153, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], len: 3 })) [1608..1609]
+                  Text(Borrowed("t exist")) [1609..1616]
+            Item [1618..1670]
+              Text(Borrowed("heading in another note: ")) [1620..1645]
+              Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("Note 2#Level 3 title"), title: Borrowed(""), id: Borrowed("") } [1645..1668]
+                Text(Borrowed("Note 2#Level 3 title")) [1647..1667]
+            Item [1670..1711]
+              Text(Borrowed("heading in another note: ")) [1672..1697]
+              Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("Note 2#L4"), title: Borrowed(""), id: Borrowed("") } [1697..1709]
+                Text(Borrowed("Note 2#L4")) [1699..1708]
+            Item [1711..1921]
+              Text(Borrowed("nested heading in another note: ")) [1713..1745]
+              Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("Note 2#Some level 2 title#L4"), title: Borrowed(""), id: Borrowed("") } [1745..1776]
+                Text(Borrowed("Note 2#Some level 2 title#L4")) [1747..1775]
+              List(None) [1777..1921]
+                Item [1777..1850]
+                  Text(Borrowed("when there")) [1781..1791]
+                  Text(Inlined(InlineStr { inner: [226, 128, 153, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], len: 3 })) [1791..1792]
+                  Text(Borrowed("s multiple levels, the level doesn")) [1792..1826]
+                  Text(Inlined(InlineStr { inner: [226, 128, 153, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], len: 3 })) [1826..1827]
+                  Text(Borrowed("t need to be specified")) [1827..1849]
+                Item [1849..1921]
+                  Text(Borrowed("it will match as long as the ancestor-descendant relationship holds")) [1853..1920]
+            Item [1921..1966]
+              Text(Borrowed("non-existing note: ")) [1923..1942]
+              Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("Non-existing note 4"), title: Borrowed(""), id: Borrowed("") } [1942..1964]
+                Text(Borrowed("Non-existing note 4")) [1944..1963]
+            Item [1966..2011]
+              Text(Borrowed("empty link: ")) [1968..1980]
+              Text(Borrowed("[")) [1980..1981]
+              Text(Borrowed("[")) [1981..1982]
+              Text(Borrowed("]")) [1982..1983]
+              Text(Borrowed("]")) [1983..1984]
+              List(None) [1984..2011]
+                Item [1984..2011]
+                  Text(Borrowed("points to current note")) [1988..2010]
+            Item [2011..2128]
+              Text(Borrowed("empty heading:")) [2013..2027]
+              List(None) [2027..2128]
+                Item [2027..2074]
+                  Code(Borrowed("[[#]]")) [2031..2038]
+                  Text(Borrowed(": ")) [2038..2040]
+                  Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("#"), title: Borrowed(""), id: Borrowed("") } [2040..2044]
+                    Text(Borrowed("#")) [2042..2043]
+                  List(None) [2047..2074]
+                    Item [2047..2074]
+                      Text(Borrowed("points to current note")) [2051..2073]
+                Item [2073..2128]
+                  Code(Borrowed("[[Note 2##]]")) [2077..2091]
+                  Text(Borrowed(":  ")) [2091..2094]
+                  Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("Note 2##"), title: Borrowed(""), id: Borrowed("") } [2094..2105]
+                    Text(Borrowed("Note 2##")) [2096..2104]
+                  List(None) [2107..2128]
+                    Item [2107..2128]
+                      Text(Borrowed("points to Note 2")) [2111..2127]
+            Item [2128..2416]
+              Text(Borrowed("incorrect heading level")) [2130..2153]
+              List(None) [2153..2416]
+                Item [2153..2212]
+                  Code(Borrowed("[[#######Link to figure]]")) [2157..2184]
+                  Text(Borrowed(": ")) [2184..2186]
+                  Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("#######Link to figure"), title: Borrowed(""), id: Borrowed("") } [2186..2210]
+                    Text(Borrowed("#######Link to figure")) [2188..2209]
+                Item [2211..2268]
+                  Code(Borrowed("[[######Link to figure]]")) [2215..2241]
+                  Text(Borrowed(": ")) [2241..2243]
+                  Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("######Link to figure"), title: Borrowed(""), id: Borrowed("") } [2243..2266]
+                    Text(Borrowed("######Link to figure")) [2245..2265]
+                Item [2267..2320]
+                  Code(Borrowed("[[####Link to figure]]")) [2271..2295]
+                  Text(Borrowed(": ")) [2295..2297]
+                  Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("####Link to figure"), title: Borrowed(""), id: Borrowed("") } [2297..2318]
+                    Text(Borrowed("####Link to figure")) [2299..2317]
+                Item [2319..2370]
+                  Code(Borrowed("[[###Link to figure]]")) [2323..2346]
+                  Text(Borrowed(": ")) [2346..2348]
+                  Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("###Link to figure"), title: Borrowed(""), id: Borrowed("") } [2348..2368]
+                    Text(Borrowed("###Link to figure")) [2350..2367]
+                Item [2369..2416]
+                  Code(Borrowed("[[#Link to figure]]")) [2373..2394]
+                  Text(Borrowed(": ")) [2394..2396]
+                  Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("#Link to figure"), title: Borrowed(""), id: Borrowed("") } [2396..2414]
+                    Text(Borrowed("#Link to figure")) [2398..2413]
+            Item [2416..2536]
+              Text(Borrowed("ambiguous pipe and heading: ")) [2419..2447]
+              Link { link_type: WikiLink { has_pothole: true }, dest_url: Borrowed("#L2 "), title: Borrowed(""), id: Borrowed("") } [2447..2459]
+                Text(Borrowed(" #L4")) [2454..2458]
+              List(None) [2461..2536]
+                Item [2461..2481]
+                  Code(Borrowed("[[#L2 | #L4]]")) [2465..2480]
+                Item [2481..2498]
+                  Text(Borrowed("points to L2")) [2485..2497]
+                Item [2498..2536]
+                  Text(Borrowed("things after the pipe is escaped")) [2502..2534]
+            Item [2536..2624]
+              Text(Borrowed("multiple pipe: ")) [2539..2554]
+              Link { link_type: WikiLink { has_pothole: true }, dest_url: Borrowed("Note 2 "), title: Borrowed(""), id: Borrowed("") } [2554..2571]
+                Text(Borrowed(" 2 | 3")) [2564..2570]
+              List(None) [2573..2624]
+                Item [2573..2598]
+                  Code(Borrowed("[[Note 2 | 2 | 3]]")) [2577..2597]
+                Item [2598..2624]
+                  Text(Borrowed("this points to Note 2")) [2602..2623]
+            Item [2624..3117]
+              Text(Borrowed("incorrect nested heading")) [2626..2650]
+              List(None) [2651..3117]
+                Item [2651..2720]
+                  Code(Borrowed("[[###L2#L4]]")) [2655..2669]
+                  Text(Borrowed(":  ")) [2669..2672]
+                  Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("###L2#L4"), title: Borrowed(""), id: Borrowed("") } [2672..2683]
+                    Text(Borrowed("###L2#L4")) [2674..2682]
+                  List(None) [2685..2720]
+                    Item [2685..2720]
+                      Text(Borrowed("points to L4 heading correctly")) [2689..2719]
+                Item [2719..2795]
+                  Code(Borrowed("[[##L2######L4]]")) [2723..2741]
+                  Text(Borrowed(": ")) [2741..2743]
+                  Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("##L2######L4"), title: Borrowed(""), id: Borrowed("") } [2743..2758]
+                    Text(Borrowed("##L2######L4")) [2745..2757]
+                  List(None) [2760..2795]
+                    Item [2760..2795]
+                      Text(Borrowed("points to L4 heading correctly")) [2764..2794]
+                Item [2794..2868]
+                  Code(Borrowed("[[##L2#####L4]]")) [2798..2815]
+                  Text(Borrowed(": ")) [2815..2817]
+                  Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("##L2#####L4"), title: Borrowed(""), id: Borrowed("") } [2817..2831]
+                    Text(Borrowed("##L2#####L4")) [2819..2830]
+                  List(None) [2833..2868]
+                    Item [2833..2868]
+                      Text(Borrowed("points to L4 heading correctly")) [2837..2867]
+                Item [2867..2941]
+                  Code(Borrowed("[[##L2#####L4#L3]]")) [2871..2891]
+                  Text(Borrowed(": ")) [2891..2893]
+                  Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("##L2#####L4#L3"), title: Borrowed(""), id: Borrowed("") } [2893..2910]
+                    Text(Borrowed("##L2#####L4#L3")) [2895..2909]
+                  List(None) [2912..2941]
+                    Item [2912..2941]
+                      Text(Borrowed("fallback to current note")) [2916..2940]
+                Item [2940..3022]
+                  Code(Borrowed("[[##L2#####L4#L3]]")) [2944..2964]
+                  Text(Borrowed(": ")) [2964..2966]
+                  Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("##L2#####L4#Another L3"), title: Borrowed(""), id: Borrowed("") } [2966..2991]
+                    Text(Borrowed("##L2#####L4#Another L3")) [2968..2990]
+                  List(None) [2993..3022]
+                    Item [2993..3022]
+                      Text(Borrowed("fallback to current note")) [2997..3021]
+                Item [3021..3117]
+                  Text(Borrowed("for displayed text, the first hash is removed, the subsequent nesting ones are not affected")) [3025..3116]
+            Item [3117..3237]
+              Text(Borrowed("↳ it looks like whenever there")) [3119..3151]
+              Text(Inlined(InlineStr { inner: [226, 128, 153, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], len: 3 })) [3151..3152]
+              Text(Borrowed("s multiple hash, it")) [3152..3171]
+              Text(Inlined(InlineStr { inner: [226, 128, 153, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], len: 3 })) [3171..3172]
+              Text(Borrowed("s all stripped. only the ancestor-descendant relationship matter")) [3172..3236]
+            Item [3237..3536]
+              Text(Borrowed("I don")) [3239..3244]
+              Text(Inlined(InlineStr { inner: [226, 128, 153, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], len: 3 })) [3244..3245]
+              Text(Borrowed("t think there")) [3245..3258]
+              Text(Inlined(InlineStr { inner: [226, 128, 153, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], len: 3 })) [3258..3259]
+              Text(Borrowed("s a different between Wikilink and Markdown link")) [3259..3307]
+              List(None) [3307..3536]
+                Item [3307..3385]
+                  Code(Borrowed("[1](##L2######L4)")) [3311..3330]
+                  Text(Borrowed(": ")) [3330..3332]
+                  Link { link_type: Inline, dest_url: Borrowed("##L2######L4"), title: Borrowed(""), id: Borrowed("") } [3332..3349]
+                    Text(Borrowed("1")) [3333..3334]
+                  List(None) [3350..3385]
+                    Item [3350..3385]
+                      Text(Borrowed("points to L4 heading correctly")) [3354..3384]
+                Item [3384..3460]
+                  Code(Borrowed("[2](##L2#####L4)")) [3388..3406]
+                  Text(Borrowed(": ")) [3406..3408]
+                  Link { link_type: Inline, dest_url: Borrowed("##L2#####L4"), title: Borrowed(""), id: Borrowed("") } [3408..3424]
+                    Text(Borrowed("2")) [3409..3410]
+                  List(None) [3425..3460]
+                    Item [3425..3460]
+                      Text(Borrowed("points to L4 heading correctly")) [3429..3459]
+                Item [3459..3536]
+                  Code(Borrowed("[3](##L2#####L4#L3)")) [3463..3484]
+                  Text(Borrowed(": ")) [3484..3486]
+                  Link { link_type: Inline, dest_url: Borrowed("##L2#####L4#L3"), title: Borrowed(""), id: Borrowed("") } [3486..3505]
+                    Text(Borrowed("3")) [3487..3488]
+                  List(None) [3506..3536]
+                    Item [3506..3536]
+                      Text(Borrowed("fallback to current note")) [3510..3534]
+          Heading { level: H5, id: None, classes: [], attrs: [] } [3536..3556]
+            Text(Borrowed("Link to asset")) [3542..3555]
+          List(None) [3556..5856]
+            Item [3556..3677]
+              Code(Borrowed("[[Figure1.jpg]]")) [3558..3575]
+              Text(Borrowed(": ")) [3575..3577]
+              Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("Figure1.jpg"), title: Borrowed(""), id: Borrowed("") } [3577..3591]
+                Text(Borrowed("Figure1.jpg")) [3579..3590]
+              List(None) [3592..3677]
+                Item [3592..3677]
+                  Text(Borrowed("even if there exists a note called ")) [3596..3631]
+                  Code(Borrowed("Figure1.jpg")) [3631..3644]
+                  Text(Borrowed(", the asset will take precedence")) [3644..3676]
+            Item [3677..3737]
+              Code(Borrowed("[[Figure1.jpg#2]]")) [3679..3698]
+              Text(Borrowed(": ")) [3698..3700]
+              Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("Figure1.jpg#2"), title: Borrowed(""), id: Borrowed("") } [3700..3716]
+                Text(Borrowed("Figure1.jpg#2")) [3702..3715]
+              List(None) [3717..3737]
+                Item [3717..3737]
+                  Text(Borrowed("points to image")) [3721..3736]
+            Item [3737..3843]
+              Code(Borrowed("[[Figure1.jpg | 2]]")) [3739..3760]
+              Text(Borrowed(": ")) [3760..3762]
+              Link { link_type: WikiLink { has_pothole: true }, dest_url: Borrowed("Figure1.jpg "), title: Borrowed(""), id: Borrowed("") } [3762..3780]
+                Text(Borrowed(" 2")) [3777..3779]
+              List(None) [3781..3843]
+                Item [3781..3801]
+                  Text(Borrowed("points to image")) [3785..3800]
+                Item [3800..3843]
+                  Text(Borrowed("leading and ending spaces are stripped")) [3804..3842]
+            Item [3843..3948]
+              Code(Borrowed("[[Figure1.jpg.md]]")) [3845..3865]
+              Text(Borrowed(": ")) [3865..3867]
+              Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("Figure1.jpg.md"), title: Borrowed(""), id: Borrowed("") } [3867..3884]
+                Text(Borrowed("Figure1.jpg.md")) [3869..3883]
+              List(None) [3885..3948]
+                Item [3885..3948]
+                  Text(Borrowed("with explicit ")) [3889..3903]
+                  Code(Borrowed(".md")) [3903..3908]
+                  Text(Borrowed(" ending, we seek for note ")) [3908..3934]
+                  Code(Borrowed("Figure1.jpg")) [3934..3947]
+            Item [3948..3997]
+              Code(Borrowed("[[Figure1.jpg.md.md]]")) [3950..3973]
+              Text(Borrowed(": ")) [3973..3975]
+              Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("Figure1.jpg.md.md"), title: Borrowed(""), id: Borrowed("") } [3975..3995]
+                Text(Borrowed("Figure1.jpg.md.md")) [3977..3994]
+            Item [3997..4136]
+              Code(Borrowed("[[Figure1#2.jpg]]")) [3999..4018]
+              Text(Borrowed(": ")) [4018..4020]
+              Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("Figure1#2.jpg"), title: Borrowed(""), id: Borrowed("") } [4020..4036]
+                Text(Borrowed("Figure1#2.jpg")) [4022..4035]
+              List(None) [4037..4136]
+                Item [4037..4136]
+                  Text(Borrowed("understood as note and points to note Figure1 (fallback to note after failing finding heading)")) [4041..4135]
+            Item [4136..4275]
+              Code(Borrowed("[[Figure1|2.jpg]]")) [4138..4157]
+              Text(Borrowed(": ")) [4157..4159]
+              Link { link_type: WikiLink { has_pothole: true }, dest_url: Borrowed("Figure1"), title: Borrowed(""), id: Borrowed("") } [4159..4175]
+                Text(Borrowed("2.jpg")) [4169..4174]
+              List(None) [4176..4275]
+                Item [4176..4275]
+                  Text(Borrowed("understood as note and points to note Figure1 (fallback to note after failing finding heading)")) [4180..4274]
+            Item [4275..4335]
+              Code(Borrowed("[[Figure1^2.jpg]]")) [4277..4296]
+              Text(Borrowed(": ")) [4296..4298]
+              Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("Figure1^2.jpg"), title: Borrowed(""), id: Borrowed("") } [4298..4314]
+                Text(Borrowed("Figure1^2.jpg")) [4300..4313]
+              List(None) [4315..4335]
+                Item [4315..4335]
+                  Text(Borrowed("points to image")) [4319..4334]
+            Item [4335..4410]
+              Text(Borrowed("↳ when there")) [4337..4351]
+              Text(Inlined(InlineStr { inner: [226, 128, 153, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], len: 3 })) [4351..4352]
+              Text(Borrowed("s ")) [4352..4354]
+              Code(Borrowed(".md")) [4354..4359]
+              Text(Borrowed(", it")) [4359..4363]
+              Text(Inlined(InlineStr { inner: [226, 128, 153, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], len: 3 })) [4363..4364]
+              Text(Borrowed("s removed and limit to the searching of notes")) [4364..4409]
+            Item [4410..4749]
+              Code(Borrowed("[[dir/]]")) [4412..4422]
+              Text(Borrowed(": ")) [4422..4424]
+              Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("dir/"), title: Borrowed(""), id: Borrowed("") } [4424..4431]
+                Text(Borrowed("dir/")) [4426..4430]
+              List(None) [4432..4749]
+                Item [4432..4440]
+                  Text(Borrowed("BUG")) [4436..4439]
+                Item [4439..4501]
+                  Text(Borrowed("when clicking it, it will create ")) [4443..4476]
+                  Code(Borrowed("dir")) [4476..4481]
+                  Text(Borrowed(" note if not exists")) [4481..4500]
+                Item [4500..4538]
+                  Text(Borrowed("create ")) [4504..4511]
+                  Code(Borrowed("dir 1.md")) [4511..4521]
+                  Text(Borrowed(" if ")) [4521..4525]
+                  Code(Borrowed("dir")) [4525..4530]
+                  Text(Borrowed(" exists")) [4530..4537]
+                Item [4537..4586]
+                  Text(Borrowed("create ")) [4541..4548]
+                  Code(Borrowed("dir {n+1}.md")) [4548..4562]
+                  Text(Borrowed(" if ")) [4562..4566]
+                  Code(Borrowed("dir {n}.md")) [4566..4578]
+                  Text(Borrowed(" exists")) [4578..4585]
+                Item [4585..4749]
+                  Text(Borrowed("I guess the logic is:")) [4589..4610]
+                  List(None) [4611..4749]
+                    Item [4611..4675]
+                      Text(Borrowed("there")) [4615..4620]
+                      Text(Inlined(InlineStr { inner: [226, 128, 153, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], len: 3 })) [4620..4621]
+                      Text(Borrowed("s no file named ")) [4621..4637]
+                      Code(Borrowed("dir/")) [4637..4643]
+                      Text(Borrowed(", Obsidian try to create a note")) [4643..4674]
+                    Item [4675..4702]
+                      Text(Borrowed("it removes ")) [4679..4690]
+                      Code(Borrowed("/")) [4690..4693]
+                      Text(Borrowed(" and ")) [4693..4698]
+                      Code(Borrowed("\\")) [4698..4701]
+                    Item [4702..4749]
+                      Text(Borrowed("if there exists one, it add integer suffix")) [4706..4748]
+            Item [4749..5260]
+              Text(Borrowed("matching of nested dirs only match ancestor-descendant relationship")) [4751..4818]
+              List(None) [4818..5260]
+                Item [4818..4897]
+                  Code(Borrowed("[[dir/inner_dir/note_in_inner_dir]]")) [4822..4859]
+                  Text(Borrowed(": ")) [4859..4861]
+                  Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("dir/inner_dir/note_in_inner_dir"), title: Borrowed(""), id: Borrowed("") } [4861..4895]
+                    Text(Borrowed("dir/inner_dir/note_in_inner_dir")) [4863..4894]
+                Item [4896..4967]
+                  Code(Borrowed("[[inner_dir/note_in_inner_dir]]")) [4900..4933]
+                  Text(Borrowed(": ")) [4933..4935]
+                  Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("inner_dir/note_in_inner_dir"), title: Borrowed(""), id: Borrowed("") } [4935..4965]
+                    Text(Borrowed("inner_dir/note_in_inner_dir")) [4937..4964]
+                Item [4966..5025]
+                  Code(Borrowed("[[dir/note_in_inner_dir]]")) [4970..4997]
+                  Text(Borrowed(": ")) [4997..4999]
+                  Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("dir/note_in_inner_dir"), title: Borrowed(""), id: Borrowed("") } [4999..5023]
+                    Text(Borrowed("dir/note_in_inner_dir")) [5001..5022]
+                Item [5024..5060]
+                  Text(Borrowed("↳ all points to the same note")) [5028..5059]
+                Item [5059..5260]
+                  Code(Borrowed("[[random/note_in_inner_dir]]")) [5063..5093]
+                  Text(Borrowed(": ")) [5093..5095]
+                  Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("random/note_in_inner_dir"), title: Borrowed(""), id: Borrowed("") } [5095..5122]
+                    Text(Borrowed("random/note_in_inner_dir")) [5097..5121]
+                  List(None) [5124..5260]
+                    Item [5124..5146]
+                      Text(Borrowed("this has no match")) [5128..5145]
+                    Item [5146..5199]
+                      Text(Borrowed("it will try to understand the file name and path")) [5150..5198]
+                    Item [5199..5260]
+                      Text(Borrowed("mkdir and touch file (in contrast to the case of ")) [5203..5252]
+                      Code(Borrowed("dir/")) [5252..5258]
+                      Text(Borrowed(")")) [5258..5259]
+            Item [5260..5313]
+              Code(Borrowed("[[dir/indir_same_name]]")) [5262..5287]
+              Text(Borrowed(": ")) [5287..5289]
+              Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("dir/indir_same_name"), title: Borrowed(""), id: Borrowed("") } [5289..5311]
+                Text(Borrowed("dir/indir_same_name")) [5291..5310]
+            Item [5313..5409]
+              Code(Borrowed("[[indir_same_name]]")) [5315..5336]
+              Text(Borrowed(": ")) [5336..5338]
+              Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("indir_same_name"), title: Borrowed(""), id: Borrowed("") } [5338..5356]
+                Text(Borrowed("indir_same_name")) [5340..5355]
+              List(None) [5357..5409]
+                Item [5357..5409]
+                  Text(Borrowed("points to ")) [5361..5371]
+                  Code(Borrowed("indir_same_name")) [5371..5388]
+                  Text(Borrowed(", not the in dir one")) [5388..5408]
+            Item [5409..5463]
+              Code(Borrowed("[[indir2]]")) [5412..5424]
+              Text(Borrowed(": ")) [5424..5426]
+              Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("indir2"), title: Borrowed(""), id: Borrowed("") } [5426..5435]
+                Text(Borrowed("indir2")) [5428..5434]
+              List(None) [5437..5463]
+                Item [5437..5463]
+                  Text(Borrowed("points to ")) [5440..5450]
+                  Code(Borrowed("dir/indir2")) [5450..5462]
+            Item [5463..5576]
+              Code(Borrowed("[[Something]]")) [5465..5480]
+              Text(Borrowed(": ")) [5480..5482]
+              Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("Something"), title: Borrowed(""), id: Borrowed("") } [5482..5494]
+                Text(Borrowed("Something")) [5484..5493]
+              List(None) [5495..5576]
+                Item [5495..5576]
+                  Text(Borrowed("there exists a ")) [5499..5514]
+                  Code(Borrowed("Something")) [5514..5525]
+                  Text(Borrowed(" file, but this will points to note ")) [5525..5561]
+                  Code(Borrowed("Something.md")) [5561..5575]
+            Item [5576..5696]
+              Code(Borrowed("[[unsupported_text_file.txt]]")) [5578..5609]
+              Text(Borrowed(": ")) [5609..5611]
+              Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("unsupported_text_file.txt"), title: Borrowed(""), id: Borrowed("") } [5611..5639]
+                Text(Borrowed("unsupported_text_file.txt")) [5613..5638]
+              List(None) [5640..5696]
+                Item [5640..5696]
+                  Text(Borrowed("points to text file, which is of unsupported format")) [5644..5695]
+            Item [5696..5757]
+              Code(Borrowed("[[a.joiwduvqneoi]]")) [5698..5718]
+              Text(Borrowed(": ")) [5718..5720]
+              Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("a.joiwduvqneoi"), title: Borrowed(""), id: Borrowed("") } [5720..5737]
+                Text(Borrowed("a.joiwduvqneoi")) [5722..5736]
+              List(None) [5738..5757]
+                Item [5738..5757]
+                  Text(Borrowed("points to file")) [5742..5756]
+            Item [5757..5856]
+              Code(Borrowed("[[Note 1]]")) [5759..5771]
+              Text(Borrowed(": ")) [5771..5773]
+              Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("Note 1"), title: Borrowed(""), id: Borrowed("") } [5773..5782]
+                Text(Borrowed("Note 1")) [5775..5781]
+              List(None) [5783..5856]
+                Item [5783..5856]
+                  Text(Borrowed("even if there exists a file named ")) [5787..5821]
+                  Code(Borrowed("Note 1")) [5821..5829]
+                  Text(Borrowed(", this points to the note")) [5829..5854]
+          Paragraph [5856..5936]
+            Code(Borrowed("![[Figure1.jpg]]")) [5856..5874]
+            Text(Borrowed(": ")) [5874..5876]
+            Image { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("Figure1.jpg"), title: Borrowed(""), id: Borrowed("") } [5876..5891]
+              Text(Borrowed("Figure1.jpg")) [5879..5890]
+            SoftBreak [5892..5893]
+            Code(Borrowed("[[empty_video.mp4]]")) [5893..5914]
+            Text(Borrowed(": ")) [5914..5916]
+            Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("empty_video.mp4"), title: Borrowed(""), id: Borrowed("") } [5916..5934]
+              Text(Borrowed("empty_video.mp4")) [5918..5933]
+          Heading { level: H2, id: None, classes: [], attrs: [] } [5937..5943]
+            Text(Borrowed("L2")) [5940..5942]
+          Heading { level: H3, id: None, classes: [], attrs: [] } [5944..5951]
+            Text(Borrowed("L3")) [5948..5950]
+          Heading { level: H4, id: None, classes: [], attrs: [] } [5951..5959]
+            Text(Borrowed("L4")) [5956..5958]
+          Heading { level: H3, id: None, classes: [], attrs: [] } [5959..5974]
+            Text(Borrowed("Another L3")) [5963..5973]
+          Rule [5975..5979]
+          Heading { level: H2, id: None, classes: [], attrs: [] } [5979..5983]
         "########);
     }
+
+    // let dir = PathBuf::from("tests/data/vaults/tt");
+    // let (referenceables, references) = scan_vault(&dir);
+    // let paths = referenceables
+    //     .iter()
+    //     .filter(|&r| match r {
+    //         Referenceable::Note { .. } => true,
+    //         Referenceable::Asset { .. } => true,
+    //         _ => false,
+    //     })
+    //     .map(|r| r.path().strip_prefix(&dir).unwrap())
+    //     .collect::<Vec<_>>();
+    // let mut s = String::new();
+    // for path in paths {
+    //     s.push_str(&format!("\"{}\",\n", path.display()));
+    // }
+    // assert_snapshot!(s, @r#"
+    // "Note 1.md",
+    // "Three laws of motion.md",
+    // "indir_same_name.md",
+    // "ww.md",
+    // "Figure 1.jpg.md",
+    // "Figure 1.jpg",
+    // "().md",
+    // "Figure1#2.jpg",
+    // "Figure 1.jpg.md.md",
+    // "dir.md",
+    // "empty_video.mp4",
+    // "Hi.txt.md",
+    // "block note.md",
+    // "dir/indir_same_name.md",
+    // "dir/indir2.md",
+    // "unsupported_text_file.txt",
+    // "unsupported.unsupported",
+    // "Figure1.md",
+    // "Figure1^2.jpg",
+    // "Note 2.md",
+    // "Figure1|2.jpg",
+    // "#);
 }
