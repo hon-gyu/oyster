@@ -262,14 +262,22 @@ fn split_dest_string(s: &str) -> (&str, Vec<&str>) {
     }
 
     let hash_pos = hash_pos.unwrap();
-    let note_name = &s[..hash_pos];
+    let file_name = &s[..hash_pos];
     let hs = &s[hash_pos + 1..];
 
-    (note_name, parse_nested_heading(hs))
+    (file_name, parse_nested_heading(hs))
 }
 
 /// Parse a string into a vector of nested headings.
-fn parse_nested_heading(s: &str) -> Vec<&str> {
+/// ```
+/// use markdown_tools::link::parse_nested_heading;
+/// assert_eq!(parse_nested_heading("##A###B"), vec!["A", "B"]);
+/// assert_eq!(parse_nested_heading("A##B"), vec!["A", "B"]);
+/// assert_eq!(parse_nested_heading("A#####C#B"), vec!["A", "C", "B"]);
+/// assert_eq!(parse_nested_heading("##"), vec![""]);
+/// assert_eq!(parse_nested_heading("##C"), vec!["C"]);
+/// ```
+pub fn parse_nested_heading(s: &str) -> Vec<&str> {
     if s.chars().all(|c| c == '#') && !s.is_empty() {
         // All hashes case
         return vec![""];
@@ -278,23 +286,17 @@ fn parse_nested_heading(s: &str) -> Vec<&str> {
     s.split('#').filter(|part| !part.is_empty()).collect()
 }
 
-fn parse_destination(dest: &str) -> Referenceable {
+fn match_file(file_name: &str, paths: Vec<PathBuf>) -> Option<PathBuf> {
+    todo!()
+}
+
+fn resolve_destination_against_files(
+    dest: &str,
+    paths: Vec<PathBuf>,
+) -> Referenceable {
     //! If the destination string ends with `.md`, it is targeting a note.
-    // TODO:
-    // if there's # or |, it's forced to be a note
-    // find first # and first |, split into three parts
-    // the first part is note name
-    //     if it's empty, it's current note
-    // the second part is nested heading, only taking ancestor-descendant relationship into account
-    if dest.ends_with(".md") {
-        Referenceable::Note {
-            path: PathBuf::from(dest),
-        }
-    } else {
-        Referenceable::Asset {
-            path: PathBuf::from(dest),
-        }
-    }
+    let (file_name, nested_headings) = split_dest_string(dest);
+    todo!()
 }
 
 /// Builds links from references and referenceables.
@@ -371,6 +373,9 @@ mod tests {
 
         output
     }
+
+    #[test]
+    fn test_match_file() {}
 
     #[test]
     fn test_parse_nested_heading() {
@@ -459,13 +464,19 @@ mod tests {
         |  35 | ##L2#####L4                             |                         | L2#L4                            |
         |  36 | ##L2#####L4#L3                          |                         | L2#L4#L3                         |
         |  37 | Figure 1.jpg                            | Figure 1.jpg            |                                  |
-        |  38 | Figure 1.jpg.md                         | Figure 1.jpg.md         |                                  |
-        |  39 | Figure 1.jpg.md.md                      | Figure 1.jpg.md.md      |                                  |
-        |  40 | Figure1#2.jpg                           | Figure1                 | 2.jpg                            |
-        |  41 | Figure1                                 | Figure1                 |                                  |
-        |  42 | Figure1^2.jpg                           | Figure1^2.jpg           |                                  |
-        |  43 | Figure 1.jpg                            | Figure 1.jpg            |                                  |
-        |  44 | empty_video.mp4                         | empty_video.mp4         |                                  |
+        |  38 | Figure 1.jpg#2                          | Figure 1.jpg            | 2                                |
+        |  39 | Figure 1.jpg                            | Figure 1.jpg            |                                  |
+        |  40 | Figure 1.jpg.md                         | Figure 1.jpg.md         |                                  |
+        |  41 | Figure 1.jpg.md.md                      | Figure 1.jpg.md.md      |                                  |
+        |  42 | Figure1#2.jpg                           | Figure1                 | 2.jpg                            |
+        |  43 | Figure1                                 | Figure1                 |                                  |
+        |  44 | Figure1^2.jpg                           | Figure1^2.jpg           |                                  |
+        |  45 | dir/                                    | dir/                    |                                  |
+        |  46 | dir/indir_same_name                     | dir/indir_same_name     |                                  |
+        |  47 | indir_same_name                         | indir_same_name         |                                  |
+        |  48 | indir2                                  | indir2                  |                                  |
+        |  49 | Figure 1.jpg                            | Figure 1.jpg            |                                  |
+        |  50 | empty_video.mp4                         | empty_video.mp4         |                                  |
         +-----+-----------------------------------------+-------------------------+----------------------------------+
         ");
     }
@@ -705,43 +716,79 @@ mod tests {
                 display_text: "Figure 1.jpg",
             },
             Reference {
-                range: 3707..3725,
+                range: 3706..3723,
+                dest: "Figure 1.jpg#2",
+                kind: WikiLink,
+                display_text: "Figure 1.jpg#2",
+            },
+            Reference {
+                range: 3770..3789,
+                dest: "Figure 1.jpg ",
+                kind: WikiLink,
+                display_text: " 2",
+            },
+            Reference {
+                range: 3835..3853,
                 dest: "Figure 1.jpg.md",
                 kind: WikiLink,
                 display_text: "Figure 1.jpg.md",
             },
             Reference {
-                range: 3818..3839,
+                range: 3946..3967,
                 dest: "Figure 1.jpg.md.md",
                 kind: WikiLink,
                 display_text: "Figure 1.jpg.md.md",
             },
             Reference {
-                range: 3864..3880,
+                range: 3992..4008,
                 dest: "Figure1#2.jpg",
                 kind: WikiLink,
                 display_text: "Figure1#2.jpg",
             },
             Reference {
-                range: 4004..4020,
+                range: 4132..4148,
                 dest: "Figure1",
                 kind: WikiLink,
                 display_text: "2.jpg",
             },
             Reference {
-                range: 4144..4160,
+                range: 4272..4288,
                 dest: "Figure1^2.jpg",
                 kind: WikiLink,
                 display_text: "Figure1^2.jpg",
             },
             Reference {
-                range: 4278..4294,
+                range: 4398..4405,
+                dest: "dir/",
+                kind: WikiLink,
+                display_text: "dir/",
+            },
+            Reference {
+                range: 4460..4482,
+                dest: "dir/indir_same_name",
+                kind: WikiLink,
+                display_text: "dir/indir_same_name",
+            },
+            Reference {
+                range: 4509..4527,
+                dest: "indir_same_name",
+                kind: WikiLink,
+                display_text: "indir_same_name",
+            },
+            Reference {
+                range: 4597..4606,
+                dest: "indir2",
+                kind: WikiLink,
+                display_text: "indir2",
+            },
+            Reference {
+                range: 4656..4672,
                 dest: "Figure 1.jpg",
                 kind: WikiLink,
                 display_text: "Figure 1.jpg",
             },
             Reference {
-                range: 4320..4338,
+                range: 4697..4715,
                 dest: "empty_video.mp4",
                 kind: WikiLink,
                 display_text: "empty_video.mp4",
@@ -769,6 +816,9 @@ mod tests {
                 path: "tests/data/vaults/tt/Three laws of motion.md",
             },
             Note {
+                path: "tests/data/vaults/tt/indir_same_name.md",
+            },
+            Note {
                 path: "tests/data/vaults/tt/ww.md",
             },
             Note {
@@ -786,11 +836,29 @@ mod tests {
             Note {
                 path: "tests/data/vaults/tt/Figure 1.jpg.md.md",
             },
+            Note {
+                path: "tests/data/vaults/tt/dir.md",
+            },
             Asset {
                 path: "tests/data/vaults/tt/empty_video.mp4",
             },
             Note {
+                path: "tests/data/vaults/tt/Hi.txt.md",
+            },
+            Note {
                 path: "tests/data/vaults/tt/block note.md",
+            },
+            Note {
+                path: "tests/data/vaults/tt/dir/indir_same_name.md",
+            },
+            Note {
+                path: "tests/data/vaults/tt/dir/indir2.md",
+            },
+            Asset {
+                path: "tests/data/vaults/tt/unsupported_text_file.txt",
+            },
+            Asset {
+                path: "tests/data/vaults/tt/unsupported.unsupported",
             },
             Note {
                 path: "tests/data/vaults/tt/Figure1.md",
@@ -837,27 +905,27 @@ mod tests {
             Heading {
                 note_path: "tests/data/vaults/tt/Note 1.md",
                 level: H2,
-                range: 4341..4347,
+                range: 4718..4724,
             },
             Heading {
                 note_path: "tests/data/vaults/tt/Note 1.md",
                 level: H3,
-                range: 4348..4355,
+                range: 4725..4732,
             },
             Heading {
                 note_path: "tests/data/vaults/tt/Note 1.md",
                 level: H4,
-                range: 4355..4363,
+                range: 4732..4740,
             },
             Heading {
                 note_path: "tests/data/vaults/tt/Note 1.md",
                 level: H3,
-                range: 4363..4378,
+                range: 4740..4755,
             },
             Heading {
                 note_path: "tests/data/vaults/tt/Note 1.md",
                 level: H2,
-                range: 4383..4387,
+                range: 4760..4764,
             },
             Heading {
                 note_path: "tests/data/vaults/tt/Note 2.md",
@@ -1119,43 +1187,79 @@ mod tests {
                 display_text: "Figure 1.jpg",
             },
             Reference {
-                range: 3707..3725,
+                range: 3706..3723,
+                dest: "Figure 1.jpg#2",
+                kind: WikiLink,
+                display_text: "Figure 1.jpg#2",
+            },
+            Reference {
+                range: 3770..3789,
+                dest: "Figure 1.jpg ",
+                kind: WikiLink,
+                display_text: " 2",
+            },
+            Reference {
+                range: 3835..3853,
                 dest: "Figure 1.jpg.md",
                 kind: WikiLink,
                 display_text: "Figure 1.jpg.md",
             },
             Reference {
-                range: 3818..3839,
+                range: 3946..3967,
                 dest: "Figure 1.jpg.md.md",
                 kind: WikiLink,
                 display_text: "Figure 1.jpg.md.md",
             },
             Reference {
-                range: 3864..3880,
+                range: 3992..4008,
                 dest: "Figure1#2.jpg",
                 kind: WikiLink,
                 display_text: "Figure1#2.jpg",
             },
             Reference {
-                range: 4004..4020,
+                range: 4132..4148,
                 dest: "Figure1",
                 kind: WikiLink,
                 display_text: "2.jpg",
             },
             Reference {
-                range: 4144..4160,
+                range: 4272..4288,
                 dest: "Figure1^2.jpg",
                 kind: WikiLink,
                 display_text: "Figure1^2.jpg",
             },
             Reference {
-                range: 4278..4294,
+                range: 4398..4405,
+                dest: "dir/",
+                kind: WikiLink,
+                display_text: "dir/",
+            },
+            Reference {
+                range: 4460..4482,
+                dest: "dir/indir_same_name",
+                kind: WikiLink,
+                display_text: "dir/indir_same_name",
+            },
+            Reference {
+                range: 4509..4527,
+                dest: "indir_same_name",
+                kind: WikiLink,
+                display_text: "indir_same_name",
+            },
+            Reference {
+                range: 4597..4606,
+                dest: "indir2",
+                kind: WikiLink,
+                display_text: "indir2",
+            },
+            Reference {
+                range: 4656..4672,
                 dest: "Figure 1.jpg",
                 kind: WikiLink,
                 display_text: "Figure 1.jpg",
             },
             Reference {
-                range: 4320..4338,
+                range: 4697..4715,
                 dest: "empty_video.mp4",
                 kind: WikiLink,
                 display_text: "empty_video.mp4",
@@ -1197,27 +1301,27 @@ mod tests {
             Heading {
                 note_path: "tests/data/vaults/tt/Note 1.md",
                 level: H2,
-                range: 4341..4347,
+                range: 4718..4724,
             },
             Heading {
                 note_path: "tests/data/vaults/tt/Note 1.md",
                 level: H3,
-                range: 4348..4355,
+                range: 4725..4732,
             },
             Heading {
                 note_path: "tests/data/vaults/tt/Note 1.md",
                 level: H4,
-                range: 4355..4363,
+                range: 4732..4740,
             },
             Heading {
                 note_path: "tests/data/vaults/tt/Note 1.md",
                 level: H3,
-                range: 4363..4378,
+                range: 4740..4755,
             },
             Heading {
                 note_path: "tests/data/vaults/tt/Note 1.md",
                 level: H2,
-                range: 4383..4387,
+                range: 4760..4764,
             },
         ]
         "#);
@@ -1229,7 +1333,7 @@ mod tests {
         let text = fs::read_to_string(path).unwrap();
         let tree = Tree::new(&text);
         assert_snapshot!(tree.root_node, @r########"
-        Document [0..4387]
+        Document [0..4764]
           List(None) [0..57]
             Item [0..57]
               Text(Borrowed("Note in Obsidian cannot have # ^ ")) [2..35]
@@ -1556,7 +1660,7 @@ mod tests {
                       Text(Borrowed("fallback to current note")) [3512..3536]
           Heading { level: H5, id: None, classes: [], attrs: [] } [3538..3558]
             Text(Borrowed("Link to asset")) [3544..3557]
-          List(None) [3558..4257]
+          List(None) [3558..4635]
             Item [3558..3682]
               Code(Borrowed("[[Figure 1.jpg]]")) [3560..3578]
               Text(Borrowed(": ")) [3578..3580]
@@ -1567,74 +1671,123 @@ mod tests {
                   Text(Borrowed("even if there exists a note called ")) [3600..3635]
                   Code(Borrowed("Figure 1.jpg")) [3635..3649]
                   Text(Borrowed(", the asset will take precedence")) [3649..3681]
-            Item [3682..3790]
-              Code(Borrowed("[[Figure 1.jpg.md]]")) [3684..3705]
-              Text(Borrowed(": ")) [3705..3707]
-              Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("Figure 1.jpg.md"), title: Borrowed(""), id: Borrowed("") } [3707..3725]
-                Text(Borrowed("Figure 1.jpg.md")) [3709..3724]
-              List(None) [3726..3790]
-                Item [3726..3790]
-                  Text(Borrowed("with explicit ")) [3730..3744]
-                  Code(Borrowed(".md")) [3744..3749]
-                  Text(Borrowed(" ending, we seek for note ")) [3749..3775]
-                  Code(Borrowed("Figure 1.jpg")) [3775..3789]
-            Item [3790..3841]
-              Code(Borrowed("[[Figure 1.jpg.md.md]]")) [3792..3816]
-              Text(Borrowed(": ")) [3816..3818]
-              Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("Figure 1.jpg.md.md"), title: Borrowed(""), id: Borrowed("") } [3818..3839]
-                Text(Borrowed("Figure 1.jpg.md.md")) [3820..3838]
-            Item [3841..3981]
-              Code(Borrowed("[[Figure1#2.jpg]]")) [3843..3862]
-              Text(Borrowed(": ")) [3862..3864]
-              Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("Figure1#2.jpg"), title: Borrowed(""), id: Borrowed("") } [3864..3880]
-                Text(Borrowed("Figure1#2.jpg")) [3866..3879]
-              List(None) [3881..3981]
-                Item [3881..3981]
-                  Text(Borrowed("understood as note and points to note Figure 1 (fallback to note after failing finding heading)")) [3885..3980]
-            Item [3981..4121]
-              Code(Borrowed("[[Figure1|2.jpg]]")) [3983..4002]
-              Text(Borrowed(": ")) [4002..4004]
-              Link { link_type: WikiLink { has_pothole: true }, dest_url: Borrowed("Figure1"), title: Borrowed(""), id: Borrowed("") } [4004..4020]
-                Text(Borrowed("2.jpg")) [4014..4019]
-              List(None) [4021..4121]
-                Item [4021..4121]
-                  Text(Borrowed("understood as note and points to note Figure 1 (fallback to note after failing finding heading)")) [4025..4120]
-            Item [4121..4181]
-              Code(Borrowed("[[Figure1^2.jpg]]")) [4123..4142]
-              Text(Borrowed(": ")) [4142..4144]
-              Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("Figure1^2.jpg"), title: Borrowed(""), id: Borrowed("") } [4144..4160]
-                Text(Borrowed("Figure1^2.jpg")) [4146..4159]
-              List(None) [4161..4181]
-                Item [4161..4181]
-                  Text(Borrowed("points to image")) [4165..4180]
-            Item [4181..4257]
-              Text(Borrowed("↳ when there")) [4183..4197]
-              Text(Inlined(InlineStr { inner: [226, 128, 153, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], len: 3 })) [4197..4198]
-              Text(Borrowed("s ")) [4198..4200]
-              Code(Borrowed(".md")) [4200..4205]
-              Text(Borrowed(", it")) [4205..4209]
-              Text(Inlined(InlineStr { inner: [226, 128, 153, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], len: 3 })) [4209..4210]
-              Text(Borrowed("s removed and limit to the searching of notes")) [4210..4255]
-          Paragraph [4257..4296]
-            Code(Borrowed("![[Figure 1.jpg]]")) [4257..4276]
-            Text(Borrowed(": ")) [4276..4278]
-            Image { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("Figure 1.jpg"), title: Borrowed(""), id: Borrowed("") } [4278..4294]
-              Text(Borrowed("Figure 1.jpg")) [4281..4293]
-          Paragraph [4297..4340]
-            Code(Borrowed("[[empty_video.mp4]]")) [4297..4318]
-            Text(Borrowed(": ")) [4318..4320]
-            Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("empty_video.mp4"), title: Borrowed(""), id: Borrowed("") } [4320..4338]
-              Text(Borrowed("empty_video.mp4")) [4322..4337]
-          Heading { level: H2, id: None, classes: [], attrs: [] } [4341..4347]
-            Text(Borrowed("L2")) [4344..4346]
-          Heading { level: H3, id: None, classes: [], attrs: [] } [4348..4355]
-            Text(Borrowed("L3")) [4352..4354]
-          Heading { level: H4, id: None, classes: [], attrs: [] } [4355..4363]
-            Text(Borrowed("L4")) [4360..4362]
-          Heading { level: H3, id: None, classes: [], attrs: [] } [4363..4378]
-            Text(Borrowed("Another L3")) [4367..4377]
-          Rule [4379..4383]
-          Heading { level: H2, id: None, classes: [], attrs: [] } [4383..4387]
+            Item [3682..3744]
+              Code(Borrowed("[[Figure 1.jpg#2]]")) [3684..3704]
+              Text(Borrowed(": ")) [3704..3706]
+              Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("Figure 1.jpg#2"), title: Borrowed(""), id: Borrowed("") } [3706..3723]
+                Text(Borrowed("Figure 1.jpg#2")) [3708..3722]
+              List(None) [3724..3744]
+                Item [3724..3744]
+                  Text(Borrowed("points to image")) [3728..3743]
+            Item [3744..3810]
+              Code(Borrowed("[[Figure 1.jpg | 2]]")) [3746..3768]
+              Text(Borrowed(": ")) [3768..3770]
+              Link { link_type: WikiLink { has_pothole: true }, dest_url: Borrowed("Figure 1.jpg "), title: Borrowed(""), id: Borrowed("") } [3770..3789]
+                Text(Borrowed(" 2")) [3786..3788]
+              List(None) [3790..3810]
+                Item [3790..3810]
+                  Text(Borrowed("points to image")) [3794..3809]
+            Item [3810..3918]
+              Code(Borrowed("[[Figure 1.jpg.md]]")) [3812..3833]
+              Text(Borrowed(": ")) [3833..3835]
+              Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("Figure 1.jpg.md"), title: Borrowed(""), id: Borrowed("") } [3835..3853]
+                Text(Borrowed("Figure 1.jpg.md")) [3837..3852]
+              List(None) [3854..3918]
+                Item [3854..3918]
+                  Text(Borrowed("with explicit ")) [3858..3872]
+                  Code(Borrowed(".md")) [3872..3877]
+                  Text(Borrowed(" ending, we seek for note ")) [3877..3903]
+                  Code(Borrowed("Figure 1.jpg")) [3903..3917]
+            Item [3918..3969]
+              Code(Borrowed("[[Figure 1.jpg.md.md]]")) [3920..3944]
+              Text(Borrowed(": ")) [3944..3946]
+              Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("Figure 1.jpg.md.md"), title: Borrowed(""), id: Borrowed("") } [3946..3967]
+                Text(Borrowed("Figure 1.jpg.md.md")) [3948..3966]
+            Item [3969..4109]
+              Code(Borrowed("[[Figure1#2.jpg]]")) [3971..3990]
+              Text(Borrowed(": ")) [3990..3992]
+              Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("Figure1#2.jpg"), title: Borrowed(""), id: Borrowed("") } [3992..4008]
+                Text(Borrowed("Figure1#2.jpg")) [3994..4007]
+              List(None) [4009..4109]
+                Item [4009..4109]
+                  Text(Borrowed("understood as note and points to note Figure 1 (fallback to note after failing finding heading)")) [4013..4108]
+            Item [4109..4249]
+              Code(Borrowed("[[Figure1|2.jpg]]")) [4111..4130]
+              Text(Borrowed(": ")) [4130..4132]
+              Link { link_type: WikiLink { has_pothole: true }, dest_url: Borrowed("Figure1"), title: Borrowed(""), id: Borrowed("") } [4132..4148]
+                Text(Borrowed("2.jpg")) [4142..4147]
+              List(None) [4149..4249]
+                Item [4149..4249]
+                  Text(Borrowed("understood as note and points to note Figure 1 (fallback to note after failing finding heading)")) [4153..4248]
+            Item [4249..4309]
+              Code(Borrowed("[[Figure1^2.jpg]]")) [4251..4270]
+              Text(Borrowed(": ")) [4270..4272]
+              Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("Figure1^2.jpg"), title: Borrowed(""), id: Borrowed("") } [4272..4288]
+                Text(Borrowed("Figure1^2.jpg")) [4274..4287]
+              List(None) [4289..4309]
+                Item [4289..4309]
+                  Text(Borrowed("points to image")) [4293..4308]
+            Item [4309..4384]
+              Text(Borrowed("↳ when there")) [4311..4325]
+              Text(Inlined(InlineStr { inner: [226, 128, 153, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], len: 3 })) [4325..4326]
+              Text(Borrowed("s ")) [4326..4328]
+              Code(Borrowed(".md")) [4328..4333]
+              Text(Borrowed(", it")) [4333..4337]
+              Text(Inlined(InlineStr { inner: [226, 128, 153, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], len: 3 })) [4337..4338]
+              Text(Borrowed("s removed and limit to the searching of notes")) [4338..4383]
+            Item [4384..4431]
+              Code(Borrowed("[[dir/]]")) [4386..4396]
+              Text(Borrowed(": ")) [4396..4398]
+              Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("dir/"), title: Borrowed(""), id: Borrowed("") } [4398..4405]
+                Text(Borrowed("dir/")) [4400..4404]
+              List(None) [4406..4431]
+                Item [4406..4431]
+                  Text(Borrowed("points to note ")) [4410..4425]
+                  Code(Borrowed("dir")) [4425..4430]
+            Item [4431..4484]
+              Code(Borrowed("[[dir/indir_same_name]]")) [4433..4458]
+              Text(Borrowed(": ")) [4458..4460]
+              Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("dir/indir_same_name"), title: Borrowed(""), id: Borrowed("") } [4460..4482]
+                Text(Borrowed("dir/indir_same_name")) [4462..4481]
+            Item [4484..4580]
+              Code(Borrowed("[[indir_same_name]]")) [4486..4507]
+              Text(Borrowed(": ")) [4507..4509]
+              Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("indir_same_name"), title: Borrowed(""), id: Borrowed("") } [4509..4527]
+                Text(Borrowed("indir_same_name")) [4511..4526]
+              List(None) [4528..4580]
+                Item [4528..4580]
+                  Text(Borrowed("points to ")) [4532..4542]
+                  Code(Borrowed("indir_same_name")) [4542..4559]
+                  Text(Borrowed(", not the in dir one")) [4559..4579]
+            Item [4580..4635]
+              Code(Borrowed("[[indir2]]")) [4583..4595]
+              Text(Borrowed(": ")) [4595..4597]
+              Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("indir2"), title: Borrowed(""), id: Borrowed("") } [4597..4606]
+                Text(Borrowed("indir2")) [4599..4605]
+              List(None) [4608..4635]
+                Item [4608..4635]
+                  Text(Borrowed("points to ")) [4611..4621]
+                  Code(Borrowed("dir/indir2")) [4621..4633]
+          Paragraph [4635..4717]
+            Code(Borrowed("![[Figure 1.jpg]]")) [4635..4654]
+            Text(Borrowed(": ")) [4654..4656]
+            Image { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("Figure 1.jpg"), title: Borrowed(""), id: Borrowed("") } [4656..4672]
+              Text(Borrowed("Figure 1.jpg")) [4659..4671]
+            SoftBreak [4673..4674]
+            Code(Borrowed("[[empty_video.mp4]]")) [4674..4695]
+            Text(Borrowed(": ")) [4695..4697]
+            Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("empty_video.mp4"), title: Borrowed(""), id: Borrowed("") } [4697..4715]
+              Text(Borrowed("empty_video.mp4")) [4699..4714]
+          Heading { level: H2, id: None, classes: [], attrs: [] } [4718..4724]
+            Text(Borrowed("L2")) [4721..4723]
+          Heading { level: H3, id: None, classes: [], attrs: [] } [4725..4732]
+            Text(Borrowed("L3")) [4729..4731]
+          Heading { level: H4, id: None, classes: [], attrs: [] } [4732..4740]
+            Text(Borrowed("L4")) [4737..4739]
+          Heading { level: H3, id: None, classes: [], attrs: [] } [4740..4755]
+            Text(Borrowed("Another L3")) [4744..4754]
+          Rule [4756..4760]
+          Heading { level: H2, id: None, classes: [], attrs: [] } [4760..4764]
         "########);
     }
 }

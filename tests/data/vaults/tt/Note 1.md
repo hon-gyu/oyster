@@ -90,6 +90,10 @@
 ##### Link to asset
 - `[[Figure 1.jpg]]`: [[Figure 1.jpg]]
 	- even if there exists a note called `Figure 1.jpg`, the asset will take precedence
+- `[[Figure 1.jpg#2]]`: [[Figure 1.jpg#2]]
+	- points to image
+- `[[Figure 1.jpg | 2]]`: [[Figure 1.jpg | 2]]
+	- points to image
 - `[[Figure 1.jpg.md]]`: [[Figure 1.jpg.md]]
 	- with explicit `.md` ending, we seek for note `Figure 1.jpg`
 - `[[Figure 1.jpg.md.md]]`: [[Figure 1.jpg.md.md]]
@@ -100,9 +104,15 @@
 - `[[Figure1^2.jpg]]`: [[Figure1^2.jpg]]
 	- points to image
 - ↳ when there's `.md`, it's removed and limit to the searching of notes
+- `[[dir/]]`: [[dir/]]
+	- points to note `dir`
+- `[[dir/indir_same_name]]`: [[dir/indir_same_name]]
+- `[[indir_same_name]]`: [[indir_same_name]]
+	- points to `indir_same_name`, not the in dir one
+-  `[[indir2]]`: [[indir2]]
+	- points to `dir/indir2`
 
 `![[Figure 1.jpg]]`: ![[Figure 1.jpg]]
-
 `[[empty_video.mp4]]`: [[empty_video.mp4]]
 
 ## L2
