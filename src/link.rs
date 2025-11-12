@@ -301,6 +301,29 @@ fn match_file(file_name: &str, paths: &Vec<PathBuf>) -> Option<PathBuf> {
     todo!()
 }
 
+/// Create a note when a link is unresolved or by some special commands (create new empty note)
+///
+/// - Parse dir and file name from the destination string first
+/// - remove `\` and `/`
+/// - increment the file name until it doesn't exist
+///
+/// Returns the path of dir to create and the path note to create.
+///
+/// Invariant: the path of dir to create, if exists, is a parent of the path of note to create.
+///
+/// Examples:
+/// - `Something` -> (None, `Something.md`)
+/// - `A/B` -> (Some(`A`), `A/B.md`)
+/// - `Untitle` -> (None, `Untitle 1.md`) if `Untitle.md` exists
+///   - in command "Create new note"
+/// - `dir/` -> (None, `dir.md`)
+///   - No dir can be parsed. So we try to create a note called `dir/.md`
+///   - and `/` is stripped
+/// - `dir/` -> (None, `dir 1.md`) if `dir.md` exists
+fn create_note(name: &str) -> (Option<PathBuf>, PathBuf) {
+    todo!()
+}
+
 fn resolve_destination_against_files(
     dest: &str,
     paths: Vec<PathBuf>,
@@ -577,15 +600,16 @@ mod tests {
         |  47 | inner_dir/note_in_inner_dir             | inner_dir/note_in_inner_dir     |                                  |
         |  48 | dir/note_in_inner_dir                   | dir/note_in_inner_dir           |                                  |
         |  49 | random/note_in_inner_dir                | random/note_in_inner_dir        |                                  |
-        |  50 | dir/indir_same_name                     | dir/indir_same_name             |                                  |
-        |  51 | indir_same_name                         | indir_same_name                 |                                  |
-        |  52 | indir2                                  | indir2                          |                                  |
-        |  53 | Something                               | Something                       |                                  |
-        |  54 | unsupported_text_file.txt               | unsupported_text_file.txt       |                                  |
-        |  55 | a.joiwduvqneoi                          | a.joiwduvqneoi                  |                                  |
-        |  56 | Note 1                                  | Note 1                          |                                  |
-        |  57 | Figure1.jpg                             | Figure1.jpg                     |                                  |
-        |  58 | empty_video.mp4                         | empty_video.mp4                 |                                  |
+        |  50 | inner_dir/hi                            | inner_dir/hi                    |                                  |
+        |  51 | dir/indir_same_name                     | dir/indir_same_name             |                                  |
+        |  52 | indir_same_name                         | indir_same_name                 |                                  |
+        |  53 | indir2                                  | indir2                          |                                  |
+        |  54 | Something                               | Something                       |                                  |
+        |  55 | unsupported_text_file.txt               | unsupported_text_file.txt       |                                  |
+        |  56 | a.joiwduvqneoi                          | a.joiwduvqneoi                  |                                  |
+        |  57 | Note 1                                  | Note 1                          |                                  |
+        |  58 | Figure1.jpg                             | Figure1.jpg                     |                                  |
+        |  59 | empty_video.mp4                         | empty_video.mp4                 |                                  |
         +-----+-----------------------------------------+---------------------------------+----------------------------------+
         ");
     }
@@ -897,55 +921,61 @@ mod tests {
                 display_text: "random/note_in_inner_dir",
             },
             Reference {
-                range: 5289..5311,
+                range: 5263..5278,
+                dest: "inner_dir/hi",
+                kind: WikiLink,
+                display_text: "inner_dir/hi",
+            },
+            Reference {
+                range: 5309..5331,
                 dest: "dir/indir_same_name",
                 kind: WikiLink,
                 display_text: "dir/indir_same_name",
             },
             Reference {
-                range: 5338..5356,
+                range: 5358..5376,
                 dest: "indir_same_name",
                 kind: WikiLink,
                 display_text: "indir_same_name",
             },
             Reference {
-                range: 5426..5435,
+                range: 5446..5455,
                 dest: "indir2",
                 kind: WikiLink,
                 display_text: "indir2",
             },
             Reference {
-                range: 5482..5494,
+                range: 5502..5514,
                 dest: "Something",
                 kind: WikiLink,
                 display_text: "Something",
             },
             Reference {
-                range: 5611..5639,
+                range: 5631..5659,
                 dest: "unsupported_text_file.txt",
                 kind: WikiLink,
                 display_text: "unsupported_text_file.txt",
             },
             Reference {
-                range: 5720..5737,
+                range: 5740..5757,
                 dest: "a.joiwduvqneoi",
                 kind: WikiLink,
                 display_text: "a.joiwduvqneoi",
             },
             Reference {
-                range: 5773..5782,
+                range: 5793..5802,
                 dest: "Note 1",
                 kind: WikiLink,
                 display_text: "Note 1",
             },
             Reference {
-                range: 5876..5891,
+                range: 5896..5911,
                 dest: "Figure1.jpg",
                 kind: WikiLink,
                 display_text: "Figure1.jpg",
             },
             Reference {
-                range: 5916..5934,
+                range: 5936..5954,
                 dest: "empty_video.mp4",
                 kind: WikiLink,
                 display_text: "empty_video.mp4",
@@ -1080,27 +1110,27 @@ mod tests {
             Heading {
                 path: "tests/data/vaults/tt/Note 1.md",
                 level: H2,
-                range: 5937..5943,
+                range: 5957..5963,
             },
             Heading {
                 path: "tests/data/vaults/tt/Note 1.md",
                 level: H3,
-                range: 5944..5951,
+                range: 5964..5971,
             },
             Heading {
                 path: "tests/data/vaults/tt/Note 1.md",
                 level: H4,
-                range: 5951..5959,
+                range: 5971..5979,
             },
             Heading {
                 path: "tests/data/vaults/tt/Note 1.md",
                 level: H3,
-                range: 5959..5974,
+                range: 5979..5994,
             },
             Heading {
                 path: "tests/data/vaults/tt/Note 1.md",
                 level: H2,
-                range: 5979..5983,
+                range: 5999..6003,
             },
             Heading {
                 path: "tests/data/vaults/tt/Note 2.md",
@@ -1434,55 +1464,61 @@ mod tests {
                 display_text: "random/note_in_inner_dir",
             },
             Reference {
-                range: 5289..5311,
+                range: 5263..5278,
+                dest: "inner_dir/hi",
+                kind: WikiLink,
+                display_text: "inner_dir/hi",
+            },
+            Reference {
+                range: 5309..5331,
                 dest: "dir/indir_same_name",
                 kind: WikiLink,
                 display_text: "dir/indir_same_name",
             },
             Reference {
-                range: 5338..5356,
+                range: 5358..5376,
                 dest: "indir_same_name",
                 kind: WikiLink,
                 display_text: "indir_same_name",
             },
             Reference {
-                range: 5426..5435,
+                range: 5446..5455,
                 dest: "indir2",
                 kind: WikiLink,
                 display_text: "indir2",
             },
             Reference {
-                range: 5482..5494,
+                range: 5502..5514,
                 dest: "Something",
                 kind: WikiLink,
                 display_text: "Something",
             },
             Reference {
-                range: 5611..5639,
+                range: 5631..5659,
                 dest: "unsupported_text_file.txt",
                 kind: WikiLink,
                 display_text: "unsupported_text_file.txt",
             },
             Reference {
-                range: 5720..5737,
+                range: 5740..5757,
                 dest: "a.joiwduvqneoi",
                 kind: WikiLink,
                 display_text: "a.joiwduvqneoi",
             },
             Reference {
-                range: 5773..5782,
+                range: 5793..5802,
                 dest: "Note 1",
                 kind: WikiLink,
                 display_text: "Note 1",
             },
             Reference {
-                range: 5876..5891,
+                range: 5896..5911,
                 dest: "Figure1.jpg",
                 kind: WikiLink,
                 display_text: "Figure1.jpg",
             },
             Reference {
-                range: 5916..5934,
+                range: 5936..5954,
                 dest: "empty_video.mp4",
                 kind: WikiLink,
                 display_text: "empty_video.mp4",
@@ -1524,27 +1560,27 @@ mod tests {
             Heading {
                 path: "tests/data/vaults/tt/Note 1.md",
                 level: H2,
-                range: 5937..5943,
+                range: 5957..5963,
             },
             Heading {
                 path: "tests/data/vaults/tt/Note 1.md",
                 level: H3,
-                range: 5944..5951,
+                range: 5964..5971,
             },
             Heading {
                 path: "tests/data/vaults/tt/Note 1.md",
                 level: H4,
-                range: 5951..5959,
+                range: 5971..5979,
             },
             Heading {
                 path: "tests/data/vaults/tt/Note 1.md",
                 level: H3,
-                range: 5959..5974,
+                range: 5979..5994,
             },
             Heading {
                 path: "tests/data/vaults/tt/Note 1.md",
                 level: H2,
-                range: 5979..5983,
+                range: 5999..6003,
             },
         ]
         "#);
@@ -1556,7 +1592,7 @@ mod tests {
         let text = fs::read_to_string(path).unwrap();
         let tree = Tree::new(&text);
         assert_snapshot!(tree.root_node, @r########"
-        Document [0..5983]
+        Document [0..6003]
           List(None) [0..55]
             Item [0..55]
               Text(Borrowed("Note in Obsidian cannot have # ^ ")) [2..35]
@@ -1883,7 +1919,7 @@ mod tests {
                       Text(Borrowed("fallback to current note")) [3510..3534]
           Heading { level: H5, id: None, classes: [], attrs: [] } [3536..3556]
             Text(Borrowed("Link to asset")) [3542..3555]
-          List(None) [3556..5856]
+          List(None) [3556..5876]
             Item [3556..3677]
               Code(Borrowed("[[Figure1.jpg]]")) [3558..3575]
               Text(Borrowed(": ")) [3575..3577]
@@ -2000,9 +2036,9 @@ mod tests {
                       Code(Borrowed("\\")) [4698..4701]
                     Item [4702..4749]
                       Text(Borrowed("if there exists one, it add integer suffix")) [4706..4748]
-            Item [4749..5260]
+            Item [4749..5280]
               Text(Borrowed("matching of nested dirs only match ancestor-descendant relationship")) [4751..4818]
-              List(None) [4818..5260]
+              List(None) [4818..5280]
                 Item [4818..4897]
                   Code(Borrowed("[[dir/inner_dir/note_in_inner_dir]]")) [4822..4859]
                   Text(Borrowed(": ")) [4859..4861]
@@ -2034,87 +2070,90 @@ mod tests {
                       Text(Borrowed("mkdir and touch file (in contrast to the case of ")) [5203..5252]
                       Code(Borrowed("dir/")) [5252..5258]
                       Text(Borrowed(")")) [5258..5259]
-            Item [5260..5313]
-              Code(Borrowed("[[dir/indir_same_name]]")) [5262..5287]
-              Text(Borrowed(": ")) [5287..5289]
-              Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("dir/indir_same_name"), title: Borrowed(""), id: Borrowed("") } [5289..5311]
-                Text(Borrowed("dir/indir_same_name")) [5291..5310]
-            Item [5313..5409]
-              Code(Borrowed("[[indir_same_name]]")) [5315..5336]
-              Text(Borrowed(": ")) [5336..5338]
-              Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("indir_same_name"), title: Borrowed(""), id: Borrowed("") } [5338..5356]
-                Text(Borrowed("indir_same_name")) [5340..5355]
-              List(None) [5357..5409]
-                Item [5357..5409]
-                  Text(Borrowed("points to ")) [5361..5371]
-                  Code(Borrowed("indir_same_name")) [5371..5388]
-                  Text(Borrowed(", not the in dir one")) [5388..5408]
-            Item [5409..5463]
-              Code(Borrowed("[[indir2]]")) [5412..5424]
-              Text(Borrowed(": ")) [5424..5426]
-              Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("indir2"), title: Borrowed(""), id: Borrowed("") } [5426..5435]
-                Text(Borrowed("indir2")) [5428..5434]
-              List(None) [5437..5463]
-                Item [5437..5463]
-                  Text(Borrowed("points to ")) [5440..5450]
-                  Code(Borrowed("dir/indir2")) [5450..5462]
-            Item [5463..5576]
-              Code(Borrowed("[[Something]]")) [5465..5480]
-              Text(Borrowed(": ")) [5480..5482]
-              Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("Something"), title: Borrowed(""), id: Borrowed("") } [5482..5494]
-                Text(Borrowed("Something")) [5484..5493]
-              List(None) [5495..5576]
-                Item [5495..5576]
-                  Text(Borrowed("there exists a ")) [5499..5514]
-                  Code(Borrowed("Something")) [5514..5525]
-                  Text(Borrowed(" file, but this will points to note ")) [5525..5561]
-                  Code(Borrowed("Something.md")) [5561..5575]
-            Item [5576..5696]
-              Code(Borrowed("[[unsupported_text_file.txt]]")) [5578..5609]
-              Text(Borrowed(": ")) [5609..5611]
-              Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("unsupported_text_file.txt"), title: Borrowed(""), id: Borrowed("") } [5611..5639]
-                Text(Borrowed("unsupported_text_file.txt")) [5613..5638]
-              List(None) [5640..5696]
-                Item [5640..5696]
-                  Text(Borrowed("points to text file, which is of unsupported format")) [5644..5695]
-            Item [5696..5757]
-              Code(Borrowed("[[a.joiwduvqneoi]]")) [5698..5718]
-              Text(Borrowed(": ")) [5718..5720]
-              Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("a.joiwduvqneoi"), title: Borrowed(""), id: Borrowed("") } [5720..5737]
-                Text(Borrowed("a.joiwduvqneoi")) [5722..5736]
-              List(None) [5738..5757]
-                Item [5738..5757]
-                  Text(Borrowed("points to file")) [5742..5756]
-            Item [5757..5856]
-              Code(Borrowed("[[Note 1]]")) [5759..5771]
-              Text(Borrowed(": ")) [5771..5773]
-              Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("Note 1"), title: Borrowed(""), id: Borrowed("") } [5773..5782]
-                Text(Borrowed("Note 1")) [5775..5781]
-              List(None) [5783..5856]
-                Item [5783..5856]
-                  Text(Borrowed("even if there exists a file named ")) [5787..5821]
-                  Code(Borrowed("Note 1")) [5821..5829]
-                  Text(Borrowed(", this points to the note")) [5829..5854]
-          Paragraph [5856..5936]
-            Code(Borrowed("![[Figure1.jpg]]")) [5856..5874]
-            Text(Borrowed(": ")) [5874..5876]
-            Image { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("Figure1.jpg"), title: Borrowed(""), id: Borrowed("") } [5876..5891]
-              Text(Borrowed("Figure1.jpg")) [5879..5890]
-            SoftBreak [5892..5893]
-            Code(Borrowed("[[empty_video.mp4]]")) [5893..5914]
-            Text(Borrowed(": ")) [5914..5916]
-            Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("empty_video.mp4"), title: Borrowed(""), id: Borrowed("") } [5916..5934]
-              Text(Borrowed("empty_video.mp4")) [5918..5933]
-          Heading { level: H2, id: None, classes: [], attrs: [] } [5937..5943]
-            Text(Borrowed("L2")) [5940..5942]
-          Heading { level: H3, id: None, classes: [], attrs: [] } [5944..5951]
-            Text(Borrowed("L3")) [5948..5950]
-          Heading { level: H4, id: None, classes: [], attrs: [] } [5951..5959]
-            Text(Borrowed("L4")) [5956..5958]
-          Heading { level: H3, id: None, classes: [], attrs: [] } [5959..5974]
-            Text(Borrowed("Another L3")) [5963..5973]
-          Rule [5975..5979]
-          Heading { level: H2, id: None, classes: [], attrs: [] } [5979..5983]
+                Item [5259..5280]
+                  Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("inner_dir/hi"), title: Borrowed(""), id: Borrowed("") } [5263..5278]
+                    Text(Borrowed("inner_dir/hi")) [5265..5277]
+            Item [5280..5333]
+              Code(Borrowed("[[dir/indir_same_name]]")) [5282..5307]
+              Text(Borrowed(": ")) [5307..5309]
+              Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("dir/indir_same_name"), title: Borrowed(""), id: Borrowed("") } [5309..5331]
+                Text(Borrowed("dir/indir_same_name")) [5311..5330]
+            Item [5333..5429]
+              Code(Borrowed("[[indir_same_name]]")) [5335..5356]
+              Text(Borrowed(": ")) [5356..5358]
+              Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("indir_same_name"), title: Borrowed(""), id: Borrowed("") } [5358..5376]
+                Text(Borrowed("indir_same_name")) [5360..5375]
+              List(None) [5377..5429]
+                Item [5377..5429]
+                  Text(Borrowed("points to ")) [5381..5391]
+                  Code(Borrowed("indir_same_name")) [5391..5408]
+                  Text(Borrowed(", not the in dir one")) [5408..5428]
+            Item [5429..5483]
+              Code(Borrowed("[[indir2]]")) [5432..5444]
+              Text(Borrowed(": ")) [5444..5446]
+              Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("indir2"), title: Borrowed(""), id: Borrowed("") } [5446..5455]
+                Text(Borrowed("indir2")) [5448..5454]
+              List(None) [5457..5483]
+                Item [5457..5483]
+                  Text(Borrowed("points to ")) [5460..5470]
+                  Code(Borrowed("dir/indir2")) [5470..5482]
+            Item [5483..5596]
+              Code(Borrowed("[[Something]]")) [5485..5500]
+              Text(Borrowed(": ")) [5500..5502]
+              Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("Something"), title: Borrowed(""), id: Borrowed("") } [5502..5514]
+                Text(Borrowed("Something")) [5504..5513]
+              List(None) [5515..5596]
+                Item [5515..5596]
+                  Text(Borrowed("there exists a ")) [5519..5534]
+                  Code(Borrowed("Something")) [5534..5545]
+                  Text(Borrowed(" file, but this will points to note ")) [5545..5581]
+                  Code(Borrowed("Something.md")) [5581..5595]
+            Item [5596..5716]
+              Code(Borrowed("[[unsupported_text_file.txt]]")) [5598..5629]
+              Text(Borrowed(": ")) [5629..5631]
+              Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("unsupported_text_file.txt"), title: Borrowed(""), id: Borrowed("") } [5631..5659]
+                Text(Borrowed("unsupported_text_file.txt")) [5633..5658]
+              List(None) [5660..5716]
+                Item [5660..5716]
+                  Text(Borrowed("points to text file, which is of unsupported format")) [5664..5715]
+            Item [5716..5777]
+              Code(Borrowed("[[a.joiwduvqneoi]]")) [5718..5738]
+              Text(Borrowed(": ")) [5738..5740]
+              Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("a.joiwduvqneoi"), title: Borrowed(""), id: Borrowed("") } [5740..5757]
+                Text(Borrowed("a.joiwduvqneoi")) [5742..5756]
+              List(None) [5758..5777]
+                Item [5758..5777]
+                  Text(Borrowed("points to file")) [5762..5776]
+            Item [5777..5876]
+              Code(Borrowed("[[Note 1]]")) [5779..5791]
+              Text(Borrowed(": ")) [5791..5793]
+              Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("Note 1"), title: Borrowed(""), id: Borrowed("") } [5793..5802]
+                Text(Borrowed("Note 1")) [5795..5801]
+              List(None) [5803..5876]
+                Item [5803..5876]
+                  Text(Borrowed("even if there exists a file named ")) [5807..5841]
+                  Code(Borrowed("Note 1")) [5841..5849]
+                  Text(Borrowed(", this points to the note")) [5849..5874]
+          Paragraph [5876..5956]
+            Code(Borrowed("![[Figure1.jpg]]")) [5876..5894]
+            Text(Borrowed(": ")) [5894..5896]
+            Image { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("Figure1.jpg"), title: Borrowed(""), id: Borrowed("") } [5896..5911]
+              Text(Borrowed("Figure1.jpg")) [5899..5910]
+            SoftBreak [5912..5913]
+            Code(Borrowed("[[empty_video.mp4]]")) [5913..5934]
+            Text(Borrowed(": ")) [5934..5936]
+            Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("empty_video.mp4"), title: Borrowed(""), id: Borrowed("") } [5936..5954]
+              Text(Borrowed("empty_video.mp4")) [5938..5953]
+          Heading { level: H2, id: None, classes: [], attrs: [] } [5957..5963]
+            Text(Borrowed("L2")) [5960..5962]
+          Heading { level: H3, id: None, classes: [], attrs: [] } [5964..5971]
+            Text(Borrowed("L3")) [5968..5970]
+          Heading { level: H4, id: None, classes: [], attrs: [] } [5971..5979]
+            Text(Borrowed("L4")) [5976..5978]
+          Heading { level: H3, id: None, classes: [], attrs: [] } [5979..5994]
+            Text(Borrowed("Another L3")) [5983..5993]
+          Rule [5995..5999]
+          Heading { level: H2, id: None, classes: [], attrs: [] } [5999..6003]
         "########);
     }
 

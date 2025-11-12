@@ -123,6 +123,7 @@
 		- this has no match
 		- it will try to understand the file name and path
 		- mkdir and touch file (in contrast to the case of `dir/`)
+	- [[inner_dir/hi]]
 - `[[dir/indir_same_name]]`: [[dir/indir_same_name]]
 - `[[indir_same_name]]`: [[indir_same_name]]
 	- points to `indir_same_name`, not the in dir one
