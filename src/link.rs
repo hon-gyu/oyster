@@ -297,6 +297,34 @@ pub fn parse_nested_heading(s: &str) -> Vec<&str> {
     s.split('#').filter(|part| !part.is_empty()).collect()
 }
 
+/// Subsequence check that only matches ancestor-descendant relationship
+///
+/// Used in file name match and heading match
+///
+/// Examples
+/// ```
+/// use markdown_tools::link::is_subsequence;
+/// assert!(is_subsequence(&[1, 2, 3, 4], &[1, 3]));
+/// assert!(is_subsequence(&[1, 2, 3, 4], &[2, 4]));
+/// assert!(is_subsequence(&[1, 2, 3, 4], &[1, 2, 3, 4]));
+/// assert!(!is_subsequence(&[1, 2, 3, 4], &[3, 1]));
+/// assert!(!is_subsequence(&[1, 2, 3, 4], &[5]));
+/// assert!(is_subsequence(&["a", "b", "c"], &["a", "c"]));
+/// assert!(!is_subsequence(&["a", "b", "c"], &["c", "a"]));
+/// ```
+pub fn is_subsequence<T: PartialEq>(haystack: &[T], needle: &[T]) -> bool {
+    let mut iter = haystack.iter();
+
+    for item in needle {
+        // iter is consumed so it never goes backward
+        if !iter.any(|h| h == item) {
+            return false;
+        }
+    }
+
+    true
+}
+
 fn match_file(file_name: &str, paths: &Vec<PathBuf>) -> Option<PathBuf> {
     todo!()
 }
@@ -473,7 +501,7 @@ mod tests {
         assert_no_match("dir/");
         // `indir_same_name.md` at the top level won't be matched
         assert_match("dir/indir_same_name", "dir/indir_same_name.md");
-        // matching of nested dirs only match ancestor-descendant relationship
+        // matching of nested dirs is subsequence check (only match ancestor-descendant relationship)
         // All of the following 3 will match to `dir/inner_dir/note_in_inner_dir.md`
         assert_match(
             "dir/inner_dir/note_in_inner_dir",
