@@ -325,8 +325,39 @@ pub fn is_subsequence<T: PartialEq>(haystack: &[T], needle: &[T]) -> bool {
     true
 }
 
-fn match_file(file_name: &str, paths: &Vec<PathBuf>) -> Option<PathBuf> {
-    todo!()
+/// Match a destination name against a list of paths.
+///
+/// - Trim spaces
+/// - Add `.md` if a file has no extension
+/// - Exact match first
+/// - Try subsequence match if not exact match
+///
+/// see `test_match_file` for examples.
+fn match_file(needle: &str, haystack: &Vec<PathBuf>) -> Option<PathBuf> {
+    // Remove spaces
+    let mut needle = needle.trim().to_string();
+    // Add `.md` if a file has no extension
+    if !needle.contains('.') {
+        needle.push_str(".md");
+    }
+
+    let needle = Path::new(needle.as_str());
+    // Try exact match first
+    for hay in haystack {
+        if hay == needle {
+            return Some(hay.clone());
+        }
+    }
+
+    // If not exact match, try to subsequence match
+    let needle_components: Vec<_> = needle.components().collect();
+    for hay in haystack {
+        let hay_components: Vec<_> = hay.components().collect();
+        if is_subsequence(&hay_components, &needle_components) {
+            return Some(hay.clone());
+        }
+    }
+    None
 }
 
 /// Create a note when a link is unresolved or by some special commands (create new empty note)
