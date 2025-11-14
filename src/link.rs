@@ -333,7 +333,7 @@ pub fn is_subsequence<T: PartialEq>(haystack: &[T], needle: &[T]) -> bool {
 /// - Try subsequence match if not exact match
 ///
 /// see `test_match_file` for examples.
-fn match_file(needle: &str, haystack: &Vec<PathBuf>) -> Option<PathBuf> {
+fn resolve_link(needle: &str, haystack: &Vec<PathBuf>) -> Option<PathBuf> {
     // Remove spaces
     let mut needle = needle.trim().to_string();
     // Add `.md` if a file has no extension
@@ -360,7 +360,15 @@ fn match_file(needle: &str, haystack: &Vec<PathBuf>) -> Option<PathBuf> {
     None
 }
 
-/// Create a note when a link is unresolved or by some special commands (create new empty note)
+/// Resolve the path of new note to create when a link is unresolved or when some special commands
+/// are used (create new empty note)
+///
+/// Arguments:
+/// - `name`: the name of the note to create
+/// - `paths`: the list of existing note paths
+///
+/// Returns:
+/// - `(parent_dir, note_path)`: the parent directory to create if any, the path of note to create
 ///
 /// - Parse dir and file name from the destination string first
 /// - remove `\` and `/`
@@ -370,17 +378,128 @@ fn match_file(needle: &str, haystack: &Vec<PathBuf>) -> Option<PathBuf> {
 ///
 /// Invariant: the path of dir to create, if exists, is a parent of the path of note to create.
 ///
-/// Examples:
-/// - `Something` -> (None, `Something.md`)
-/// - `A/B` -> (Some(`A`), `A/B.md`)
-/// - `Untitle` -> (None, `Untitle 1.md`) if `Untitle.md` exists
-///   - in command "Create new note"
-/// - `dir/` -> (None, `dir.md`)
-///   - No dir can be parsed. So we try to create a note called `dir/.md`
-///   - and `/` is stripped
-/// - `dir/` -> (None, `dir 1.md`) if `dir.md` exists
-fn create_note(name: &str) -> (Option<PathBuf>, PathBuf) {
-    todo!()
+/// # Examples
+///
+/// Simple name without directory:
+/// ```
+/// use std::path::PathBuf;
+/// use markdown_tools::link::resolve_new_note_path;
+/// let paths = vec![];
+/// let (dir, note) = resolve_new_note_path("Something", &paths);
+/// assert_eq!(dir, None);
+/// assert_eq!(note, PathBuf::from("Something.md"));
+/// ```
+///
+/// With directory:
+/// ```
+/// use std::path::PathBuf;
+/// use markdown_tools::link::resolve_new_note_path;
+/// let paths = vec![];
+/// let (dir, note) = resolve_new_note_path("A/B", &paths);
+/// assert_eq!(dir, Some(PathBuf::from("A")));
+/// assert_eq!(note, PathBuf::from("A/B.md"));
+/// ```
+///
+/// Increment when file exists:
+/// ```
+/// use std::path::PathBuf;
+/// use markdown_tools::link::resolve_new_note_path;
+/// let paths = vec![PathBuf::from("Untitle.md")];
+/// let (dir, note) = resolve_new_note_path("Untitle", &paths);
+/// assert_eq!(dir, None);
+/// assert_eq!(note, PathBuf::from("Untitle 1.md"));
+/// ```
+///
+/// Trailing slash:
+/// ```
+/// use std::path::PathBuf;
+/// use markdown_tools::link::resolve_new_note_path;
+/// let paths = vec![];
+/// let (dir, note) = resolve_new_note_path("dir/", &paths);
+/// assert_eq!(dir, None);
+/// assert_eq!(note, PathBuf::from("dir.md"));
+/// ```
+///
+/// Trailing slash with existing file:
+/// ```
+/// use std::path::PathBuf;
+/// use markdown_tools::link::resolve_new_note_path;
+/// let paths = vec![PathBuf::from("dir.md")];
+/// let (dir, note) = resolve_new_note_path("dir/", &paths);
+/// assert_eq!(dir, None);
+/// assert_eq!(note, PathBuf::from("dir 1.md"));
+/// ```
+///
+/// Non-md extension:
+/// ```
+/// use std::path::PathBuf;
+/// use markdown_tools::link::resolve_new_note_path;
+/// let paths = vec![];
+/// let (dir, note) = resolve_new_note_path("Hi.txt", &paths);
+/// assert_eq!(dir, None);
+/// assert_eq!(note, PathBuf::from("Hi.txt.md"));
+/// ```
+///
+/// Already has .md extension:
+/// ```
+/// use std::path::PathBuf;
+/// use markdown_tools::link::resolve_new_note_path;
+/// let paths = vec![];
+/// let (dir, note) = resolve_new_note_path("Hi.md", &paths);
+/// assert_eq!(dir, None);
+/// assert_eq!(note, PathBuf::from("Hi.md"));
+/// ```
+pub fn resolve_new_note_path(
+    name: &str,
+    paths: &Vec<PathBuf>,
+) -> (Option<PathBuf>, PathBuf) {
+    let name = name.trim();
+    let path = Path::new(name);
+
+    // Extract parent directory and file name
+    let parent = path.parent().filter(|p| p.as_os_str().len() > 0);
+    let mut file_name = if let Some(f) = path.file_name() {
+        f.to_string_lossy().to_string()
+    } else {
+        // No file name (e.g., "dir/"), use the whole name after stripping slashes
+        name.replace('\\', "").replace('/', "")
+    };
+
+    // Add .md extension if it doesn't already have .md extension
+    if !file_name.ends_with(".md") {
+        file_name.push_str(".md");
+    }
+
+    // Build the initial note path
+    let mut note_path = if let Some(p) = parent {
+        p.join(&file_name)
+    } else {
+        PathBuf::from(&file_name)
+    };
+
+    // Increment the file name until it doesn't exist in paths
+    let mut counter = 1;
+    while paths.contains(&note_path) {
+        // Extract stem and extension
+        let stem = Path::new(&file_name).file_stem().unwrap().to_string_lossy();
+        let ext = Path::new(&file_name)
+            .extension()
+            .map(|e| format!(".{}", e.to_string_lossy()))
+            .unwrap_or_default();
+
+        // Create new file name with counter
+        let new_file_name = format!("{} {}{}", stem, counter, ext);
+        note_path = if let Some(p) = parent {
+            p.join(&new_file_name)
+        } else {
+            PathBuf::from(&new_file_name)
+        };
+
+        counter += 1;
+    }
+
+    // Return (parent directory to create if any, note path to create)
+    (parent.map(|p| p.to_path_buf()), note_path)
 }
 
 fn resolve_destination_against_files(
@@ -503,12 +622,12 @@ mod tests {
         .collect::<Vec<_>>();
 
         let assert_match = |input: &str, expected: &str| {
-            let matched = match_file(input, &paths)
+            let matched = resolve_link(input, &paths)
                 .and_then(|p| p.as_path().to_str().map(|s| s.to_string()));
             assert_eq!(matched, Some(expected.to_string()));
         };
         let assert_no_match = |input: &str| {
-            let matched = match_file(input, &paths)
+            let matched = resolve_link(input, &paths)
                 .and_then(|p| p.as_path().to_str().map(|s| s.to_string()));
             assert_eq!(matched, None);
         };
