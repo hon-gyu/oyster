@@ -6,6 +6,7 @@
 ///     - assets other than notes: images, videos, audios, PDFs, etc.
 use crate::ast::{Node, NodeKind, Tree};
 use pulldown_cmark::{HeadingLevel, LinkType};
+use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 use std::{ops::Range, path::Path};
@@ -17,6 +18,7 @@ pub enum Referenceable {
     },
     Note {
         path: PathBuf,
+        children: Vec<Referenceable>,
     },
     Heading {
         path: PathBuf,
@@ -35,6 +37,18 @@ impl Referenceable {
             Referenceable::Note { path, .. } => path,
             Referenceable::Heading { path, .. } => path,
             Referenceable::Block { path, .. } => path,
+        }
+    }
+
+    pub fn add_in_note_referenceables(
+        &mut self,
+        referenceables: Vec<Referenceable>,
+    ) -> () {
+        match self {
+            Referenceable::Note { children, .. } => {
+                children.extend(referenceables);
+            }
+            _ => {}
         }
     }
 }
@@ -224,7 +238,10 @@ fn scan_dir_for_assets_and_notes(dir: &Path) -> Vec<Referenceable> {
                 aux(&path, referenceables, ignores);
             } else if path.is_file() {
                 let item = match path.extension().and_then(|ext| ext.to_str()) {
-                    Some("md") => Referenceable::Note { path },
+                    Some("md") => Referenceable::Note {
+                        path,
+                        children: Vec::new(),
+                    },
                     _ => {
                         if ignores.iter().any(|ignore| {
                             path.file_name().and_then(|n| n.to_str())
@@ -245,26 +262,39 @@ fn scan_dir_for_assets_and_notes(dir: &Path) -> Vec<Referenceable> {
     referenceables
 }
 
+/// Scan a vault for referenceables and references.
+///
+/// in-note referenceables stored in note's children
+///
+/// Returns:
+///     - referenceables: all referenceables
+///     - references: note references and asset references
 fn scan_vault(dir: &Path) -> (Vec<Referenceable>, Vec<Reference>) {
     let mut file_referenceables = scan_dir_for_assets_and_notes(dir);
 
-    let mut in_note_referenceables = Vec::<Referenceable>::new();
-    let mut references = Vec::<Reference>::new();
+    let mut all_references = Vec::<Reference>::new();
 
-    for note in file_referenceables.iter() {
-        if let Referenceable::Note { path } = note {
-            let (note_references, note_referenceables) = scan_note(path);
-            references.extend(note_references);
-            in_note_referenceables.extend(note_referenceables);
-        }
-    }
+    let file_referenceables_with_children = file_referenceables
+        .into_iter()
+        .map(|mut referenceable| match referenceable {
+            Referenceable::Note { ref path, .. } => {
+                let (references, referenceables) = scan_note(path);
+                all_references.extend(references);
+                referenceable.add_in_note_referenceables(referenceables);
+                referenceable
+            }
+            asset @ Referenceable::Asset { .. } => asset,
+            other => unreachable!(
+                "in-note referenceable shouldn't present here, got {:?}",
+                other
+            ),
+        })
+        .collect();
 
-    // Merge referenceables
-    file_referenceables.extend(in_note_referenceables);
-    (file_referenceables, references)
+    (file_referenceables_with_children, all_references)
 }
 
-/// Splits a destination string into two parts: the note name and nested headings
+/// Splits a destination string into two parts: the file name and nested headings
 fn split_dest_string(s: &str) -> (&str, Vec<&str>) {
     let hash_pos = s.find('#');
 
@@ -325,10 +355,10 @@ pub fn is_subsequence<T: PartialEq>(haystack: &[T], needle: &[T]) -> bool {
     true
 }
 
-/// Match a destination name against a list of paths.
+/// Match a file name reference against a list of paths.
 ///
 /// Arguments:
-/// - `needle`: the destination name to match
+/// - `needle`: the file (note or asset) name to match
 /// - `haystack`: a list of paths to match against
 ///
 /// - Trim spaces
@@ -373,6 +403,8 @@ fn resolve_link(needle: &str, haystack: &Vec<PathBuf>) -> Option<PathBuf> {
 ///
 /// Returns:
 /// - `(parent_dir, note_path)`: the parent directory to create if any, the path of note to create
+///
+/// [LLM]: this function is implemented by LLM using TDD
 ///
 /// - Parse dir and file name from the destination string first
 /// - remove `\` and `/`
@@ -436,6 +468,9 @@ pub fn resolve_new_note_path(
 
 /// Builds links from references and referenceables.
 /// Return a tuple of matched links and unresolved references.
+///
+/// - If heading reference is not found, fallback to note / asset reference.
+///     - Yes a reference to figure's heading is allowed. The heading part gets ignored.
 fn build_links(
     references: Vec<Reference>,
     referenceable: Vec<Referenceable>,
@@ -443,26 +478,29 @@ fn build_links(
     let mut links = Vec::<Link>::new();
     let mut unresolved = Vec::<Reference>::new();
 
-    // Build lookup structures for efficient matching
-    let note_paths: Vec<PathBuf> = referenceable
-        .iter()
-        .filter_map(|r| match r {
-            Referenceable::Note { path } => Some(path.clone()),
-            _ => None,
-        })
-        .collect();
+    // Build path-referenceable map
+    let mut path_referenceable_map = HashMap::<PathBuf, Referenceable>::new();
+    for referenceable in referenceable {
+        path_referenceable_map
+            .insert(referenceable.path().clone(), referenceable);
+    }
 
-    let asset_paths: Vec<PathBuf> = referenceable
-        .iter()
-        .filter_map(|r| match r {
-            Referenceable::Asset { path } => Some(path.clone()),
-            _ => None,
-        })
-        .collect();
+    let referenceable_paths =
+        path_referenceable_map.keys().cloned().collect::<Vec<_>>();
 
     for reference in references {
         let dest = reference.dest.as_str();
-        todo!()
+        let (file_name, nested_headings) = split_dest_string(dest);
+        let matched_path = resolve_link(file_name, &referenceable_paths);
+        if matched_path.is_some() {
+            let link = Link {
+                from: reference,
+                to: path_referenceable_map[&matched_path.unwrap()].clone(),
+            };
+            links.push(link);
+        } else {
+            unresolved.push(reference);
+        }
     }
 
     (links, unresolved)
@@ -769,8 +807,10 @@ mod tests {
 
         #[test]
         fn increment_when_file_exists() {
-            let (dir, note) =
-                resolve_new_note_path("Untitle", &vec![PathBuf::from("Untitle.md")]);
+            let (dir, note) = resolve_new_note_path(
+                "Untitle",
+                &vec![PathBuf::from("Untitle.md")],
+            );
             assert_eq!(dir, None);
             assert_eq!(note, PathBuf::from("Untitle 1.md"));
         }
@@ -827,7 +867,8 @@ mod tests {
 
         #[test]
         fn whitespace_trimming() {
-            let (dir, note) = resolve_new_note_path("  Note with spaces  ", &vec![]);
+            let (dir, note) =
+                resolve_new_note_path("  Note with spaces  ", &vec![]);
             assert_eq!(dir, None);
             assert_eq!(note, PathBuf::from("Note with spaces.md"));
         }
@@ -1227,33 +1268,97 @@ mod tests {
         [
             Note {
                 path: "tests/data/vaults/tt/Note 1.md",
+                children: [
+                    Heading {
+                        path: "tests/data/vaults/tt/Note 1.md",
+                        level: H3,
+                        range: 55..73,
+                    },
+                    Heading {
+                        path: "tests/data/vaults/tt/Note 1.md",
+                        level: H4,
+                        range: 73..92,
+                    },
+                    Heading {
+                        path: "tests/data/vaults/tt/Note 1.md",
+                        level: H3,
+                        range: 93..115,
+                    },
+                    Heading {
+                        path: "tests/data/vaults/tt/Note 1.md",
+                        level: H6,
+                        range: 116..147,
+                    },
+                    Heading {
+                        path: "tests/data/vaults/tt/Note 1.md",
+                        level: H6,
+                        range: 887..942,
+                    },
+                    Heading {
+                        path: "tests/data/vaults/tt/Note 1.md",
+                        level: H5,
+                        range: 3536..3556,
+                    },
+                    Heading {
+                        path: "tests/data/vaults/tt/Note 1.md",
+                        level: H2,
+                        range: 5957..5963,
+                    },
+                    Heading {
+                        path: "tests/data/vaults/tt/Note 1.md",
+                        level: H3,
+                        range: 5964..5971,
+                    },
+                    Heading {
+                        path: "tests/data/vaults/tt/Note 1.md",
+                        level: H4,
+                        range: 5971..5979,
+                    },
+                    Heading {
+                        path: "tests/data/vaults/tt/Note 1.md",
+                        level: H3,
+                        range: 5979..5994,
+                    },
+                    Heading {
+                        path: "tests/data/vaults/tt/Note 1.md",
+                        level: H2,
+                        range: 5999..6003,
+                    },
+                ],
             },
             Asset {
                 path: "tests/data/vaults/tt/a.joiwduvqneoi",
             },
             Note {
                 path: "tests/data/vaults/tt/Figure1.jpg.md",
+                children: [],
             },
             Asset {
                 path: "tests/data/vaults/tt/Something",
             },
             Note {
                 path: "tests/data/vaults/tt/Three laws of motion.md",
+                children: [],
             },
             Note {
                 path: "tests/data/vaults/tt/indir_same_name.md",
+                children: [],
             },
             Note {
                 path: "tests/data/vaults/tt/ww.md",
+                children: [],
             },
             Note {
                 path: "tests/data/vaults/tt/unsupported_text_file.txt.md",
+                children: [],
             },
             Note {
                 path: "tests/data/vaults/tt/Figure1.jpg.md.md",
+                children: [],
             },
             Note {
                 path: "tests/data/vaults/tt/().md",
+                children: [],
             },
             Asset {
                 path: "tests/data/vaults/tt/Figure1#2.jpg",
@@ -1263,27 +1368,34 @@ mod tests {
             },
             Note {
                 path: "tests/data/vaults/tt/dir.md",
+                children: [],
             },
             Note {
                 path: "tests/data/vaults/tt/a.joiwduvqneoi.md",
+                children: [],
             },
             Asset {
                 path: "tests/data/vaults/tt/empty_video.mp4",
             },
             Note {
                 path: "tests/data/vaults/tt/Hi.txt.md",
+                children: [],
             },
             Note {
                 path: "tests/data/vaults/tt/block note.md",
+                children: [],
             },
             Note {
                 path: "tests/data/vaults/tt/dir/inner_dir/note_in_inner_dir.md",
+                children: [],
             },
             Note {
                 path: "tests/data/vaults/tt/dir/indir_same_name.md",
+                children: [],
             },
             Note {
                 path: "tests/data/vaults/tt/dir/indir2.md",
+                children: [],
             },
             Asset {
                 path: "tests/data/vaults/tt/unsupported_text_file.txt",
@@ -1293,6 +1405,7 @@ mod tests {
             },
             Note {
                 path: "tests/data/vaults/tt/Figure1.md",
+                children: [],
             },
             Asset {
                 path: "tests/data/vaults/tt/Figure1^2.jpg",
@@ -1302,84 +1415,31 @@ mod tests {
             },
             Note {
                 path: "tests/data/vaults/tt/Note 2.md",
+                children: [
+                    Heading {
+                        path: "tests/data/vaults/tt/Note 2.md",
+                        level: H2,
+                        range: 1..23,
+                    },
+                    Heading {
+                        path: "tests/data/vaults/tt/Note 2.md",
+                        level: H4,
+                        range: 24..32,
+                    },
+                    Heading {
+                        path: "tests/data/vaults/tt/Note 2.md",
+                        level: H3,
+                        range: 33..51,
+                    },
+                    Heading {
+                        path: "tests/data/vaults/tt/Note 2.md",
+                        level: H2,
+                        range: 53..77,
+                    },
+                ],
             },
             Asset {
                 path: "tests/data/vaults/tt/Figure1|2.jpg",
-            },
-            Heading {
-                path: "tests/data/vaults/tt/Note 1.md",
-                level: H3,
-                range: 55..73,
-            },
-            Heading {
-                path: "tests/data/vaults/tt/Note 1.md",
-                level: H4,
-                range: 73..92,
-            },
-            Heading {
-                path: "tests/data/vaults/tt/Note 1.md",
-                level: H3,
-                range: 93..115,
-            },
-            Heading {
-                path: "tests/data/vaults/tt/Note 1.md",
-                level: H6,
-                range: 116..147,
-            },
-            Heading {
-                path: "tests/data/vaults/tt/Note 1.md",
-                level: H6,
-                range: 887..942,
-            },
-            Heading {
-                path: "tests/data/vaults/tt/Note 1.md",
-                level: H5,
-                range: 3536..3556,
-            },
-            Heading {
-                path: "tests/data/vaults/tt/Note 1.md",
-                level: H2,
-                range: 5957..5963,
-            },
-            Heading {
-                path: "tests/data/vaults/tt/Note 1.md",
-                level: H3,
-                range: 5964..5971,
-            },
-            Heading {
-                path: "tests/data/vaults/tt/Note 1.md",
-                level: H4,
-                range: 5971..5979,
-            },
-            Heading {
-                path: "tests/data/vaults/tt/Note 1.md",
-                level: H3,
-                range: 5979..5994,
-            },
-            Heading {
-                path: "tests/data/vaults/tt/Note 1.md",
-                level: H2,
-                range: 5999..6003,
-            },
-            Heading {
-                path: "tests/data/vaults/tt/Note 2.md",
-                level: H2,
-                range: 1..23,
-            },
-            Heading {
-                path: "tests/data/vaults/tt/Note 2.md",
-                level: H4,
-                range: 24..32,
-            },
-            Heading {
-                path: "tests/data/vaults/tt/Note 2.md",
-                level: H3,
-                range: 33..51,
-            },
-            Heading {
-                path: "tests/data/vaults/tt/Note 2.md",
-                level: H2,
-                range: 53..77,
             },
         ]
         "#);
