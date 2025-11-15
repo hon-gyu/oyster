@@ -1,8 +1,8 @@
-/// Table of contents based on heading levels
-use crate::ast::{Node, NodeKind, Tree};
-use ptree::TreeBuilder;
+//! Table of contents based on heading levels
+use crate::ast::{Node as ASTNode, NodeKind, Tree as ASTTree};
+use ego_tree::{Tree, iter::Edge};
 use pulldown_cmark::HeadingLevel;
-use std::collections::{HashMap, HashSet};
+use std::fmt::Display;
 use tree_sitter::Point;
 
 /// Heading information, including text and ending location
@@ -16,105 +16,93 @@ pub struct Heading {
     pub end_point: Point,
 }
 
-type Depth = usize;
+#[derive(Debug, PartialEq, Clone)]
+pub enum Node {
+    Root,
+    Heading(Heading),
+}
+
+impl Node {
+    fn get_level(&self) -> usize {
+        match self {
+            Node::Heading(h) => h.level as usize,
+            Node::Root => 0,
+        }
+    }
+}
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct TOC {
-    entries: Vec<(Heading, Depth)>,
-}
+pub struct Hierarchy(Tree<Node>);
 
-impl Heading {
-    fn to_tree_label(&self) -> String {
-        format!("{:?} {} (L{})", self.level, self.text, self.start_point.row,)
-    }
-}
-
-impl TOC {
-    /// Convert the TOC to a `ptree::Tree`, useful for debugging
-    ///
-    /// Note: this is implmented by LLM
-    pub fn to_tree(&self) -> TreeBuilder {
-        let mut builder = TreeBuilder::new("TOC".to_string());
-
-        if self.entries.is_empty() {
-            return builder;
-        }
-
-        // Track depth and use the builder stack
-        let mut depth_stack: Vec<Depth> = vec![];
-
-        for (entry, depth) in self.entries.iter() {
-            let label = entry.to_tree_label();
-
-            // End children until we're at the right depth
-            while let Some(&stack_depth) = depth_stack.last() {
-                if stack_depth < *depth {
-                    break;
+impl Display for Hierarchy {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let tree = &self.0;
+        for edge in tree.root().traverse() {
+            match edge {
+                Edge::Open(node) => {
+                    let ancestor_count = node.ancestors().count();
+                    let depth = ancestor_count.saturating_sub(1);
+                    let indent = "  ".repeat(depth);
+                    match node.value() {
+                        Node::Root => writeln!(f, "Root")?,
+                        Node::Heading(h) => writeln!(
+                            f,
+                            "{}├─ H{}: {}",
+                            indent, h.level as usize, h.text
+                        )?,
+                    }
                 }
-                builder.end_child();
-                depth_stack.pop();
+                Edge::Close(_) => {} // Ignore close edges
             }
-
-            // Begin this child
-            builder.begin_child(label);
-            depth_stack.push(*depth);
         }
-
-        // Close all remaining children
-        while depth_stack.pop().is_some() {
-            builder.end_child();
-        }
-
-        builder
-    }
-
-    /// Render the TOC as a tree string
-    pub fn render_tree(&self) -> String {
-        let tree = self.to_tree().build();
-        let mut output = Vec::new();
-        ptree::write_tree(&tree, &mut output).expect("Failed to write tree");
-        String::from_utf8(output).expect("Invalid UTF-8")
+        Ok(())
     }
 }
 
-/// Extract a table of contents from a AST `Tree`
-///
-///
-/// Not very efficient. Most of the time we would like to
-/// process a vector of ast headings directly.
-pub fn extract_toc(tree: &Tree) -> TOC {
+pub fn build_heading_hierarchy(tree: &ASTTree) -> Hierarchy {
     let root_node = &tree.root_node;
-    let mut entries: Vec<Heading> = vec![];
-    extract_toc_from_node(root_node, &mut entries);
+    let mut nodes: Vec<Node> = vec![];
+    extract_heading_nodes_from_ast_node(root_node, &mut nodes);
 
-    // map heading levels to depths
-    let mut unique_levels: Vec<HeadingLevel> = entries
-        .iter()
-        .map(|e| e.level)
-        .collect::<HashSet<HeadingLevel>>()
-        .into_iter()
-        .collect();
-    unique_levels.sort();
-    let level_to_depth: HashMap<HeadingLevel, Depth> = unique_levels
-        .into_iter()
-        .enumerate()
-        .map(|(i, level)| (level, i))
-        .collect();
+    let mut heading_tree = Tree::new(Node::Root);
 
-    TOC {
-        entries: entries
-            .iter()
-            .map(|e| (e.clone(), level_to_depth[&e.level]))
-            .collect(),
+    // Use a stack of node IDs instead of mutable references
+    let mut stack: Vec<ego_tree::NodeId> = vec![heading_tree.root().id()];
+
+    for node in nodes {
+        let curr_level = node.get_level();
+
+        // Pop stack until we find a parent with level < current level
+        while stack.len() > 1 {
+            let parent_id = *stack.last().unwrap();
+            let parent_level =
+                heading_tree.get(parent_id).unwrap().value().get_level();
+
+            if parent_level < curr_level {
+                break;
+            }
+            stack.pop();
+        }
+        let parent_id = *stack.last().unwrap();
+
+        // Append the node to the current parent
+        let new_node_id =
+            heading_tree.get_mut(parent_id).unwrap().append(node).id();
+        stack.push(new_node_id);
     }
+
+    Hierarchy(heading_tree)
 }
 
-fn extract_toc_from_node(node: &Node, toc_entries: &mut Vec<Heading>) {
+fn extract_heading_nodes_from_ast_node(
+    node: &ASTNode,
+    acc_heading_nodes: &mut Vec<Node>,
+) {
     for child in node.children.iter() {
         if let NodeKind::Heading { level, .. } = child.kind {
             match &child.children[..] {
                 [
-                    Node {
+                    ASTNode {
                         kind: NodeKind::Text(text),
                         ..
                     },
@@ -127,7 +115,7 @@ fn extract_toc_from_node(node: &Node, toc_entries: &mut Vec<Heading>) {
                         start_point: child.start_point,
                         end_point: child.end_point,
                     };
-                    toc_entries.push(entry);
+                    acc_heading_nodes.push(Node::Heading(entry));
                 }
                 [] => {
                     // Empty heading
@@ -139,15 +127,14 @@ fn extract_toc_from_node(node: &Node, toc_entries: &mut Vec<Heading>) {
                         start_point: child.start_point,
                         end_point: child.end_point,
                     };
-                    toc_entries.push(entry);
+                    acc_heading_nodes.push(Node::Heading(entry));
                 }
                 _ => unreachable!("Never: Heading without inner text"),
             }
         } else {
-            child
-                .children
-                .iter()
-                .for_each(|c| extract_toc_from_node(c, toc_entries));
+            child.children.iter().for_each(|c| {
+                extract_heading_nodes_from_ast_node(c, acc_heading_nodes)
+            });
         }
     }
     ()
@@ -156,7 +143,7 @@ fn extract_toc_from_node(node: &Node, toc_entries: &mut Vec<Heading>) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use insta::{assert_debug_snapshot, assert_snapshot};
+    use insta::assert_snapshot;
 
     fn data() -> String {
         let md = r#######"
@@ -219,296 +206,34 @@ some text
     #[test]
     fn test_toc_1() {
         let md = data();
-        let tree = Tree::new(&md);
-        // assert_snapshot!(tree.root_node, @"");
-
-        // let mut entries: Vec<TOCEntry> = vec![];
-        // extract_toc_from_node(&tree.root_node, &mut entries);
-        // assert_debug_snapshot!(entries, @"");
-
-        let toc = extract_toc(&tree);
-        assert_debug_snapshot!(toc, @r#"
-        TOC {
-            entries: [
-                (
-                    Heading {
-                        level: H1,
-                        text: "Heading",
-                        start_byte: 1,
-                        end_byte: 11,
-                        start_point: Point {
-                            row: 1,
-                            column: 0,
-                        },
-                        end_point: Point {
-                            row: 2,
-                            column: 0,
-                        },
-                    },
-                    0,
-                ),
-                (
-                    Heading {
-                        level: H2,
-                        text: "Heading 2",
-                        start_byte: 23,
-                        end_byte: 36,
-                        start_point: Point {
-                            row: 5,
-                            column: 0,
-                        },
-                        end_point: Point {
-                            row: 6,
-                            column: 0,
-                        },
-                    },
-                    1,
-                ),
-                (
-                    Heading {
-                        level: H3,
-                        text: "Heading 3",
-                        start_byte: 48,
-                        end_byte: 62,
-                        start_point: Point {
-                            row: 9,
-                            column: 0,
-                        },
-                        end_point: Point {
-                            row: 10,
-                            column: 0,
-                        },
-                    },
-                    2,
-                ),
-                (
-                    Heading {
-                        level: H4,
-                        text: "Heading 4",
-                        start_byte: 74,
-                        end_byte: 89,
-                        start_point: Point {
-                            row: 13,
-                            column: 0,
-                        },
-                        end_point: Point {
-                            row: 14,
-                            column: 0,
-                        },
-                    },
-                    3,
-                ),
-                (
-                    Heading {
-                        level: H5,
-                        text: "Heading 5",
-                        start_byte: 101,
-                        end_byte: 117,
-                        start_point: Point {
-                            row: 17,
-                            column: 0,
-                        },
-                        end_point: Point {
-                            row: 18,
-                            column: 0,
-                        },
-                    },
-                    4,
-                ),
-                (
-                    Heading {
-                        level: H6,
-                        text: "Heading 6",
-                        start_byte: 129,
-                        end_byte: 146,
-                        start_point: Point {
-                            row: 21,
-                            column: 0,
-                        },
-                        end_point: Point {
-                            row: 22,
-                            column: 0,
-                        },
-                    },
-                    5,
-                ),
-                (
-                    Heading {
-                        level: H1,
-                        text: "Heading",
-                        start_byte: 158,
-                        end_byte: 168,
-                        start_point: Point {
-                            row: 25,
-                            column: 0,
-                        },
-                        end_point: Point {
-                            row: 26,
-                            column: 0,
-                        },
-                    },
-                    0,
-                ),
-                (
-                    Heading {
-                        level: H1,
-                        text: "",
-                        start_byte: 180,
-                        end_byte: 182,
-                        start_point: Point {
-                            row: 29,
-                            column: 0,
-                        },
-                        end_point: Point {
-                            row: 30,
-                            column: 0,
-                        },
-                    },
-                    0,
-                ),
-            ],
-        }
-        "#);
+        let tree = ASTTree::new(&md);
+        let toc = build_heading_hierarchy(&tree);
+        assert_snapshot!(toc, @r"
+        Root
+        ├─ H1: Heading
+          ├─ H2: Heading 2
+            ├─ H3: Heading 3
+              ├─ H4: Heading 4
+                ├─ H5: Heading 5
+                  ├─ H6: Heading 6
+        ├─ H1: Heading
+        ├─ H1:
+        ");
     }
 
     #[test]
     fn test_toc_2() {
         let md = data_sparse_headings();
-        let tree = Tree::new(&md);
-        // assert_snapshot!(tree.root_node, @"");
+        let tree = ASTTree::new(&md);
 
-        // let mut entries: Vec<TOCEntry> = vec![];
-        // extract_toc_from_node(&tree.root_node, &mut entries);
-        // assert_debug_snapshot!(entries, @"");
-
-        let toc = extract_toc(&tree);
-        assert_debug_snapshot!(toc, @r#"
-        TOC {
-            entries: [
-                (
-                    Heading {
-                        level: H3,
-                        text: "Heading 3",
-                        start_byte: 2,
-                        end_byte: 16,
-                        start_point: Point {
-                            row: 2,
-                            column: 0,
-                        },
-                        end_point: Point {
-                            row: 3,
-                            column: 0,
-                        },
-                    },
-                    1,
-                ),
-                (
-                    Heading {
-                        level: H4,
-                        text: "Heading 4",
-                        start_byte: 18,
-                        end_byte: 33,
-                        start_point: Point {
-                            row: 5,
-                            column: 0,
-                        },
-                        end_point: Point {
-                            row: 6,
-                            column: 0,
-                        },
-                    },
-                    2,
-                ),
-                (
-                    Heading {
-                        level: H5,
-                        text: "Heading 5",
-                        start_byte: 45,
-                        end_byte: 61,
-                        start_point: Point {
-                            row: 9,
-                            column: 0,
-                        },
-                        end_point: Point {
-                            row: 10,
-                            column: 0,
-                        },
-                    },
-                    3,
-                ),
-                (
-                    Heading {
-                        level: H2,
-                        text: "Heading 2",
-                        start_byte: 62,
-                        end_byte: 75,
-                        start_point: Point {
-                            row: 11,
-                            column: 0,
-                        },
-                        end_point: Point {
-                            row: 12,
-                            column: 0,
-                        },
-                    },
-                    0,
-                ),
-                (
-                    Heading {
-                        level: H6,
-                        text: "Heading 6",
-                        start_byte: 76,
-                        end_byte: 93,
-                        start_point: Point {
-                            row: 13,
-                            column: 0,
-                        },
-                        end_point: Point {
-                            row: 14,
-                            column: 0,
-                        },
-                    },
-                    4,
-                ),
-            ],
-        }
-        "#);
-    }
-
-    #[test]
-    fn test_print_tree() {
-        let md = data();
-        let tree = Tree::new(&md);
-        let toc = extract_toc(&tree);
-
-        let output = toc.render_tree();
-        assert_snapshot!(output, @r"
-        TOC
-        ├─ H1 Heading (L1)
-        │  └─ H2 Heading 2 (L5)
-        │     └─ H3 Heading 3 (L9)
-        │        └─ H4 Heading 4 (L13)
-        │           └─ H5 Heading 5 (L17)
-        │              └─ H6 Heading 6 (L21)
-        ├─ H1 Heading (L25)
-        └─ H1  (L29)
-        ")
-    }
-
-    #[test]
-    fn test_print_tree_sparse() {
-        let md = data_sparse_headings();
-        let tree = Tree::new(&md);
-        let toc = extract_toc(&tree);
-
-        let output = toc.render_tree();
-        assert_snapshot!(output, @r"
-        TOC
-        ├─ H3 Heading 3 (L2)
-        │  └─ H4 Heading 4 (L5)
-        │     └─ H5 Heading 5 (L9)
-        └─ H2 Heading 2 (L11)
-           └─ H6 Heading 6 (L13)
-        ")
+        let toc = build_heading_hierarchy(&tree);
+        assert_snapshot!(toc, @r"
+        Root
+        ├─ H3: Heading 3
+          ├─ H4: Heading 4
+            ├─ H5: Heading 5
+        ├─ H2: Heading 2
+          ├─ H6: Heading 6
+        ");
     }
 }

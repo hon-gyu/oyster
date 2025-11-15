@@ -274,7 +274,6 @@ fn scan_dir_for_assets_and_notes(dir: &Path) -> Vec<Referenceable> {
 ///     - references: note references and asset references
 fn scan_vault(dir: &Path) -> (Vec<Referenceable>, Vec<Reference>) {
     let mut file_referenceables = scan_dir_for_assets_and_notes(dir);
-
     let mut all_references = Vec::<Reference>::new();
 
     let file_referenceables_with_children = file_referenceables
