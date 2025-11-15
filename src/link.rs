@@ -264,7 +264,7 @@ fn scan_vault(dir: &Path) -> (Vec<Referenceable>, Vec<Reference>) {
     (file_referenceables, references)
 }
 
-/// Splits a destination string into three parts: the note name and nested headings
+/// Splits a destination string into two parts: the note name and nested headings
 fn split_dest_string(s: &str) -> (&str, Vec<&str>) {
     let hash_pos = s.find('#');
 
@@ -327,6 +327,10 @@ pub fn is_subsequence<T: PartialEq>(haystack: &[T], needle: &[T]) -> bool {
 
 /// Match a destination name against a list of paths.
 ///
+/// Arguments:
+/// - `needle`: the destination name to match
+/// - `haystack`: a list of paths to match against
+///
 /// - Trim spaces
 /// - Add `.md` if a file has no extension
 /// - Exact match first
@@ -377,78 +381,6 @@ fn resolve_link(needle: &str, haystack: &Vec<PathBuf>) -> Option<PathBuf> {
 /// Returns the path of dir to create and the path note to create.
 ///
 /// Invariant: the path of dir to create, if exists, is a parent of the path of note to create.
-///
-/// # Examples
-///
-/// Simple name without directory:
-/// ```
-/// use std::path::PathBuf;
-/// use markdown_tools::link::resolve_new_note_path;
-/// let paths = vec![];
-/// let (dir, note) = resolve_new_note_path("Something", &paths);
-/// assert_eq!(dir, None);
-/// assert_eq!(note, PathBuf::from("Something.md"));
-/// ```
-///
-/// With directory:
-/// ```
-/// use std::path::PathBuf;
-/// use markdown_tools::link::resolve_new_note_path;
-/// let paths = vec![];
-/// let (dir, note) = resolve_new_note_path("A/B", &paths);
-/// assert_eq!(dir, Some(PathBuf::from("A")));
-/// assert_eq!(note, PathBuf::from("A/B.md"));
-/// ```
-///
-/// Increment when file exists:
-/// ```
-/// use std::path::PathBuf;
-/// use markdown_tools::link::resolve_new_note_path;
-/// let paths = vec![PathBuf::from("Untitle.md")];
-/// let (dir, note) = resolve_new_note_path("Untitle", &paths);
-/// assert_eq!(dir, None);
-/// assert_eq!(note, PathBuf::from("Untitle 1.md"));
-/// ```
-///
-/// Trailing slash:
-/// ```
-/// use std::path::PathBuf;
-/// use markdown_tools::link::resolve_new_note_path;
-/// let paths = vec![];
-/// let (dir, note) = resolve_new_note_path("dir/", &paths);
-/// assert_eq!(dir, None);
-/// assert_eq!(note, PathBuf::from("dir.md"));
-/// ```
-///
-/// Trailing slash with existing file:
-/// ```
-/// use std::path::PathBuf;
-/// use markdown_tools::link::resolve_new_note_path;
-/// let paths = vec![PathBuf::from("dir.md")];
-/// let (dir, note) = resolve_new_note_path("dir/", &paths);
-/// assert_eq!(dir, None);
-/// assert_eq!(note, PathBuf::from("dir 1.md"));
-/// ```
-///
-/// Non-md extension:
-/// ```
-/// use std::path::PathBuf;
-/// use markdown_tools::link::resolve_new_note_path;
-/// let paths = vec![];
-/// let (dir, note) = resolve_new_note_path("Hi.txt", &paths);
-/// assert_eq!(dir, None);
-/// assert_eq!(note, PathBuf::from("Hi.txt.md"));
-/// ```
-///
-/// Already has .md extension:
-/// ```
-/// use std::path::PathBuf;
-/// use markdown_tools::link::resolve_new_note_path;
-/// let paths = vec![];
-/// let (dir, note) = resolve_new_note_path("Hi.md", &paths);
-/// assert_eq!(dir, None);
-/// assert_eq!(note, PathBuf::from("Hi.md"));
-/// ```
 pub fn resolve_new_note_path(
     name: &str,
     paths: &Vec<PathBuf>,
@@ -502,26 +434,38 @@ pub fn resolve_new_note_path(
     (parent.map(|p| p.to_path_buf()), note_path)
 }
 
-fn resolve_destination_against_files(
-    dest: &str,
-    paths: Vec<PathBuf>,
-) -> Referenceable {
-    //! If the destination string ends with `.md`, it is targeting a note.
-    let (file_name, nested_headings) = split_dest_string(dest);
-    todo!()
-}
-
 /// Builds links from references and referenceables.
 /// Return a tuple of matched links and unresolved references.
 fn build_links(
     references: Vec<Reference>,
     referenceable: Vec<Referenceable>,
-) -> (Vec<Link>, Vec<Referenceable>) {
+) -> (Vec<Link>, Vec<Reference>) {
     let mut links = Vec::<Link>::new();
+    let mut unresolved = Vec::<Reference>::new();
+
+    // Build lookup structures for efficient matching
+    let note_paths: Vec<PathBuf> = referenceable
+        .iter()
+        .filter_map(|r| match r {
+            Referenceable::Note { path } => Some(path.clone()),
+            _ => None,
+        })
+        .collect();
+
+    let asset_paths: Vec<PathBuf> = referenceable
+        .iter()
+        .filter_map(|r| match r {
+            Referenceable::Asset { path } => Some(path.clone()),
+            _ => None,
+        })
+        .collect();
+
     for reference in references {
-        for referenceable in referenceable.iter() {}
+        let dest = reference.dest.as_str();
+        todo!()
     }
-    todo!()
+
+    (links, unresolved)
 }
 
 #[cfg(test)]
@@ -790,6 +734,113 @@ mod tests {
         |  59 | empty_video.mp4                         | empty_video.mp4                 |                                  |
         +-----+-----------------------------------------+---------------------------------+----------------------------------+
         ");
+    }
+
+    mod resolve_new_note_path {
+        use super::*;
+
+        #[test]
+        fn simple_name_with_md_extension() {
+            let (dir, note) = resolve_new_note_path("Note 1.md", &vec![]);
+            assert_eq!(dir, None);
+            assert_eq!(note, PathBuf::from("Note 1.md"));
+        }
+
+        #[test]
+        fn simple_name_without_extension() {
+            let (dir, note) = resolve_new_note_path("Something", &vec![]);
+            assert_eq!(dir, None);
+            assert_eq!(note, PathBuf::from("Something.md"));
+        }
+
+        #[test]
+        fn with_directory_no_extension() {
+            let (dir, note) = resolve_new_note_path("A/B", &vec![]);
+            assert_eq!(dir, Some(PathBuf::from("A")));
+            assert_eq!(note, PathBuf::from("A/B.md"));
+        }
+
+        #[test]
+        fn with_directory_and_md_extension() {
+            let (dir, note) = resolve_new_note_path("A/B.md", &vec![]);
+            assert_eq!(dir, Some(PathBuf::from("A")));
+            assert_eq!(note, PathBuf::from("A/B.md"));
+        }
+
+        #[test]
+        fn increment_when_file_exists() {
+            let (dir, note) =
+                resolve_new_note_path("Untitle", &vec![PathBuf::from("Untitle.md")]);
+            assert_eq!(dir, None);
+            assert_eq!(note, PathBuf::from("Untitle 1.md"));
+        }
+
+        #[test]
+        fn increment_multiple_times() {
+            let (dir, note) = resolve_new_note_path(
+                "Untitle",
+                &vec![
+                    PathBuf::from("Untitle.md"),
+                    PathBuf::from("Untitle 1.md"),
+                    PathBuf::from("Untitle 2.md"),
+                ],
+            );
+            assert_eq!(dir, None);
+            assert_eq!(note, PathBuf::from("Untitle 3.md"));
+        }
+
+        #[test]
+        fn trailing_slash() {
+            let (dir, note) = resolve_new_note_path("dir/", &vec![]);
+            assert_eq!(dir, None);
+            assert_eq!(note, PathBuf::from("dir.md"));
+        }
+
+        #[test]
+        fn trailing_slash_with_existing_file() {
+            let (dir, note) =
+                resolve_new_note_path("dir/", &vec![PathBuf::from("dir.md")]);
+            assert_eq!(dir, None);
+            assert_eq!(note, PathBuf::from("dir 1.md"));
+        }
+
+        #[test]
+        fn non_md_extension() {
+            let (dir, note) = resolve_new_note_path("Hi.txt", &vec![]);
+            assert_eq!(dir, None);
+            assert_eq!(note, PathBuf::from("Hi.txt.md"));
+        }
+
+        #[test]
+        fn already_has_md_extension() {
+            let (dir, note) = resolve_new_note_path("Hi.md", &vec![]);
+            assert_eq!(dir, None);
+            assert_eq!(note, PathBuf::from("Hi.md"));
+        }
+
+        #[test]
+        fn nested_directory_path() {
+            let (dir, note) = resolve_new_note_path("A/B/C", &vec![]);
+            assert_eq!(dir, Some(PathBuf::from("A/B")));
+            assert_eq!(note, PathBuf::from("A/B/C.md"));
+        }
+
+        #[test]
+        fn whitespace_trimming() {
+            let (dir, note) = resolve_new_note_path("  Note with spaces  ", &vec![]);
+            assert_eq!(dir, None);
+            assert_eq!(note, PathBuf::from("Note with spaces.md"));
+        }
+
+        #[test]
+        fn increment_in_subdirectory() {
+            let (dir, note) = resolve_new_note_path(
+                "dir/note",
+                &vec![PathBuf::from("dir/note.md")],
+            );
+            assert_eq!(dir, Some(PathBuf::from("dir")));
+            assert_eq!(note, PathBuf::from("dir/note 1.md"));
+        }
     }
 
     #[test]
