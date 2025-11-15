@@ -64,6 +64,7 @@ pub enum ReferenceKind {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Reference {
+    path: PathBuf,
     range: Range<usize>,
     dest: String,
     kind: ReferenceKind,
@@ -149,6 +150,7 @@ fn extract_reference_and_referenceable(
                         }
                     };
                     let reference = Reference {
+                        path: path.clone(),
                         range: node.byte_range().clone(),
                         dest: dest_url.to_string(),
                         kind: ReferenceKind::WikiLink,
@@ -188,6 +190,7 @@ fn extract_reference_and_referenceable(
                     };
 
                     let reference = Reference {
+                        path: path.clone(),
                         range: node.byte_range().clone(),
                         dest: dest.to_string(),
                         kind: ReferenceKind::MarkdownLink,
@@ -283,35 +286,86 @@ fn scan_dir_for_assets_and_notes(dir: &Path) -> Vec<Referenceable> {
     referenceables
 }
 
+/// Convert an absolute path to a path relative to root_dir (in-place).
+/// If the path is not under root_dir, leaves it unchanged.
+fn make_path_relative(path: &mut PathBuf, root_dir: &Path) {
+    if let Ok(relative) = path.strip_prefix(root_dir) {
+        *path = relative.to_path_buf();
+    }
+}
+
+/// Recursively convert all paths in a Referenceable to be relative to root_dir (in-place).
+fn make_referenceable_relative(
+    referenceable: &mut Referenceable,
+    root_dir: &Path,
+) {
+    match referenceable {
+        Referenceable::Asset { path } => {
+            make_path_relative(path, root_dir);
+        }
+        Referenceable::Note { path, children } => {
+            make_path_relative(path, root_dir);
+            for child in children.iter_mut() {
+                make_referenceable_relative(child, root_dir);
+            }
+        }
+        Referenceable::Heading { path, .. } => {
+            make_path_relative(path, root_dir);
+        }
+        Referenceable::Block { path } => {
+            make_path_relative(path, root_dir);
+        }
+    }
+}
+
 /// Scan a vault for referenceables and references.
 ///
-/// in-note referenceables stored in note's children
+/// in-note referenceables are stored in note's children
+///
+/// Arguments:
+/// - `dir`: the directory to scan
+/// - `root_dir`: the root directory - all paths will be made relative to this
 ///
 /// Returns:
-///   - referenceables: all referenceables
-///   - references: note references and asset references
-fn scan_vault(dir: &Path) -> (Vec<Referenceable>, Vec<Reference>) {
+/// - referenceables: all referenceables (with relative paths)
+/// - references: note references and asset references
+fn scan_vault(
+    dir: &Path,
+    root_dir: &Path,
+) -> (Vec<Referenceable>, Vec<Reference>) {
     let mut file_referenceables = scan_dir_for_assets_and_notes(dir);
     let mut all_references = Vec::<Reference>::new();
 
-    let file_referenceables_with_children = file_referenceables
-        .into_iter()
-        .map(|mut referenceable| match referenceable {
-            Referenceable::Note { ref path, .. } => {
-                let (references, referenceables) = scan_note(path);
-                all_references.extend(references);
-                referenceable.add_in_note_referenceables(referenceables);
-                referenceable
-            }
-            asset @ Referenceable::Asset { .. } => asset,
-            other => unreachable!(
-                "in-note referenceable shouldn't present here, got {:?}",
-                other
-            ),
-        })
-        .collect();
+    let file_referenceables_with_children: Vec<Referenceable> =
+        file_referenceables
+            .into_iter()
+            .map(|mut referenceable| match referenceable {
+                Referenceable::Note { ref path, .. } => {
+                    let (references, referenceables) = scan_note(path);
+                    all_references.extend(references);
+                    referenceable.add_in_note_referenceables(referenceables);
+                    referenceable
+                }
+                asset @ Referenceable::Asset { .. } => asset,
+                other => unreachable!(
+                    "in-note referenceable shouldn't present here, got {:?}",
+                    other
+                ),
+            })
+            .collect();
 
-    (file_referenceables_with_children, all_references)
+    // Convert all paths to be relative to root_dir
+    let mut relative_referenceables = file_referenceables_with_children;
+    for referenceable in relative_referenceables.iter_mut() {
+        make_referenceable_relative(referenceable, root_dir);
+    }
+
+    // Convert reference paths to be relative to root_dir
+    for reference in all_references.iter_mut() {
+        make_path_relative(&mut reference.path, root_dir);
+    }
+
+    (relative_referenceables, all_references)
 }
 
 /// Splits a destination string into two parts: the file name, and nested headings or block identifier
@@ -1270,390 +1324,462 @@ mod tests {
     }
 
     #[test]
+    fn test_build_links() {
+        let dir = PathBuf::from("tests/data/vaults/tt");
+        let root_dir = PathBuf::from("tests/data/vaults/tt");
+        let (referenceables, references) = scan_vault(&dir, &root_dir);
+    }
+
+    #[test]
     fn test_scan_vault() {
         let dir = PathBuf::from("tests/data/vaults/tt");
-        let (referenceables, references) = scan_vault(&dir);
+        let root_dir = PathBuf::from("tests/data/vaults/tt");
+        let (referenceables, references) = scan_vault(&dir, &root_dir);
         assert_debug_snapshot!(references, @r########"
         [
             Reference {
+                path: "Note 1.md",
                 range: 167..223,
                 dest: "Three laws of motion",
                 kind: MarkdownLink,
                 display_text: "Three laws of motion 11",
             },
             Reference {
+                path: "Note 1.md",
                 range: 254..289,
                 dest: "#Level 3 title",
                 kind: MarkdownLink,
                 display_text: "Level 3 title",
             },
             Reference {
+                path: "Note 1.md",
                 range: 356..395,
                 dest: "Note 2#Some level 2 title",
                 kind: MarkdownLink,
                 display_text: "22",
             },
             Reference {
+                path: "Note 1.md",
                 range: 514..521,
                 dest: "()",
                 kind: MarkdownLink,
                 display_text: "www",
             },
             Reference {
+                path: "Note 1.md",
                 range: 590..596,
                 dest: "ww",
                 kind: MarkdownLink,
                 display_text: "",
             },
             Reference {
+                path: "Note 1.md",
                 range: 647..651,
                 dest: "()",
                 kind: MarkdownLink,
                 display_text: "",
             },
             Reference {
+                path: "Note 1.md",
                 range: 700..733,
                 dest: "Three laws of motion",
                 kind: MarkdownLink,
                 display_text: "",
             },
             Reference {
+                path: "Note 1.md",
                 range: 951..974,
                 dest: "Three laws of motion",
                 kind: WikiLink,
                 display_text: "Three laws of motion",
             },
             Reference {
+                path: "Note 1.md",
                 range: 1015..1041,
                 dest: "Three laws of motion.md",
                 kind: WikiLink,
                 display_text: "Three laws of motion.md",
             },
             Reference {
+                path: "Note 1.md",
                 range: 1075..1095,
                 dest: "Note 2 ",
                 kind: WikiLink,
                 display_text: " Note two",
             },
             Reference {
+                path: "Note 1.md",
                 range: 1125..1142,
                 dest: "#Level 3 title",
                 kind: WikiLink,
                 display_text: "#Level 3 title",
             },
             Reference {
+                path: "Note 1.md",
                 range: 1203..1220,
                 dest: "#Level 4 title",
                 kind: WikiLink,
                 display_text: "#Level 4 title",
             },
             Reference {
+                path: "Note 1.md",
                 range: 1282..1292,
                 dest: "#random",
                 kind: WikiLink,
                 display_text: "#random",
             },
             Reference {
+                path: "Note 1.md",
                 range: 1358..1386,
                 dest: "Note 2#Some level 2 title",
                 kind: WikiLink,
                 display_text: "Note 2#Some level 2 title",
             },
             Reference {
+                path: "Note 1.md",
                 range: 1457..1499,
                 dest: "Note 2#Some level 2 title#Level 3 title",
                 kind: WikiLink,
                 display_text: "Note 2#Some level 2 title#Level 3 title",
             },
             Reference {
+                path: "Note 1.md",
                 range: 1536..1566,
                 dest: "Note 2#random#Level 3 title",
                 kind: WikiLink,
                 display_text: "Note 2#random#Level 3 title",
             },
             Reference {
+                path: "Note 1.md",
                 range: 1645..1668,
                 dest: "Note 2#Level 3 title",
                 kind: WikiLink,
                 display_text: "Note 2#Level 3 title",
             },
             Reference {
+                path: "Note 1.md",
                 range: 1697..1709,
                 dest: "Note 2#L4",
                 kind: WikiLink,
                 display_text: "Note 2#L4",
             },
             Reference {
+                path: "Note 1.md",
                 range: 1745..1776,
                 dest: "Note 2#Some level 2 title#L4",
                 kind: WikiLink,
                 display_text: "Note 2#Some level 2 title#L4",
             },
             Reference {
+                path: "Note 1.md",
                 range: 1942..1964,
                 dest: "Non-existing note 4",
                 kind: WikiLink,
                 display_text: "Non-existing note 4",
             },
             Reference {
+                path: "Note 1.md",
                 range: 2040..2044,
                 dest: "#",
                 kind: WikiLink,
                 display_text: "#",
             },
             Reference {
+                path: "Note 1.md",
                 range: 2094..2105,
                 dest: "Note 2##",
                 kind: WikiLink,
                 display_text: "Note 2##",
             },
             Reference {
+                path: "Note 1.md",
                 range: 2186..2210,
                 dest: "#######Link to figure",
                 kind: WikiLink,
                 display_text: "#######Link to figure",
             },
             Reference {
+                path: "Note 1.md",
                 range: 2243..2266,
                 dest: "######Link to figure",
                 kind: WikiLink,
                 display_text: "######Link to figure",
             },
             Reference {
+                path: "Note 1.md",
                 range: 2297..2318,
                 dest: "####Link to figure",
                 kind: WikiLink,
                 display_text: "####Link to figure",
             },
             Reference {
+                path: "Note 1.md",
                 range: 2348..2368,
                 dest: "###Link to figure",
                 kind: WikiLink,
                 display_text: "###Link to figure",
             },
             Reference {
+                path: "Note 1.md",
                 range: 2396..2414,
                 dest: "#Link to figure",
                 kind: WikiLink,
                 display_text: "#Link to figure",
             },
             Reference {
+                path: "Note 1.md",
                 range: 2447..2459,
                 dest: "#L2 ",
                 kind: WikiLink,
                 display_text: " #L4",
             },
             Reference {
+                path: "Note 1.md",
                 range: 2554..2571,
                 dest: "Note 2 ",
                 kind: WikiLink,
                 display_text: " 2 | 3",
             },
             Reference {
+                path: "Note 1.md",
                 range: 2672..2683,
                 dest: "###L2#L4",
                 kind: WikiLink,
                 display_text: "###L2#L4",
             },
             Reference {
+                path: "Note 1.md",
                 range: 2743..2758,
                 dest: "##L2######L4",
                 kind: WikiLink,
                 display_text: "##L2######L4",
             },
             Reference {
+                path: "Note 1.md",
                 range: 2817..2831,
                 dest: "##L2#####L4",
                 kind: WikiLink,
                 display_text: "##L2#####L4",
             },
             Reference {
+                path: "Note 1.md",
                 range: 2893..2910,
                 dest: "##L2#####L4#L3",
                 kind: WikiLink,
                 display_text: "##L2#####L4#L3",
             },
             Reference {
+                path: "Note 1.md",
                 range: 2966..2991,
                 dest: "##L2#####L4#Another L3",
                 kind: WikiLink,
                 display_text: "##L2#####L4#Another L3",
             },
             Reference {
+                path: "Note 1.md",
                 range: 3332..3349,
                 dest: "##L2######L4",
                 kind: MarkdownLink,
                 display_text: "1",
             },
             Reference {
+                path: "Note 1.md",
                 range: 3408..3424,
                 dest: "##L2#####L4",
                 kind: MarkdownLink,
                 display_text: "2",
             },
             Reference {
+                path: "Note 1.md",
                 range: 3486..3505,
                 dest: "##L2#####L4#L3",
                 kind: MarkdownLink,
                 display_text: "3",
             },
             Reference {
+                path: "Note 1.md",
                 range: 3577..3591,
                 dest: "Figure1.jpg",
                 kind: WikiLink,
                 display_text: "Figure1.jpg",
             },
             Reference {
+                path: "Note 1.md",
                 range: 3700..3716,
                 dest: "Figure1.jpg#2",
                 kind: WikiLink,
                 display_text: "Figure1.jpg#2",
             },
             Reference {
+                path: "Note 1.md",
                 range: 3762..3780,
                 dest: "Figure1.jpg ",
                 kind: WikiLink,
                 display_text: " 2",
             },
             Reference {
+                path: "Note 1.md",
                 range: 3867..3884,
                 dest: "Figure1.jpg.md",
                 kind: WikiLink,
                 display_text: "Figure1.jpg.md",
             },
             Reference {
+                path: "Note 1.md",
                 range: 3975..3995,
                 dest: "Figure1.jpg.md.md",
                 kind: WikiLink,
                 display_text: "Figure1.jpg.md.md",
             },
             Reference {
+                path: "Note 1.md",
                 range: 4020..4036,
                 dest: "Figure1#2.jpg",
                 kind: WikiLink,
                 display_text: "Figure1#2.jpg",
             },
             Reference {
+                path: "Note 1.md",
                 range: 4159..4175,
                 dest: "Figure1",
                 kind: WikiLink,
                 display_text: "2.jpg",
             },
             Reference {
+                path: "Note 1.md",
                 range: 4298..4314,
                 dest: "Figure1^2.jpg",
                 kind: WikiLink,
                 display_text: "Figure1^2.jpg",
             },
             Reference {
+                path: "Note 1.md",
                 range: 4424..4431,
                 dest: "dir/",
                 kind: WikiLink,
                 display_text: "dir/",
             },
             Reference {
+                path: "Note 1.md",
                 range: 4861..4895,
                 dest: "dir/inner_dir/note_in_inner_dir",
                 kind: WikiLink,
                 display_text: "dir/inner_dir/note_in_inner_dir",
             },
             Reference {
+                path: "Note 1.md",
                 range: 4935..4965,
                 dest: "inner_dir/note_in_inner_dir",
                 kind: WikiLink,
                 display_text: "inner_dir/note_in_inner_dir",
             },
             Reference {
+                path: "Note 1.md",
                 range: 4999..5023,
                 dest: "dir/note_in_inner_dir",
                 kind: WikiLink,
                 display_text: "dir/note_in_inner_dir",
             },
             Reference {
+                path: "Note 1.md",
                 range: 5095..5122,
                 dest: "random/note_in_inner_dir",
                 kind: WikiLink,
                 display_text: "random/note_in_inner_dir",
             },
             Reference {
+                path: "Note 1.md",
                 range: 5263..5278,
                 dest: "inner_dir/hi",
                 kind: WikiLink,
                 display_text: "inner_dir/hi",
             },
             Reference {
+                path: "Note 1.md",
                 range: 5309..5331,
                 dest: "dir/indir_same_name",
                 kind: WikiLink,
                 display_text: "dir/indir_same_name",
             },
             Reference {
+                path: "Note 1.md",
                 range: 5358..5376,
                 dest: "indir_same_name",
                 kind: WikiLink,
                 display_text: "indir_same_name",
             },
             Reference {
+                path: "Note 1.md",
                 range: 5446..5455,
                 dest: "indir2",
                 kind: WikiLink,
                 display_text: "indir2",
             },
             Reference {
+                path: "Note 1.md",
                 range: 5502..5514,
                 dest: "Something",
                 kind: WikiLink,
                 display_text: "Something",
             },
             Reference {
+                path: "Note 1.md",
                 range: 5631..5659,
                 dest: "unsupported_text_file.txt",
                 kind: WikiLink,
                 display_text: "unsupported_text_file.txt",
             },
             Reference {
+                path: "Note 1.md",
                 range: 5740..5757,
                 dest: "a.joiwduvqneoi",
                 kind: WikiLink,
                 display_text: "a.joiwduvqneoi",
             },
             Reference {
+                path: "Note 1.md",
                 range: 5793..5802,
                 dest: "Note 1",
                 kind: WikiLink,
                 display_text: "Note 1",
             },
             Reference {
+                path: "Note 1.md",
                 range: 5896..5911,
                 dest: "Figure1.jpg",
                 kind: WikiLink,
                 display_text: "Figure1.jpg",
             },
             Reference {
+                path: "Note 1.md",
                 range: 5936..5954,
                 dest: "empty_video.mp4",
                 kind: WikiLink,
                 display_text: "empty_video.mp4",
             },
             Reference {
+                path: "block ref.md",
                 range: 43..58,
                 dest: "Note 1#^afon",
                 kind: WikiLink,
                 display_text: "Note 1#^afon",
             },
             Reference {
+                path: "block ref.md",
                 range: 60..71,
                 dest: "#^1 dwad",
                 kind: WikiLink,
                 display_text: "#^1 dwad",
             },
             Reference {
+                path: "block ref.md",
                 range: 73..86,
                 dest: "#^insidel6",
                 kind: WikiLink,
                 display_text: "#^insidel6",
             },
             Reference {
+                path: "block ref.md",
                 range: 88..104,
                 dest: "#L6#^insidel6",
                 kind: WikiLink,
@@ -1664,70 +1790,70 @@ mod tests {
         assert_debug_snapshot!(referenceables, @r#"
         [
             Note {
-                path: "tests/data/vaults/tt/Note 1.md",
+                path: "Note 1.md",
                 children: [
                     Heading {
-                        path: "tests/data/vaults/tt/Note 1.md",
+                        path: "Note 1.md",
                         level: H3,
                         text: "Level 3 title",
                         range: 55..73,
                     },
                     Heading {
-                        path: "tests/data/vaults/tt/Note 1.md",
+                        path: "Note 1.md",
                         level: H4,
                         text: "Level 4 title",
                         range: 73..92,
                     },
                     Heading {
-                        path: "tests/data/vaults/tt/Note 1.md",
+                        path: "Note 1.md",
                         level: H3,
                         text: "Example (level 3)",
                         range: 93..115,
                     },
                     Heading {
-                        path: "tests/data/vaults/tt/Note 1.md",
+                        path: "Note 1.md",
                         level: H6,
                         text: "Markdown link: [x](y)",
                         range: 116..147,
                     },
                     Heading {
-                        path: "tests/data/vaults/tt/Note 1.md",
+                        path: "Note 1.md",
                         level: H6,
                         text: "Wiki link: [[x#]] | [[x#^block_identifier]]",
                         range: 887..942,
                     },
                     Heading {
-                        path: "tests/data/vaults/tt/Note 1.md",
+                        path: "Note 1.md",
                         level: H5,
                         text: "Link to asset",
                         range: 3536..3556,
                     },
                     Heading {
-                        path: "tests/data/vaults/tt/Note 1.md",
+                        path: "Note 1.md",
                         level: H2,
                         text: "L2",
                         range: 5957..5963,
                     },
                     Heading {
-                        path: "tests/data/vaults/tt/Note 1.md",
+                        path: "Note 1.md",
                         level: H3,
                         text: "L3",
                         range: 5964..5971,
                     },
                     Heading {
-                        path: "tests/data/vaults/tt/Note 1.md",
+                        path: "Note 1.md",
                         level: H4,
                         text: "L4",
                         range: 5971..5979,
                     },
                     Heading {
-                        path: "tests/data/vaults/tt/Note 1.md",
+                        path: "Note 1.md",
                         level: H3,
                         text: "Another L3",
                         range: 5979..5994,
                     },
                     Heading {
-                        path: "tests/data/vaults/tt/Note 1.md",
+                        path: "Note 1.md",
                         level: H2,
                         text: "",
                         range: 5999..6003,
@@ -1735,99 +1861,99 @@ mod tests {
                 ],
             },
             Asset {
-                path: "tests/data/vaults/tt/a.joiwduvqneoi",
+                path: "a.joiwduvqneoi",
             },
             Note {
-                path: "tests/data/vaults/tt/Figure1.jpg.md",
+                path: "Figure1.jpg.md",
                 children: [],
             },
             Asset {
-                path: "tests/data/vaults/tt/Something",
+                path: "Something",
             },
             Note {
-                path: "tests/data/vaults/tt/Three laws of motion.md",
+                path: "Three laws of motion.md",
                 children: [],
             },
             Note {
-                path: "tests/data/vaults/tt/indir_same_name.md",
+                path: "indir_same_name.md",
                 children: [],
             },
             Note {
-                path: "tests/data/vaults/tt/ww.md",
+                path: "ww.md",
                 children: [],
             },
             Note {
-                path: "tests/data/vaults/tt/unsupported_text_file.txt.md",
+                path: "unsupported_text_file.txt.md",
                 children: [],
             },
             Note {
-                path: "tests/data/vaults/tt/Figure1.jpg.md.md",
+                path: "Figure1.jpg.md.md",
                 children: [],
             },
             Note {
-                path: "tests/data/vaults/tt/().md",
-                children: [],
-            },
-            Asset {
-                path: "tests/data/vaults/tt/Figure1#2.jpg",
-            },
-            Asset {
-                path: "tests/data/vaults/tt/Note 1",
-            },
-            Note {
-                path: "tests/data/vaults/tt/dir.md",
-                children: [],
-            },
-            Note {
-                path: "tests/data/vaults/tt/a.joiwduvqneoi.md",
+                path: "().md",
                 children: [],
             },
             Asset {
-                path: "tests/data/vaults/tt/empty_video.mp4",
+                path: "Figure1#2.jpg",
+            },
+            Asset {
+                path: "Note 1",
             },
             Note {
-                path: "tests/data/vaults/tt/Hi.txt.md",
+                path: "dir.md",
                 children: [],
             },
             Note {
-                path: "tests/data/vaults/tt/dir/inner_dir/note_in_inner_dir.md",
-                children: [],
-            },
-            Note {
-                path: "tests/data/vaults/tt/dir/indir_same_name.md",
-                children: [],
-            },
-            Note {
-                path: "tests/data/vaults/tt/dir/indir2.md",
+                path: "a.joiwduvqneoi.md",
                 children: [],
             },
             Asset {
-                path: "tests/data/vaults/tt/unsupported_text_file.txt",
-            },
-            Asset {
-                path: "tests/data/vaults/tt/unsupported.unsupported",
+                path: "empty_video.mp4",
             },
             Note {
-                path: "tests/data/vaults/tt/Figure1.md",
+                path: "Hi.txt.md",
+                children: [],
+            },
+            Note {
+                path: "dir/inner_dir/note_in_inner_dir.md",
+                children: [],
+            },
+            Note {
+                path: "dir/indir_same_name.md",
+                children: [],
+            },
+            Note {
+                path: "dir/indir2.md",
                 children: [],
             },
             Asset {
-                path: "tests/data/vaults/tt/Figure1^2.jpg",
+                path: "unsupported_text_file.txt",
             },
             Asset {
-                path: "tests/data/vaults/tt/Figure1.jpg",
+                path: "unsupported.unsupported",
             },
             Note {
-                path: "tests/data/vaults/tt/block ref.md",
+                path: "Figure1.md",
+                children: [],
+            },
+            Asset {
+                path: "Figure1^2.jpg",
+            },
+            Asset {
+                path: "Figure1.jpg",
+            },
+            Note {
+                path: "block ref.md",
                 children: [
                     Heading {
-                        path: "tests/data/vaults/tt/block ref.md",
+                        path: "block ref.md",
                         level: H6,
                         text: "L6",
                         range: 179..189,
                     },
                     Heading {
-                        path: "tests/data/vaults/tt/block ref.md",
+                        path: "block ref.md",
                         level: H6,
                         text: "^1 dwad",
                         range: 219..233,
@@ -1835,28 +1961,28 @@ mod tests {
                 ],
             },
             Note {
-                path: "tests/data/vaults/tt/Note 2.md",
+                path: "Note 2.md",
                 children: [
                     Heading {
-                        path: "tests/data/vaults/tt/Note 2.md",
+                        path: "Note 2.md",
                         level: H2,
                         text: "Some level 2 title",
                         range: 1..23,
                     },
                     Heading {
-                        path: "tests/data/vaults/tt/Note 2.md",
+                        path: "Note 2.md",
                         level: H4,
                         text: "L4",
                         range: 24..32,
                     },
                     Heading {
-                        path: "tests/data/vaults/tt/Note 2.md",
+                        path: "Note 2.md",
                         level: H3,
                         text: "Level 3 title",
                         range: 33..51,
                     },
                     Heading {
-                        path: "tests/data/vaults/tt/Note 2.md",
+                        path: "Note 2.md",
                         level: H2,
                         text: "Another level 2 title",
                         range: 53..77,
@@ -1864,7 +1990,7 @@ mod tests {
                 ],
             },
             Asset {
-                path: "tests/data/vaults/tt/Figure1|2.jpg",
+                path: "Figure1|2.jpg",
             },
         ]
         "#);
@@ -1878,360 +2004,420 @@ mod tests {
         assert_debug_snapshot!(references, @r########"
         [
             Reference {
+                path: "tests/data/vaults/tt/Note 1.md",
                 range: 167..223,
                 dest: "Three laws of motion",
                 kind: MarkdownLink,
                 display_text: "Three laws of motion 11",
             },
             Reference {
+                path: "tests/data/vaults/tt/Note 1.md",
                 range: 254..289,
                 dest: "#Level 3 title",
                 kind: MarkdownLink,
                 display_text: "Level 3 title",
             },
             Reference {
+                path: "tests/data/vaults/tt/Note 1.md",
                 range: 356..395,
                 dest: "Note 2#Some level 2 title",
                 kind: MarkdownLink,
                 display_text: "22",
             },
             Reference {
+                path: "tests/data/vaults/tt/Note 1.md",
                 range: 514..521,
                 dest: "()",
                 kind: MarkdownLink,
                 display_text: "www",
             },
             Reference {
+                path: "tests/data/vaults/tt/Note 1.md",
                 range: 590..596,
                 dest: "ww",
                 kind: MarkdownLink,
                 display_text: "",
             },
             Reference {
+                path: "tests/data/vaults/tt/Note 1.md",
                 range: 647..651,
                 dest: "()",
                 kind: MarkdownLink,
                 display_text: "",
             },
             Reference {
+                path: "tests/data/vaults/tt/Note 1.md",
                 range: 700..733,
                 dest: "Three laws of motion",
                 kind: MarkdownLink,
                 display_text: "",
             },
             Reference {
+                path: "tests/data/vaults/tt/Note 1.md",
                 range: 951..974,
                 dest: "Three laws of motion",
                 kind: WikiLink,
                 display_text: "Three laws of motion",
             },
             Reference {
+                path: "tests/data/vaults/tt/Note 1.md",
                 range: 1015..1041,
                 dest: "Three laws of motion.md",
                 kind: WikiLink,
                 display_text: "Three laws of motion.md",
             },
             Reference {
+                path: "tests/data/vaults/tt/Note 1.md",
                 range: 1075..1095,
                 dest: "Note 2 ",
                 kind: WikiLink,
                 display_text: " Note two",
             },
             Reference {
+                path: "tests/data/vaults/tt/Note 1.md",
                 range: 1125..1142,
                 dest: "#Level 3 title",
                 kind: WikiLink,
                 display_text: "#Level 3 title",
             },
             Reference {
+                path: "tests/data/vaults/tt/Note 1.md",
                 range: 1203..1220,
                 dest: "#Level 4 title",
                 kind: WikiLink,
                 display_text: "#Level 4 title",
             },
             Reference {
+                path: "tests/data/vaults/tt/Note 1.md",
                 range: 1282..1292,
                 dest: "#random",
                 kind: WikiLink,
                 display_text: "#random",
             },
             Reference {
+                path: "tests/data/vaults/tt/Note 1.md",
                 range: 1358..1386,
                 dest: "Note 2#Some level 2 title",
                 kind: WikiLink,
                 display_text: "Note 2#Some level 2 title",
             },
             Reference {
+                path: "tests/data/vaults/tt/Note 1.md",
                 range: 1457..1499,
                 dest: "Note 2#Some level 2 title#Level 3 title",
                 kind: WikiLink,
                 display_text: "Note 2#Some level 2 title#Level 3 title",
             },
             Reference {
+                path: "tests/data/vaults/tt/Note 1.md",
                 range: 1536..1566,
                 dest: "Note 2#random#Level 3 title",
                 kind: WikiLink,
                 display_text: "Note 2#random#Level 3 title",
             },
             Reference {
+                path: "tests/data/vaults/tt/Note 1.md",
                 range: 1645..1668,
                 dest: "Note 2#Level 3 title",
                 kind: WikiLink,
                 display_text: "Note 2#Level 3 title",
             },
             Reference {
+                path: "tests/data/vaults/tt/Note 1.md",
                 range: 1697..1709,
                 dest: "Note 2#L4",
                 kind: WikiLink,
                 display_text: "Note 2#L4",
             },
             Reference {
+                path: "tests/data/vaults/tt/Note 1.md",
                 range: 1745..1776,
                 dest: "Note 2#Some level 2 title#L4",
                 kind: WikiLink,
                 display_text: "Note 2#Some level 2 title#L4",
             },
             Reference {
+                path: "tests/data/vaults/tt/Note 1.md",
                 range: 1942..1964,
                 dest: "Non-existing note 4",
                 kind: WikiLink,
                 display_text: "Non-existing note 4",
             },
             Reference {
+                path: "tests/data/vaults/tt/Note 1.md",
                 range: 2040..2044,
                 dest: "#",
                 kind: WikiLink,
                 display_text: "#",
             },
             Reference {
+                path: "tests/data/vaults/tt/Note 1.md",
                 range: 2094..2105,
                 dest: "Note 2##",
                 kind: WikiLink,
                 display_text: "Note 2##",
             },
             Reference {
+                path: "tests/data/vaults/tt/Note 1.md",
                 range: 2186..2210,
                 dest: "#######Link to figure",
                 kind: WikiLink,
                 display_text: "#######Link to figure",
             },
             Reference {
+                path: "tests/data/vaults/tt/Note 1.md",
                 range: 2243..2266,
                 dest: "######Link to figure",
                 kind: WikiLink,
                 display_text: "######Link to figure",
             },
             Reference {
+                path: "tests/data/vaults/tt/Note 1.md",
                 range: 2297..2318,
                 dest: "####Link to figure",
                 kind: WikiLink,
                 display_text: "####Link to figure",
             },
             Reference {
+                path: "tests/data/vaults/tt/Note 1.md",
                 range: 2348..2368,
                 dest: "###Link to figure",
                 kind: WikiLink,
                 display_text: "###Link to figure",
             },
             Reference {
+                path: "tests/data/vaults/tt/Note 1.md",
                 range: 2396..2414,
                 dest: "#Link to figure",
                 kind: WikiLink,
                 display_text: "#Link to figure",
             },
             Reference {
+                path: "tests/data/vaults/tt/Note 1.md",
                 range: 2447..2459,
                 dest: "#L2 ",
                 kind: WikiLink,
                 display_text: " #L4",
             },
             Reference {
+                path: "tests/data/vaults/tt/Note 1.md",
                 range: 2554..2571,
                 dest: "Note 2 ",
                 kind: WikiLink,
                 display_text: " 2 | 3",
             },
             Reference {
+                path: "tests/data/vaults/tt/Note 1.md",
                 range: 2672..2683,
                 dest: "###L2#L4",
                 kind: WikiLink,
                 display_text: "###L2#L4",
             },
             Reference {
+                path: "tests/data/vaults/tt/Note 1.md",
                 range: 2743..2758,
                 dest: "##L2######L4",
                 kind: WikiLink,
                 display_text: "##L2######L4",
             },
             Reference {
+                path: "tests/data/vaults/tt/Note 1.md",
                 range: 2817..2831,
                 dest: "##L2#####L4",
                 kind: WikiLink,
                 display_text: "##L2#####L4",
             },
             Reference {
+                path: "tests/data/vaults/tt/Note 1.md",
                 range: 2893..2910,
                 dest: "##L2#####L4#L3",
                 kind: WikiLink,
                 display_text: "##L2#####L4#L3",
             },
             Reference {
+                path: "tests/data/vaults/tt/Note 1.md",
                 range: 2966..2991,
                 dest: "##L2#####L4#Another L3",
                 kind: WikiLink,
                 display_text: "##L2#####L4#Another L3",
             },
             Reference {
+                path: "tests/data/vaults/tt/Note 1.md",
                 range: 3332..3349,
                 dest: "##L2######L4",
                 kind: MarkdownLink,
                 display_text: "1",
             },
             Reference {
+                path: "tests/data/vaults/tt/Note 1.md",
                 range: 3408..3424,
                 dest: "##L2#####L4",
                 kind: MarkdownLink,
                 display_text: "2",
             },
             Reference {
+                path: "tests/data/vaults/tt/Note 1.md",
                 range: 3486..3505,
                 dest: "##L2#####L4#L3",
                 kind: MarkdownLink,
                 display_text: "3",
             },
             Reference {
+                path: "tests/data/vaults/tt/Note 1.md",
                 range: 3577..3591,
                 dest: "Figure1.jpg",
                 kind: WikiLink,
                 display_text: "Figure1.jpg",
             },
             Reference {
+                path: "tests/data/vaults/tt/Note 1.md",
                 range: 3700..3716,
                 dest: "Figure1.jpg#2",
                 kind: WikiLink,
                 display_text: "Figure1.jpg#2",
             },
             Reference {
+                path: "tests/data/vaults/tt/Note 1.md",
                 range: 3762..3780,
                 dest: "Figure1.jpg ",
                 kind: WikiLink,
                 display_text: " 2",
             },
             Reference {
+                path: "tests/data/vaults/tt/Note 1.md",
                 range: 3867..3884,
                 dest: "Figure1.jpg.md",
                 kind: WikiLink,
                 display_text: "Figure1.jpg.md",
             },
             Reference {
+                path: "tests/data/vaults/tt/Note 1.md",
                 range: 3975..3995,
                 dest: "Figure1.jpg.md.md",
                 kind: WikiLink,
                 display_text: "Figure1.jpg.md.md",
             },
             Reference {
+                path: "tests/data/vaults/tt/Note 1.md",
                 range: 4020..4036,
                 dest: "Figure1#2.jpg",
                 kind: WikiLink,
                 display_text: "Figure1#2.jpg",
             },
             Reference {
+                path: "tests/data/vaults/tt/Note 1.md",
                 range: 4159..4175,
                 dest: "Figure1",
                 kind: WikiLink,
                 display_text: "2.jpg",
             },
             Reference {
+                path: "tests/data/vaults/tt/Note 1.md",
                 range: 4298..4314,
                 dest: "Figure1^2.jpg",
                 kind: WikiLink,
                 display_text: "Figure1^2.jpg",
             },
             Reference {
+                path: "tests/data/vaults/tt/Note 1.md",
                 range: 4424..4431,
                 dest: "dir/",
                 kind: WikiLink,
                 display_text: "dir/",
             },
             Reference {
+                path: "tests/data/vaults/tt/Note 1.md",
                 range: 4861..4895,
                 dest: "dir/inner_dir/note_in_inner_dir",
                 kind: WikiLink,
                 display_text: "dir/inner_dir/note_in_inner_dir",
             },
             Reference {
+                path: "tests/data/vaults/tt/Note 1.md",
                 range: 4935..4965,
                 dest: "inner_dir/note_in_inner_dir",
                 kind: WikiLink,
                 display_text: "inner_dir/note_in_inner_dir",
             },
             Reference {
+                path: "tests/data/vaults/tt/Note 1.md",
                 range: 4999..5023,
                 dest: "dir/note_in_inner_dir",
                 kind: WikiLink,
                 display_text: "dir/note_in_inner_dir",
             },
             Reference {
+                path: "tests/data/vaults/tt/Note 1.md",
                 range: 5095..5122,
                 dest: "random/note_in_inner_dir",
                 kind: WikiLink,
                 display_text: "random/note_in_inner_dir",
             },
             Reference {
+                path: "tests/data/vaults/tt/Note 1.md",
                 range: 5263..5278,
                 dest: "inner_dir/hi",
                 kind: WikiLink,
                 display_text: "inner_dir/hi",
             },
             Reference {
+                path: "tests/data/vaults/tt/Note 1.md",
                 range: 5309..5331,
                 dest: "dir/indir_same_name",
                 kind: WikiLink,
                 display_text: "dir/indir_same_name",
             },
             Reference {
+                path: "tests/data/vaults/tt/Note 1.md",
                 range: 5358..5376,
                 dest: "indir_same_name",
                 kind: WikiLink,
                 display_text: "indir_same_name",
             },
             Reference {
+                path: "tests/data/vaults/tt/Note 1.md",
                 range: 5446..5455,
                 dest: "indir2",
                 kind: WikiLink,
                 display_text: "indir2",
             },
             Reference {
+                path: "tests/data/vaults/tt/Note 1.md",
                 range: 5502..5514,
                 dest: "Something",
                 kind: WikiLink,
                 display_text: "Something",
             },
             Reference {
+                path: "tests/data/vaults/tt/Note 1.md",
                 range: 5631..5659,
                 dest: "unsupported_text_file.txt",
                 kind: WikiLink,
                 display_text: "unsupported_text_file.txt",
             },
             Reference {
+                path: "tests/data/vaults/tt/Note 1.md",
                 range: 5740..5757,
                 dest: "a.joiwduvqneoi",
                 kind: WikiLink,
                 display_text: "a.joiwduvqneoi",
             },
             Reference {
+                path: "tests/data/vaults/tt/Note 1.md",
                 range: 5793..5802,
                 dest: "Note 1",
                 kind: WikiLink,
                 display_text: "Note 1",
             },
             Reference {
+                path: "tests/data/vaults/tt/Note 1.md",
                 range: 5896..5911,
                 dest: "Figure1.jpg",
                 kind: WikiLink,
                 display_text: "Figure1.jpg",
             },
             Reference {
+                path: "tests/data/vaults/tt/Note 1.md",
                 range: 5936..5954,
                 dest: "empty_video.mp4",
                 kind: WikiLink,
