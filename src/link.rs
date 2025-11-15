@@ -622,7 +622,7 @@ fn resolve_nested_headings<'a>(
 /// Return a tuple of matched links and unresolved references.
 ///
 /// - If heading reference is not found, fallback to note / asset reference.
-///     - Yes a reference to figure's heading is allowed. The heading part gets ignored.
+///   - a reference to figure's heading is allowed but the heading part gets ignored.
 fn build_links(
     references: Vec<Reference>,
     referenceable: Vec<Referenceable>,
@@ -645,12 +645,16 @@ fn build_links(
         let (file_name, nested_headings_opt, block_identifier_opt) =
             split_dest_string(dest);
         let matched_path_opt = resolve_link(file_name, &referenceable_paths);
+
+        // If path is found
         if let Some(matched_path) = matched_path_opt {
             let file_referenceable =
                 path_referenceable_map.get(&matched_path).unwrap();
 
+            // If the matched file is a note
             if let Referenceable::Note { children, .. } = file_referenceable {
-                let matched_in_note_children: Option<Referenceable> = match (
+                // We see if there's heading or block identifier in the reference
+                let matched_in_note_child: Option<Referenceable> = match (
                     nested_headings_opt,
                     block_identifier_opt,
                 ) {
@@ -673,6 +677,15 @@ fn build_links(
                         None
                     }
                 };
+
+                if let Some(in_note) = matched_in_note_child {
+                    let link = Link {
+                        from: reference,
+                        to: in_note.clone(),
+                    };
+                    links.push(link);
+                    continue;
+                }
             }
 
             let link = Link {
