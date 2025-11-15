@@ -112,37 +112,26 @@ fn extract_heading_nodes_from_ast_node(
 ) {
     for child in node.children.iter() {
         if let NodeKind::Heading { level, .. } = child.kind {
-            match &child.children[..] {
-                [
-                    ASTNode {
-                        kind: NodeKind::Text(text),
-                        ..
-                    },
-                ] => {
-                    let entry = Heading {
-                        level,
-                        text: text.to_string(),
-                        start_byte: child.start_byte,
-                        end_byte: child.end_byte,
-                        start_point: child.start_point,
-                        end_point: child.end_point,
-                    };
-                    acc_heading_nodes.push(Node::Heading(entry));
-                }
-                [] => {
-                    // Empty heading
-                    let entry = Heading {
-                        level,
-                        text: "".to_string(),
-                        start_byte: child.start_byte,
-                        end_byte: child.end_byte,
-                        start_point: child.start_point,
-                        end_point: child.end_point,
-                    };
-                    acc_heading_nodes.push(Node::Heading(entry));
-                }
-                _ => unreachable!("Never: Heading without inner text"),
-            }
+            let text = child
+                .children
+                .iter()
+                .filter_map(|child| match &child.kind {
+                    NodeKind::Text(text) => Some(text.as_ref()),
+                    NodeKind::Code(code) => Some(code.as_ref()),
+                    _ => None,
+                })
+                .collect::<Vec<&str>>()
+                .join("");
+
+            let entry = Heading {
+                level,
+                text,
+                start_byte: child.start_byte,
+                end_byte: child.end_byte,
+                start_point: child.start_point,
+                end_point: child.end_point,
+            };
+            acc_heading_nodes.push(Node::Heading(entry));
         } else {
             child.children.iter().for_each(|c| {
                 extract_heading_nodes_from_ast_node(c, acc_heading_nodes)
