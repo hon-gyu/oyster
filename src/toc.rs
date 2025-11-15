@@ -29,8 +29,9 @@ impl TOCEntry {
 }
 
 impl TOC {
-    /// Convert the TOC to a `ptree::Tree`
-    /// #implmented_by_AI
+    /// Convert the TOC to a `ptree::Tree`, useful for debugging
+    ///
+    /// Note: this is implmented by LLM
     pub fn to_tree(&self) -> TreeBuilder {
         let mut builder = TreeBuilder::new("TOC".to_string());
 

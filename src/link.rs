@@ -89,6 +89,9 @@ fn percent_encode(url: &str) -> String {
     .replace("%2F", "/") // Preserve / for file paths
 }
 
+// Scan a note and return a tuple of references and in-note referenceables
+//
+// Post-condition: the in-note referenceables are in order
 pub fn scan_note(path: &PathBuf) -> (Vec<Reference>, Vec<Referenceable>) {
     let text = fs::read_to_string(path).unwrap();
     if text.is_empty() {
@@ -422,7 +425,7 @@ fn resolve_link(needle: &str, haystack: &Vec<PathBuf>) -> Option<PathBuf> {
 ///
 /// Returns the path of dir to create and the path note to create.
 ///
-/// Invariant: the path of dir to create, if exists, is a parent of the path of note to create.
+/// Post-condition: the path of dir to create, if exists, is a parent of the path of note to create.
 pub fn resolve_new_note_path(
     name: &str,
     paths: &Vec<PathBuf>,
@@ -500,7 +503,7 @@ fn build_links(
 
     for reference in references {
         let dest = reference.dest.as_str();
-        let (file_name, nested_headings, block_identifier) =
+        let (file_name, nested_headings_opt, block_identifier_opt) =
             split_dest_string(dest);
         let matched_path_opt = resolve_link(file_name, &referenceable_paths);
         if let Some(matched_path) = matched_path_opt {
@@ -508,8 +511,29 @@ fn build_links(
                 path_referenceable_map.get(&matched_path).unwrap();
 
             if let Referenceable::Note { children, .. } = file_referenceable {
-                todo!("resolve nested headings");
-                todo!("resolve block references");
+                let matched_in_note_children: Option<Referenceable> = match (
+                    nested_headings_opt,
+                    block_identifier_opt,
+                ) {
+                    (None, None) => None,
+                    (Some(_), Some(_)) => unreachable!(
+                        "Never: nested headings and block identifier should not be present at the same time"
+                    ),
+                    (Some(nested_headings), None) => {
+                        let headings = children
+                            .iter()
+                            .filter(|r| match r {
+                                Referenceable::Heading { .. } => true,
+                                _ => false,
+                            })
+                            .collect::<Vec<_>>();
+                        todo!("resolve nested headings")
+                    }
+                    (None, Some(block_identifier)) => {
+                        // TODO: resolve block references
+                        None
+                    }
+                };
             }
 
             let link = Link {
