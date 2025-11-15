@@ -22,7 +22,44 @@ pub enum Node {
     Heading(Heading),
 }
 
-impl Node {
+trait HasLevel {
+    fn get_level(&self) -> usize;
+
+    fn build_tree(root_node: Self, nodes: Vec<Self>) -> Tree<Self>
+    where
+        Self: Sized,
+    {
+        let mut tree = Tree::new(root_node);
+
+        // Use a stack of node IDs instead of mutable references
+        let mut stack: Vec<ego_tree::NodeId> = vec![tree.root().id()];
+
+        for node in nodes {
+            let curr_level = node.get_level();
+
+            // Pop stack until we find a parent with level < current level
+            while stack.len() > 1 {
+                let parent_id = *stack.last().unwrap();
+                let parent_level =
+                    tree.get(parent_id).unwrap().value().get_level();
+
+                if parent_level < curr_level {
+                    break;
+                }
+                stack.pop();
+            }
+            let parent_id = *stack.last().unwrap();
+
+            // Append the node to the current parent
+            let new_node_id =
+                tree.get_mut(parent_id).unwrap().append(node).id();
+            stack.push(new_node_id);
+        }
+        tree
+    }
+}
+
+impl HasLevel for Node {
     fn get_level(&self) -> usize {
         match self {
             Node::Heading(h) => h.level as usize,
@@ -64,32 +101,7 @@ pub fn build_heading_hierarchy(tree: &ASTTree) -> Hierarchy {
     let mut nodes: Vec<Node> = vec![];
     extract_heading_nodes_from_ast_node(root_node, &mut nodes);
 
-    let mut heading_tree = Tree::new(Node::Root);
-
-    // Use a stack of node IDs instead of mutable references
-    let mut stack: Vec<ego_tree::NodeId> = vec![heading_tree.root().id()];
-
-    for node in nodes {
-        let curr_level = node.get_level();
-
-        // Pop stack until we find a parent with level < current level
-        while stack.len() > 1 {
-            let parent_id = *stack.last().unwrap();
-            let parent_level =
-                heading_tree.get(parent_id).unwrap().value().get_level();
-
-            if parent_level < curr_level {
-                break;
-            }
-            stack.pop();
-        }
-        let parent_id = *stack.last().unwrap();
-
-        // Append the node to the current parent
-        let new_node_id =
-            heading_tree.get_mut(parent_id).unwrap().append(node).id();
-        stack.push(new_node_id);
-    }
+    let heading_tree = HasLevel::build_tree(Node::Root, nodes);
 
     Hierarchy(heading_tree)
 }

@@ -272,8 +272,8 @@ fn scan_dir_for_assets_and_notes(dir: &Path) -> Vec<Referenceable> {
 /// in-note referenceables stored in note's children
 ///
 /// Returns:
-///     - referenceables: all referenceables
-///     - references: note references and asset references
+///   - referenceables: all referenceables
+///   - references: note references and asset references
 fn scan_vault(dir: &Path) -> (Vec<Referenceable>, Vec<Reference>) {
     let mut file_referenceables = scan_dir_for_assets_and_notes(dir);
     let mut all_references = Vec::<Reference>::new();
@@ -2537,43 +2537,4 @@ mod tests {
           Heading { level: H2, id: None, classes: [], attrs: [] } [5999..6003]
         "########);
     }
-
-    // let dir = PathBuf::from("tests/data/vaults/tt");
-    // let (referenceables, references) = scan_vault(&dir);
-    // let paths = referenceables
-    //     .iter()
-    //     .filter(|&r| match r {
-    //         Referenceable::Note { .. } => true,
-    //         Referenceable::Asset { .. } => true,
-    //         _ => false,
-    //     })
-    //     .map(|r| r.path().strip_prefix(&dir).unwrap())
-    //     .collect::<Vec<_>>();
-    // let mut s = String::new();
-    // for path in paths {
-    //     s.push_str(&format!("\"{}\",\n", path.display()));
-    // }
-    // assert_snapshot!(s, @r#"
-    // "Note 1.md",
-    // "Three laws of motion.md",
-    // "indir_same_name.md",
-    // "ww.md",
-    // "Figure 1.jpg.md",
-    // "Figure 1.jpg",
-    // "().md",
-    // "Figure1#2.jpg",
-    // "Figure 1.jpg.md.md",
-    // "dir.md",
-    // "empty_video.mp4",
-    // "Hi.txt.md",
-    // "block note.md",
-    // "dir/indir_same_name.md",
-    // "dir/indir2.md",
-    // "unsupported_text_file.txt",
-    // "unsupported.unsupported",
-    // "Figure1.md",
-    // "Figure1^2.jpg",
-    // "Note 2.md",
-    // "Figure1|2.jpg",
-    // "#);
 }
