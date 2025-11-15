@@ -5,6 +5,8 @@
 ///     - notes: markdown files
 ///     - assets other than notes: images, videos, audios, PDFs, etc.
 use crate::ast::{Node, NodeKind, Tree};
+use crate::heading::HasLevel;
+use ego_tree::iter::Edge;
 use pulldown_cmark::{HeadingLevel, LinkType};
 use std::collections::HashMap;
 use std::fs;
@@ -23,6 +25,7 @@ pub enum Referenceable {
     Heading {
         path: PathBuf,
         level: HeadingLevel,
+        text: String,
         range: Range<usize>,
     },
     Block {
@@ -197,9 +200,22 @@ fn extract_reference_and_referenceable(
         }
         // Referenceable
         NodeKind::Heading { level, .. } => {
+            // Extract text from heading's children (can be Text, Code, etc.)
+            let text = node
+                .children
+                .iter()
+                .filter_map(|child| match &child.kind {
+                    NodeKind::Text(text) => Some(text.as_ref()),
+                    NodeKind::Code(code) => Some(code.as_ref()),
+                    _ => None,
+                })
+                .collect::<Vec<&str>>()
+                .join("");
+
             let referenceable = Referenceable::Heading {
                 path: path.clone(),
                 level: level.clone(),
+                text,
                 range: node.byte_range().clone(),
             };
             referenceables.push(referenceable);
@@ -435,7 +451,7 @@ fn resolve_link(needle: &str, haystack: &Vec<PathBuf>) -> Option<PathBuf> {
 /// Returns:
 /// - `(parent_dir, note_path)`: the parent directory to create if any, the path of note to create
 ///
-/// [LLM]: this function is implemented by LLM using TDD
+/// #LLM: this function is implemented by LLM using TDD
 ///
 /// - Parse dir and file name from the destination string first
 /// - remove `\` and `/`
@@ -497,6 +513,111 @@ pub fn resolve_new_note_path(
     (parent.map(|p| p.to_path_buf()), note_path)
 }
 
+/// Resolve nested headings using subsequence matching with backtracking.
+///
+/// Given a list of heading referenceables (in document order) and a sequence of nested
+/// heading texts to match, finds the first valid match that forms a proper hierarchy.
+///
+/// Uses backtracking to try all possible subsequence matches until finding one where
+/// each heading level is strictly greater than the previous (forming a valid parent-child
+/// hierarchy). This handles cases where identical heading names appear multiple times.
+///
+/// Returns the matched heading referenceable, or None if no valid match is found.
+///
+/// Example:
+/// If headings in doc are: H2(L2), H4(L4), H3(L3), H2(L2), H4(L3), H3(L4)
+/// - ["L2", "L4"] matches the first H4(L4) at index 1
+/// - ["L2", "L3", "L4"] matches H3(L4) at index 5 (skips first invalid L2→L4→L3)
+/// - ["L2", "L4", "L3"] returns None (no valid hierarchy exists)
+fn resolve_nested_headings<'a>(
+    headings: &[&'a Referenceable],
+    nested_headings: &[&str],
+) -> Option<Referenceable> {
+    if nested_headings.is_empty() {
+        return None;
+    }
+
+    // Extract heading texts in order
+    let heading_texts: Vec<&str> = headings
+        .iter()
+        .filter_map(|r| match r {
+            Referenceable::Heading { text, .. } => Some(text.as_str()),
+            _ => None,
+        })
+        .collect();
+
+    // Try to find all possible subsequence matches using backtracking
+    fn find_valid_match<'a>(
+        headings: &[&'a Referenceable],
+        heading_texts: &[&str],
+        nested_headings: &[&str],
+        start_idx: usize,
+        depth: usize,
+        current_matches: &mut Vec<usize>,
+    ) -> Option<usize> {
+        // Base case: we've matched all nested headings
+        if depth == nested_headings.len() {
+            // Verify this match forms a valid hierarchy
+            for i in 1..current_matches.len() {
+                let prev_idx = current_matches[i - 1];
+                let curr_idx = current_matches[i];
+
+                if let (
+                    Referenceable::Heading {
+                        level: prev_level, ..
+                    },
+                    Referenceable::Heading {
+                        level: curr_level, ..
+                    },
+                ) = (headings[prev_idx], headings[curr_idx])
+                {
+                    if (*curr_level as usize) <= (*prev_level as usize) {
+                        // Invalid hierarchy - try another match
+                        return None;
+                    }
+                }
+            }
+            // Valid hierarchy found - return the last matched index
+            return Some(*current_matches.last().unwrap());
+        }
+
+        let target = nested_headings[depth];
+
+        // Try to find the target heading starting from start_idx
+        for i in start_idx..heading_texts.len() {
+            if heading_texts[i] == target {
+                current_matches.push(i);
+                if let Some(result) = find_valid_match(
+                    headings,
+                    heading_texts,
+                    nested_headings,
+                    i + 1,
+                    depth + 1,
+                    current_matches,
+                ) {
+                    return Some(result);
+                }
+                current_matches.pop();
+            }
+        }
+
+        None
+    }
+
+    let mut current_matches = Vec::new();
+    let last_match_idx = find_valid_match(
+        headings,
+        &heading_texts,
+        nested_headings,
+        0,
+        0,
+        &mut current_matches,
+    )?;
+
+    // Return the heading at the last matched index
+    headings.get(last_match_idx).map(|r| (*r).clone())
+}
+
 /// Builds links from references and referenceables.
 /// Return a tuple of matched links and unresolved references.
 ///
@@ -545,7 +666,7 @@ fn build_links(
                                 _ => false,
                             })
                             .collect::<Vec<_>>();
-                        todo!("resolve nested headings")
+                        resolve_nested_headings(&headings, &nested_headings)
                     }
                     (None, Some(block_identifier)) => {
                         // TODO: resolve block references
@@ -841,6 +962,188 @@ mod tests {
         |  59 | empty_video.mp4                         | empty_video.mp4                 | -                                |
         +-----+-----------------------------------------+---------------------------------+----------------------------------+
         ");
+    }
+
+    mod resolve_nested_headings {
+        use super::*;
+
+        /// Helper to create a list of headings from (level, text) tuples.
+        /// Automatically assigns sequential ranges for each heading.
+        fn headings(specs: &[(HeadingLevel, &str)]) -> Vec<Referenceable> {
+            specs
+                .iter()
+                .enumerate()
+                .map(|(i, (level, text))| {
+                    let start = i * 10;
+                    let end = start + 10;
+                    Referenceable::Heading {
+                        path: PathBuf::from("test.md"),
+                        level: *level,
+                        text: text.to_string(),
+                        range: start..end,
+                    }
+                })
+                .collect()
+        }
+
+        #[test]
+        fn test_simple_match() {
+            let hs = headings(&[
+                (HeadingLevel::H1, "Chapter 1"),
+                (HeadingLevel::H2, "Section 1.1"),
+            ]);
+            let refs: Vec<_> = hs.iter().collect();
+
+            let result = super::resolve_nested_headings(
+                &refs,
+                &["Chapter 1", "Section 1.1"],
+            );
+            assert_eq!(result, Some(hs[1].clone()));
+        }
+
+        #[test]
+        fn test_invalid_hierarchy_returns_none() {
+            let hs = headings(&[
+                (HeadingLevel::H1, "Chapter 1"),
+                (HeadingLevel::H3, "Section 1.1.1"),
+                (HeadingLevel::H2, "Section 2.1"),
+            ]);
+            let refs: Vec<_> = hs.iter().collect();
+
+            let result = super::resolve_nested_headings(
+                &refs,
+                &["Chapter 1", "Section 1.1.1", "Section 2.1"],
+            );
+            assert_eq!(result, None);
+        }
+
+        #[test]
+        fn test_duplicate_names_finds_valid_match() {
+            // First match attempt: Chapter 1 → Section 1.2 → Section 1.1 (invalid: H4→H3)
+            // Second match: Chapter 1 → Section 1.1 → Section 1.1.1 (valid: H2→H3→H4)
+            let hs = headings(&[
+                (HeadingLevel::H1, "1"),
+                (HeadingLevel::H3, "1.1"),
+                (HeadingLevel::H2, "1.1.1"),
+                (HeadingLevel::H1, "1"),
+                (HeadingLevel::H2, "1.1"),
+                (HeadingLevel::H3, "1.1.1"),
+            ]);
+            let refs: Vec<_> = hs.iter().collect();
+
+            let result =
+                super::resolve_nested_headings(&refs, &["1", "1.1", "1.1.1"]);
+            assert_eq!(result, Some(hs[5].clone()));
+        }
+
+        #[test]
+        fn test_first_valid_match_is_returned() {
+            // Both matches are valid; should return the first one
+            let hs = headings(&[
+                (HeadingLevel::H1, "Chapter 1"),
+                (HeadingLevel::H2, "Section 1.1"),
+                (HeadingLevel::H1, "Chapter 1"),
+                (HeadingLevel::H2, "Section 1.1"),
+            ]);
+            let refs: Vec<_> = hs.iter().collect();
+
+            let result = super::resolve_nested_headings(
+                &refs,
+                &["Chapter 1", "Section 1.1"],
+            );
+            assert_eq!(result, Some(hs[1].clone()));
+        }
+
+        #[test]
+        fn test_single_heading() {
+            let hs = headings(&[(HeadingLevel::H1, "Chapter 1")]);
+            let refs: Vec<_> = hs.iter().collect();
+
+            let result = super::resolve_nested_headings(&refs, &["Chapter 1"]);
+            assert_eq!(result, Some(hs[0].clone()));
+        }
+
+        #[test]
+        fn test_no_match() {
+            let hs = headings(&[
+                (HeadingLevel::H1, "Chapter 1"),
+                (HeadingLevel::H2, "Section 1.1"),
+            ]);
+            let refs: Vec<_> = hs.iter().collect();
+
+            let result = super::resolve_nested_headings(
+                &refs,
+                &["Chapter 1", "Section 1.2"],
+            );
+            assert_eq!(result, None);
+        }
+
+        #[test]
+        fn test_empty_nested_headings() {
+            let hs = headings(&[(HeadingLevel::H1, "Chapter 1")]);
+            let refs: Vec<_> = hs.iter().collect();
+
+            let result = super::resolve_nested_headings(&refs, &[]);
+            assert_eq!(result, None);
+        }
+
+        #[test]
+        fn test_deep_hierarchy() {
+            let hs = headings(&[
+                (HeadingLevel::H1, "Part 1"),
+                (HeadingLevel::H2, "Chapter 1.1"),
+                (HeadingLevel::H3, "Section 1.1.1"),
+                (HeadingLevel::H4, "Subsection 1.1.1.1"),
+                (HeadingLevel::H5, "Paragraph 1.1.1.1.1"),
+                (HeadingLevel::H6, "Subparagraph 1.1.1.1.1.1"),
+            ]);
+            let refs: Vec<_> = hs.iter().collect();
+
+            let result = super::resolve_nested_headings(
+                &refs,
+                &[
+                    "Part 1",
+                    "Section 1.1.1",
+                    "Paragraph 1.1.1.1.1",
+                    "Subparagraph 1.1.1.1.1.1",
+                ],
+            );
+            assert_eq!(result, Some(hs[5].clone()));
+        }
+
+        #[test]
+        fn test_same_level_headings_no_match() {
+            let hs = headings(&[
+                (HeadingLevel::H1, "Chapter 1"),
+                (HeadingLevel::H1, "Chapter 2"),
+            ]);
+            let refs: Vec<_> = hs.iter().collect();
+
+            let result = super::resolve_nested_headings(
+                &refs,
+                &["Chapter 1", "Chapter 2"],
+            );
+            assert_eq!(result, None);
+        }
+
+        #[test]
+        fn test_skip_multiple_invalid_matches() {
+            let hs = headings(&[
+                (HeadingLevel::H1, "Chapter 1"),
+                (HeadingLevel::H1, "Chapter 2"),
+                (HeadingLevel::H2, "Section 2.1"),
+                (HeadingLevel::H1, "Chapter 1"),
+                (HeadingLevel::H2, "Section 1.1"),
+                (HeadingLevel::H3, "Section 1.1.1"),
+            ]);
+            let refs: Vec<_> = hs.iter().collect();
+
+            let result = super::resolve_nested_headings(
+                &refs,
+                &["Chapter 1", "Section 1.1", "Section 1.1.1"],
+            );
+            assert_eq!(result, Some(hs[5].clone()));
+        }
     }
 
     mod resolve_new_note_path {
@@ -1353,56 +1656,67 @@ mod tests {
                     Heading {
                         path: "tests/data/vaults/tt/Note 1.md",
                         level: H3,
+                        text: "Level 3 title",
                         range: 55..73,
                     },
                     Heading {
                         path: "tests/data/vaults/tt/Note 1.md",
                         level: H4,
+                        text: "Level 4 title",
                         range: 73..92,
                     },
                     Heading {
                         path: "tests/data/vaults/tt/Note 1.md",
                         level: H3,
+                        text: "Example (level 3)",
                         range: 93..115,
                     },
                     Heading {
                         path: "tests/data/vaults/tt/Note 1.md",
                         level: H6,
+                        text: "Markdown link: [x](y)",
                         range: 116..147,
                     },
                     Heading {
                         path: "tests/data/vaults/tt/Note 1.md",
                         level: H6,
+                        text: "Wiki link: [[x#]] | [[x#^block_identifier]]",
                         range: 887..942,
                     },
                     Heading {
                         path: "tests/data/vaults/tt/Note 1.md",
                         level: H5,
+                        text: "Link to asset",
                         range: 3536..3556,
                     },
                     Heading {
                         path: "tests/data/vaults/tt/Note 1.md",
                         level: H2,
+                        text: "L2",
                         range: 5957..5963,
                     },
                     Heading {
                         path: "tests/data/vaults/tt/Note 1.md",
                         level: H3,
+                        text: "L3",
                         range: 5964..5971,
                     },
                     Heading {
                         path: "tests/data/vaults/tt/Note 1.md",
                         level: H4,
+                        text: "L4",
                         range: 5971..5979,
                     },
                     Heading {
                         path: "tests/data/vaults/tt/Note 1.md",
                         level: H3,
+                        text: "Another L3",
                         range: 5979..5994,
                     },
                     Heading {
                         path: "tests/data/vaults/tt/Note 1.md",
                         level: H2,
+                        text: "",
                         range: 5999..6003,
                     },
                 ],
@@ -1496,11 +1810,13 @@ mod tests {
                     Heading {
                         path: "tests/data/vaults/tt/block ref.md",
                         level: H6,
+                        text: "L6",
                         range: 179..189,
                     },
                     Heading {
                         path: "tests/data/vaults/tt/block ref.md",
                         level: H6,
+                        text: "^1 dwad",
                         range: 219..233,
                     },
                 ],
@@ -1511,21 +1827,25 @@ mod tests {
                     Heading {
                         path: "tests/data/vaults/tt/Note 2.md",
                         level: H2,
+                        text: "Some level 2 title",
                         range: 1..23,
                     },
                     Heading {
                         path: "tests/data/vaults/tt/Note 2.md",
                         level: H4,
+                        text: "L4",
                         range: 24..32,
                     },
                     Heading {
                         path: "tests/data/vaults/tt/Note 2.md",
                         level: H3,
+                        text: "Level 3 title",
                         range: 33..51,
                     },
                     Heading {
                         path: "tests/data/vaults/tt/Note 2.md",
                         level: H2,
+                        text: "Another level 2 title",
                         range: 53..77,
                     },
                 ],
@@ -1911,56 +2231,67 @@ mod tests {
             Heading {
                 path: "tests/data/vaults/tt/Note 1.md",
                 level: H3,
+                text: "Level 3 title",
                 range: 55..73,
             },
             Heading {
                 path: "tests/data/vaults/tt/Note 1.md",
                 level: H4,
+                text: "Level 4 title",
                 range: 73..92,
             },
             Heading {
                 path: "tests/data/vaults/tt/Note 1.md",
                 level: H3,
+                text: "Example (level 3)",
                 range: 93..115,
             },
             Heading {
                 path: "tests/data/vaults/tt/Note 1.md",
                 level: H6,
+                text: "Markdown link: [x](y)",
                 range: 116..147,
             },
             Heading {
                 path: "tests/data/vaults/tt/Note 1.md",
                 level: H6,
+                text: "Wiki link: [[x#]] | [[x#^block_identifier]]",
                 range: 887..942,
             },
             Heading {
                 path: "tests/data/vaults/tt/Note 1.md",
                 level: H5,
+                text: "Link to asset",
                 range: 3536..3556,
             },
             Heading {
                 path: "tests/data/vaults/tt/Note 1.md",
                 level: H2,
+                text: "L2",
                 range: 5957..5963,
             },
             Heading {
                 path: "tests/data/vaults/tt/Note 1.md",
                 level: H3,
+                text: "L3",
                 range: 5964..5971,
             },
             Heading {
                 path: "tests/data/vaults/tt/Note 1.md",
                 level: H4,
+                text: "L4",
                 range: 5971..5979,
             },
             Heading {
                 path: "tests/data/vaults/tt/Note 1.md",
                 level: H3,
+                text: "Another L3",
                 range: 5979..5994,
             },
             Heading {
                 path: "tests/data/vaults/tt/Note 1.md",
                 level: H2,
+                text: "",
                 range: 5999..6003,
             },
         ]

@@ -22,7 +22,7 @@ pub enum Node {
     Heading(Heading),
 }
 
-trait HasLevel {
+pub trait HasLevel {
     fn get_level(&self) -> usize;
 
     fn build_tree(root_node: Self, nodes: Vec<Self>) -> Tree<Self>
