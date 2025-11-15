@@ -294,19 +294,29 @@ fn scan_vault(dir: &Path) -> (Vec<Referenceable>, Vec<Reference>) {
     (file_referenceables_with_children, all_references)
 }
 
-/// Splits a destination string into two parts: the file name and nested headings
-fn split_dest_string(s: &str) -> (&str, Vec<&str>) {
+/// Splits a destination string into two parts: the file name, and nested headings or block identifier
+fn split_dest_string(s: &str) -> (&str, Option<Vec<&str>>, Option<&str>) {
     let hash_pos = s.find('#');
 
+    // No hash
     if hash_pos.is_none() {
-        return (s, Vec::new());
+        return (s, None, None);
     }
 
     let hash_pos = hash_pos.unwrap();
     let file_name = &s[..hash_pos];
-    let hs = &s[hash_pos + 1..];
+    let after_fst_hash = &s[hash_pos + 1..];
 
-    (file_name, parse_nested_heading(hs))
+    // Check if it's a block reference
+    // A block reference start with `^` and followed by letters and numbers
+    if after_fst_hash.starts_with('^') && after_fst_hash.len() > 1 {
+        let maybe_identifier = &after_fst_hash[1..];
+        if maybe_identifier.chars().all(|c| c.is_ascii_alphanumeric()) {
+            return (file_name, None, Some(maybe_identifier));
+        }
+    }
+
+    (file_name, Some(parse_nested_heading(after_fst_hash)), None)
 }
 
 /// Parse a string into a vector of nested headings.
@@ -490,12 +500,21 @@ fn build_links(
 
     for reference in references {
         let dest = reference.dest.as_str();
-        let (file_name, nested_headings) = split_dest_string(dest);
-        let matched_path = resolve_link(file_name, &referenceable_paths);
-        if matched_path.is_some() {
+        let (file_name, nested_headings, block_identifier) =
+            split_dest_string(dest);
+        let matched_path_opt = resolve_link(file_name, &referenceable_paths);
+        if let Some(matched_path) = matched_path_opt {
+            let file_referenceable =
+                path_referenceable_map.get(&matched_path).unwrap();
+
+            if let Referenceable::Note { children, .. } = file_referenceable {
+                todo!("resolve nested headings");
+                todo!("resolve block references");
+            }
+
             let link = Link {
                 from: reference,
-                to: path_referenceable_map[&matched_path.unwrap()].clone(),
+                to: file_referenceable.clone(),
             };
             links.push(link);
         } else {
@@ -694,10 +713,18 @@ mod tests {
             scan_note(&path);
         let dest_strings: Vec<&str> =
             references.iter().map(|r| r.dest.as_str()).collect();
-        let (note_names, nested_headings): (Vec<&str>, Vec<Vec<&str>>) =
-            dest_strings.iter().map(|s| split_dest_string(s)).collect();
-        let nested_headings_str: Vec<String> =
-            nested_headings.iter().map(|v| v.join("#")).collect();
+        let (note_names, nested_headings, block_identifiers): (
+            Vec<&str>,
+            Vec<Option<Vec<&str>>>,
+            Vec<Option<&str>>,
+        ) = dest_strings.iter().map(|s| split_dest_string(s)).collect();
+        let nested_headings_str: Vec<String> = nested_headings
+            .iter()
+            .map(|v| match v {
+                Some(v) => v.join("#"),
+                None => "-".to_string(),
+            })
+            .collect();
         let table = print_table(
             &vec!["Destination string", "Note", "Headings"],
             &vec![
@@ -710,16 +737,16 @@ mod tests {
         +-----+-----------------------------------------+---------------------------------+----------------------------------+
         | Idx |           Destination string            |              Note               |             Headings             |
         +-----+-----------------------------------------+---------------------------------+----------------------------------+
-        |   0 | Three laws of motion                    | Three laws of motion            |                                  |
+        |   0 | Three laws of motion                    | Three laws of motion            | -                                |
         |   1 | #Level 3 title                          |                                 | Level 3 title                    |
         |   2 | Note 2#Some level 2 title               | Note 2                          | Some level 2 title               |
-        |   3 | ()                                      | ()                              |                                  |
-        |   4 | ww                                      | ww                              |                                  |
-        |   5 | ()                                      | ()                              |                                  |
-        |   6 | Three laws of motion                    | Three laws of motion            |                                  |
-        |   7 | Three laws of motion                    | Three laws of motion            |                                  |
-        |   8 | Three laws of motion.md                 | Three laws of motion.md         |                                  |
-        |   9 | Note 2                                  | Note 2                          |                                  |
+        |   3 | ()                                      | ()                              | -                                |
+        |   4 | ww                                      | ww                              | -                                |
+        |   5 | ()                                      | ()                              | -                                |
+        |   6 | Three laws of motion                    | Three laws of motion            | -                                |
+        |   7 | Three laws of motion                    | Three laws of motion            | -                                |
+        |   8 | Three laws of motion.md                 | Three laws of motion.md         | -                                |
+        |   9 | Note 2                                  | Note 2                          | -                                |
         |  10 | #Level 3 title                          |                                 | Level 3 title                    |
         |  11 | #Level 4 title                          |                                 | Level 4 title                    |
         |  12 | #random                                 |                                 | random                           |
@@ -729,7 +756,7 @@ mod tests {
         |  16 | Note 2#Level 3 title                    | Note 2                          | Level 3 title                    |
         |  17 | Note 2#L4                               | Note 2                          | L4                               |
         |  18 | Note 2#Some level 2 title#L4            | Note 2                          | Some level 2 title#L4            |
-        |  19 | Non-existing note 4                     | Non-existing note 4             |                                  |
+        |  19 | Non-existing note 4                     | Non-existing note 4             | -                                |
         |  20 | #                                       |                                 |                                  |
         |  21 | Note 2##                                | Note 2                          |                                  |
         |  22 | #######Link to figure                   |                                 | Link to figure                   |
@@ -738,7 +765,7 @@ mod tests {
         |  25 | ###Link to figure                       |                                 | Link to figure                   |
         |  26 | #Link to figure                         |                                 | Link to figure                   |
         |  27 | #L2                                     |                                 | L2                               |
-        |  28 | Note 2                                  | Note 2                          |                                  |
+        |  28 | Note 2                                  | Note 2                          | -                                |
         |  29 | ###L2#L4                                |                                 | L2#L4                            |
         |  30 | ##L2######L4                            |                                 | L2#L4                            |
         |  31 | ##L2#####L4                             |                                 | L2#L4                            |
@@ -747,29 +774,29 @@ mod tests {
         |  34 | ##L2######L4                            |                                 | L2#L4                            |
         |  35 | ##L2#####L4                             |                                 | L2#L4                            |
         |  36 | ##L2#####L4#L3                          |                                 | L2#L4#L3                         |
-        |  37 | Figure1.jpg                             | Figure1.jpg                     |                                  |
+        |  37 | Figure1.jpg                             | Figure1.jpg                     | -                                |
         |  38 | Figure1.jpg#2                           | Figure1.jpg                     | 2                                |
-        |  39 | Figure1.jpg                             | Figure1.jpg                     |                                  |
-        |  40 | Figure1.jpg.md                          | Figure1.jpg.md                  |                                  |
-        |  41 | Figure1.jpg.md.md                       | Figure1.jpg.md.md               |                                  |
+        |  39 | Figure1.jpg                             | Figure1.jpg                     | -                                |
+        |  40 | Figure1.jpg.md                          | Figure1.jpg.md                  | -                                |
+        |  41 | Figure1.jpg.md.md                       | Figure1.jpg.md.md               | -                                |
         |  42 | Figure1#2.jpg                           | Figure1                         | 2.jpg                            |
-        |  43 | Figure1                                 | Figure1                         |                                  |
-        |  44 | Figure1^2.jpg                           | Figure1^2.jpg                   |                                  |
-        |  45 | dir/                                    | dir/                            |                                  |
-        |  46 | dir/inner_dir/note_in_inner_dir         | dir/inner_dir/note_in_inner_dir |                                  |
-        |  47 | inner_dir/note_in_inner_dir             | inner_dir/note_in_inner_dir     |                                  |
-        |  48 | dir/note_in_inner_dir                   | dir/note_in_inner_dir           |                                  |
-        |  49 | random/note_in_inner_dir                | random/note_in_inner_dir        |                                  |
-        |  50 | inner_dir/hi                            | inner_dir/hi                    |                                  |
-        |  51 | dir/indir_same_name                     | dir/indir_same_name             |                                  |
-        |  52 | indir_same_name                         | indir_same_name                 |                                  |
-        |  53 | indir2                                  | indir2                          |                                  |
-        |  54 | Something                               | Something                       |                                  |
-        |  55 | unsupported_text_file.txt               | unsupported_text_file.txt       |                                  |
-        |  56 | a.joiwduvqneoi                          | a.joiwduvqneoi                  |                                  |
-        |  57 | Note 1                                  | Note 1                          |                                  |
-        |  58 | Figure1.jpg                             | Figure1.jpg                     |                                  |
-        |  59 | empty_video.mp4                         | empty_video.mp4                 |                                  |
+        |  43 | Figure1                                 | Figure1                         | -                                |
+        |  44 | Figure1^2.jpg                           | Figure1^2.jpg                   | -                                |
+        |  45 | dir/                                    | dir/                            | -                                |
+        |  46 | dir/inner_dir/note_in_inner_dir         | dir/inner_dir/note_in_inner_dir | -                                |
+        |  47 | inner_dir/note_in_inner_dir             | inner_dir/note_in_inner_dir     | -                                |
+        |  48 | dir/note_in_inner_dir                   | dir/note_in_inner_dir           | -                                |
+        |  49 | random/note_in_inner_dir                | random/note_in_inner_dir        | -                                |
+        |  50 | inner_dir/hi                            | inner_dir/hi                    | -                                |
+        |  51 | dir/indir_same_name                     | dir/indir_same_name             | -                                |
+        |  52 | indir_same_name                         | indir_same_name                 | -                                |
+        |  53 | indir2                                  | indir2                          | -                                |
+        |  54 | Something                               | Something                       | -                                |
+        |  55 | unsupported_text_file.txt               | unsupported_text_file.txt       | -                                |
+        |  56 | a.joiwduvqneoi                          | a.joiwduvqneoi                  | -                                |
+        |  57 | Note 1                                  | Note 1                          | -                                |
+        |  58 | Figure1.jpg                             | Figure1.jpg                     | -                                |
+        |  59 | empty_video.mp4                         | empty_video.mp4                 | -                                |
         +-----+-----------------------------------------+---------------------------------+----------------------------------+
         ");
     }
@@ -1251,16 +1278,28 @@ mod tests {
                 display_text: "empty_video.mp4",
             },
             Reference {
-                range: 50..61,
-                dest: "#^c93d41",
+                range: 43..58,
+                dest: "Note 1#^afon",
                 kind: WikiLink,
-                display_text: "#^c93d41",
+                display_text: "Note 1#^afon",
             },
             Reference {
-                range: 117..126,
-                dest: "#^9afo",
+                range: 60..71,
+                dest: "#^1 dwad",
                 kind: WikiLink,
-                display_text: "#^9afo",
+                display_text: "#^1 dwad",
+            },
+            Reference {
+                range: 73..86,
+                dest: "#^insidel6",
+                kind: WikiLink,
+                display_text: "#^insidel6",
+            },
+            Reference {
+                range: 88..104,
+                dest: "#L6#^insidel6",
+                kind: WikiLink,
+                display_text: "#L6#^insidel6",
             },
         ]
         "########);
@@ -1382,10 +1421,6 @@ mod tests {
                 children: [],
             },
             Note {
-                path: "tests/data/vaults/tt/block note.md",
-                children: [],
-            },
-            Note {
                 path: "tests/data/vaults/tt/dir/inner_dir/note_in_inner_dir.md",
                 children: [],
             },
@@ -1412,6 +1447,21 @@ mod tests {
             },
             Asset {
                 path: "tests/data/vaults/tt/Figure1.jpg",
+            },
+            Note {
+                path: "tests/data/vaults/tt/block ref.md",
+                children: [
+                    Heading {
+                        path: "tests/data/vaults/tt/block ref.md",
+                        level: H6,
+                        range: 179..189,
+                    },
+                    Heading {
+                        path: "tests/data/vaults/tt/block ref.md",
+                        level: H6,
+                        range: 219..233,
+                    },
+                ],
             },
             Note {
                 path: "tests/data/vaults/tt/Note 2.md",
