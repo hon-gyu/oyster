@@ -142,7 +142,7 @@ fn extract_reference_and_referenceable(
                         if let NodeKind::Text(text) = &text_node.kind {
                             text.to_string()
                         } else {
-                            panic!("Never: Wikilink should have text");
+                            unreachable!("Never: Wikilink should have text");
                         }
                     };
                     let reference = Reference {
@@ -170,12 +170,14 @@ fn extract_reference_and_referenceable(
                                 if let NodeKind::Text(text) = &text_node.kind {
                                     text.to_string()
                                 } else {
-                                    panic!("Markdown link should have text");
+                                    unreachable!(
+                                        "Never: Markdown link should have text"
+                                    );
                                 }
                             }
                             [fst, snd, ..] => {
-                                panic!(
-                                    "Markdown link should have at most one child, got \n first: {:?}\n second: {:?}",
+                                unreachable!(
+                                    "Never: Markdown link should have at most one child, got \n first: {:?}\n second: {:?}",
                                     fst, snd,
                                 );
                             }
@@ -343,28 +345,45 @@ pub fn parse_nested_heading(s: &str) -> Vec<&str> {
 ///
 /// Used in file name match and heading match
 ///
+/// Returns the index of last matching item in haystack
+///
 /// Examples
 /// ```
-/// use markdown_tools::link::is_subsequence;
-/// assert!(is_subsequence(&[1, 2, 3, 4], &[1, 3]));
-/// assert!(is_subsequence(&[1, 2, 3, 4], &[2, 4]));
-/// assert!(is_subsequence(&[1, 2, 3, 4], &[1, 2, 3, 4]));
-/// assert!(!is_subsequence(&[1, 2, 3, 4], &[3, 1]));
-/// assert!(!is_subsequence(&[1, 2, 3, 4], &[5]));
-/// assert!(is_subsequence(&["a", "b", "c"], &["a", "c"]));
-/// assert!(!is_subsequence(&["a", "b", "c"], &["c", "a"]));
+/// use markdown_tools::link::match_subsequence;
+/// assert_eq!(match_subsequence(&[1, 2, 3, 4], &[1, 3]), Some(2));
+/// assert_eq!(match_subsequence(&[1, 2, 3, 4], &[2, 4]), Some(3));
+/// assert_eq!(match_subsequence(&[1, 2, 3, 4], &[1, 2, 3, 4]), Some(3));
+/// assert_eq!(match_subsequence(&[1, 2, 3, 4], &[3, 1]), None);
+/// assert_eq!(match_subsequence(&[1, 2, 3, 4], &[5]), None);
+/// assert_eq!(match_subsequence(&["a", "b", "c"], &["a", "c"]), Some(2));
+/// assert_eq!(match_subsequence(&["a", "b", "c"], &["c", "a"]), None);
 /// ```
-pub fn is_subsequence<T: PartialEq>(haystack: &[T], needle: &[T]) -> bool {
-    let mut iter = haystack.iter();
+pub fn match_subsequence<T: PartialEq>(
+    haystack: &[T],
+    needle: &[T],
+) -> Option<usize> {
+    let mut haystack_idx = 0;
+    let mut last_match_idx = 0;
 
-    for item in needle {
-        // iter is consumed so it never goes backward
-        if !iter.any(|h| h == item) {
-            return false;
+    for needle_item in needle {
+        // Find the next occurrence of needle_item in haystack
+        let mut found = false;
+        while haystack_idx < haystack.len() {
+            if &haystack[haystack_idx] == needle_item {
+                last_match_idx = haystack_idx;
+                haystack_idx += 1; // Move past this match
+                found = true;
+                break;
+            }
+            haystack_idx += 1;
+        }
+
+        if !found {
+            return None;
         }
     }
 
-    true
+    Some(last_match_idx)
 }
 
 /// Match a file name reference against a list of paths.
@@ -399,7 +418,7 @@ fn resolve_link(needle: &str, haystack: &Vec<PathBuf>) -> Option<PathBuf> {
     let needle_components: Vec<_> = needle.components().collect();
     for hay in haystack {
         let hay_components: Vec<_> = hay.components().collect();
-        if is_subsequence(&hay_components, &needle_components) {
+        if match_subsequence(&hay_components, &needle_components).is_some() {
             return Some(hay.clone());
         }
     }
