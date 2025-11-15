@@ -5,8 +5,9 @@ use pulldown_cmark::HeadingLevel;
 use std::collections::{HashMap, HashSet};
 use tree_sitter::Point;
 
+/// Heading information, including text and ending location
 #[derive(Debug, PartialEq, Clone)]
-pub struct TOCEntry {
+pub struct Heading {
     pub level: HeadingLevel,
     pub text: String,
     pub start_byte: usize,
@@ -19,10 +20,10 @@ type Depth = usize;
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct TOC {
-    entries: Vec<(TOCEntry, Depth)>,
+    entries: Vec<(Heading, Depth)>,
 }
 
-impl TOCEntry {
+impl Heading {
     fn to_tree_label(&self) -> String {
         format!("{:?} {} (L{})", self.level, self.text, self.start_point.row,)
     }
@@ -78,14 +79,15 @@ impl TOC {
 
 /// Extract a table of contents from a AST `Tree`
 ///
-/// not very efficient
+///
+/// Not very efficient. Most of the time we would like to
+/// process a vector of ast headings directly.
 pub fn extract_toc(tree: &Tree) -> TOC {
     let root_node = &tree.root_node;
-    let mut entries: Vec<TOCEntry> = vec![];
+    let mut entries: Vec<Heading> = vec![];
     extract_toc_from_node(root_node, &mut entries);
 
     // map heading levels to depths
-    // TODO(confirm): Will this consume the data?
     let mut unique_levels: Vec<HeadingLevel> = entries
         .iter()
         .map(|e| e.level)
@@ -93,7 +95,6 @@ pub fn extract_toc(tree: &Tree) -> TOC {
         .into_iter()
         .collect();
     unique_levels.sort();
-
     let level_to_depth: HashMap<HeadingLevel, Depth> = unique_levels
         .into_iter()
         .enumerate()
@@ -108,7 +109,7 @@ pub fn extract_toc(tree: &Tree) -> TOC {
     }
 }
 
-fn extract_toc_from_node(node: &Node, toc_entries: &mut Vec<TOCEntry>) {
+fn extract_toc_from_node(node: &Node, toc_entries: &mut Vec<Heading>) {
     for child in node.children.iter() {
         if let NodeKind::Heading { level, .. } = child.kind {
             match &child.children[..] {
@@ -118,7 +119,7 @@ fn extract_toc_from_node(node: &Node, toc_entries: &mut Vec<TOCEntry>) {
                         ..
                     },
                 ] => {
-                    let entry = TOCEntry {
+                    let entry = Heading {
                         level,
                         text: text.to_string(),
                         start_byte: child.start_byte,
@@ -130,7 +131,7 @@ fn extract_toc_from_node(node: &Node, toc_entries: &mut Vec<TOCEntry>) {
                 }
                 [] => {
                     // Empty heading
-                    let entry = TOCEntry {
+                    let entry = Heading {
                         level,
                         text: "".to_string(),
                         start_byte: child.start_byte,
@@ -230,7 +231,7 @@ some text
         TOC {
             entries: [
                 (
-                    TOCEntry {
+                    Heading {
                         level: H1,
                         text: "Heading",
                         start_byte: 1,
@@ -247,7 +248,7 @@ some text
                     0,
                 ),
                 (
-                    TOCEntry {
+                    Heading {
                         level: H2,
                         text: "Heading 2",
                         start_byte: 23,
@@ -264,7 +265,7 @@ some text
                     1,
                 ),
                 (
-                    TOCEntry {
+                    Heading {
                         level: H3,
                         text: "Heading 3",
                         start_byte: 48,
@@ -281,7 +282,7 @@ some text
                     2,
                 ),
                 (
-                    TOCEntry {
+                    Heading {
                         level: H4,
                         text: "Heading 4",
                         start_byte: 74,
@@ -298,7 +299,7 @@ some text
                     3,
                 ),
                 (
-                    TOCEntry {
+                    Heading {
                         level: H5,
                         text: "Heading 5",
                         start_byte: 101,
@@ -315,7 +316,7 @@ some text
                     4,
                 ),
                 (
-                    TOCEntry {
+                    Heading {
                         level: H6,
                         text: "Heading 6",
                         start_byte: 129,
@@ -332,7 +333,7 @@ some text
                     5,
                 ),
                 (
-                    TOCEntry {
+                    Heading {
                         level: H1,
                         text: "Heading",
                         start_byte: 158,
@@ -349,7 +350,7 @@ some text
                     0,
                 ),
                 (
-                    TOCEntry {
+                    Heading {
                         level: H1,
                         text: "",
                         start_byte: 180,
@@ -385,7 +386,7 @@ some text
         TOC {
             entries: [
                 (
-                    TOCEntry {
+                    Heading {
                         level: H3,
                         text: "Heading 3",
                         start_byte: 2,
@@ -402,7 +403,7 @@ some text
                     1,
                 ),
                 (
-                    TOCEntry {
+                    Heading {
                         level: H4,
                         text: "Heading 4",
                         start_byte: 18,
@@ -419,7 +420,7 @@ some text
                     2,
                 ),
                 (
-                    TOCEntry {
+                    Heading {
                         level: H5,
                         text: "Heading 5",
                         start_byte: 45,
@@ -436,7 +437,7 @@ some text
                     3,
                 ),
                 (
-                    TOCEntry {
+                    Heading {
                         level: H2,
                         text: "Heading 2",
                         start_byte: 62,
@@ -453,7 +454,7 @@ some text
                     0,
                 ),
                 (
-                    TOCEntry {
+                    Heading {
                         level: H6,
                         text: "Heading 6",
                         start_byte: 76,
