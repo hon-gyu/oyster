@@ -1,4 +1,4 @@
-//! Table of contents based on heading levels
+/// Table of contents based on heading levels
 use crate::ast::{Node, NodeKind, Tree};
 use ptree::TreeBuilder;
 use pulldown_cmark::HeadingLevel;
@@ -76,6 +76,9 @@ impl TOC {
     }
 }
 
+/// Extract a table of contents from a AST `Tree`
+///
+/// not very efficient
 pub fn extract_toc(tree: &Tree) -> TOC {
     let root_node = &tree.root_node;
     let mut entries: Vec<TOCEntry> = vec![];
@@ -125,7 +128,19 @@ fn extract_toc_from_node(node: &Node, toc_entries: &mut Vec<TOCEntry>) {
                     };
                     toc_entries.push(entry);
                 }
-                _ => panic!("Heading without inner text"),
+                [] => {
+                    // Empty heading
+                    let entry = TOCEntry {
+                        level,
+                        text: "".to_string(),
+                        start_byte: child.start_byte,
+                        end_byte: child.end_byte,
+                        start_point: child.start_point,
+                        end_point: child.end_point,
+                    };
+                    toc_entries.push(entry);
+                }
+                _ => unreachable!("Never: Heading without inner text"),
             }
         } else {
             child
@@ -171,6 +186,10 @@ some text
 # Heading
 
 some text
+
+#
+
+emtpy heading
 "#######;
         md.to_string()
     }
@@ -329,6 +348,23 @@ some text
                     },
                     0,
                 ),
+                (
+                    TOCEntry {
+                        level: H1,
+                        text: "",
+                        start_byte: 180,
+                        end_byte: 182,
+                        start_point: Point {
+                            row: 29,
+                            column: 0,
+                        },
+                        end_point: Point {
+                            row: 30,
+                            column: 0,
+                        },
+                    },
+                    0,
+                ),
             ],
         }
         "#);
@@ -453,7 +489,8 @@ some text
         │        └─ H4 Heading 4 (L13)
         │           └─ H5 Heading 5 (L17)
         │              └─ H6 Heading 6 (L21)
-        └─ H1 Heading (L25)
+        ├─ H1 Heading (L25)
+        └─ H1  (L29)
         ")
     }
 
