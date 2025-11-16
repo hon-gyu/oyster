@@ -77,6 +77,33 @@ pub struct Link {
     to: Referenceable,
 }
 
+impl std::fmt::Display for Referenceable {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Referenceable::Asset { path } => {
+                write!(f, "Asset: {}", path.display())
+            }
+            Referenceable::Note { path, .. } => {
+                write!(f, "Note: {}", path.display())
+            }
+            Referenceable::Heading {
+                path, level, text, ..
+            } => {
+                write!(
+                    f,
+                    "Heading: {} level: {}, text: {}",
+                    path.display(),
+                    level,
+                    text
+                )
+            }
+            Referenceable::Block { path } => {
+                write!(f, "Block: {}", path.display())
+            }
+        }
+    }
+}
+
 fn percent_decode(url: &str) -> String {
     percent_encoding::percent_decode_str(url)
         .decode_utf8_lossy()
@@ -698,6 +725,18 @@ fn build_links(
         let dest = reference.dest.as_str();
         let (file_name, nested_headings_opt, block_identifier_opt) =
             split_dest_string(dest);
+        let file_name = if file_name.is_empty() {
+            // Fallback to current note if the file name is empty
+            reference
+                .path
+                .file_name()
+                .unwrap()
+                .to_string_lossy()
+                .to_string()
+        } else {
+            file_name.to_string()
+        };
+        let file_name = file_name.as_str();
         let matched_path_opt = resolve_link(file_name, &referenceable_paths);
 
         // If path is found
@@ -1328,6 +1367,98 @@ mod tests {
         let dir = PathBuf::from("tests/data/vaults/tt");
         let root_dir = PathBuf::from("tests/data/vaults/tt");
         let (referenceables, references) = scan_vault(&dir, &root_dir);
+        let note_1_references = references
+            .into_iter()
+            .filter(|r| r.path == PathBuf::from("Note 1.md"))
+            .collect::<Vec<_>>();
+        let (links_built_from_note_1, unresolved_references_in_note_1) =
+            build_links(note_1_references, referenceables);
+        fn fmt_link(link: &Link) -> String {
+            let mut s = String::new();
+            s.push_str(link.from.dest.as_str());
+            s.push_str(" -> ");
+            s.push_str(format!("{}", link.to).as_str());
+            s
+        }
+        let links = links_built_from_note_1
+            .into_iter()
+            .map(|l| fmt_link(&l))
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert_snapshot!(links, @r"
+        Three laws of motion -> Note: Three laws of motion.md
+        #Level 3 title -> Heading: Note 1.md level: h3, text: Level 3 title
+        Note 2#Some level 2 title -> Heading: Note 2.md level: h2, text: Some level 2 title
+        () -> Note: ().md
+        ww -> Note: ww.md
+        () -> Note: ().md
+        Three laws of motion -> Note: Three laws of motion.md
+        Three laws of motion -> Note: Three laws of motion.md
+        Three laws of motion.md -> Note: Three laws of motion.md
+        Note 2  -> Note: Note 2.md
+        #Level 3 title -> Heading: Note 1.md level: h3, text: Level 3 title
+        #Level 4 title -> Heading: Note 1.md level: h4, text: Level 4 title
+        #random -> Note: Note 1.md
+        Note 2#Some level 2 title -> Heading: Note 2.md level: h2, text: Some level 2 title
+        Note 2#Some level 2 title#Level 3 title -> Heading: Note 2.md level: h3, text: Level 3 title
+        Note 2#random#Level 3 title -> Note: Note 2.md
+        Note 2#Level 3 title -> Heading: Note 2.md level: h3, text: Level 3 title
+        Note 2#L4 -> Heading: Note 2.md level: h4, text: L4
+        Note 2#Some level 2 title#L4 -> Heading: Note 2.md level: h4, text: L4
+        # -> Note: Note 1.md
+        Note 2## -> Note: Note 2.md
+        #######Link to figure -> Note: Note 1.md
+        ######Link to figure -> Note: Note 1.md
+        ####Link to figure -> Note: Note 1.md
+        ###Link to figure -> Note: Note 1.md
+        #Link to figure -> Note: Note 1.md
+        #L2  -> Note: Note 1.md
+        Note 2  -> Note: Note 2.md
+        ###L2#L4 -> Heading: Note 1.md level: h4, text: L4
+        ##L2######L4 -> Heading: Note 1.md level: h4, text: L4
+        ##L2#####L4 -> Heading: Note 1.md level: h4, text: L4
+        ##L2#####L4#L3 -> Note: Note 1.md
+        ##L2#####L4#Another L3 -> Note: Note 1.md
+        ##L2######L4 -> Heading: Note 1.md level: h4, text: L4
+        ##L2#####L4 -> Heading: Note 1.md level: h4, text: L4
+        ##L2#####L4#L3 -> Note: Note 1.md
+        Figure1.jpg -> Asset: Figure1.jpg
+        Figure1.jpg#2 -> Asset: Figure1.jpg
+        Figure1.jpg  -> Asset: Figure1.jpg
+        Figure1.jpg.md -> Note: Figure1.jpg.md
+        Figure1.jpg.md.md -> Note: Figure1.jpg.md.md
+        Figure1#2.jpg -> Note: Figure1.md
+        Figure1 -> Note: Figure1.md
+        Figure1^2.jpg -> Asset: Figure1^2.jpg
+        dir/inner_dir/note_in_inner_dir -> Note: dir/inner_dir/note_in_inner_dir.md
+        inner_dir/note_in_inner_dir -> Note: dir/inner_dir/note_in_inner_dir.md
+        dir/note_in_inner_dir -> Note: dir/inner_dir/note_in_inner_dir.md
+        dir/indir_same_name -> Note: dir/indir_same_name.md
+        indir_same_name -> Note: indir_same_name.md
+        indir2 -> Note: dir/indir2.md
+        unsupported_text_file.txt -> Asset: unsupported_text_file.txt
+        a.joiwduvqneoi -> Asset: a.joiwduvqneoi
+        Note 1 -> Note: Note 1.md
+        Figure1.jpg -> Asset: Figure1.jpg
+        empty_video.mp4 -> Asset: empty_video.mp4
+        ");
+
+        let unresolved_str = unresolved_references_in_note_1
+            .into_iter()
+            .map(|r| {
+                let mut s = String::new();
+                s.push_str(&r.dest);
+                s
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert_snapshot!(unresolved_str, @r"
+        Non-existing note 4
+        dir/
+        random/note_in_inner_dir
+        inner_dir/hi
+        Something
+        ");
     }
 
     #[test]
