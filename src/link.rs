@@ -179,7 +179,7 @@ fn extract_reference_and_referenceable(
                     let reference = Reference {
                         path: path.clone(),
                         range: node.byte_range().clone(),
-                        dest: dest_url.to_string(),
+                        dest: dest_url.trim().to_string(),
                         kind: ReferenceKind::WikiLink,
                         display_text,
                     };
@@ -1395,7 +1395,7 @@ mod tests {
         Three laws of motion -> Note: Three laws of motion.md
         Three laws of motion -> Note: Three laws of motion.md
         Three laws of motion.md -> Note: Three laws of motion.md
-        Note 2  -> Note: Note 2.md
+        Note 2 -> Note: Note 2.md
         #Level 3 title -> Heading: Note 1.md level: h3, text: Level 3 title
         #Level 4 title -> Heading: Note 1.md level: h4, text: Level 4 title
         #random -> Note: Note 1.md
@@ -1412,8 +1412,8 @@ mod tests {
         ####Link to figure -> Note: Note 1.md
         ###Link to figure -> Note: Note 1.md
         #Link to figure -> Note: Note 1.md
-        #L2  -> Note: Note 1.md
-        Note 2  -> Note: Note 2.md
+        #L2 -> Heading: Note 1.md level: h2, text: L2
+        Note 2 -> Note: Note 2.md
         ###L2#L4 -> Heading: Note 1.md level: h4, text: L4
         ##L2######L4 -> Heading: Note 1.md level: h4, text: L4
         ##L2#####L4 -> Heading: Note 1.md level: h4, text: L4
@@ -1424,7 +1424,7 @@ mod tests {
         ##L2#####L4#L3 -> Note: Note 1.md
         Figure1.jpg -> Asset: Figure1.jpg
         Figure1.jpg#2 -> Asset: Figure1.jpg
-        Figure1.jpg  -> Asset: Figure1.jpg
+        Figure1.jpg -> Asset: Figure1.jpg
         Figure1.jpg.md -> Note: Figure1.jpg.md
         Figure1.jpg.md.md -> Note: Figure1.jpg.md.md
         Figure1#2.jpg -> Note: Figure1.md
@@ -1534,7 +1534,7 @@ mod tests {
             Reference {
                 path: "Note 1.md",
                 range: 1075..1095,
-                dest: "Note 2 ",
+                dest: "Note 2",
                 kind: WikiLink,
                 display_text: " Note two",
             },
@@ -1660,14 +1660,14 @@ mod tests {
             Reference {
                 path: "Note 1.md",
                 range: 2447..2459,
-                dest: "#L2 ",
+                dest: "#L2",
                 kind: WikiLink,
                 display_text: " #L4",
             },
             Reference {
                 path: "Note 1.md",
                 range: 2554..2571,
-                dest: "Note 2 ",
+                dest: "Note 2",
                 kind: WikiLink,
                 display_text: " 2 | 3",
             },
@@ -1744,7 +1744,7 @@ mod tests {
             Reference {
                 path: "Note 1.md",
                 range: 3762..3780,
-                dest: "Figure1.jpg ",
+                dest: "Figure1.jpg",
                 kind: WikiLink,
                 display_text: " 2",
             },
@@ -2200,7 +2200,7 @@ mod tests {
             Reference {
                 path: "tests/data/vaults/tt/Note 1.md",
                 range: 1075..1095,
-                dest: "Note 2 ",
+                dest: "Note 2",
                 kind: WikiLink,
                 display_text: " Note two",
             },
@@ -2326,14 +2326,14 @@ mod tests {
             Reference {
                 path: "tests/data/vaults/tt/Note 1.md",
                 range: 2447..2459,
-                dest: "#L2 ",
+                dest: "#L2",
                 kind: WikiLink,
                 display_text: " #L4",
             },
             Reference {
                 path: "tests/data/vaults/tt/Note 1.md",
                 range: 2554..2571,
-                dest: "Note 2 ",
+                dest: "Note 2",
                 kind: WikiLink,
                 display_text: " 2 | 3",
             },
@@ -2410,7 +2410,7 @@ mod tests {
             Reference {
                 path: "tests/data/vaults/tt/Note 1.md",
                 range: 3762..3780,
-                dest: "Figure1.jpg ",
+                dest: "Figure1.jpg",
                 kind: WikiLink,
                 display_text: " 2",
             },
