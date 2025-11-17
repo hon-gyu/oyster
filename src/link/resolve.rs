@@ -1,4 +1,5 @@
 use super::types::{Link, Reference, Referenceable};
+use super::utils::is_block_identifier;
 
 use std::collections::HashMap;
 use std::path::Path;
@@ -21,7 +22,7 @@ fn split_dest_string(s: &str) -> (&str, Option<Vec<&str>>, Option<&str>) {
     // A block reference start with `^` and followed by letters and numbers
     if after_fst_hash.starts_with('^') && after_fst_hash.len() > 1 {
         let maybe_identifier = &after_fst_hash[1..];
-        if maybe_identifier.chars().all(|c| c.is_ascii_alphanumeric()) {
+        if is_block_identifier(maybe_identifier) {
             return (file_name, None, Some(maybe_identifier));
         }
     }
