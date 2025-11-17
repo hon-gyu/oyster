@@ -8,6 +8,16 @@ use std::ops::Range;
 use std::path::PathBuf;
 
 #[derive(Clone, Debug, PartialEq)]
+pub enum BlockReferenceableKind {
+    InlineParagraph,
+    InlineListItem,
+    Paragraph,
+    List,
+    BlockQuote,
+    Table,
+}
+
+#[derive(Clone, Debug, PartialEq)]
 pub enum Referenceable {
     Asset {
         path: PathBuf,
@@ -24,6 +34,9 @@ pub enum Referenceable {
     },
     Block {
         path: PathBuf,
+        identifier: String,
+        kind: BlockReferenceableKind,
+        range: Range<usize>,
     },
 }
 
@@ -91,8 +104,19 @@ impl std::fmt::Display for Referenceable {
                     text
                 )
             }
-            Referenceable::Block { path } => {
-                write!(f, "Block: {}", path.display())
+            Referenceable::Block {
+                path,
+                identifier,
+                kind,
+                range: _,
+            } => {
+                write!(
+                    f,
+                    "Block: {}, {}, {:?}",
+                    path.display(),
+                    identifier,
+                    kind
+                )
             }
         }
     }

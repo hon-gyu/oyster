@@ -6,21 +6,25 @@ paragraph 2
 - some list
 	- item 1
 	- item 2
+
 ^fulllist
 
 | Col 1  | Col 2  |
 | ------ | ------ |
 | Cell 1 | Cell 2 |
 | Cell 3 | Cell 4 |
+
 ^table
 
 > quotation
+
 ^quotation
 
 [[#^quotation]]
 
 
 > [!info] this is a info callout
+
 ^callout
 
 [[#^callout]]
@@ -93,5 +97,6 @@ this
 
 [[#^works]]
 
-1 blank line after the identifier is required, however
-0-n blank line before the identifier works fine
+- 1 blank line after the identifier is required
+- however, 0-n blank line before the identifier works fine
+	- for clarity, we should always require at least 1 blank line before the identifier (so that the identifier won't be parsed as part of the previous struct)

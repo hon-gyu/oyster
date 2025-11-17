@@ -5,7 +5,6 @@ use pulldown_cmark::LinkType;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-//
 // Scan a note and return a tuple of references and in-note referenceables
 //
 // Post-condition: the in-note referenceables are in order
@@ -226,7 +225,7 @@ fn make_referenceable_relative(
         Referenceable::Heading { path, .. } => {
             make_path_relative(path, root_dir);
         }
-        Referenceable::Block { path } => {
+        Referenceable::Block { path, .. } => {
             make_path_relative(path, root_dir);
         }
     }
@@ -296,112 +295,112 @@ mod tests {
         [
             Reference {
                 path: "tests/data/vaults/tt/block.md",
-                range: 204..218,
+                range: 207..221,
                 dest: "#^quotation",
                 kind: WikiLink,
                 display_text: "#^quotation",
             },
             Reference {
                 path: "tests/data/vaults/tt/block.md",
-                range: 265..277,
+                range: 269..281,
                 dest: "#^callout",
                 kind: WikiLink,
                 display_text: "#^callout",
             },
             Reference {
                 path: "tests/data/vaults/tt/block.md",
-                range: 309..324,
+                range: 313..328,
                 dest: "#^paragraph1",
                 kind: WikiLink,
                 display_text: "#^paragraph1",
             },
             Reference {
                 path: "tests/data/vaults/tt/block.md",
-                range: 349..364,
+                range: 353..368,
                 dest: "#^paragraph2",
                 kind: WikiLink,
                 display_text: "#^paragraph2",
             },
             Reference {
                 path: "tests/data/vaults/tt/block.md",
-                range: 456..466,
+                range: 460..470,
                 dest: "#^table",
                 kind: WikiLink,
                 display_text: "#^table",
             },
             Reference {
                 path: "tests/data/vaults/tt/block.md",
-                range: 478..489,
+                range: 482..493,
                 dest: "#^table2",
                 kind: WikiLink,
                 display_text: "#^table2",
             },
             Reference {
                 path: "tests/data/vaults/tt/block.md",
-                range: 501..516,
+                range: 505..520,
                 dest: "#^tableagain",
                 kind: WikiLink,
                 display_text: "#^tableagain",
             },
             Reference {
                 path: "tests/data/vaults/tt/block.md",
-                range: 694..708,
+                range: 698..712,
                 dest: "#^firstline",
                 kind: WikiLink,
                 display_text: "#^firstline",
             },
             Reference {
                 path: "tests/data/vaults/tt/block.md",
-                range: 740..754,
+                range: 744..758,
                 dest: "#^inneritem",
                 kind: WikiLink,
                 display_text: "#^inneritem",
             },
             Reference {
                 path: "tests/data/vaults/tt/block.md",
-                range: 939..954,
+                range: 943..958,
                 dest: "#^firstline1",
                 kind: WikiLink,
                 display_text: "#^firstline1",
             },
             Reference {
                 path: "tests/data/vaults/tt/block.md",
-                range: 1007..1022,
+                range: 1011..1026,
                 dest: "#^inneritem1",
                 kind: WikiLink,
                 display_text: "#^inneritem1",
             },
             Reference {
                 path: "tests/data/vaults/tt/block.md",
-                range: 1074..1087,
+                range: 1078..1091,
                 dest: "#^fulllst1",
                 kind: WikiLink,
                 display_text: "#^fulllst1",
             },
             Reference {
                 path: "tests/data/vaults/tt/block.md",
-                range: 1299..1312,
+                range: 1303..1316,
                 dest: "#^tableref",
                 kind: WikiLink,
                 display_text: "#^tableref",
             },
             Reference {
                 path: "tests/data/vaults/tt/block.md",
-                range: 1469..1483,
+                range: 1473..1487,
                 dest: "#^tableref3",
                 kind: WikiLink,
                 display_text: "#^tableref3",
             },
             Reference {
                 path: "tests/data/vaults/tt/block.md",
-                range: 1487..1501,
+                range: 1491..1505,
                 dest: "#^tableref2",
                 kind: WikiLink,
                 display_text: "#^tableref2",
             },
             Reference {
                 path: "tests/data/vaults/tt/block.md",
-                range: 1643..1653,
+                range: 1647..1657,
                 dest: "#^works",
                 kind: WikiLink,
                 display_text: "#^works",
@@ -414,13 +413,13 @@ mod tests {
                 path: "tests/data/vaults/tt/block.md",
                 level: H6,
                 text: "Edge case: a later block identifier invalidate previous one",
-                range: 1120..1188,
+                range: 1124..1192,
             },
             Heading {
                 path: "tests/data/vaults/tt/block.md",
                 level: H6,
                 text: "Edge case: the number of blank lines before identifier doesn’t matter",
-                range: 1551..1629,
+                range: 1555..1633,
             },
         ]
         "#);
@@ -432,7 +431,7 @@ mod tests {
         let text = fs::read_to_string(path).unwrap();
         let tree = Tree::new(&text);
         assert_snapshot!(tree.root_node, @r##"
-        Document [0..1758]
+        Document [0..1924]
           Paragraph [0..23]
             Text(Borrowed("paragraph 1 ")) [0..12]
             Text(Borrowed("^")) [12..13]
@@ -442,223 +441,227 @@ mod tests {
             SoftBreak [35..36]
             Text(Borrowed("^")) [36..37]
             Text(Borrowed("paragraph2")) [37..47]
-          List(None) [49..92]
-            Item [49..92]
+          List(None) [49..82]
+            Item [49..82]
               Text(Borrowed("some list")) [51..60]
-              List(None) [60..92]
+              List(None) [60..82]
                 Item [60..71]
                   Text(Borrowed("item 1")) [64..70]
-                Item [70..92]
+                Item [70..82]
                   Text(Borrowed("item 2")) [74..80]
-                  SoftBreak [80..81]
-                  Text(Borrowed("^")) [81..82]
-                  Text(Borrowed("fulllist")) [82..90]
-          Table([None, None]) [92..179]
-            TableHead [92..112]
-              TableCell [93..101]
-                Text(Borrowed("Col 1")) [94..99]
-              TableCell [102..110]
-                Text(Borrowed("Col 2")) [103..108]
-            TableRow [132..152]
-              TableCell [133..141]
-                Text(Borrowed("Cell 1")) [134..140]
-              TableCell [142..150]
-                Text(Borrowed("Cell 2")) [143..149]
-            TableRow [152..172]
-              TableCell [153..161]
-                Text(Borrowed("Cell 3")) [154..160]
-              TableCell [162..170]
-                Text(Borrowed("Cell 4")) [163..169]
-            TableRow [172..179]
-              TableCell [172..178]
-                Text(Borrowed("^")) [172..173]
-                Text(Borrowed("table")) [173..178]
-              TableCell [179..179]
-          BlockQuote(None) [180..203]
-            Paragraph [182..203]
-              Text(Borrowed("quotation")) [182..191]
-              SoftBreak [191..192]
-              Text(Borrowed("^")) [192..193]
-              Text(Borrowed("quotation")) [193..202]
-          Paragraph [204..220]
-            Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("#^quotation"), title: Borrowed(""), id: Borrowed("") } [204..218]
-              Text(Borrowed("#^quotation")) [206..217]
-          BlockQuote(None) [222..264]
-            Paragraph [224..264]
-              Text(Borrowed("[")) [224..225]
-              Text(Borrowed("!info")) [225..230]
-              Text(Borrowed("]")) [230..231]
-              Text(Borrowed(" this is a info callout")) [231..254]
-              SoftBreak [254..255]
-              Text(Borrowed("^")) [255..256]
-              Text(Borrowed("callout")) [256..263]
-          Paragraph [265..279]
-            Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("#^callout"), title: Borrowed(""), id: Borrowed("") } [265..277]
-              Text(Borrowed("#^callout")) [267..276]
-          Rule [281..285]
-          Paragraph [286..296]
-            Text(Borrowed("reference")) [286..295]
-          List(None) [296..619]
-            Item [296..326]
-              Text(Borrowed("paragraph: ")) [298..309]
-              Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("#^paragraph1"), title: Borrowed(""), id: Borrowed("") } [309..324]
-                Text(Borrowed("#^paragraph1")) [311..323]
-            Item [326..447]
-              Text(Borrowed("separate line caret: ")) [328..349]
-              Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("#^paragraph2"), title: Borrowed(""), id: Borrowed("") } [349..364]
-                Text(Borrowed("#^paragraph2")) [351..363]
-              List(None) [365..447]
-                Item [365..447]
-                  Text(Borrowed("for paragraph the caret doesn")) [369..398]
-                  Text(Inlined(InlineStr { inner: [226, 128, 153, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], len: 3 })) [398..399]
-                  Text(Borrowed("t need to have a blank line before and after it")) [399..446]
-            Item [447..469]
-              Text(Borrowed("table: ")) [449..456]
-              Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("#^table"), title: Borrowed(""), id: Borrowed("") } [456..466]
-                Text(Borrowed("#^table")) [458..465]
-            Item [469..492]
-              Text(Borrowed("table: ")) [471..478]
-              Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("#^table2"), title: Borrowed(""), id: Borrowed("") } [478..489]
-                Text(Borrowed("#^table2")) [480..488]
-            Item [492..619]
-              Text(Borrowed("table: ")) [494..501]
-              Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("#^tableagain"), title: Borrowed(""), id: Borrowed("") } [501..516]
-                Text(Borrowed("#^tableagain")) [503..515]
-              List(None) [517..619]
-                Item [517..619]
-                  Text(Borrowed("it looks like the block reference will always point to last non-empty non-block-reference struct")) [521..617]
-          Rule [619..623]
-          List(None) [624..1116]
-            Item [624..675]
-              Paragraph [626..651]
-                Text(Borrowed("a nested list ")) [626..640]
-                Text(Borrowed("^")) [640..641]
-                Text(Borrowed("firstline")) [641..650]
-              List(None) [650..675]
-                Item [650..675]
-                  Text(Borrowed("item")) [655..659]
-                  SoftBreak [659..660]
-                  Text(Borrowed("^")) [663..664]
-                  Text(Borrowed("inneritem")) [664..673]
-            Item [675..789]
-              Paragraph [677..691]
-                Text(Borrowed("inside a list")) [677..690]
-              List(None) [690..789]
-                Item [690..736]
-                  Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("#^firstline"), title: Borrowed(""), id: Borrowed("") } [694..708]
-                    Text(Borrowed("#^firstline")) [696..707]
-                  Text(Borrowed(": points to the first line")) [709..735]
-                Item [735..789]
-                  Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("#^inneritem"), title: Borrowed(""), id: Borrowed("") } [740..754]
-                    Text(Borrowed("#^inneritem")) [742..753]
-                  Text(Borrowed(": points to the first inner item")) [755..787]
-            Item [789..856]
-              Paragraph [791..854]
-                Text(Borrowed("full reference to a list make its inner state not refereceable")) [791..853]
-            Item [856..920]
-              Paragraph [858..884]
-                Text(Borrowed("a nested list ")) [858..872]
-                Text(Borrowed("^")) [872..873]
-                Text(Borrowed("firstline1")) [873..883]
-              List(None) [883..920]
-                Item [883..920]
-                  Text(Borrowed("item")) [888..892]
-                  SoftBreak [892..893]
-                  Text(Borrowed("^")) [896..897]
-                  Text(Borrowed("inneritem1")) [897..907]
-                  SoftBreak [907..908]
-                  Text(Borrowed("^")) [908..909]
-                  Text(Borrowed("fulllist1")) [909..918]
-            Item [920..1116]
-              Paragraph [922..936]
-                Text(Borrowed("inside a list")) [922..935]
-              List(None) [935..1116]
-                Item [935..1003]
-                  Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("#^firstline1"), title: Borrowed(""), id: Borrowed("") } [939..954]
-                    Text(Borrowed("#^firstline1")) [941..953]
-                  Text(Borrowed(": this now breaks and fallback to the full note")) [955..1002]
-                Item [1002..1071]
-                  Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("#^inneritem1"), title: Borrowed(""), id: Borrowed("") } [1007..1022]
-                    Text(Borrowed("#^inneritem1")) [1009..1021]
-                  Text(Borrowed(": this now breaks and fallback to the full note")) [1023..1070]
-                Item [1070..1116]
-                  Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("#^fulllst1"), title: Borrowed(""), id: Borrowed("") } [1074..1087]
-                    Text(Borrowed("#^fulllst1")) [1076..1086]
-                  Text(Borrowed(": points to the full list")) [1088..1113]
-          Rule [1116..1120]
-          Heading { level: H6, id: None, classes: [], attrs: [] } [1120..1188]
-            Text(Borrowed("Edge case: a later block identifier invalidate previous one")) [1128..1187]
-          Table([None, None]) [1189..1269]
-            TableHead [1189..1209]
-              TableCell [1190..1198]
-                Text(Borrowed("Col 1")) [1191..1196]
-              TableCell [1199..1207]
-                Text(Borrowed("Col 2")) [1200..1205]
-            TableRow [1229..1249]
-              TableCell [1230..1238]
-                Text(Borrowed("Cell 1")) [1231..1237]
-              TableCell [1239..1247]
-                Text(Borrowed("Cell 2")) [1240..1246]
-            TableRow [1249..1269]
-              TableCell [1250..1258]
-                Text(Borrowed("Cell 3")) [1251..1257]
-              TableCell [1259..1267]
-                Text(Borrowed("Cell 4")) [1260..1266]
-          Paragraph [1270..1280]
-            Text(Borrowed("^")) [1270..1271]
-            Text(Borrowed("tableref")) [1271..1279]
-          List(None) [1281..1316]
-            Item [1281..1316]
-              Text(Borrowed("this works fine ")) [1283..1299]
-              Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("#^tableref"), title: Borrowed(""), id: Borrowed("") } [1299..1312]
-                Text(Borrowed("#^tableref")) [1301..1311]
-          Table([None, None]) [1316..1396]
-            TableHead [1316..1336]
-              TableCell [1317..1325]
-                Text(Borrowed("Col 1")) [1318..1323]
-              TableCell [1326..1334]
-                Text(Borrowed("Col 2")) [1327..1332]
-            TableRow [1356..1376]
-              TableCell [1357..1365]
-                Text(Borrowed("Cell 1")) [1358..1364]
-              TableCell [1366..1374]
-                Text(Borrowed("Cell 2")) [1367..1373]
-            TableRow [1376..1396]
-              TableCell [1377..1385]
-                Text(Borrowed("Cell 3")) [1378..1384]
-              TableCell [1386..1394]
-                Text(Borrowed("Cell 4")) [1387..1393]
-          Paragraph [1397..1408]
-            Text(Borrowed("^")) [1397..1398]
-            Text(Borrowed("tableref2")) [1398..1407]
-          Paragraph [1409..1420]
-            Text(Borrowed("^")) [1409..1410]
-            Text(Borrowed("tableref3")) [1410..1419]
-          List(None) [1421..1551]
-            Item [1421..1485]
-              Text(Borrowed("now the above table can only be referenced by ")) [1423..1469]
-              Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("#^tableref3"), title: Borrowed(""), id: Borrowed("") } [1469..1483]
-                Text(Borrowed("#^tableref3")) [1471..1482]
-            Item [1485..1551]
-              Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("#^tableref2"), title: Borrowed(""), id: Borrowed("") } [1487..1501]
-                Text(Borrowed("#^tableref2")) [1489..1500]
-              Text(Borrowed(" is invalid and will fallback to the whole note")) [1502..1549]
-          Heading { level: H6, id: None, classes: [], attrs: [] } [1551..1629]
-            Text(Borrowed("Edge case: the number of blank lines before identifier doesn")) [1559..1619]
-            Text(Inlined(InlineStr { inner: [226, 128, 153, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], len: 3 })) [1619..1620]
-            Text(Borrowed("t matter")) [1620..1628]
-          Paragraph [1630..1642]
-            Text(Borrowed("this")) [1630..1634]
-            SoftBreak [1634..1635]
-            Text(Borrowed("^")) [1635..1636]
-            Text(Borrowed("works")) [1636..1641]
-          Paragraph [1643..1655]
-            Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("#^works"), title: Borrowed(""), id: Borrowed("") } [1643..1653]
-              Text(Borrowed("#^works")) [1645..1652]
-          Paragraph [1656..1758]
-            Text(Borrowed("1 blank line after the identifier is required, however")) [1656..1710]
-            SoftBreak [1710..1711]
-            Text(Borrowed("0-n blank line before the identifier works fine")) [1711..1758]
+          Paragraph [82..92]
+            Text(Borrowed("^")) [82..83]
+            Text(Borrowed("fulllist")) [83..91]
+          Table([None, None]) [93..173]
+            TableHead [93..113]
+              TableCell [94..102]
+                Text(Borrowed("Col 1")) [95..100]
+              TableCell [103..111]
+                Text(Borrowed("Col 2")) [104..109]
+            TableRow [133..153]
+              TableCell [134..142]
+                Text(Borrowed("Cell 1")) [135..141]
+              TableCell [143..151]
+                Text(Borrowed("Cell 2")) [144..150]
+            TableRow [153..173]
+              TableCell [154..162]
+                Text(Borrowed("Cell 3")) [155..161]
+              TableCell [163..171]
+                Text(Borrowed("Cell 4")) [164..170]
+          Paragraph [174..181]
+            Text(Borrowed("^")) [174..175]
+            Text(Borrowed("table")) [175..180]
+          BlockQuote(None) [182..194]
+            Paragraph [184..194]
+              Text(Borrowed("quotation")) [184..193]
+          Paragraph [195..206]
+            Text(Borrowed("^")) [195..196]
+            Text(Borrowed("quotation")) [196..205]
+          Paragraph [207..223]
+            Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("#^quotation"), title: Borrowed(""), id: Borrowed("") } [207..221]
+              Text(Borrowed("#^quotation")) [209..220]
+          BlockQuote(None) [225..258]
+            Paragraph [227..258]
+              Text(Borrowed("[")) [227..228]
+              Text(Borrowed("!info")) [228..233]
+              Text(Borrowed("]")) [233..234]
+              Text(Borrowed(" this is a info callout")) [234..257]
+          Paragraph [259..268]
+            Text(Borrowed("^")) [259..260]
+            Text(Borrowed("callout")) [260..267]
+          Paragraph [269..283]
+            Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("#^callout"), title: Borrowed(""), id: Borrowed("") } [269..281]
+              Text(Borrowed("#^callout")) [271..280]
+          Rule [285..289]
+          Paragraph [290..300]
+            Text(Borrowed("reference")) [290..299]
+          List(None) [300..623]
+            Item [300..330]
+              Text(Borrowed("paragraph: ")) [302..313]
+              Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("#^paragraph1"), title: Borrowed(""), id: Borrowed("") } [313..328]
+                Text(Borrowed("#^paragraph1")) [315..327]
+            Item [330..451]
+              Text(Borrowed("separate line caret: ")) [332..353]
+              Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("#^paragraph2"), title: Borrowed(""), id: Borrowed("") } [353..368]
+                Text(Borrowed("#^paragraph2")) [355..367]
+              List(None) [369..451]
+                Item [369..451]
+                  Text(Borrowed("for paragraph the caret doesn")) [373..402]
+                  Text(Inlined(InlineStr { inner: [226, 128, 153, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], len: 3 })) [402..403]
+                  Text(Borrowed("t need to have a blank line before and after it")) [403..450]
+            Item [451..473]
+              Text(Borrowed("table: ")) [453..460]
+              Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("#^table"), title: Borrowed(""), id: Borrowed("") } [460..470]
+                Text(Borrowed("#^table")) [462..469]
+            Item [473..496]
+              Text(Borrowed("table: ")) [475..482]
+              Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("#^table2"), title: Borrowed(""), id: Borrowed("") } [482..493]
+                Text(Borrowed("#^table2")) [484..492]
+            Item [496..623]
+              Text(Borrowed("table: ")) [498..505]
+              Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("#^tableagain"), title: Borrowed(""), id: Borrowed("") } [505..520]
+                Text(Borrowed("#^tableagain")) [507..519]
+              List(None) [521..623]
+                Item [521..623]
+                  Text(Borrowed("it looks like the block reference will always point to last non-empty non-block-reference struct")) [525..621]
+          Rule [623..627]
+          List(None) [628..1120]
+            Item [628..679]
+              Paragraph [630..655]
+                Text(Borrowed("a nested list ")) [630..644]
+                Text(Borrowed("^")) [644..645]
+                Text(Borrowed("firstline")) [645..654]
+              List(None) [654..679]
+                Item [654..679]
+                  Text(Borrowed("item")) [659..663]
+                  SoftBreak [663..664]
+                  Text(Borrowed("^")) [667..668]
+                  Text(Borrowed("inneritem")) [668..677]
+            Item [679..793]
+              Paragraph [681..695]
+                Text(Borrowed("inside a list")) [681..694]
+              List(None) [694..793]
+                Item [694..740]
+                  Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("#^firstline"), title: Borrowed(""), id: Borrowed("") } [698..712]
+                    Text(Borrowed("#^firstline")) [700..711]
+                  Text(Borrowed(": points to the first line")) [713..739]
+                Item [739..793]
+                  Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("#^inneritem"), title: Borrowed(""), id: Borrowed("") } [744..758]
+                    Text(Borrowed("#^inneritem")) [746..757]
+                  Text(Borrowed(": points to the first inner item")) [759..791]
+            Item [793..860]
+              Paragraph [795..858]
+                Text(Borrowed("full reference to a list make its inner state not refereceable")) [795..857]
+            Item [860..924]
+              Paragraph [862..888]
+                Text(Borrowed("a nested list ")) [862..876]
+                Text(Borrowed("^")) [876..877]
+                Text(Borrowed("firstline1")) [877..887]
+              List(None) [887..924]
+                Item [887..924]
+                  Text(Borrowed("item")) [892..896]
+                  SoftBreak [896..897]
+                  Text(Borrowed("^")) [900..901]
+                  Text(Borrowed("inneritem1")) [901..911]
+                  SoftBreak [911..912]
+                  Text(Borrowed("^")) [912..913]
+                  Text(Borrowed("fulllist1")) [913..922]
+            Item [924..1120]
+              Paragraph [926..940]
+                Text(Borrowed("inside a list")) [926..939]
+              List(None) [939..1120]
+                Item [939..1007]
+                  Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("#^firstline1"), title: Borrowed(""), id: Borrowed("") } [943..958]
+                    Text(Borrowed("#^firstline1")) [945..957]
+                  Text(Borrowed(": this now breaks and fallback to the full note")) [959..1006]
+                Item [1006..1075]
+                  Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("#^inneritem1"), title: Borrowed(""), id: Borrowed("") } [1011..1026]
+                    Text(Borrowed("#^inneritem1")) [1013..1025]
+                  Text(Borrowed(": this now breaks and fallback to the full note")) [1027..1074]
+                Item [1074..1120]
+                  Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("#^fulllst1"), title: Borrowed(""), id: Borrowed("") } [1078..1091]
+                    Text(Borrowed("#^fulllst1")) [1080..1090]
+                  Text(Borrowed(": points to the full list")) [1092..1117]
+          Rule [1120..1124]
+          Heading { level: H6, id: None, classes: [], attrs: [] } [1124..1192]
+            Text(Borrowed("Edge case: a later block identifier invalidate previous one")) [1132..1191]
+          Table([None, None]) [1193..1273]
+            TableHead [1193..1213]
+              TableCell [1194..1202]
+                Text(Borrowed("Col 1")) [1195..1200]
+              TableCell [1203..1211]
+                Text(Borrowed("Col 2")) [1204..1209]
+            TableRow [1233..1253]
+              TableCell [1234..1242]
+                Text(Borrowed("Cell 1")) [1235..1241]
+              TableCell [1243..1251]
+                Text(Borrowed("Cell 2")) [1244..1250]
+            TableRow [1253..1273]
+              TableCell [1254..1262]
+                Text(Borrowed("Cell 3")) [1255..1261]
+              TableCell [1263..1271]
+                Text(Borrowed("Cell 4")) [1264..1270]
+          Paragraph [1274..1284]
+            Text(Borrowed("^")) [1274..1275]
+            Text(Borrowed("tableref")) [1275..1283]
+          List(None) [1285..1320]
+            Item [1285..1320]
+              Text(Borrowed("this works fine ")) [1287..1303]
+              Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("#^tableref"), title: Borrowed(""), id: Borrowed("") } [1303..1316]
+                Text(Borrowed("#^tableref")) [1305..1315]
+          Table([None, None]) [1320..1400]
+            TableHead [1320..1340]
+              TableCell [1321..1329]
+                Text(Borrowed("Col 1")) [1322..1327]
+              TableCell [1330..1338]
+                Text(Borrowed("Col 2")) [1331..1336]
+            TableRow [1360..1380]
+              TableCell [1361..1369]
+                Text(Borrowed("Cell 1")) [1362..1368]
+              TableCell [1370..1378]
+                Text(Borrowed("Cell 2")) [1371..1377]
+            TableRow [1380..1400]
+              TableCell [1381..1389]
+                Text(Borrowed("Cell 3")) [1382..1388]
+              TableCell [1390..1398]
+                Text(Borrowed("Cell 4")) [1391..1397]
+          Paragraph [1401..1412]
+            Text(Borrowed("^")) [1401..1402]
+            Text(Borrowed("tableref2")) [1402..1411]
+          Paragraph [1413..1424]
+            Text(Borrowed("^")) [1413..1414]
+            Text(Borrowed("tableref3")) [1414..1423]
+          List(None) [1425..1555]
+            Item [1425..1489]
+              Text(Borrowed("now the above table can only be referenced by ")) [1427..1473]
+              Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("#^tableref3"), title: Borrowed(""), id: Borrowed("") } [1473..1487]
+                Text(Borrowed("#^tableref3")) [1475..1486]
+            Item [1489..1555]
+              Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("#^tableref2"), title: Borrowed(""), id: Borrowed("") } [1491..1505]
+                Text(Borrowed("#^tableref2")) [1493..1504]
+              Text(Borrowed(" is invalid and will fallback to the whole note")) [1506..1553]
+          Heading { level: H6, id: None, classes: [], attrs: [] } [1555..1633]
+            Text(Borrowed("Edge case: the number of blank lines before identifier doesn")) [1563..1623]
+            Text(Inlined(InlineStr { inner: [226, 128, 153, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], len: 3 })) [1623..1624]
+            Text(Borrowed("t matter")) [1624..1632]
+          Paragraph [1634..1646]
+            Text(Borrowed("this")) [1634..1638]
+            SoftBreak [1638..1639]
+            Text(Borrowed("^")) [1639..1640]
+            Text(Borrowed("works")) [1640..1645]
+          Paragraph [1647..1659]
+            Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("#^works"), title: Borrowed(""), id: Borrowed("") } [1647..1657]
+              Text(Borrowed("#^works")) [1649..1656]
+          List(None) [1660..1924]
+            Item [1660..1708]
+              Text(Borrowed("1 blank line after the identifier is required")) [1662..1707]
+            Item [1708..1924]
+              Text(Borrowed("however, 0-n blank line before the identifier works fine")) [1710..1766]
+              List(None) [1766..1924]
+                Item [1766..1924]
+                  Text(Borrowed("for clarity, we should always require at least 1 blank line before the identifier (so that the identifier won")) [1770..1879]
+                  Text(Inlined(InlineStr { inner: [226, 128, 153, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], len: 3 })) [1879..1880]
+                  Text(Borrowed("t be parsed as part of the previous struct)")) [1880..1923]
         "##);
     }
 }
