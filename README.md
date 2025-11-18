@@ -11,4 +11,15 @@ Open-source [Obsidian.md](https://obsidian.md/)
 - ⬜ Markdown to structured data (YAML / JSON)
     - ⬜ CHANGELOG validation
 - ⬜ LSP (inspired by [markdown-oxide](https://github.com/Feel-ix-343/markdown-oxide))
-- ⬜ UI ([neovim](https://neovim.io/)? [Zed](https://zed.dev/) fork?)
+
+### Long-term
+- Obsidian [base](https://help.obsidian.md/bases)
+- UI ([neovim](https://neovim.io/)? [Zed](https://zed.dev/) fork?)
+
+
+## Ideas & Explorations 
+- Vault as some sort of database
+- Bi-directional sync with 
+  - Github
+  - Linear
+- Integration with [CatColab](https://github.com/ToposInstitute/CatColab)
