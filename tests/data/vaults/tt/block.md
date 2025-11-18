@@ -1,7 +1,10 @@
 paragraph 1 ^paragraph
 
 paragraph 2
+
 ^paragraph2
+
+
 
 - some list
 	- item 1
@@ -46,23 +49,10 @@ reference
 - a nested list ^firstline
 	-  item
 	  ^inneritem
-
 - inside a list
 	- [[#^firstline]]: points to the first line
 	-  [[#^inneritem]]: points to the first inner item
 
-- full reference to a list make its inner state not refereceable
-
-
-- a nested list ^firstline1
-	-  item
-	  ^inneritem1
-^fulllist1
-
-- inside a list
-	- [[#^firstline1]]: this now breaks and fallback to the full note
-	-  [[#^inneritem1]]: this now breaks and fallback to the full note
-	- [[#^fulllst1]]: points to the full list
 
 
 ---
@@ -100,3 +90,22 @@ this
 - 1 blank line after the identifier is required
 - however, 0-n blank line before the identifier works fine
 	- for clarity, we should always require at least 1 blank line before the identifier (so that the identifier won't be parsed as part of the previous struct)
+
+######  Edge case: full reference to a list make its inner state not refereceable
+
+- a nested list ^firstline
+	-  item
+	  ^inneritem
+- inside a list
+	- [[#^firstline]]: points to the first line
+	-  [[#^inneritem]]: points to the first inner item
+
+- a nested list ^firstline1
+	-  item
+	  ^inneritem1
+^fulllist1
+
+- inside a list
+	- [[#^firstline1]]: this now breaks and fallback to the full note
+	-  [[#^inneritem1]]: this now breaks and fallback to the full note
+	- [[#^fulllst1]]: points to the full list
