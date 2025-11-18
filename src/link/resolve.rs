@@ -376,9 +376,25 @@ pub fn build_links(
                             .collect::<Vec<_>>();
                         resolve_nested_headings(&headings, &nested_headings)
                     }
-                    (None, Some(_block_identifier)) => {
-                        // TODO: resolve block references
-                        None
+                    (None, Some(block_identifier)) => {
+                        let matched_blocks = children
+                            .iter()
+                            .filter_map(|r| match r {
+                                Referenceable::Block { identifier, .. } => {
+                                    if identifier == block_identifier {
+                                        Some(r)
+                                    } else {
+                                        None
+                                    }
+                                }
+                                _ => None,
+                            })
+                            .collect::<Vec<_>>();
+                        if let [matched_block] = matched_blocks[..] {
+                            Some(matched_block.clone())
+                        } else {
+                            None
+                        }
                     }
                 };
 
@@ -407,12 +423,14 @@ pub fn build_links(
 
 #[cfg(test)]
 mod tests {
+    use std::cmp::min;
+
     use super::*;
     use crate::link::extract::{scan_note, scan_vault};
     use insta::assert_snapshot;
     use pulldown_cmark::HeadingLevel;
 
-    fn print_table(titles: &[&str], columns: &[Vec<&str>]) -> String {
+    fn print_table(titles: &[&str], columns: &[Vec<String>]) -> String {
         let mut output = String::new();
 
         // Calculate column widths (including index column and titles)
@@ -424,7 +442,7 @@ mod tests {
             .map(|(title, col)| {
                 title
                     .len()
-                    .max(col.iter().map(|s| s.len()).max().unwrap_or(0))
+                    .max(col.iter().map(|s| s.replace('\n', "\\n").len()).max().unwrap_or(0))
             })
             .collect();
 
@@ -453,7 +471,8 @@ mod tests {
         for i in 0..columns[0].len() {
             output.push_str(&format!("| {:>index_width$} |", i));
             for (j, &width) in widths.iter().enumerate() {
-                output.push_str(&format!(" {:<width$} |", columns[j][i]));
+                let cell = columns[j][i].replace('\n', "\\n");
+                output.push_str(&format!(" {:<width$} |", cell));
             }
             output.push('\n');
         }
@@ -571,7 +590,7 @@ mod tests {
             .collect::<Vec<_>>();
         let table = print_table(
             &vec!["Input", "Output"],
-            &vec![inputs, outputs.iter().map(|s| s.as_str()).collect()],
+            &vec![inputs.iter().map(|s| s.to_string()).collect(), outputs],
         );
         assert_snapshot!(table, @r"
         +-----+-----------+--------+
@@ -592,13 +611,19 @@ mod tests {
         let path = PathBuf::from("tests/data/vaults/tt/Note 1.md");
         let (references, _): (Vec<Reference>, Vec<Referenceable>) =
             scan_note(&path);
-        let dest_strings: Vec<&str> =
-            references.iter().map(|r| r.dest.as_str()).collect();
+        let dest_strings: Vec<String> =
+            references.iter().map(|r| r.dest.clone()).collect();
         let (note_names, nested_headings, _block_identifiers): (
-            Vec<&str>,
+            Vec<String>,
             Vec<Option<Vec<&str>>>,
             Vec<Option<&str>>,
-        ) = dest_strings.iter().map(|s| split_dest_string(s)).collect();
+        ) = dest_strings
+            .iter()
+            .map(|s| {
+                let (n, h, b) = split_dest_string(s);
+                (n.to_string(), h, b)
+            })
+            .collect();
         let nested_headings_str: Vec<String> = nested_headings
             .iter()
             .map(|v| match v {
@@ -608,11 +633,7 @@ mod tests {
             .collect();
         let table = print_table(
             &vec!["Destination string", "Note", "Headings"],
-            &vec![
-                dest_strings,
-                note_names,
-                nested_headings_str.iter().map(|s| s.as_str()).collect(),
-            ],
+            &vec![dest_strings, note_names, nested_headings_str],
         );
         assert_snapshot!(table, @r"
         +-----+-----------------------------------------+---------------------------------+----------------------------------+
@@ -975,7 +996,7 @@ mod tests {
     }
 
     #[test]
-    fn test_build_links() {
+    fn test_build_links_node_1() {
         let dir = PathBuf::from("tests/data/vaults/tt");
         let root_dir = PathBuf::from("tests/data/vaults/tt");
         let (referenceables, references) = scan_vault(&dir, &root_dir);
@@ -1071,5 +1092,112 @@ mod tests {
         inner_dir/hi
         Something
         ");
+    }
+
+    #[test]
+    fn test_build_links_block_ref() {
+        let dir = PathBuf::from("tests/data/vaults/tt");
+        let root_dir = PathBuf::from("tests/data/vaults/tt");
+        let path = PathBuf::from("block.md");
+        let block_md = std::fs::read_to_string(root_dir.join(&path)).unwrap();
+
+        let (referenceables, references) = scan_vault(&dir, &root_dir);
+        let block_md_references = references
+            .into_iter()
+            .filter(|r| r.path == path)
+            .collect::<Vec<_>>();
+        let (links_built_from_block_md, unresolved_references_in_block_md) =
+            build_links(block_md_references, referenceables);
+
+        let ref_contents = links_built_from_block_md
+            .iter()
+            .map(|l| {
+                let refe = &l.from;
+                block_md[refe.range.clone()].to_string()
+            })
+            .collect::<Vec<_>>();
+
+        let refable_contents = links_built_from_block_md
+            .iter()
+            .map(|l| {
+                let refable = &l.to;
+                let range = match refable {
+                    Referenceable::Block { range, .. } => range,
+                    Referenceable::Note { .. } => return "Note".to_string(),
+                    _ => panic!("Unexpected referenceable"),
+                };
+                block_md[(range.start)
+                    ..(range.start + min(range.end - range.start, 10))]
+                    .to_string()
+            })
+            .collect::<Vec<_>>();
+
+        let identifiers = links_built_from_block_md
+            .iter()
+            .map(|l| {
+                let refable = &l.to;
+                match refable {
+                    Referenceable::Block { identifier, .. } => {
+                        identifier.to_string()
+                    }
+                    Referenceable::Note { .. } => return "-".to_string(),
+                    _ => panic!("Expected block referenceable"),
+                }
+            })
+            .collect::<Vec<_>>();
+
+        let kinds = links_built_from_block_md
+            .iter()
+            .map(|l| {
+                let refable = &l.to;
+                match refable {
+                    Referenceable::Block { kind, .. } => format!("{:?}", kind),
+                    Referenceable::Note { .. } => return "-".to_string(),
+                    _ => panic!("Expected block referenceable"),
+                }
+            })
+            .collect::<Vec<_>>();
+
+        let table = print_table(
+            &vec!["Reference", "Referenceable content", "Identifier", "Kind"],
+            &vec![ref_contents, refable_contents, identifiers, kinds],
+        );
+
+        assert_snapshot!(table, @r"
+        +-----+------------------+-----------------------+-------------+-----------------+
+        | Idx |    Reference     | Referenceable content | Identifier  |      Kind       |
+        +-----+------------------+-----------------------+-------------+-----------------+
+        |   0 | [[#^quotation]   | > quotatio            | quotation   | BlockQuote      |
+        |   1 | [[#^callout]     | > [!info]             | callout     | BlockQuote      |
+        |   2 | [[#^paragraph1]  | Note                  | -           | -               |
+        |   3 | [[#^p-with-code] | paragraph             | p-with-code | InlineParagraph |
+        |   4 | [[#^paragraph2]  | paragraph             | paragraph2  | Paragraph       |
+        |   5 | [[#^table]       | | Col 1  |            | table       | Table           |
+        |   6 | [[#^table2]      | Note                  | -           | -               |
+        |   7 | [[#^tableagain]  | Note                  | -           | -               |
+        |   8 | [[#^firstline]   | a nested l            | firstline   | InlineParagraph |
+        |   9 | [[#^inneritem]   | Note                  | -           | -               |
+        |  10 | [[#^tableref]    | | Col 1  |            | tableref    | Table           |
+        |  11 | [[#^tableref3]   | ^tableref2            | tableref3   | Paragraph       |
+        |  12 | [[#^tableref2]   | | Col 1  |            | tableref2   | Table           |
+        |  13 | [[#^works]       | this\n^work           | works       | InlineParagraph |
+        |  14 | [[#^firstline]   | a nested l            | firstline   | InlineParagraph |
+        |  15 | [[#^inneritem]   | Note                  | -           | -               |
+        |  16 | [[#^firstline1]  | a nested l            | firstline1  | InlineParagraph |
+        |  17 | [[#^inneritem1]  | Note                  | -           | -               |
+        |  18 | [[#^fulllst1]    | Note                  | -           | -               |
+        +-----+------------------+-----------------------+-------------+-----------------+
+        ");
+
+        let unresolved_str = unresolved_references_in_block_md
+            .into_iter()
+            .map(|r| {
+                let mut s = String::new();
+                s.push_str(&r.dest);
+                s
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert_snapshot!(unresolved_str, @"");
     }
 }

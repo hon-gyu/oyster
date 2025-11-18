@@ -108,14 +108,15 @@ impl std::fmt::Display for Referenceable {
                 path,
                 identifier,
                 kind,
-                range: _,
+                range,
             } => {
                 write!(
                     f,
-                    "Block: {}, {}, {:?}",
+                    "Block: {}, {}, {:?}, range: {:?}",
                     path.display(),
                     identifier,
-                    kind
+                    kind,
+                    range
                 )
             }
         }
