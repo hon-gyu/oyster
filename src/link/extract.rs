@@ -144,10 +144,6 @@ fn extract_node_reference_referenceable_and_identifier(
             };
             Some(NodeParsedResult::Referenceable(referenceable))
         }
-        NodeKind::List { .. } => {
-            // TODO: Block. Not implemented.
-            None
-        }
         NodeKind::Paragraph => {
             if node.children.len() < 2 {
                 return None;
@@ -197,7 +193,49 @@ fn extract_node_reference_referenceable_and_identifier(
                     return Some(NodeParsedResult::Referenceable(refable));
                 }
             }
-            
+
+            None
+        }
+        NodeKind::Item => {
+            if node.children.len() <= 2 {
+                return None;
+            }
+
+            let snd_last_child = &node.children[node.children.len() - 1];
+            let last_child = &node.children[node.children.len() - 2];
+
+            let block_identifier: Option<BlockIdentifier> =
+                match (&snd_last_child.kind, &last_child.kind) {
+                    (NodeKind::Text(fst), NodeKind::Text(snd)) => {
+                        if fst.as_ref() == "^"
+                            && is_block_identifier(snd.as_ref())
+                        {
+                            Some(BlockIdentifier {
+                                identifier: snd.as_ref().to_string(),
+                                range: (snd_last_child.byte_range().start
+                                    ..last_child.byte_range().end),
+                            })
+                        } else {
+                            None
+                        }
+                    }
+                    _ => None,
+                };
+
+            if block_identifier.is_none() {
+                return None;
+            }
+
+            if let Some(block_identifer_val) = block_identifier {
+                let refable = Referenceable::Block {
+                    path: path.clone(),
+                    identifier: block_identifer_val.identifier,
+                    kind: BlockReferenceableKind::InlineParagraph,
+                    range: node.byte_range().clone(),
+                };
+                return Some(NodeParsedResult::Referenceable(refable));
+            }
+
             None
         }
         _ => None,
@@ -543,59 +581,11 @@ mod tests {
         "##);
         assert_debug_snapshot!(referenceables, @r#"
         [
-            Block {
-                path: "tests/data/vaults/tt/block.md",
-                identifier: "paragraph2",
-                kind: Paragraph,
-                range: 67..79,
-            },
-            Block {
-                path: "tests/data/vaults/tt/block.md",
-                identifier: "fulllist",
-                kind: List,
-                range: 93..126,
-            },
-            Block {
-                path: "tests/data/vaults/tt/block.md",
-                identifier: "table",
-                kind: Table,
-                range: 137..217,
-            },
-            Block {
-                path: "tests/data/vaults/tt/block.md",
-                identifier: "quotation",
-                kind: BlockQuote,
-                range: 226..238,
-            },
-            Block {
-                path: "tests/data/vaults/tt/block.md",
-                identifier: "callout",
-                kind: BlockQuote,
-                range: 269..302,
-            },
             Heading {
                 path: "tests/data/vaults/tt/block.md",
                 level: H6,
                 text: "Edge case: a later block identifier invalidate previous one",
                 range: 883..951,
-            },
-            Block {
-                path: "tests/data/vaults/tt/block.md",
-                identifier: "tableref",
-                kind: Table,
-                range: 952..1032,
-            },
-            Block {
-                path: "tests/data/vaults/tt/block.md",
-                identifier: "tableref2",
-                kind: Table,
-                range: 1079..1159,
-            },
-            Block {
-                path: "tests/data/vaults/tt/block.md",
-                identifier: "tableref3",
-                kind: Paragraph,
-                range: 1160..1171,
             },
             Heading {
                 path: "tests/data/vaults/tt/block.md",
