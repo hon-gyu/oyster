@@ -1,10 +1,10 @@
 paragraph 1 ^paragraph
 
+paragraph with `code` inside ^p-with-code
+
 paragraph 2
 
 ^paragraph2
-
-
 
 - some list
 	- item 1
@@ -37,6 +37,7 @@ paragraph 2
 
 reference
 - paragraph: [[#^paragraph1]]
+- paragraph with code: [[#^p-with-code]]
 - separate line caret: [[#^paragraph2]]
 	- for paragraph the caret doesn't need to have a blank line before and after it
 - table: [[#^table]] 

@@ -149,8 +149,8 @@ fn extract_node_reference_referenceable_and_identifier(
                 return None;
             }
 
-            let snd_last_child = &node.children[node.children.len() - 1];
-            let last_child = &node.children[node.children.len() - 2];
+            let snd_last_child = &node.children[node.children.len() - 2];
+            let last_child = &node.children[node.children.len() - 1];
 
             let block_identifier: Option<BlockIdentifier> =
                 match (&snd_last_child.kind, &last_child.kind) {
@@ -201,8 +201,8 @@ fn extract_node_reference_referenceable_and_identifier(
                 return None;
             }
 
-            let snd_last_child = &node.children[node.children.len() - 1];
-            let last_child = &node.children[node.children.len() - 2];
+            let snd_last_child = &node.children[node.children.len() - 2];
+            let last_child = &node.children[node.children.len() - 1];
 
             let block_identifier: Option<BlockIdentifier> =
                 match (&snd_last_child.kind, &last_child.kind) {
@@ -230,7 +230,7 @@ fn extract_node_reference_referenceable_and_identifier(
                 let refable = Referenceable::Block {
                     path: path.clone(),
                     identifier: block_identifer_val.identifier,
-                    kind: BlockReferenceableKind::InlineParagraph,
+                    kind: BlockReferenceableKind::InlineListItem,
                     range: node.byte_range().clone(),
                 };
                 return Some(NodeParsedResult::Referenceable(refable));
@@ -581,11 +581,77 @@ mod tests {
         "##);
         assert_debug_snapshot!(referenceables, @r#"
         [
+            Block {
+                path: "tests/data/vaults/tt/block.md",
+                identifier: "paragraph",
+                kind: InlineParagraph,
+                range: 0..23,
+            },
+            Block {
+                path: "tests/data/vaults/tt/block.md",
+                identifier: "p-with-code",
+                kind: InlineParagraph,
+                range: 24..66,
+            },
+            Block {
+                path: "tests/data/vaults/tt/block.md",
+                identifier: "paragraph2",
+                kind: Paragraph,
+                range: 67..79,
+            },
+            Block {
+                path: "tests/data/vaults/tt/block.md",
+                identifier: "fulllist",
+                kind: List,
+                range: 93..126,
+            },
+            Block {
+                path: "tests/data/vaults/tt/block.md",
+                identifier: "table",
+                kind: Table,
+                range: 137..217,
+            },
+            Block {
+                path: "tests/data/vaults/tt/block.md",
+                identifier: "quotation",
+                kind: BlockQuote,
+                range: 226..238,
+            },
+            Block {
+                path: "tests/data/vaults/tt/block.md",
+                identifier: "callout",
+                kind: BlockQuote,
+                range: 269..302,
+            },
+            Block {
+                path: "tests/data/vaults/tt/block.md",
+                identifier: "inneritem",
+                kind: InlineListItem,
+                range: 739..763,
+            },
             Heading {
                 path: "tests/data/vaults/tt/block.md",
                 level: H6,
                 text: "Edge case: a later block identifier invalidate previous one",
                 range: 883..951,
+            },
+            Block {
+                path: "tests/data/vaults/tt/block.md",
+                identifier: "tableref",
+                kind: Table,
+                range: 952..1032,
+            },
+            Block {
+                path: "tests/data/vaults/tt/block.md",
+                identifier: "tableref2",
+                kind: Table,
+                range: 1079..1159,
+            },
+            Block {
+                path: "tests/data/vaults/tt/block.md",
+                identifier: "tableref3",
+                kind: Paragraph,
+                range: 1160..1171,
             },
             Heading {
                 path: "tests/data/vaults/tt/block.md",
@@ -593,11 +659,41 @@ mod tests {
                 text: "Edge case: the number of blank lines before identifier doesn’t matter",
                 range: 1314..1392,
             },
+            Block {
+                path: "tests/data/vaults/tt/block.md",
+                identifier: "works",
+                kind: InlineParagraph,
+                range: 1393..1405,
+            },
             Heading {
                 path: "tests/data/vaults/tt/block.md",
                 level: H6,
                 text: "Edge case: full reference to a list make its inner state not refereceable",
                 range: 1684..1766,
+            },
+            Block {
+                path: "tests/data/vaults/tt/block.md",
+                identifier: "firstline",
+                kind: InlineParagraph,
+                range: 1769..1794,
+            },
+            Block {
+                path: "tests/data/vaults/tt/block.md",
+                identifier: "inneritem",
+                kind: InlineListItem,
+                range: 1793..1817,
+            },
+            Block {
+                path: "tests/data/vaults/tt/block.md",
+                identifier: "firstline1",
+                kind: InlineParagraph,
+                range: 1933..1959,
+            },
+            Block {
+                path: "tests/data/vaults/tt/block.md",
+                identifier: "fulllist1",
+                kind: InlineListItem,
+                range: 1958..1995,
             },
         ]
         "#);
