@@ -1,8 +1,9 @@
 use super::types::{Reference, ReferenceKind, Referenceable};
-use super::utils::percent_decode;
+use super::utils::{is_block_identifier, percent_decode};
 use crate::ast::{Node, NodeKind, Tree};
 use pulldown_cmark::LinkType;
 use std::fs;
+use std::ops::Range;
 use std::path::{Path, PathBuf};
 
 // Scan a note and return a tuple of references and in-note referenceables
@@ -18,6 +19,8 @@ pub fn scan_note(path: &PathBuf) -> (Vec<Reference>, Vec<Referenceable>) {
 
     let mut references = Vec::new();
     let mut referenceables = Vec::new();
+
+    let root_children = &tree.root_node.children;
     extract_reference_and_referenceable(
         &tree.root_node,
         path,
@@ -28,7 +31,164 @@ pub fn scan_note(path: &PathBuf) -> (Vec<Reference>, Vec<Referenceable>) {
     (references, referenceables)
 }
 
-/// Extracts all references and referenceables from a node.
+/// Extracts all references and referenceables from a list of node.
+///
+/// We operates on a list of node because we need to get previous node
+/// when we encounter a block reference.
+
+struct BlockIdentifier {
+    identifier: String,
+    range: Range<usize>,
+}
+
+enum NodeParsedResult {
+    Refernce(Reference),
+    Referenceable(Referenceable),
+    BlockIdentifier(BlockIdentifier),
+}
+
+/// Maybe we should return a boolean value indicating whether
+/// the node analysis can be ended?
+fn extract_node_reference_referenceable_and_identifier(
+    node: &Node,
+    path: &PathBuf,
+) -> Option<NodeParsedResult> {
+    match &node.kind {
+        // Reference
+        NodeKind::Link {
+            link_type,
+            dest_url,
+            ..
+        }
+        | NodeKind::Image {
+            link_type,
+            dest_url,
+            ..
+        } => {
+            match link_type {
+                LinkType::WikiLink { has_pothole } => {
+                    let display_text = if !has_pothole {
+                        dest_url.to_string()
+                    } else {
+                        // Take out the text from the link's first child
+                        assert_eq!(node.child_count(), 1);
+                        let text_node = &node.children[0];
+                        if let NodeKind::Text(text) = &text_node.kind {
+                            text.to_string()
+                        } else {
+                            unreachable!("Never: Wikilink should have text");
+                        }
+                    };
+                    let reference = Reference {
+                        path: path.clone(),
+                        range: node.byte_range().clone(),
+                        dest: dest_url.trim().to_string(),
+                        kind: ReferenceKind::WikiLink,
+                        display_text,
+                    };
+                    Some(NodeParsedResult::Refernce(reference))
+                }
+                LinkType::Inline => {
+                    // Decode the destination URL. Eg, from `Note%201` to `Note 1`
+                    let mut dest = percent_decode(dest_url);
+                    // `[text]()` points to file `().md`
+                    if dest.is_empty() {
+                        dest = "()".to_string();
+                    }
+                    let dest = dest.strip_suffix(".md").unwrap_or(&dest);
+                    let dest = dest.strip_suffix(".markdown").unwrap_or(&dest);
+                    // Take out the text from the link's first child
+                    let display_text = {
+                        match node.children.as_slice() {
+                            [] => "".to_string(),
+                            [text_node] => {
+                                if let NodeKind::Text(text) = &text_node.kind {
+                                    text.to_string()
+                                } else {
+                                    unreachable!(
+                                        "Never: Markdown link should have text"
+                                    );
+                                }
+                            }
+                            [fst, snd, ..] => {
+                                unreachable!(
+                                    "Never: Markdown link should have at most one child, got \n first: {:?}\n second: {:?}",
+                                    fst, snd,
+                                );
+                            }
+                        }
+                    };
+
+                    let reference = Reference {
+                        path: path.clone(),
+                        range: node.byte_range().clone(),
+                        dest: dest.to_string(),
+                        kind: ReferenceKind::MarkdownLink,
+                        display_text,
+                    };
+                    Some(NodeParsedResult::Refernce(reference))
+                }
+                _ => None,
+            }
+        }
+        // Referenceable
+        NodeKind::Heading { level, .. } => {
+            // Extract text from heading's children (can be Text, Code, etc.)
+            let text = node
+                .children
+                .iter()
+                .filter_map(|child| match &child.kind {
+                    NodeKind::Text(text) => Some(text.as_ref()),
+                    NodeKind::Code(code) => Some(code.as_ref()),
+                    _ => None,
+                })
+                .collect::<Vec<&str>>()
+                .join("");
+            let referenceable = Referenceable::Heading {
+                path: path.clone(),
+                level: level.clone(),
+                text,
+                range: node.byte_range().clone(),
+            };
+            Some(NodeParsedResult::Referenceable(referenceable))
+        }
+        NodeKind::List { .. } => {
+            // TODO: Block. Not implemented.
+            None
+        }
+        NodeKind::Paragraph => {
+            // If the paragraph has two text nodes
+            // with the first one being `^`, and the second one being a
+            // valid block identifier, then it's a block reference.
+            if node.children.len() == 2 {
+                let fst = &node.children[0];
+                let snd = &node.children[1];
+                if let NodeKind::Text(text) = &fst.kind {
+                    if text.as_ref() == "^" {
+                        if let NodeKind::Text(text) = &snd.kind {
+                            if is_block_identifier(text.as_ref()) {
+                                return Some(
+                                    NodeParsedResult::BlockIdentifier(
+                                        BlockIdentifier {
+                                            identifier: text
+                                                .as_ref()
+                                                .to_string(),
+                                            range: (fst.byte_range().start)
+                                                ..(snd.byte_range().end),
+                                        },
+                                    ),
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+            todo!()
+        }
+        _ => None,
+    }
+}
+
 fn extract_reference_and_referenceable(
     node: &Node,
     path: &PathBuf,
