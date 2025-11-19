@@ -390,7 +390,7 @@ pub fn build_links(
                                 _ => None,
                             })
                             .collect::<Vec<_>>();
-                        if let [matched_block] = matched_blocks[..] {
+                        if let [matched_block, ..] = matched_blocks[..] {
                             Some(matched_block.clone())
                         } else {
                             None
