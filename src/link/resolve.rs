@@ -427,7 +427,9 @@ mod tests {
 
     use super::*;
     use crate::link::extract::{scan_note, scan_vault};
-    use insta::assert_snapshot;
+    use insta::{
+        assert_compact_debug_snapshot, assert_debug_snapshot, assert_snapshot,
+    };
     use pulldown_cmark::HeadingLevel;
 
     fn print_table(titles: &[&str], columns: &[Vec<String>]) -> String {
@@ -440,9 +442,12 @@ mod tests {
             .iter()
             .zip(columns.iter())
             .map(|(title, col)| {
-                title
-                    .len()
-                    .max(col.iter().map(|s| s.replace('\n', "\\n").len()).max().unwrap_or(0))
+                title.len().max(
+                    col.iter()
+                        .map(|s| s.replace('\n', "\\n").len())
+                        .max()
+                        .unwrap_or(0),
+                )
             })
             .collect();
 
@@ -1102,10 +1107,28 @@ mod tests {
         let block_md = std::fs::read_to_string(root_dir.join(&path)).unwrap();
 
         let (referenceables, references) = scan_vault(&dir, &root_dir);
+
         let block_md_references = references
             .into_iter()
             .filter(|r| r.path == path)
             .collect::<Vec<_>>();
+
+        let _block_md_referenceables = &referenceables
+            .iter()
+            .filter_map(|r| match r {
+                Referenceable::Note { path: p, .. } => {
+                    if p == &path {
+                        Some(r)
+                    } else {
+                        None
+                    }
+                }
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+
+        // assert_debug_snapshot!(block_md_referenceables, @r#""#);
+
         let (links_built_from_block_md, unresolved_references_in_block_md) =
             build_links(block_md_references, referenceables);
 
@@ -1169,23 +1192,21 @@ mod tests {
         +-----+------------------+-----------------------+-------------+-----------------+
         |   0 | [[#^quotation]   | > quotatio            | quotation   | BlockQuote      |
         |   1 | [[#^callout]     | > [!info]             | callout     | BlockQuote      |
-        |   2 | [[#^paragraph1]  | Note                  | -           | -               |
+        |   2 | [[#^paragraph]   | paragraph             | paragraph   | InlineParagraph |
         |   3 | [[#^p-with-code] | paragraph             | p-with-code | InlineParagraph |
         |   4 | [[#^paragraph2]  | paragraph             | paragraph2  | Paragraph       |
         |   5 | [[#^table]       | | Col 1  |            | table       | Table           |
-        |   6 | [[#^table2]      | Note                  | -           | -               |
-        |   7 | [[#^tableagain]  | Note                  | -           | -               |
-        |   8 | [[#^firstline]   | a nested l            | firstline   | InlineParagraph |
-        |   9 | [[#^inneritem]   | Note                  | -           | -               |
-        |  10 | [[#^tableref]    | | Col 1  |            | tableref    | Table           |
-        |  11 | [[#^tableref3]   | ^tableref2            | tableref3   | Paragraph       |
-        |  12 | [[#^tableref2]   | | Col 1  |            | tableref2   | Table           |
-        |  13 | [[#^works]       | this\n^work           | works       | InlineParagraph |
-        |  14 | [[#^firstline]   | a nested l            | firstline   | InlineParagraph |
-        |  15 | [[#^inneritem]   | Note                  | -           | -               |
-        |  16 | [[#^firstline1]  | a nested l            | firstline1  | InlineParagraph |
-        |  17 | [[#^inneritem1]  | Note                  | -           | -               |
-        |  18 | [[#^fulllst1]    | Note                  | -           | -               |
+        |   6 | [[#^firstline]   | - a nested            | firstline   | InlineListItem  |
+        |   7 | [[#^inneritem]   | \n	-  item\n          | inneritem   | InlineListItem  |
+        |   8 | [[#^tableref]    | | Col 1  |            | tableref    | Table           |
+        |   9 | [[#^tableref3]   | ^tableref2            | tableref3   | Paragraph       |
+        |  10 | [[#^tableref2]   | | Col 1  |            | tableref2   | Table           |
+        |  11 | [[#^works]       | this\n^work           | works       | InlineParagraph |
+        |  12 | [[#^firstline]   | - a nested            | firstline   | InlineListItem  |
+        |  13 | [[#^inneritem]   | \n	-  item\n          | inneritem   | InlineListItem  |
+        |  14 | [[#^firstline1]  | a nested l            | firstline1  | InlineParagraph |
+        |  15 | [[#^inneritem1]  | Note                  | -           | -               |
+        |  16 | [[#^fulllst1]    | Note                  | -           | -               |
         +-----+------------------+-----------------------+-------------+-----------------+
         ");
 

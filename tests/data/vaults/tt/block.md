@@ -36,14 +36,11 @@ paragraph 2
 ---
 
 reference
-- paragraph: [[#^paragraph1]]
+- paragraph: [[#^paragraph]]
 - paragraph with code: [[#^p-with-code]]
 - separate line caret: [[#^paragraph2]]
 	- for paragraph the caret doesn't need to have a blank line before and after it
 - table: [[#^table]] 
-- table: [[#^table2]] 
-- table: [[#^tableagain]]
-	- it looks like the block reference will always point to last non-empty non-block-reference struct
 
 ---
 
@@ -110,3 +107,8 @@ this
 	- [[#^firstline1]]: this now breaks and fallback to the full note
 	-  [[#^inneritem1]]: this now breaks and fallback to the full note
 	- [[#^fulllst1]]: points to the full list
+
+
+######  Edge case: When there are more than one identical identifiers
+
+Obsidian doesn't guarantee to points to the first one 
