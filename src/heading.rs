@@ -5,6 +5,34 @@ use pulldown_cmark::HeadingLevel;
 use std::fmt::Display;
 use tree_sitter::Point;
 
+impl<'a> ASTNode<'a> {
+    pub fn is_heading(&self, level: Option<usize>) -> bool {
+        match &self.kind {
+            NodeKind::Heading { level: l, .. } => {
+                if let Some(level) = level {
+                    (*l as usize) == level
+                } else {
+                    true
+                }
+            }
+            _ => false,
+        }
+    }
+
+    pub fn get_heading_text(&self, text: &str) -> Option<String> {
+        if !self.is_heading(None) {
+            return None;
+        } else if self.children.len() == 0 {
+            return None;
+        } else {
+            let first_child_start = &self.children[0].start_byte;
+            let last_child_end =
+                &self.children[self.children.len() - 1].end_byte;
+            Some(text[*first_child_start..*last_child_end].to_string())
+        }
+    }
+}
+
 /// Heading information, including text and ending location
 #[derive(Debug, PartialEq, Clone)]
 pub struct Heading {
