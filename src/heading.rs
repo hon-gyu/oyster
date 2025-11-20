@@ -1,9 +1,9 @@
 //! Table of contents based on heading levels
-use crate::ast::{Node as ASTNode, NodeKind, Tree as ASTTree};
+#[allow(dead_code)] // TODO: remove
+use crate::ast::{Node as ASTNode, NodeKind};
 use crate::value::Value;
 use ego_tree::{Tree, iter::Edge};
 use pulldown_cmark::HeadingLevel;
-use std::fmt::Display;
 use std::ops::Range;
 use tree_sitter::Point;
 
@@ -146,65 +146,4 @@ fn pp_tree(
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use insta::assert_snapshot;
-
-    fn data() -> String {
-        let md = r#######"
-# Heading
-
-some text
-
-## Heading 2
-
-some text
-
-### Heading 3
-
-some text
-
-#### Heading 4
-
-some text
-
-##### Heading 5
-
-some text
-
-###### Heading 6
-
-some text
-
-# Heading
-
-some text
-
-#
-
-emtpy heading
-"#######;
-        md.to_string()
-    }
-
-    fn data_sparse_headings() -> String {
-        r#######"
-
-### Heading 3
-
-
-#### Heading 4
-
-some text
-
-##### Heading 5
-
-## Heading 2
-
-###### Heading 6
-
-some text
-"#######
-            .to_string()
-    }
-}
+mod tests {}
