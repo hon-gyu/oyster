@@ -1,8 +1,10 @@
 //! Table of contents based on heading levels
 use crate::ast::{Node as ASTNode, NodeKind, Tree as ASTTree};
+use crate::value::Value;
 use ego_tree::{Tree, iter::Edge};
 use pulldown_cmark::HeadingLevel;
 use std::fmt::Display;
+use std::ops::Range;
 use tree_sitter::Point;
 
 impl<'a> ASTNode<'a> {
@@ -33,26 +35,11 @@ impl<'a> ASTNode<'a> {
     }
 }
 
-/// Heading information, including text and ending location
-#[derive(Debug, PartialEq, Clone)]
-pub struct Heading {
-    pub level: HeadingLevel,
-    pub text: String,
-    pub start_byte: usize,
-    pub end_byte: usize,
-    pub start_point: Point,
-    pub end_point: Point,
-}
-
-#[derive(Debug, PartialEq, Clone)]
-pub enum Node {
-    Root,
-    Heading(Heading),
-}
-
 pub trait HasLevel {
     fn get_level(&self) -> usize;
 
+    /// Build a tree for a given root node and a list of ordered nodes
+    /// based on their level information.
     fn build_tree(root_node: Self, nodes: Vec<Self>) -> Tree<Self>
     where
         Self: Sized,
@@ -87,6 +74,43 @@ pub trait HasLevel {
     }
 }
 
+pub struct Section {
+    level: usize,
+    heading_text: String,
+    range: Range<usize>,
+    heading_range: Range<usize>,
+    content: Value,
+}
+
+impl Into<Value> for Section {
+    fn into(self) -> Value {
+        Value::O(vec![(self.heading_text, self.content)])
+    }
+}
+
+impl HasLevel for Section {
+    fn get_level(&self) -> usize {
+        self.level
+    }
+}
+
+/// Heading information, including text and ending location
+#[derive(Debug, PartialEq, Clone)]
+pub struct Heading {
+    pub level: HeadingLevel,
+    pub text: String,
+    pub start_byte: usize,
+    pub end_byte: usize,
+    pub start_point: Point,
+    pub end_point: Point,
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub enum Node {
+    Root,
+    Heading(Heading),
+}
+
 impl HasLevel for Node {
     fn get_level(&self) -> usize {
         match self {
@@ -96,77 +120,29 @@ impl HasLevel for Node {
     }
 }
 
-#[derive(Debug, PartialEq, Clone)]
-pub struct Hierarchy(Tree<Node>);
-
-impl Display for Hierarchy {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let tree = &self.0;
-        for edge in tree.root().traverse() {
-            match edge {
-                Edge::Open(node) => {
-                    let ancestor_count = node.ancestors().count();
-                    let depth = ancestor_count.saturating_sub(1);
-                    let indent = "  ".repeat(depth);
-                    match node.value() {
-                        Node::Root => writeln!(f, "Root")?,
-                        Node::Heading(h) => writeln!(
-                            f,
-                            "{}├─ H{}: {}",
-                            indent, h.level as usize, h.text
-                        )?,
-                    }
+fn pp_tree(
+    tree: &Tree<Node>,
+    f: &mut std::fmt::Formatter<'_>,
+) -> std::fmt::Result {
+    for edge in tree.root().traverse() {
+        match edge {
+            Edge::Open(node) => {
+                let ancestor_count = node.ancestors().count();
+                let depth = ancestor_count.saturating_sub(1);
+                let indent = "  ".repeat(depth);
+                match node.value() {
+                    Node::Root => writeln!(f, "Root")?,
+                    Node::Heading(h) => writeln!(
+                        f,
+                        "{}├─ H{}: {}",
+                        indent, h.level as usize, h.text
+                    )?,
                 }
-                Edge::Close(_) => {} // Ignore close edges
             }
-        }
-        Ok(())
-    }
-}
-
-pub fn build_heading_hierarchy(tree: &ASTTree) -> Hierarchy {
-    let root_node = &tree.root_node;
-    let mut nodes: Vec<Node> = vec![];
-    extract_heading_nodes_from_ast_node(root_node, &mut nodes);
-
-    let heading_tree = HasLevel::build_tree(Node::Root, nodes);
-
-    Hierarchy(heading_tree)
-}
-
-fn extract_heading_nodes_from_ast_node(
-    node: &ASTNode,
-    acc_heading_nodes: &mut Vec<Node>,
-) {
-    for child in node.children.iter() {
-        if let NodeKind::Heading { level, .. } = child.kind {
-            let text = child
-                .children
-                .iter()
-                .filter_map(|child| match &child.kind {
-                    NodeKind::Text(text) => Some(text.as_ref()),
-                    NodeKind::Code(code) => Some(code.as_ref()),
-                    _ => None,
-                })
-                .collect::<Vec<&str>>()
-                .join("");
-
-            let entry = Heading {
-                level,
-                text,
-                start_byte: child.start_byte,
-                end_byte: child.end_byte,
-                start_point: child.start_point,
-                end_point: child.end_point,
-            };
-            acc_heading_nodes.push(Node::Heading(entry));
-        } else {
-            child.children.iter().for_each(|c| {
-                extract_heading_nodes_from_ast_node(c, acc_heading_nodes)
-            });
+            Edge::Close(_) => {} // Ignore close edges
         }
     }
-    ()
+    Ok(())
 }
 
 #[cfg(test)]
@@ -230,39 +206,5 @@ some text
 some text
 "#######
             .to_string()
-    }
-
-    #[test]
-    fn test_toc_1() {
-        let md = data();
-        let tree = ASTTree::new(&md);
-        let toc = build_heading_hierarchy(&tree);
-        assert_snapshot!(toc, @r"
-        Root
-        ├─ H1: Heading
-          ├─ H2: Heading 2
-            ├─ H3: Heading 3
-              ├─ H4: Heading 4
-                ├─ H5: Heading 5
-                  ├─ H6: Heading 6
-        ├─ H1: Heading
-        ├─ H1:
-        ");
-    }
-
-    #[test]
-    fn test_toc_2() {
-        let md = data_sparse_headings();
-        let tree = ASTTree::new(&md);
-
-        let toc = build_heading_hierarchy(&tree);
-        assert_snapshot!(toc, @r"
-        Root
-        ├─ H3: Heading 3
-          ├─ H4: Heading 4
-            ├─ H5: Heading 5
-        ├─ H2: Heading 2
-          ├─ H6: Heading 6
-        ");
     }
 }
