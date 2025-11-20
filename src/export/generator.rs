@@ -4,7 +4,7 @@ use super::template::render_page;
 use super::types::{
     BacklinkInfo, LinkContext, PageContext, PageData, SiteConfig, SiteContext,
 };
-use crate::link::{build_links, scan_vault, Link, Referenceable};
+use crate::link::{Link, Referenceable, build_links, scan_vault};
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -17,10 +17,8 @@ pub fn generate_site(
     // Create output directory
     fs::create_dir_all(&config.output_dir)?;
 
-    // Scan the vault
+    // Scan the vault and build links
     let (referenceables, references) = scan_vault(vault_path, vault_path);
-
-    // Build link graph
     let (links, _unresolved) = build_links(references, referenceables.clone());
 
     // Build backlink map: path -> list of pages that link to it
@@ -29,13 +27,7 @@ pub fn generate_site(
     // Process each note
     for referenceable in &referenceables {
         if let Referenceable::Note { path, .. } = referenceable {
-            generate_page(
-                vault_path,
-                path,
-                &links,
-                &backlink_map,
-                config,
-            )?;
+            generate_page(vault_path, path, &links, &backlink_map, config)?;
         }
     }
 
@@ -51,7 +43,10 @@ fn build_backlink_map(links: &[Link]) -> HashMap<PathBuf, Vec<PathBuf>> {
         let target = link.to.path().clone();
         let source = link.from.path.clone();
 
-        backlinks.entry(target).or_insert_with(Vec::new).push(source);
+        backlinks
+            .entry(target)
+            .or_insert_with(Vec::new)
+            .push(source);
     }
 
     backlinks
@@ -77,17 +72,15 @@ fn generate_page(
 
     // Build backlinks for this page
     let backlinks = if config.generate_backlinks {
-        backlink_map
-            .get(note_path)
-            .map(|sources| {
-                sources
-                    .iter()
-                    .map(|src| BacklinkInfo {
-                        title: extract_title_from_path(src),
-                        path: format!("/{}", path_to_slug(src)),
-                    })
-                    .collect()
-            })
+        backlink_map.get(note_path).map(|sources| {
+            sources
+                .iter()
+                .map(|src| BacklinkInfo {
+                    title: extract_title_from_path(src),
+                    path: format!("/{}", path_to_slug(src)),
+                })
+                .collect()
+        })
     } else {
         None
     };
@@ -155,10 +148,7 @@ mod tests {
     #[test]
     fn test_extract_title() {
         let md = "# Hello World\n\nSome content";
-        assert_eq!(
-            extract_title(md, Path::new("test.md")),
-            "Hello World"
-        );
+        assert_eq!(extract_title(md, Path::new("test.md")), "Hello World");
 
         let md_no_heading = "Just some text";
         assert_eq!(
@@ -167,9 +157,6 @@ mod tests {
         );
 
         let md_h2 = "## Second Level";
-        assert_eq!(
-            extract_title(md_h2, Path::new("test.md")),
-            "Second Level"
-        );
+        assert_eq!(extract_title(md_h2, Path::new("test.md")), "Second Level");
     }
 }

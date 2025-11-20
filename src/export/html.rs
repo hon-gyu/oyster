@@ -1,15 +1,14 @@
 /// HTML conversion from markdown with link rewriting
 use crate::link::Link;
-use pulldown_cmark::{html, Parser};
+use crate::parse::default_opts;
+use pulldown_cmark::{CowStr, Event, LinkType, Parser, Tag};
+use std::collections::HashMap;
 use std::path::Path;
 
 /// Converts a path to a URL-friendly slug
 /// e.g., "Note 1.md" -> "note-1.html"
 pub fn path_to_slug(path: &Path) -> String {
-    let stem = path
-        .file_stem()
-        .and_then(|s| s.to_str())
-        .unwrap_or("index");
+    let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("index");
 
     // Convert to lowercase and replace spaces with hyphens
     let slug = stem
@@ -23,8 +22,9 @@ pub fn path_to_slug(path: &Path) -> String {
 /// Converts a markdown file to HTML with proper link rewriting
 ///
 /// Strategy:
-/// 1. Replace wikilinks [[...]] with markdown links [text](url) using the resolved links
-/// 2. Render the result to HTML using pulldown-cmark
+/// 1. Parse markdown with default_opts
+/// 2. Transform Link events using resolved links
+/// 3. Render to HTML
 ///
 /// Arguments:
 /// - `markdown`: The raw markdown content
@@ -37,59 +37,52 @@ pub fn markdown_to_html(
     current_path: &Path,
     links: &[Link],
 ) -> String {
-    // Replace wikilinks with markdown links
-    let rewritten = rewrite_wikilinks(markdown, current_path, links);
-
-    // Convert to HTML
-    let parser = Parser::new(&rewritten);
-    let mut html_output = String::new();
-    html::push_html(&mut html_output, parser);
-
-    html_output
-}
-
-/// Rewrites wikilinks in markdown to standard markdown links
-fn rewrite_wikilinks(
-    markdown: &str,
-    current_path: &Path,
-    links: &[Link],
-) -> String {
-    let mut result = markdown.to_string();
-
-    // Sort links by range in reverse order so replacements don't affect positions
-    let mut sorted_links: Vec<_> = links
+    // Build a lookup map: dest string -> resolved link
+    let link_map: HashMap<&str, &Link> = links
         .iter()
         .filter(|link| link.from.path == current_path)
+        .map(|link| (link.from.dest.as_str(), link))
         .collect();
-    sorted_links.sort_by_key(|link| std::cmp::Reverse(link.from.range.start));
 
-    for link in sorted_links {
-        let range = &link.from.range;
-        let original_text = &markdown[range.clone()];
+    // Parse with the same options as in link resolution
+    let opts = default_opts();
+    let parser = Parser::new_ext(markdown, opts);
 
-        // Generate the target URL
-        let target_slug = path_to_slug(link.to.path());
-        let href = format!("/{}", target_slug);
+    // Transform wikilinks
+    let transformed = parser.map(|event| match event {
+        Event::Start(Tag::Link {
+            dest_url, title, ..
+        }) => {
+            // Look up the resolved link
+            if let Some(resolved_link) = link_map.get(dest_url.as_ref()) {
+                // Rewrite to point to generated HTML
+                let target_slug = path_to_slug(resolved_link.to.path());
+                let new_dest = format!("/{}", target_slug);
 
-        // Get display text (use display_text from reference, or default to dest)
-        let display = if !link.from.display_text.is_empty() {
-            &link.from.display_text
-        } else {
-            // Extract note name from path
-            link.to.path()
-                .file_stem()
-                .and_then(|s| s.to_str())
-                .unwrap_or(&link.from.dest)
-        };
+                Event::Start(Tag::Link {
+                    link_type: LinkType::Inline,
+                    dest_url: CowStr::from(new_dest),
+                    title: title.clone(),
+                    id: CowStr::from(""),
+                })
+            } else {
+                // Keep original wikilink (unresolved)
+                Event::Start(Tag::Link {
+                    link_type: LinkType::Inline,
+                    dest_url,
+                    title,
+                    id: CowStr::from(""),
+                })
+            }
+        }
+        other => other,
+    });
 
-        // Create markdown link
-        let markdown_link = format!("[{}]({})", display, href);
+    // Render to HTML
+    let mut html_output = String::new();
+    pulldown_cmark::html::push_html(&mut html_output, transformed);
 
-        // Replace in string
-        result.replace_range(range.clone(), &markdown_link);
-    }
-
-    result
+    html_output
 }
 
 #[cfg(test)]
@@ -99,7 +92,10 @@ mod tests {
     #[test]
     fn test_path_to_slug() {
         assert_eq!(path_to_slug(Path::new("Note 1.md")), "note-1.html");
-        assert_eq!(path_to_slug(Path::new("Three laws of motion.md")), "three-laws-of-motion.html");
+        assert_eq!(
+            path_to_slug(Path::new("Three laws of motion.md")),
+            "three-laws-of-motion.html"
+        );
         assert_eq!(path_to_slug(Path::new("dir/Note.md")), "note.html");
         assert_eq!(path_to_slug(Path::new("(Test).md")), "test.html");
     }

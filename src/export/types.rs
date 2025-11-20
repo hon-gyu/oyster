@@ -1,3 +1,4 @@
+use serde::Serialize;
 use std::path::PathBuf;
 
 /// Configuration for the static site generator
@@ -25,7 +26,7 @@ impl Default for SiteConfig {
 }
 
 /// Context data passed to templates for rendering pages
-#[derive(Debug, Clone, serde::Serialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct PageContext {
     /// Site-level configuration
     pub site: SiteContext,
@@ -40,14 +41,14 @@ pub struct PageContext {
 }
 
 /// Site-level context for templates
-#[derive(Debug, Clone, serde::Serialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct SiteContext {
     pub title: String,
     pub base_url: String,
 }
 
 /// Individual page data
-#[derive(Debug, Clone, serde::Serialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct PageData {
     /// Page title (from frontmatter or first heading or filename)
     pub title: String,
@@ -57,8 +58,10 @@ pub struct PageData {
     pub path: String,
 }
 
+// <review>
+
 /// Link information for a page
-#[derive(Debug, Clone, serde::Serialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct LinkContext {
     /// Pages that link to this page
     pub backlinks: Vec<BacklinkInfo>,
@@ -67,7 +70,7 @@ pub struct LinkContext {
 }
 
 /// Information about a backlink
-#[derive(Debug, Clone, serde::Serialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct BacklinkInfo {
     /// Title of the page that links here
     pub title: String,
@@ -76,7 +79,7 @@ pub struct BacklinkInfo {
 }
 
 /// Information about an outgoing link
-#[derive(Debug, Clone, serde::Serialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct OutgoingLinkInfo {
     /// Title of the linked page
     pub title: String,
@@ -84,8 +87,10 @@ pub struct OutgoingLinkInfo {
     pub path: String,
 }
 
+// </review> Is this needed? Can't we just the one in link.rs?
+
 /// Table of contents entry
-#[derive(Debug, Clone, serde::Serialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct TocEntry {
     /// Heading level (1-6)
     pub level: u8,
@@ -94,3 +99,5 @@ pub struct TocEntry {
     /// Anchor ID for linking
     pub id: String,
 }
+
+// <review/> can't we just use the one in heading.rs?
