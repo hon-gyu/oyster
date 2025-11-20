@@ -19,54 +19,54 @@ const BASE_TEMPLATE: &str = r#"<!DOCTYPE html>
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
             line-height: 1.6;
-            color: #333;
+            color: #e4e4e7;
             max-width: 900px;
             margin: 0 auto;
             padding: 2rem;
-            background: #fafafa;
+            background: #18181b;
         }
 
         header {
             margin-bottom: 2rem;
             padding-bottom: 1rem;
-            border-bottom: 2px solid #eee;
+            border-bottom: 2px solid #3f3f46;
         }
 
         header h1 {
             font-size: 1.5rem;
-            color: #111;
+            color: #fafafa;
         }
 
         header a {
             text-decoration: none;
-            color: #111;
+            color: #fafafa;
         }
 
         main {
-            background: white;
+            background: #27272a;
             padding: 2rem;
             border-radius: 8px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            box-shadow: 0 1px 3px rgba(0,0,0,0.3);
         }
 
         article h1 {
             font-size: 2rem;
             margin-bottom: 1rem;
-            color: #111;
+            color: #fafafa;
         }
 
         article h2 {
             font-size: 1.5rem;
             margin-top: 2rem;
             margin-bottom: 0.75rem;
-            color: #222;
+            color: #e4e4e7;
         }
 
         article h3 {
             font-size: 1.25rem;
             margin-top: 1.5rem;
             margin-bottom: 0.5rem;
-            color: #333;
+            color: #d4d4d8;
         }
 
         article p {
@@ -74,7 +74,7 @@ const BASE_TEMPLATE: &str = r#"<!DOCTYPE html>
         }
 
         article a {
-            color: #0066cc;
+            color: #60a5fa;
             text-decoration: none;
         }
 
@@ -88,15 +88,16 @@ const BASE_TEMPLATE: &str = r#"<!DOCTYPE html>
         }
 
         article code {
-            background: #f5f5f5;
+            background: #3f3f46;
             padding: 0.2rem 0.4rem;
             border-radius: 3px;
             font-size: 0.9em;
             font-family: 'Monaco', 'Courier New', monospace;
+            color: #fca5a5;
         }
 
         article pre {
-            background: #f5f5f5;
+            background: #3f3f46;
             padding: 1rem;
             border-radius: 5px;
             overflow-x: auto;
@@ -106,25 +107,26 @@ const BASE_TEMPLATE: &str = r#"<!DOCTYPE html>
         article pre code {
             background: none;
             padding: 0;
+            color: #e4e4e7;
         }
 
         article blockquote {
-            border-left: 4px solid #ddd;
+            border-left: 4px solid #52525b;
             padding-left: 1rem;
             margin: 1rem 0;
-            color: #666;
+            color: #a1a1aa;
         }
 
         .backlinks {
             margin-top: 3rem;
             padding-top: 2rem;
-            border-top: 1px solid #eee;
+            border-top: 1px solid #3f3f46;
         }
 
         .backlinks h2 {
             font-size: 1.25rem;
             margin-bottom: 1rem;
-            color: #666;
+            color: #a1a1aa;
         }
 
         .backlinks ul {
@@ -137,7 +139,7 @@ const BASE_TEMPLATE: &str = r#"<!DOCTYPE html>
         }
 
         .backlinks a {
-            color: #0066cc;
+            color: #60a5fa;
             text-decoration: none;
         }
 
@@ -148,9 +150,9 @@ const BASE_TEMPLATE: &str = r#"<!DOCTYPE html>
         footer {
             margin-top: 2rem;
             padding-top: 1rem;
-            border-top: 1px solid #eee;
+            border-top: 1px solid #3f3f46;
             text-align: center;
-            color: #666;
+            color: #a1a1aa;
             font-size: 0.9rem;
         }
     </style>
