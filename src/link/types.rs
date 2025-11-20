@@ -30,12 +30,19 @@ pub enum Referenceable {
         path: PathBuf,
         level: HeadingLevel,
         text: String,
+        // The exact range of the heading event from start to end
         range: Range<usize>,
     },
     Block {
         path: PathBuf,
         identifier: String,
         kind: BlockReferenceableKind,
+        // The exact range of the event, including
+        // - paragraph
+        // - list item
+        // - block quote
+        // - table
+        // - list
         range: Range<usize>,
     },
 }
