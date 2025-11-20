@@ -11,11 +11,14 @@ use std::path::Path;
 pub fn path_to_slug(path: &Path) -> String {
     let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("index");
 
-    // Convert to lowercase and replace spaces with hyphens
     let slug = stem
         .to_lowercase()
         .replace(' ', "-")
-        .replace(['(', ')', '[', ']', '{', '}'], "");
+        .replace(['(', ')', '[', ']', '{', '}'], "")
+        // Remove or replace non-ASCII characters
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == '_')
+        .collect::<String>();
 
     format!("{}.html", slug)
 }
@@ -94,7 +97,11 @@ pub fn markdown_to_html(
                     format!("/{}", target_slug)
                 } else {
                     // Custom base URL: prepend to path
-                    format!("{}/{}", base_url.trim_end_matches('/'), target_slug)
+                    format!(
+                        "{}/{}",
+                        base_url.trim_end_matches('/'),
+                        target_slug
+                    )
                 };
 
                 Event::Start(Tag::Link {
