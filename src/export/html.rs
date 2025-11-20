@@ -1,6 +1,7 @@
 /// HTML conversion from markdown with link rewriting
 use crate::link::Link;
 use crate::parse::default_opts;
+use percent_encoding::percent_decode_str;
 use pulldown_cmark::{CowStr, Event, LinkType, Parser, Tag};
 use std::collections::HashMap;
 use std::path::Path;
@@ -30,12 +31,14 @@ pub fn path_to_slug(path: &Path) -> String {
 /// - `markdown`: The raw markdown content
 /// - `current_path`: Path of the current file being converted
 /// - `links`: Resolved links for this file
+/// - `base_url`: Base URL to prepend to all links
 ///
 /// Returns: HTML string
 pub fn markdown_to_html(
     markdown: &str,
     current_path: &Path,
     links: &[Link],
+    base_url: &str,
 ) -> String {
     // Build a lookup map: dest string -> resolved link
     let link_map: HashMap<&str, &Link> = links
@@ -48,16 +51,51 @@ pub fn markdown_to_html(
     let opts = default_opts();
     let parser = Parser::new_ext(markdown, opts);
 
-    // Transform wikilinks
+    // Transform wikilinks and markdown links to .md files
     let transformed = parser.map(|event| match event {
         Event::Start(Tag::Link {
             dest_url, title, ..
         }) => {
-            // Look up the resolved link
-            if let Some(resolved_link) = link_map.get(dest_url.as_ref()) {
+            // Decode percent-encoded URLs (e.g., "Three%20laws" -> "Three laws")
+            let dest_str = dest_url.as_ref();
+            let decoded = percent_decode_str(dest_str)
+                .decode_utf8()
+                .unwrap_or(std::borrow::Cow::Borrowed(dest_str));
+
+            // Try to look up the resolved link (try both original and decoded)
+            let resolved_opt = link_map
+                .get(dest_str)
+                .or_else(|| link_map.get(decoded.as_ref()));
+
+            // If not found, check if it's a markdown link to a .md file
+            let resolved_opt = resolved_opt.or_else(|| {
+                // Handle markdown links like [text](Note.md) or [text](Note.md#heading)
+                if decoded.contains(".md") {
+                    // Try without .md extension
+                    let without_md = decoded
+                        .split('#')
+                        .next()
+                        .unwrap_or(&decoded)
+                        .trim_end_matches(".md");
+                    link_map.get(without_md)
+                } else {
+                    None
+                }
+            });
+
+            if let Some(resolved_link) = resolved_opt {
                 // Rewrite to point to generated HTML
                 let target_slug = path_to_slug(resolved_link.to.path());
-                let new_dest = format!("/{}", target_slug);
+                let new_dest = if base_url.is_empty() {
+                    // No base URL: use relative paths (best for local dev)
+                    target_slug
+                } else if base_url == "/" {
+                    // Root: use absolute paths from root
+                    format!("/{}", target_slug)
+                } else {
+                    // Custom base URL: prepend to path
+                    format!("{}/{}", base_url.trim_end_matches('/'), target_slug)
+                };
 
                 Event::Start(Tag::Link {
                     link_type: LinkType::Inline,
@@ -66,7 +104,7 @@ pub fn markdown_to_html(
                     id: CowStr::from(""),
                 })
             } else {
-                // Keep original wikilink (unresolved)
+                // Keep original link (unresolved or external)
                 Event::Start(Tag::Link {
                     link_type: LinkType::Inline,
                     dest_url,

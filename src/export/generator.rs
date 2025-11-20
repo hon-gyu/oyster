@@ -65,7 +65,12 @@ fn generate_page(
     let markdown_content = fs::read_to_string(&full_path)?;
 
     // Convert to HTML with link rewriting
-    let html_content = markdown_to_html(&markdown_content, note_path, links);
+    let html_content = markdown_to_html(
+        &markdown_content,
+        note_path,
+        links,
+        &config.base_url,
+    );
 
     // Extract title (from first heading or filename)
     let title = extract_title(&markdown_content, note_path);
@@ -75,9 +80,22 @@ fn generate_page(
         backlink_map.get(note_path).map(|sources| {
             sources
                 .iter()
-                .map(|src| BacklinkInfo {
-                    title: extract_title_from_path(src),
-                    path: format!("/{}", path_to_slug(src)),
+                .map(|src| {
+                    let slug = path_to_slug(src);
+                    let path = if config.base_url.is_empty() {
+                        // Relative path
+                        slug
+                    } else if config.base_url == "/" {
+                        // Absolute from root
+                        format!("/{}", slug)
+                    } else {
+                        // With base URL
+                        format!("{}/{}", config.base_url.trim_end_matches('/'), slug)
+                    };
+                    BacklinkInfo {
+                        title: extract_title_from_path(src),
+                        path,
+                    }
                 })
                 .collect()
         })
@@ -94,7 +112,16 @@ fn generate_page(
         page: PageData {
             title: title.clone(),
             content: html_content,
-            path: format!("/{}", path_to_slug(note_path)),
+            path: {
+                let slug = path_to_slug(note_path);
+                if config.base_url.is_empty() {
+                    slug
+                } else if config.base_url == "/" {
+                    format!("/{}", slug)
+                } else {
+                    format!("{}/{}", config.base_url.trim_end_matches('/'), slug)
+                }
+            },
         },
         links: backlinks.map(|backlinks| LinkContext {
             backlinks,

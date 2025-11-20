@@ -1,5 +1,5 @@
 use clap::{Parser, Subcommand};
-use markdown_tools::export::{generate_site, SiteConfig};
+use markdown_tools::export::{SiteConfig, generate_site};
 use std::path::PathBuf;
 
 #[derive(Parser)]
@@ -26,8 +26,8 @@ enum Commands {
         title: String,
 
         /// Base URL for the site
-        #[arg(short, long, default_value = "/")]
-        base_url: String,
+        #[arg(short, long, default_value = None)]
+        base_url: Option<String>,
 
         /// Disable backlinks generation
         #[arg(long)]
@@ -48,9 +48,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         } => {
             println!("Generating site from vault: {}", vault_path.display());
 
+            // Default to empty string for relative paths (best for local dev)
+            let url = base_url.unwrap_or_else(|| String::new());
+
             let config = SiteConfig {
                 title,
-                base_url,
+                base_url: url,
                 output_dir: output,
                 generate_backlinks: !no_backlinks,
             };
