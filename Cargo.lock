@@ -247,6 +247,7 @@ dependencies = [
  "nonempty",
  "percent-encoding",
  "pulldown-cmark",
+ "pulldown-cmark-escape",
  "serde",
  "similar",
  "tree-sitter",
