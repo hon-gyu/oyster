@@ -41,7 +41,6 @@ pub fn markdown_to_html(
     markdown: &str,
     current_path: &Path,
     links: &[Link],
-    base_url: &str,
 ) -> String {
     // Build a lookup map: dest string -> resolved link
     let link_map: HashMap<&str, &Link> = links
@@ -89,21 +88,7 @@ pub fn markdown_to_html(
             if let Some(resolved_link) = resolved_opt {
                 // Rewrite to point to generated HTML
                 let target_slug = path_to_slug(resolved_link.to.path());
-                let new_dest = if base_url.is_empty() {
-                    // No base URL: use relative paths (best for local dev)
-                    target_slug
-                } else if base_url == "/" {
-                    // Root: use absolute paths from root
-                    format!("/{}", target_slug)
-                } else {
-                    // Custom base URL: prepend to path
-                    format!(
-                        "{}/{}",
-                        base_url.trim_end_matches('/'),
-                        target_slug
-                    )
-                };
-
+                let new_dest = target_slug;
                 Event::Start(Tag::Link {
                     link_type: LinkType::Inline,
                     dest_url: CowStr::from(new_dest),
