@@ -24,6 +24,7 @@
 //! HTML renderer that takes an iterator of events as input.
 
 use std::collections::HashMap;
+use std::ops::Range;
 
 use pulldown_cmark::CowStr;
 use pulldown_cmark::Event::*;
@@ -57,14 +58,18 @@ struct HtmlWriter<'a, I, W> {
     table_alignments: Vec<Alignment>,
     table_cell_index: usize,
     numbers: HashMap<CowStr<'a>, usize>,
+
+    // New fields
+    /// Map from byte ranges to HTML id attributes
+    id_map: HashMap<Range<usize>, String>,
 }
 
 impl<'a, I, W> HtmlWriter<'a, I, W>
 where
-    I: Iterator<Item = Event<'a>>,
+    I: Iterator<Item = (Event<'a>, Range<usize>)>,
     W: StrWrite,
 {
-    fn new(iter: I, writer: W) -> Self {
+    fn new(iter: I, writer: W, id_map: HashMap<Range<usize>, String>) -> Self {
         Self {
             iter,
             writer,
@@ -74,6 +79,7 @@ where
             table_alignments: vec![],
             table_cell_index: 0,
             numbers: HashMap::new(),
+            id_map,
         }
     }
 
@@ -95,11 +101,37 @@ where
         Ok(())
     }
 
+    /// Writes an opening tag with optional id attribute.
+    /// If current_range matches an entry in id_map, inject id="...".
+    fn write_tag_with_optional_id(
+        &mut self,
+        tag_name: &str,
+        range: Range<usize>,
+    ) -> Result<(), W::Error> {
+        if self.end_newline {
+            self.write("<")?;
+        } else {
+            self.write("\n<")?;
+        }
+        self.write(tag_name)?;
+
+        // Check if we should inject an id (clone to avoid borrow checker issues)
+        let id_opt = self.id_map.get(&range).cloned();
+
+        if let Some(id) = id_opt {
+            self.write(" id=\"")?;
+            escape_html(&mut self.writer, &id)?;
+            self.write("\"")?;
+        }
+
+        self.write(">")
+    }
+
     fn run(mut self) -> Result<(), W::Error> {
-        while let Some(event) = self.iter.next() {
+        while let Some((event, range)) = self.iter.next() {
             match event {
                 Start(tag) => {
-                    self.start_tag(tag)?;
+                    self.start_tag(tag, range)?;
                 }
                 End(tag) => {
                     self.end_tag(tag)?;
@@ -164,16 +196,14 @@ where
     }
 
     /// Writes the start of an HTML tag.
-    fn start_tag(&mut self, tag: Tag<'a>) -> Result<(), W::Error> {
+    fn start_tag(
+        &mut self,
+        tag: Tag<'a>,
+        range: Range<usize>,
+    ) -> Result<(), W::Error> {
         match tag {
             Tag::HtmlBlock => Ok(()),
-            Tag::Paragraph => {
-                if self.end_newline {
-                    self.write("<p>")
-                } else {
-                    self.write("\n<p>")
-                }
-            }
+            Tag::Paragraph => self.write_tag_with_optional_id("p", range),
             Tag::Heading {
                 level,
                 id,
@@ -268,10 +298,24 @@ where
                         }
                     },
                 };
-                if self.end_newline {
-                    self.write(&format!("<blockquote{}>\n", class_str))
+
+                // Check if we should inject an id
+                let id_str = if let Some(id) = self.id_map.get(&range) {
+                    format!(" id=\"{}\"", id)
                 } else {
-                    self.write(&format!("\n<blockquote{}>\n", class_str))
+                    String::new()
+                };
+
+                if self.end_newline {
+                    self.write(&format!(
+                        "<blockquote{}{}>\n",
+                        id_str, class_str
+                    ))
+                } else {
+                    self.write(&format!(
+                        "\n<blockquote{}{}>\n",
+                        id_str, class_str
+                    ))
                 }
             }
             Tag::CodeBlock(info) => {
@@ -293,35 +337,51 @@ where
                 }
             }
             Tag::List(Some(1)) => {
-                if self.end_newline {
-                    self.write("<ol>\n")
+                // Check if we should inject an id
+                let id_str = if let Some(id) = self.id_map.get(&range) {
+                    format!(" id=\"{}\"", id)
                 } else {
-                    self.write("\n<ol>\n")
+                    String::new()
+                };
+
+                if self.end_newline {
+                    self.write(&format!("<ol{}>\n", id_str))
+                } else {
+                    self.write(&format!("\n<ol{}>\n", id_str))
                 }
             }
             Tag::List(Some(start)) => {
-                if self.end_newline {
-                    self.write("<ol start=\"")?;
+                // Check if we should inject an id
+                let id_str = if let Some(id) = self.id_map.get(&range) {
+                    format!(" id=\"{}\"", id)
                 } else {
-                    self.write("\n<ol start=\"")?;
+                    String::new()
+                };
+
+                if self.end_newline {
+                    self.write(&format!("<ol{} start=\"{}\">\n", id_str, start))
+                } else {
+                    self.write(&format!(
+                        "\n<ol{} start=\"{}\">\n",
+                        id_str, start
+                    ))
                 }
-                write!(&mut self.writer, "{}", start)?;
-                self.write("\">\n")
             }
             Tag::List(None) => {
-                if self.end_newline {
-                    self.write("<ul>\n")
+                // Check if we should inject an id
+                let id_str = if let Some(id) = self.id_map.get(&range) {
+                    format!(" id=\"{}\"", id)
                 } else {
-                    self.write("\n<ul>\n")
+                    String::new()
+                };
+
+                if self.end_newline {
+                    self.write(&format!("<ul{}>\n", id_str))
+                } else {
+                    self.write(&format!("\n<ul{}>\n", id_str))
                 }
             }
-            Tag::Item => {
-                if self.end_newline {
-                    self.write("<li>")
-                } else {
-                    self.write("\n<li>")
-                }
-            }
+            Tag::Item => self.write_tag_with_optional_id("li", range),
             Tag::DefinitionList => {
                 if self.end_newline {
                     self.write("<dl>\n")
@@ -500,7 +560,7 @@ where
     // run raw text, consuming end tag
     fn raw_text(&mut self) -> Result<(), W::Error> {
         let mut nest = 0;
-        while let Some(event) = self.iter.next() {
+        while let Some((event, _range)) = self.iter.next() {
             match event {
                 Start(_) => nest += 1,
                 End(_) => {
@@ -569,11 +629,17 @@ where
 /// </ul>
 /// "#);
 /// ```
-pub fn push_html<'a, I>(s: &mut String, iter: I)
-where
-    I: Iterator<Item = Event<'a>>,
+///
+/// Modification:
+/// - iter is changed from Iterator<Item = Event<'a>> to Iterator<Item = (Event<'a>, Range<usize>)>
+pub fn push_html<'a, I>(
+    s: &mut String,
+    iter: I,
+    id_map: HashMap<Range<usize>, String>,
+) where
+    I: Iterator<Item = (Event<'a>, Range<usize>)>,
 {
-    write_html_fmt(s, iter).unwrap()
+    write_html_fmt(s, iter, id_map).unwrap()
 }
 
 /// Iterate over an `Iterator` of `Event`s, generate HTML for each `Event`, and
@@ -609,12 +675,16 @@ where
 /// </ul>
 /// "#);
 /// ```
-pub fn write_html_io<'a, I, W>(writer: W, iter: I) -> std::io::Result<()>
+pub fn write_html_io<'a, I, W>(
+    writer: W,
+    iter: I,
+    id_map: HashMap<Range<usize>, String>,
+) -> std::io::Result<()>
 where
-    I: Iterator<Item = Event<'a>>,
+    I: Iterator<Item = (Event<'a>, Range<usize>)>,
     W: std::io::Write,
 {
-    HtmlWriter::new(iter, IoWriter(writer)).run()
+    HtmlWriter::new(iter, IoWriter(writer), id_map).run()
 }
 
 /// Iterate over an `Iterator` of `Event`s, generate HTML for each `Event`, and
@@ -644,10 +714,15 @@ where
 /// </ul>
 /// "#);
 /// ```
-pub fn write_html_fmt<'a, I, W>(writer: W, iter: I) -> std::fmt::Result
+pub fn write_html_fmt<'a, I, W>(
+    writer: W,
+    iter: I,
+    id_map: HashMap<Range<usize>, String>,
+) -> std::fmt::Result
 where
-    I: Iterator<Item = Event<'a>>,
+    I: Iterator<Item = (Event<'a>, Range<usize>)>,
     W: std::fmt::Write,
 {
-    HtmlWriter::new(iter, FmtWriter(writer)).run()
+    // Wrap events in (event, 0..0) to match the new iterator type
+    HtmlWriter::new(iter, FmtWriter(writer), id_map).run()
 }

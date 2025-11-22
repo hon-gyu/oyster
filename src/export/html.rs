@@ -8,6 +8,10 @@ use std::path::Path;
 
 /// Converts a path to a URL-friendly slug
 /// e.g., "Note 1.md" -> "note-1.html"
+///
+/// - lower-cases
+/// - replaces spaces with hyphens
+/// - special characters
 pub fn path_to_slug(path: &Path) -> String {
     let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("index");
 
