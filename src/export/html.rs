@@ -1,10 +1,10 @@
 /// HTML conversion from markdown with link rewriting
 use crate::link::Link;
+use crate::link::percent_decode;
 use crate::parse::default_opts;
-use percent_encoding::percent_decode_str;
 use pulldown_cmark::{CowStr, Event, LinkType, Parser, Tag};
 use std::collections::HashMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 /// Converts a path to a URL-friendly slug
 /// e.g., "Note 1.md" -> "note-1.html"
@@ -27,69 +27,55 @@ pub fn path_to_slug(path: &Path) -> String {
     format!("{}.html", slug)
 }
 
-/// Converts a markdown file to HTML with proper link rewriting
-///
-/// Strategy:
-/// 1. Parse markdown with default_opts
-/// 2. Transform Link events using resolved links
-/// 3. Render to HTML
+/// Exports markdown to HTML
 ///
 /// Arguments:
-/// - `markdown`: The raw markdown content
-/// - `current_path`: Path of the current file being converted
+/// - `md_src`: The raw markdown content
+/// - `path`: Path of the current file being converted
 /// - `links`: Resolved links for this file
-/// - `base_url`: Base URL to prepend to all links
 ///
 /// Returns: HTML string
-pub fn markdown_to_html(
-    markdown: &str,
-    current_path: &Path,
-    links: &[Link],
+///
+/// We are usign pulldown-cmark's HTML writer to convert the markdown to HTML.
+/// But with some modifications:
+/// -
+pub fn export_to_html_body(
+    md_src: &str,
+    path: &Path,
+    resolved_links: &[Link],
+    file_path_to_slug: &HashMap<PathBuf, String>,
 ) -> String {
     // Build a lookup map: dest string -> resolved link
-    let link_map: HashMap<&str, &Link> = links
+    let link_map: HashMap<&str, &Link> = resolved_links
         .iter()
-        .filter(|link| link.from.path == current_path)
+        .filter(|link| link.from.path == path)
         .map(|link| (link.from.dest.as_str(), link))
         .collect();
 
     // Parse with the same options as in link resolution
     let opts = default_opts();
-    let parser = Parser::new_ext(markdown, opts);
+    let parser = Parser::new_ext(md_src, opts);
 
     // Transform wikilinks and markdown links to .md files
     let transformed = parser.map(|event| match event {
         Event::Start(Tag::Link {
-            dest_url, title, ..
+            link_type,
+            dest_url,
+            title,
+            ..
         }) => {
-            // Decode percent-encoded URLs (e.g., "Three%20laws" -> "Three laws")
-            let dest_str = dest_url.as_ref();
-            let decoded = percent_decode_str(dest_str)
-                .decode_utf8()
-                .unwrap_or(std::borrow::Cow::Borrowed(dest_str));
+            // Decode percent-encoded URLs for inline links
+            let decoded = percent_decode(dest_url.as_ref());
+            let dest_str = if link_type == LinkType::Inline {
+                decoded.as_str()
+            } else {
+                dest_url.as_ref()
+            };
 
-            // Try to look up the resolved link (try both original and decoded)
-            let resolved_opt = link_map
-                .get(dest_str)
-                .or_else(|| link_map.get(decoded.as_ref()));
+            let resolved_link_opt = link_map.get(dest_str);
+            // TODO: rewrite links to resolved ones
 
-            // If not found, check if it's a markdown link to a .md file
-            let resolved_opt = resolved_opt.or_else(|| {
-                // Handle markdown links like [text](Note.md) or [text](Note.md#heading)
-                if decoded.contains(".md") {
-                    // Try without .md extension
-                    let without_md = decoded
-                        .split('#')
-                        .next()
-                        .unwrap_or(&decoded)
-                        .trim_end_matches(".md");
-                    link_map.get(without_md)
-                } else {
-                    None
-                }
-            });
-
-            if let Some(resolved_link) = resolved_opt {
+            if let Some(resolved_link) = resolved_link_opt {
                 // Rewrite to point to generated HTML
                 let target_slug = path_to_slug(resolved_link.to.path());
                 let new_dest = target_slug;

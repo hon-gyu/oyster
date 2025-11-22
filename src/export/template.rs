@@ -186,6 +186,10 @@ const BASE_TEMPLATE: &str = r#"<!DOCTYPE html>
 </body>
 </html>
 "#;
+// TODO: backlink component should be configurable
+// TODO: backlink should contains in-note references as well
+// TODO: make CSS configurable
+// TODO: make TOC configurable
 
 /// Renders a page using the default template
 pub fn render_page(context: &PageContext) -> Result<String, minijinja::Error> {
@@ -386,7 +390,7 @@ mod tests {
                     <p>Hello, world!</p>
                 </article>
 
-                
+
             </main>
 
             <footer>

@@ -81,6 +81,8 @@ fn extract_node_reference_referenceable_and_identifier(
                     Some(NodeParsedResult::Refernce(reference))
                 }
                 LinkType::Inline => {
+                    // Markdown link like `[text](Note.md)`
+                    // The destination in parentheses is percent-encoded
                     // Decode the destination URL. Eg, from `Note%201` to `Note 1`
                     let mut dest = percent_decode(dest_url);
                     // `[text]()` points to file `().md`

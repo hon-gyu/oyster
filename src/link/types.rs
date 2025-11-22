@@ -80,6 +80,8 @@ pub enum ReferenceKind {
 pub struct Reference {
     pub path: PathBuf,
     pub range: Range<usize>,
+    /// The `dest_url` of the raw link in markdown file
+    /// percent-decoded if it's a inline link (markdown link)
     pub dest: String,
     pub kind: ReferenceKind,
     pub display_text: String,
