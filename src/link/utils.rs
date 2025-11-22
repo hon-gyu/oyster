@@ -105,8 +105,8 @@ pub fn build_in_note_anchor_id_map(
     for refable in referenceables {
         match refable {
             Referenceable::Heading {
-                path,
-                level,
+                path: _path,
+                level: _level,
                 text,
                 range,
             } => {
@@ -114,9 +114,9 @@ pub fn build_in_note_anchor_id_map(
                 map.insert(range.clone(), id);
             }
             Referenceable::Block {
-                path,
+                path: _path,
                 identifier,
-                kind,
+                kind: _kind,
                 range,
             } => {
                 map.insert(range.clone(), identifier.clone());

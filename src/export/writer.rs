@@ -61,7 +61,7 @@ struct HtmlWriter<'a, I, W> {
 
     // New fields
     /// Map from byte ranges to HTML id attributes
-    id_map: HashMap<Range<usize>, String>,
+    id_map: &'a HashMap<Range<usize>, String>,
 }
 
 impl<'a, I, W> HtmlWriter<'a, I, W>
@@ -69,7 +69,11 @@ where
     I: Iterator<Item = (Event<'a>, Range<usize>)>,
     W: StrWrite,
 {
-    fn new(iter: I, writer: W, id_map: HashMap<Range<usize>, String>) -> Self {
+    fn new(
+        iter: I,
+        writer: W,
+        id_map: &'a HashMap<Range<usize>, String>,
+    ) -> Self {
         Self {
             iter,
             writer,
@@ -635,7 +639,7 @@ where
 pub fn push_html<'a, I>(
     s: &mut String,
     iter: I,
-    id_map: HashMap<Range<usize>, String>,
+    id_map: &'a HashMap<Range<usize>, String>,
 ) where
     I: Iterator<Item = (Event<'a>, Range<usize>)>,
 {
@@ -678,7 +682,7 @@ pub fn push_html<'a, I>(
 pub fn write_html_io<'a, I, W>(
     writer: W,
     iter: I,
-    id_map: HashMap<Range<usize>, String>,
+    id_map: &'a HashMap<Range<usize>, String>,
 ) -> std::io::Result<()>
 where
     I: Iterator<Item = (Event<'a>, Range<usize>)>,
@@ -717,7 +721,7 @@ where
 pub fn write_html_fmt<'a, I, W>(
     writer: W,
     iter: I,
-    id_map: HashMap<Range<usize>, String>,
+    id_map: &'a HashMap<Range<usize>, String>,
 ) -> std::fmt::Result
 where
     I: Iterator<Item = (Event<'a>, Range<usize>)>,
