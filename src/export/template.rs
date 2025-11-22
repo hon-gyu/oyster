@@ -172,7 +172,7 @@ const BASE_TEMPLATE: &str = r#"<!DOCTYPE html>
         <div class="backlinks">
             <h2>Backlinks</h2>
             <ul>
-            {% for backlink in links.backlinks %}
+            {% for backlink in backlinks %}
                 <li><a href="{{ backlink.path }}">{{ backlink.title }}</a></li>
             {% endfor %}
             </ul>
@@ -199,6 +199,13 @@ pub fn render_page(context: &PageContext) -> Result<String, minijinja::Error> {
     let template = env.get_template("base.html")?;
     template.render(context)
 }
+// pub fn render_page(context: &PageContext) -> Result<String, minijinja::Error> {
+//     let mut env = Environment::new();
+//     env.add_template("base.html", BASE_TEMPLATE)?;
+
+//     let template = env.get_template("base.html")?;
+//     template.render(context)
+// }
 
 #[cfg(test)]
 mod tests {

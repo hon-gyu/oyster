@@ -1,12 +1,16 @@
+use itertools::Itertools;
+
 /// Main SSG generator that processes a vault
-use super::html::{markdown_to_html, path_to_slug};
+use super::html::export_to_html_body;
 use super::template::render_page;
-use super::types::{
-    BacklinkInfo, LinkContext, PageContext, PageData, SiteConfig, SiteContext,
+use super::types::{PageContext, PageData, SiteConfig, SiteContext};
+use crate::link::{
+    Link, Referenceable, build_in_note_anchor_id_map, build_links,
+    build_vault_paths_to_slug_map, scan_vault,
 };
-use crate::link::{Link, Referenceable, build_links, scan_vault};
 use std::collections::HashMap;
 use std::fs;
+use std::ops::Range;
 use std::path::{Path, PathBuf};
 
 /// Generates a static site from an Obsidian vault
@@ -21,13 +25,57 @@ pub fn generate_site(
     let (referenceables, references) = scan_vault(vault_path, vault_path);
     let (links, _unresolved) = build_links(references, referenceables.clone());
 
-    // Build backlink map: path -> list of pages that link to it
-    let backlink_map = build_backlink_map(&links);
+    let file_paths = referenceables
+        .iter()
+        .map(|r| r.path().as_path())
+        .unique()
+        .collect::<Vec<_>>();
+    let path_to_slug_map = build_vault_paths_to_slug_map(&file_paths);
+    let in_note_anchor_id_map = build_in_note_anchor_id_map(&referenceables);
+
+    // // Build backlink map: path -> list of pages that link to it
+    // let backlink_map = build_backlink_map(&links);
 
     // Process each note
     for referenceable in &referenceables {
-        if let Referenceable::Note { path, .. } = referenceable {
-            generate_page(vault_path, path, &links, &backlink_map, config)?;
+        if let Referenceable::Note {
+            path: note_path, ..
+        } = referenceable
+        {
+            let note_slug = path_to_slug_map.get(note_path).unwrap();
+            let md_src = fs::read_to_string(note_path)?;
+            let html_content = export_to_html_body(
+                &md_src,
+                note_path,
+                &links,
+                &path_to_slug_map,
+                &in_note_anchor_id_map,
+            );
+
+            let title = note_path.as_os_str().to_string_lossy().to_string();
+            // Create page context
+            let context = PageContext {
+                site: SiteContext {
+                    title: config.title.clone(),
+                    base_url: config.base_url.clone(),
+                },
+                page: PageData {
+                    title: title,
+                    content: html_content,
+                    path: note_slug.clone(),
+                },
+            };
+
+            // Render the page
+            let html = render_page(&context)?;
+
+            // Write to output
+            let output_path = config.output_dir.join(note_slug);
+            fs::write(&output_path, html)?;
+
+            println!("  Generated: {}", output_path.display());
+
+            // generate_page(vault_path, path, &links, config)?;
         }
     }
 
@@ -35,148 +83,113 @@ pub fn generate_site(
     Ok(())
 }
 
-/// Builds a map of backlinks: target_path -> vec of source paths
-fn build_backlink_map(links: &[Link]) -> HashMap<PathBuf, Vec<PathBuf>> {
-    let mut backlinks: HashMap<PathBuf, Vec<PathBuf>> = HashMap::new();
+// /// Builds a map of backlinks: target_path -> vec of source paths
+// fn build_backlink_map(links: &[Link]) -> HashMap<PathBuf, Vec<PathBuf>> {
+//     let mut backlinks: HashMap<PathBuf, Vec<PathBuf>> = HashMap::new();
 
-    for link in links {
-        let target = link.to.path().clone();
-        let source = link.from.path.clone();
+//     for link in links {
+//         let target = link.to.path().clone();
+//         let source = link.from.path.clone();
 
-        backlinks
-            .entry(target)
-            .or_insert_with(Vec::new)
-            .push(source);
-    }
+//         backlinks
+//             .entry(target)
+//             .or_insert_with(Vec::new)
+//             .push(source);
+//     }
 
-    backlinks
-}
+//     backlinks
+// }
 
-/// Generates a single HTML page from a note
-fn generate_page(
-    vault_path: &Path,
-    note_path: &Path,
-    links: &[Link],
-    backlink_map: &HashMap<PathBuf, Vec<PathBuf>>,
-    config: &SiteConfig,
-) -> Result<(), Box<dyn std::error::Error>> {
-    // Read the markdown file
-    let full_path = vault_path.join(note_path);
-    let markdown_content = fs::read_to_string(&full_path)?;
+// /// Generates a single HTML page from a note
+// ///
+// /// writes to config.output_dir
+// fn generate_page(
+//     vault_path: &Path,
+//     note_path: &Path,
+//     links: &[Link],
+//     path_to_slug_map: &HashMap<PathBuf, String>,
+//     in_note_anchor_id_map: &HashMap<Range<usize>, String>,
+//     config: &SiteConfig,
+// ) -> Result<(), Box<dyn std::error::Error>> {
+//     // Read the markdown file
+//     let full_path = vault_path.join(note_path);
+//     let md_src = fs::read_to_string(&full_path)?;
 
-    // Convert to HTML with link rewriting
-    let html_content = markdown_to_html(&markdown_content, note_path, links);
+//     // Convert to HTML with link rewriting
+//     let html_content = export_to_html_body(
+//         &md_src,
+//         note_path,
+//         links,
+//         path_to_slug_map,
+//         in_note_anchor_id_map,
+//     );
 
-    // Extract title (from first heading or filename)
-    let title = extract_title(&markdown_content, note_path);
+//     let title = note_path.as_os_str().to_string_lossy().to_string();
 
-    // Build backlinks for this page
-    let backlinks = if config.generate_backlinks {
-        backlink_map.get(note_path).map(|sources| {
-            sources
-                .iter()
-                .map(|src| {
-                    let slug = path_to_slug(src);
-                    let path = if config.base_url.is_empty() {
-                        // Relative path
-                        slug
-                    } else if config.base_url == "/" {
-                        // Absolute from root
-                        format!("/{}", slug)
-                    } else {
-                        // With base URL
-                        format!(
-                            "{}/{}",
-                            config.base_url.trim_end_matches('/'),
-                            slug
-                        )
-                    };
-                    BacklinkInfo {
-                        title: extract_title_from_path(src),
-                        path,
-                    }
-                })
-                .collect()
-        })
-    } else {
-        None
-    };
+//     // // Extract title (from first heading or filename)
+//     // let title = extract_title(&md_src, note_path);
 
-    // Create page context
-    let context = PageContext {
-        site: SiteContext {
-            title: config.title.clone(),
-            base_url: config.base_url.clone(),
-        },
-        page: PageData {
-            title: title.clone(),
-            content: html_content,
-            path: {
-                let slug = path_to_slug(note_path);
-                slug
-            },
-        },
-        links: backlinks.map(|backlinks| LinkContext {
-            backlinks,
-            outgoing_links: vec![], // Can be added later
-        }),
-        toc: None, // Can be added later
-    };
+//     // // Build backlinks for this page
+//     // let backlinks = if config.generate_backlinks {
+//     //     backlink_map.get(note_path).map(|sources| {
+//     //         sources
+//     //             .iter()
+//     //             .map(|src| {
+//     //                 let slug = path_to_slug(src);
+//     //                 let path = if config.base_url.is_empty() {
+//     //                     // Relative path
+//     //                     slug
+//     //                 } else if config.base_url == "/" {
+//     //                     // Absolute from root
+//     //                     format!("/{}", slug)
+//     //                 } else {
+//     //                     // With base URL
+//     //                     format!(
+//     //                         "{}/{}",
+//     //                         config.base_url.trim_end_matches('/'),
+//     //                         slug
+//     //                     )
+//     //                 };
+//     //                 BacklinkInfo {
+//     //                     title: extract_title_from_path(src),
+//     //                     path,
+//     //                 }
+//     //             })
+//     //             .collect()
+//     //     })
+//     // } else {
+//     //     None
+//     // };
 
-    // Render the page
-    let html = render_page(&context)?;
+//     // Create page context
+//     let context = PageContext {
+//         site: SiteContext {
+//             title: config.title.clone(),
+//             base_url: config.base_url.clone(),
+//         },
+//         page: PageData {
+//             title: title,
+//             content: html_content,
+//             path: {
+//                 let slug = path_to_slug(note_path);
+//                 slug
+//             },
+//         },
+//         // links: backlinks.map(|backlinks| LinkContext {
+//         //     backlinks,
+//         //     outgoing_links: vec![], // Can be added later
+//         // }),
+//         // toc: None, // Can be added later
+//     };
 
-    // Write to output
-    let output_path = config.output_dir.join(path_to_slug(note_path));
-    fs::write(&output_path, html)?;
+//     // Render the page
+//     let html = render_page(&context)?;
 
-    println!("  Generated: {}", output_path.display());
+//     // Write to output
+//     let output_path = config.output_dir.join(path_to_slug(note_path));
+//     fs::write(&output_path, html)?;
 
-    Ok(())
-}
+//     println!("  Generated: {}", output_path.display());
 
-/// Extracts title from markdown content (first heading) or falls back to filename
-fn extract_title(markdown: &str, path: &Path) -> String {
-    // Try to find first heading
-    for line in markdown.lines() {
-        let trimmed = line.trim();
-        if trimmed.starts_with('#') {
-            // Extract heading text
-            let text = trimmed.trim_start_matches('#').trim();
-            if !text.is_empty() {
-                return text.to_string();
-            }
-        }
-    }
-
-    // Fall back to filename
-    extract_title_from_path(path)
-}
-
-/// Extracts a title from a file path
-fn extract_title_from_path(path: &Path) -> String {
-    path.file_stem()
-        .and_then(|s| s.to_str())
-        .unwrap_or("Untitled")
-        .to_string()
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_extract_title() {
-        let md = "# Hello World\n\nSome content";
-        assert_eq!(extract_title(md, Path::new("test.md")), "Hello World");
-
-        let md_no_heading = "Just some text";
-        assert_eq!(
-            extract_title(md_no_heading, Path::new("My Note.md")),
-            "My Note"
-        );
-
-        let md_h2 = "## Second Level";
-        assert_eq!(extract_title(md_h2, Path::new("test.md")), "Second Level");
-    }
-}
+//     Ok(())
+// }

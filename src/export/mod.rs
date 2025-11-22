@@ -1,4 +1,4 @@
-// pub mod generator;
+pub mod generator;
 pub mod html;
 pub mod template;
 pub mod types;
