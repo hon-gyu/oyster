@@ -1,9 +1,10 @@
 use super::utils::{
     build_in_note_anchor_id_map, build_vault_paths_to_slug_map,
 };
-use crate::ast::{Node, NodeKind, Tree};
+use crate::ast::{Node, NodeKind::*, Tree};
 use crate::link::types::*;
 use crate::link::{build_links, scan_vault};
+use pulldown_cmark_escape::{escape_html, escape_html_body_text, escape_href};
 use std::collections::HashMap;
 use std::fs;
 use std::ops::Range;
@@ -86,15 +87,29 @@ fn render_content(
             .get(vault_path)
             .expect("vault path not found");
 
-    let mut buffer = String::new();
-    render_node(
+    let rendered = render_node(
         &tree.root_node,
         vault_path,
         &reference_slug_dest_map,
         &in_note_anchor_id_map,
-        &mut buffer,
     );
-    todo!()
+    rendered
+}
+
+fn render_nodes(
+    nodes: &[Node],
+    vault_path: &Path,
+    ref_slug_map: &HashMap<Range<usize>, String>,
+    refable_anchor_id_map: &HashMap<Range<usize>, String>,
+) -> String {
+    let mut buffer = String::new();
+    for node in nodes {
+        let rendered =
+            render_node(node, vault_path, ref_slug_map, refable_anchor_id_map);
+        buffer.push_str(rendered.as_str());
+    }
+
+    buffer
 }
 
 fn render_node(
@@ -102,7 +117,73 @@ fn render_node(
     vault_path: &Path,
     ref_slug_map: &HashMap<Range<usize>, String>,
     refable_anchor_id_map: &HashMap<Range<usize>, String>,
-    buffer: &mut String,
-) {
+) -> String {
     let range = node.start_byte..node.end_byte;
+    match node.kind {
+        Document => {
+            let children_rendered = render_nodes(
+                &node.children,
+                vault_path,
+                ref_slug_map,
+                refable_anchor_id_map,
+            );
+            format!("<article>{}</article>", children_rendered)
+        }
+        // Non-nested elements
+        Text(text) => {
+            // if !self.in_non_writing_block {
+                escape_html_body_text(&mut self.writer, &text)?;
+                self.end_newline = text.ends_with('\n');
+            }
+        }
+        Code(text) => {
+            self.write("<code>")?;
+            escape_html_body_text(&mut self.writer, &text)?;
+            self.write("</code>")?;
+        }
+        InlineMath(text) => {
+            self.write(r#"<span class="math math-inline">"#)?;
+            escape_html(&mut self.writer, &text)?;
+            self.write("</span>")?;
+        }
+        DisplayMath(text) => {
+            self.write(r#"<span class="math math-display">"#)?;
+            escape_html(&mut self.writer, &text)?;
+            self.write("</span>")?;
+        }
+        Html(html) | InlineHtml(html) => {
+            self.write(&html)?;
+        }
+        SoftBreak => {
+            self.write_newline()?;
+        }
+        HardBreak => {
+            self.write("<br />\n")?;
+        }
+        Rule => {
+            if self.end_newline {
+                self.write("<hr />\n")?;
+            } else {
+                self.write("\n<hr />\n")?;
+            }
+        }
+        FootnoteReference(name) => {
+            let len = self.numbers.len() + 1;
+            self.write("<sup class=\"footnote-reference\"><a href=\"#")?;
+            escape_html(&mut self.writer, &name)?;
+            self.write("\">")?;
+            let number = *self.numbers.entry(name).or_insert(len);
+            write!(&mut self.writer, "{}", number)?;
+            self.write("</a></sup>")?;
+        }
+        TaskListMarker(true) => {
+            self.write(
+                "<input disabled=\"\" type=\"checkbox\" checked=\"\"/>\n",
+            )?;
+        }
+        TaskListMarker(false) => {
+            self.write("<input disabled=\"\" type=\"checkbox\"/>\n")?;
+        }
+        _ => todo!(),
+    }
 }
