@@ -61,6 +61,14 @@ impl Referenceable {
         }
     }
 
+    pub fn is_innote(&self) -> bool {
+        match self {
+            Referenceable::Heading { .. } => true,
+            Referenceable::Block { .. } => true,
+            _ => false,
+        }
+    }
+
     pub fn add_in_note_referenceables(
         &mut self,
         referenceables: Vec<Referenceable>,

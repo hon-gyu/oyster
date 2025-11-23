@@ -86,8 +86,7 @@ pub fn build_vault_paths_to_slug_map(
 /// For a list of referenceables, we build a map of their byte ranges to anchor IDs
 ///
 /// Returns: HashMap<PathBuf, HashMap<Range<usize>, String>>
-/// - Outer map: reference path -> inner map
-/// - Inner map: byte range -> anchor ID
+/// - vault path -> byte range -> anchor ID
 ///
 /// Note: we don't de-duplicate anchor IDs here.
 pub fn build_in_note_anchor_id_map(
