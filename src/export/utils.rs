@@ -83,31 +83,38 @@ pub fn build_vault_paths_to_slug_map(
     map
 }
 
-/// For a list of in-note referenceables, we build a map of their byte ranges to anchor IDs
+/// For a list of referenceables, we build a map of their byte ranges to anchor IDs
+///
+/// Returns: HashMap<PathBuf, HashMap<Range<usize>, String>>
+/// - Outer map: reference path -> inner map
+/// - Inner map: byte range -> anchor ID
 ///
 /// Note: we don't de-duplicate anchor IDs here.
 pub fn build_in_note_anchor_id_map(
     referenceables: &[&Referenceable],
-) -> HashMap<Range<usize>, String> {
-    let mut map: HashMap<Range<usize>, String> = HashMap::new();
+) -> HashMap<PathBuf, HashMap<Range<usize>, String>> {
+    let mut map: HashMap<PathBuf, HashMap<Range<usize>, String>> =
+        HashMap::new();
     for refable in referenceables {
         match refable {
             Referenceable::Heading {
-                path: _path,
+                path,
                 level: _level,
                 text,
                 range,
             } => {
                 let id = text_to_anchor_id(text);
-                map.insert(range.clone(), id);
+                let curr_map = map.entry(path.clone()).or_default();
+                curr_map.insert(range.clone(), id);
             }
             Referenceable::Block {
-                path: _path,
+                path,
                 identifier,
                 kind: _kind,
                 range,
             } => {
-                map.insert(range.clone(), identifier.clone());
+                let curr_map = map.entry(path.clone()).or_default();
+                curr_map.insert(range.clone(), identifier.clone());
             }
             Referenceable::Note { path: _, children } => {
                 let refs: Vec<&Referenceable> = children.iter().collect();

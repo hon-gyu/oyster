@@ -7,14 +7,9 @@ use super::types::{LinkInfo, PageContext, PageData, SiteConfig, SiteContext};
 use super::utils::{
     build_in_note_anchor_id_map, build_vault_paths_to_slug_map,
 };
-use crate::link::{
-    Link, Referenceable, build_links, mut_transform_referenceable_path,
-    scan_vault,
-};
-use std::collections::HashMap;
+use crate::link::{Referenceable, build_links, scan_vault};
 use std::fs;
-use std::ops::Range;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 /// Generates a static site from an Obsidian vault
 pub fn generate_site(
@@ -34,7 +29,10 @@ pub fn generate_site(
         .unique()
         .collect::<Vec<_>>();
     let path_to_slug_map = build_vault_paths_to_slug_map(&pre_slug_paths);
-    let in_note_anchor_id_map = build_in_note_anchor_id_map(&referenceables);
+
+    let referenceable_refs = referenceables.iter().collect::<Vec<_>>();
+    let in_note_anchor_id_map =
+        build_in_note_anchor_id_map(&referenceable_refs);
 
     // TODO: generate page for assets
 
@@ -51,12 +49,18 @@ pub fn generate_site(
                 })?;
 
             // Main content
+            // Get the anchor ID map for this specific note
+            let note_anchor_map = in_note_anchor_id_map
+                .get(note_path)
+                .cloned()
+                .unwrap_or_default();
+
             let html_content = export_to_html_body(
                 &md_src,
                 note_path,
                 &links,
                 &path_to_slug_map,
-                &in_note_anchor_id_map,
+                &note_anchor_map,
             );
 
             // Backlinks
