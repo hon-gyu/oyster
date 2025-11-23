@@ -34,7 +34,7 @@ pub fn is_block_identifier(text: &str) -> bool {
 /// - lower-cases
 /// - replaces spaces with hyphens
 /// - special characters
-fn slugify(s: &str) -> String {
+pub fn slugify(s: &str) -> String {
     s.to_lowercase()
         .chars()
         .map(|c| match c {
@@ -51,7 +51,7 @@ fn slugify(s: &str) -> String {
 /// Convert a text to an anchor ID
 ///
 /// -
-fn text_to_anchor_id(text: &str) -> String {
+pub fn text_to_anchor_id(text: &str) -> String {
     slugify(text)
 }
 

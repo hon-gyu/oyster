@@ -314,7 +314,7 @@ fn resolve_nested_headings<'a>(
 /// Return a tuple of matched links and unresolved references.
 ///
 /// - If heading reference is not found, fallback to note / asset reference.
-///   - a reference to figure's heading is allowed but the heading part gets ignored.
+///   - a reference to the heading of an image (non-note asset) is allowed but the heading part gets ignored as it makes no sense
 pub fn build_links(
     references: Vec<Reference>,
     referenceable: Vec<Referenceable>,

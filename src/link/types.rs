@@ -1,3 +1,4 @@
+use super::utils::text_to_anchor_id;
 /// Extracts references and referenceables from a Markdown AST.
 /// Referenceable can be
 ///   - items in a note: headings, block
@@ -18,6 +19,38 @@ pub enum BlockReferenceableKind {
 }
 
 #[derive(Clone, Debug, PartialEq)]
+pub enum InNoteReferenceable {
+    Heading {
+        path: PathBuf,
+        level: HeadingLevel,
+        text: String,
+        /// The exact range of the heading event from start to end
+        range: Range<usize>,
+    },
+    Block {
+        path: PathBuf,
+        identifier: String,
+        kind: BlockReferenceableKind,
+        /// The exact range of the event, including
+        /// - paragraph
+        /// - list item
+        /// - block quote
+        /// - table
+        /// - list
+        range: Range<usize>,
+    },
+}
+
+impl InNoteReferenceable {
+    fn get_anchor_id(&self) -> String {
+        match self {
+            Self::Heading { text, .. } => text_to_anchor_id(text),
+            Self::Block { identifier, .. } => identifier.clone(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
 pub enum Referenceable {
     Asset {
         path: PathBuf,
@@ -26,34 +59,36 @@ pub enum Referenceable {
         path: PathBuf,
         children: Vec<Referenceable>,
     },
-    Heading {
-        path: PathBuf,
-        level: HeadingLevel,
-        text: String,
-        // The exact range of the heading event from start to end
-        range: Range<usize>,
-    },
-    Block {
-        path: PathBuf,
-        identifier: String,
-        kind: BlockReferenceableKind,
-        // The exact range of the event, including
-        // - paragraph
-        // - list item
-        // - block quote
-        // - table
-        // - list
-        range: Range<usize>,
-    },
+    InNote(InNoteReferenceable),
+    // Heading {
+    //     path: PathBuf,
+    //     level: HeadingLevel,
+    //     text: String,
+    //     // The exact range of the heading event from start to end
+    //     range: Range<usize>,
+    // },
+    // Block {
+    //     path: PathBuf,
+    //     identifier: String,
+    //     kind: BlockReferenceableKind,
+    //     // The exact range of the event, including
+    //     // - paragraph
+    //     // - list item
+    //     // - block quote
+    //     // - table
+    //     // - list
+    //     range: Range<usize>,
+    // },
 }
 
 impl Referenceable {
     pub fn path(&self) -> &PathBuf {
         match self {
-            Referenceable::Asset { path, .. } => path,
-            Referenceable::Note { path, .. } => path,
-            Referenceable::Heading { path, .. } => path,
-            Referenceable::Block { path, .. } => path,
+            Self::Asset { path, .. } | Self::Note { path, .. } => path,
+            Self::InNote(
+                InNoteReferenceable::Heading { path, .. }
+                | InNoteReferenceable::Block { path, .. },
+            ) => path,
         }
     }
 
@@ -90,15 +125,18 @@ pub struct Reference {
 impl std::fmt::Display for Referenceable {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Referenceable::Asset { path } => {
+            Self::Asset { path } => {
                 write!(f, "Asset: {}", path.display())
             }
-            Referenceable::Note { path, .. } => {
+            Self::Note { path, .. } => {
                 write!(f, "Note: {}", path.display())
             }
-            Referenceable::Heading {
-                path, level, text, ..
-            } => {
+            Self::InNote(InNoteReferenceable::Heading {
+                path,
+                level,
+                text,
+                ..
+            }) => {
                 write!(
                     f,
                     "Heading: {} level: {}, text: {}",
@@ -107,12 +145,12 @@ impl std::fmt::Display for Referenceable {
                     text
                 )
             }
-            Referenceable::Block {
+            Self::InNote(InNoteReferenceable::Block {
                 path,
                 identifier,
                 kind,
                 range,
-            } => {
+            }) => {
                 write!(
                     f,
                     "Block: {}, {}, {:?}, range: {:?}",
@@ -135,8 +173,13 @@ pub struct Link {
 impl Link {
     fn tgt_range(&self) -> Range<usize> {
         match &self.to {
-            Referenceable::Heading { range, .. } => range.clone(),
-            Referenceable::Block { range, .. } => range.clone(),
+            Referenceable::InNote(InNoteReferenceable::Heading {
+                range,
+                ..
+            }) => range.clone(),
+            Referenceable::InNote(InNoteReferenceable::Block {
+                range, ..
+            }) => range.clone(),
             _ => panic!(
                 "Invalid arguments: No target range for non-in-note referenceable. Only heading and block are valid."
             ),
