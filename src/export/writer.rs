@@ -211,7 +211,7 @@ where
             Tag::Paragraph => self.write_tag_with_optional_id("p", range),
             Tag::Heading {
                 level,
-                id,
+                id: id_from_md_src,
                 classes,
                 attrs,
             } => {
@@ -221,9 +221,16 @@ where
                     self.write("\n<")?;
                 }
                 write!(&mut self.writer, "{}", level)?;
-                if let Some(id) = id {
+
+                let id_from_map = self.id_map.get(&range);
+
+                if let Some(id) = id_from_map {
                     self.write(" id=\"")?;
                     escape_html(&mut self.writer, &id)?;
+                    self.write("\"")?;
+                } else if let Some(id_from_md_src) = id_from_md_src {
+                    self.write(" id=\"")?;
+                    escape_html(&mut self.writer, &id_from_md_src)?;
                     self.write("\"")?;
                 }
                 let mut classes = classes.iter();

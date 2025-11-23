@@ -83,8 +83,15 @@ pub fn export_to_html_body(
                             Referenceable::Asset { .. }
                             | Referenceable::Note { .. } => tgt_slug.clone(),
                             // In-note referenceable
-                            Referenceable::Block { .. }
-                            | Referenceable::Heading { .. } => {
+                            Referenceable::Block {
+                                range: in_note_refable_range,
+                                ..
+                            }
+                            | Referenceable::Heading {
+                                range: in_note_refable_range,
+                                ..
+                            } => {
+                                debug_assert!(in_note_refable_range == &range, "In-note referenceable range should match the event range. Guaranteed during extraction.");
                                 let anchor_id = in_note_anchor_id_map
                                     .get(&range)
                                     .unwrap()
