@@ -226,7 +226,7 @@ fn render_node(
 
             let tag = format!("h{}", level);
 
-            // Build attributes as string parts
+            // id: anchor id from matched referenceable takes precedence
             let id_attr = if let Some(id_from_matched_referable) =
                 refable_anchor_id_map.get(&range)
             {
@@ -281,17 +281,35 @@ fn render_node(
                 BlockQuoteKind::Caution => "markdown-alert-caution",
             });
 
-            match class_name {
-                Some(class) => html! {
-                    blockquote class=(class) {
-                        (PreEscaped(children))
-                    }
-                },
-                None => html! {
-                    blockquote {
-                        (PreEscaped(children))
-                    }
-                },
+            let id_opt = refable_anchor_id_map.get(&range);
+
+            // Inject anchor id for matched referenceable
+            if let Some(id) = id_opt {
+                match class_name {
+                    Some(class) => html! {
+                        blockquote #(id) class=(class) {
+                            (PreEscaped(children))
+                        }
+                    },
+                    None => html! {
+                        blockquote #(id) {
+                            (PreEscaped(children))
+                        }
+                    },
+                }
+            } else {
+                match class_name {
+                    Some(class) => html! {
+                        blockquote class=(class) {
+                            (PreEscaped(children))
+                        }
+                    },
+                    None => html! {
+                        blockquote {
+                            (PreEscaped(children))
+                        }
+                    },
+                }
             }
         }
         CodeBlock(kind) => {
@@ -347,17 +365,40 @@ fn render_node(
                 refable_anchor_id_map,
             );
 
+            let id_opt = refable_anchor_id_map.get(&range);
+
             // Extract list type and start attribute determination
-            match start {
-                Some(1) => html! {
-                    ol { (PreEscaped(children)) }
-                },
-                Some(start_num) => html! {
-                    ol start=(start_num) { (PreEscaped(children)) }
-                },
-                None => html! {
-                    ul { (PreEscaped(children)) }
-                },
+            if let Some(id) = id_opt {
+                // Inject anchor id for matched referenceable
+                match start {
+                    // Ordered list starting from 1
+                    Some(1) => html! {
+                        ol #(id) { (PreEscaped(children)) }
+                    },
+                    // Ordered list starting from specified number
+                    Some(start_num) => html! {
+                        ol #(id) start=(start_num) { (PreEscaped(children)) }
+                    },
+                    // Unordered list
+                    None => html! {
+                        ul #(id) { (PreEscaped(children)) }
+                    },
+                }
+            } else {
+                match start {
+                    // Ordered list starting from 1
+                    Some(1) => html! {
+                        ol { (PreEscaped(children)) }
+                    },
+                    // Ordered list starting from specified number
+                    Some(start_num) => html! {
+                        ol start=(start_num) { (PreEscaped(children)) }
+                    },
+                    // Unordered list
+                    None => html! {
+                        ul { (PreEscaped(children)) }
+                    },
+                }
             }
         }
         Item => {
@@ -367,8 +408,15 @@ fn render_node(
                 ref_slug_map,
                 refable_anchor_id_map,
             );
-            html! {
-                li { (PreEscaped(children)) }
+            // Inject anchor id for matched referenceable
+            if let Some(id) = refable_anchor_id_map.get(&range) {
+                html! {
+                    li id=(id) { (PreEscaped(children)) }
+                }
+            } else {
+                html! {
+                    li { (PreEscaped(children)) }
+                }
             }
         }
         Emphasis => {
