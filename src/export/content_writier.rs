@@ -2,9 +2,10 @@ use super::utils::{
     build_in_note_anchor_id_map, build_vault_paths_to_slug_map,
 };
 use crate::ast::{Node, NodeKind::*, Tree};
-use crate::link::types::*;
+use crate::link::types::{Link as ResolvedLink, Reference, Referenceable};
 use crate::link::{build_links, scan_vault};
-use pulldown_cmark_escape::{escape_html, escape_html_body_text, escape_href};
+use maud::{Markup, PreEscaped, html};
+use pulldown_cmark_escape::{escape_href, escape_html, escape_html_body_text};
 use std::collections::HashMap;
 use std::fs;
 use std::ops::Range;
@@ -54,7 +55,7 @@ fn render_vault(
 fn render_content(
     tree: &Tree,
     vault_path: &Path,
-    resolved_links: &[Link],
+    resolved_links: &[ResolvedLink],
     vault_path_to_slug_map: &HashMap<PathBuf, String>,
     innote_refable_anchor_id_map: &HashMap<
         PathBuf,
@@ -119,7 +120,7 @@ fn render_node(
     refable_anchor_id_map: &HashMap<Range<usize>, String>,
 ) -> String {
     let range = node.start_byte..node.end_byte;
-    match node.kind {
+    let markup = match &node.kind {
         Document => {
             let children_rendered = render_nodes(
                 &node.children,
@@ -127,63 +128,76 @@ fn render_node(
                 ref_slug_map,
                 refable_anchor_id_map,
             );
-            format!("<article>{}</article>", children_rendered)
+            html! {
+                article {
+                    (PreEscaped(children_rendered))
+                }
+            }
         }
-        // Non-nested elements
+        // Non-container nodes (leaf nodes)
         Text(text) => {
-            // if !self.in_non_writing_block {
-                escape_html_body_text(&mut self.writer, &text)?;
-                self.end_newline = text.ends_with('\n');
+            html! {
+                (text.as_ref())
             }
         }
         Code(text) => {
-            self.write("<code>")?;
-            escape_html_body_text(&mut self.writer, &text)?;
-            self.write("</code>")?;
+            html! {
+                code { (text.as_ref()) }
+            }
         }
         InlineMath(text) => {
-            self.write(r#"<span class="math math-inline">"#)?;
-            escape_html(&mut self.writer, &text)?;
-            self.write("</span>")?;
+            html! {
+                span class="math math-inline" { (text.as_ref()) }
+            }
         }
         DisplayMath(text) => {
-            self.write(r#"<span class="math math-display">"#)?;
-            escape_html(&mut self.writer, &text)?;
-            self.write("</span>")?;
+            html! {
+                span class="math math-display" { (text.as_ref()) }
+            }
         }
-        Html(html) | InlineHtml(html) => {
-            self.write(&html)?;
+        Html(text) | InlineHtml(text) => {
+            html! {
+                (PreEscaped(text.as_ref()))
+            }
         }
         SoftBreak => {
-            self.write_newline()?;
+            html! {
+                " "
+            }
         }
         HardBreak => {
-            self.write("<br />\n")?;
+            html! {
+                br;
+            }
         }
         Rule => {
-            if self.end_newline {
-                self.write("<hr />\n")?;
-            } else {
-                self.write("\n<hr />\n")?;
+            html! {
+                hr;
             }
         }
         FootnoteReference(name) => {
-            let len = self.numbers.len() + 1;
-            self.write("<sup class=\"footnote-reference\"><a href=\"#")?;
-            escape_html(&mut self.writer, &name)?;
-            self.write("\">")?;
-            let number = *self.numbers.entry(name).or_insert(len);
-            write!(&mut self.writer, "{}", number)?;
-            self.write("</a></sup>")?;
+            html! {
+                sup class="footnote-reference" {
+                    a href=(format!("#{}", name)) {
+                        (name.as_ref())
+                    }
+                }
+            }
         }
-        TaskListMarker(true) => {
-            self.write(
-                "<input disabled=\"\" type=\"checkbox\" checked=\"\"/>\n",
-            )?;
+        TaskListMarker(checked) => {
+            html! {
+                @if *checked {
+                    input type="checkbox" disabled checked;
+                } @else {
+                    input type="checkbox" disabled;
+                }
+            }
         }
-        TaskListMarker(false) => {
-            self.write("<input disabled=\"\" type=\"checkbox\"/>\n")?;
+        _ => {
+            // Placeholder for container nodes (to be implemented later)
+            html! {}
         }
-        _ => todo!(),
-    }
+    };
+
+    markup.into_string()
 }
