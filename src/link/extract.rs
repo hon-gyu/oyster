@@ -356,7 +356,7 @@ fn scan_dir_for_assets_and_notes(dir: &Path) -> Vec<Referenceable> {
 }
 
 /// Recursively apply a map to all paths in a Referenceable
-fn mut_transform_referenceable_path<M>(
+pub fn mut_transform_referenceable_path<M>(
     referenceable: &mut Referenceable,
     path_map: &M,
 ) where

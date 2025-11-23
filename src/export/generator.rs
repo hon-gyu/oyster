@@ -6,7 +6,8 @@ use super::template::render_page;
 use super::types::{PageContext, PageData, SiteConfig, SiteContext};
 use crate::link::{
     Link, Referenceable, build_in_note_anchor_id_map, build_links,
-    build_vault_paths_to_slug_map, scan_vault,
+    build_vault_paths_to_slug_map, mut_transform_referenceable_path,
+    scan_vault,
 };
 use std::collections::HashMap;
 use std::fs;
@@ -25,12 +26,12 @@ pub fn generate_site(
     let (referenceables, references) = scan_vault(vault_path, vault_path);
     let (links, _unresolved) = build_links(references, referenceables.clone());
 
-    let file_paths = referenceables
+    let pre_slug_paths = referenceables
         .iter()
         .map(|r| r.path().as_path())
         .unique()
         .collect::<Vec<_>>();
-    let path_to_slug_map = build_vault_paths_to_slug_map(&file_paths);
+    let path_to_slug_map = build_vault_paths_to_slug_map(&pre_slug_paths);
     let in_note_anchor_id_map = build_in_note_anchor_id_map(&referenceables);
 
     // // Build backlink map: path -> list of pages that link to it
@@ -74,8 +75,6 @@ pub fn generate_site(
             fs::write(&output_path, html)?;
 
             println!("  Generated: {}", output_path.display());
-
-            // generate_page(vault_path, path, &links, config)?;
         }
     }
 

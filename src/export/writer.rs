@@ -140,6 +140,7 @@ where
                 End(tag) => {
                     self.end_tag(tag)?;
                 }
+                // Non-nested elements
                 Text(text) => {
                     if !self.in_non_writing_block {
                         escape_html_body_text(&mut self.writer, &text)?;

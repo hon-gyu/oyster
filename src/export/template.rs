@@ -199,13 +199,6 @@ pub fn render_page(context: &PageContext) -> Result<String, minijinja::Error> {
     let template = env.get_template("base.html")?;
     template.render(context)
 }
-// pub fn render_page(context: &PageContext) -> Result<String, minijinja::Error> {
-//     let mut env = Environment::new();
-//     env.add_template("base.html", BASE_TEMPLATE)?;
-
-//     let template = env.get_template("base.html")?;
-//     template.render(context)
-// }
 
 #[cfg(test)]
 mod tests {
@@ -225,8 +218,8 @@ mod tests {
                 content: "<p>Hello, world!</p>".to_string(),
                 path: "/test.html".to_string(),
             },
-            links: None,
-            toc: None,
+            // links: None,
+            // toc: None,
         };
 
         let result = render_page(&context);

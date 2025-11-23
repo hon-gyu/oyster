@@ -87,12 +87,6 @@ pub struct Reference {
     pub display_text: String,
 }
 
-#[derive(Clone, Debug, PartialEq)]
-pub struct Link {
-    pub from: Reference,
-    pub to: Referenceable,
-}
-
 impl std::fmt::Display for Referenceable {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -128,6 +122,24 @@ impl std::fmt::Display for Referenceable {
                     range
                 )
             }
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct Link {
+    pub from: Reference,
+    pub to: Referenceable,
+}
+
+impl Link {
+    fn tgt_range(&self) -> Range<usize> {
+        match &self.to {
+            Referenceable::Heading { range, .. } => range.clone(),
+            Referenceable::Block { range, .. } => range.clone(),
+            _ => panic!(
+                "Invalid arguments: No target range for non-in-note referenceable. Only heading and block are valid."
+            ),
         }
     }
 }
