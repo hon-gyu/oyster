@@ -200,13 +200,20 @@ fn render_node(
                 ref_slug_map,
                 refable_anchor_id_map,
             );
-            html! {
-                p { (PreEscaped(children)) }
+            // Inject anchor id for matched referenceable
+            if let Some(id) = refable_anchor_id_map.get(&range) {
+                html! {
+                    p #(id) { (PreEscaped(children)) }
+                }
+            } else {
+                html! {
+                    p { (PreEscaped(children)) }
+                }
             }
         }
         Heading {
             level,
-            id,
+            id: id_from_md_src,
             classes,
             attrs,
         } => {
@@ -216,14 +223,22 @@ fn render_node(
                 ref_slug_map,
                 refable_anchor_id_map,
             );
+
             let tag = format!("h{}", level);
 
             // Build attributes as string parts
-            let id_attr = id
-                .as_ref()
-                .map(|id_val| format!(" id=\"{}\"", id_val.as_ref()))
-                .unwrap_or_default();
+            let id_attr = if let Some(id_from_matched_referable) =
+                refable_anchor_id_map.get(&range)
+            {
+                format!(" id=\"{}\"", id_from_matched_referable)
+            } else {
+                id_from_md_src
+                    .as_ref()
+                    .map(|id_val| format!(" id=\"{}\"", id_val.as_ref()))
+                    .unwrap_or_default()
+            };
 
+            // Class attribute
             let class_attr = if classes.is_empty() {
                 String::new()
             } else {
@@ -235,6 +250,7 @@ fn render_node(
                 format!(" class=\"{}\"", class_str)
             };
 
+            // Other attributes
             let other_attrs = attrs
                 .iter()
                 .map(|(name, val)| match val {
