@@ -355,11 +355,25 @@ fn scan_dir_for_assets_and_notes(dir: &Path) -> Vec<Referenceable> {
     referenceables
 }
 
-/// Convert an absolute path to a path relative to root_dir (in-place).
-/// If the path is not under root_dir, leaves it unchanged.
-fn make_path_relative(path: &mut PathBuf, root_dir: &Path) {
-    if let Ok(relative) = path.strip_prefix(root_dir) {
-        *path = relative.to_path_buf();
+/// Recursively apply a map to all paths in a Referenceable
+fn mut_transform_referenceable_path<M>(
+    referenceable: &mut Referenceable,
+    path_map: &M,
+) where
+    M: Fn(&mut PathBuf),
+{
+    match referenceable {
+        Referenceable::Note { path, children } => {
+            path_map(path);
+            for child in children.iter_mut() {
+                mut_transform_referenceable_path(child, path_map);
+            }
+        }
+        Referenceable::Asset { path }
+        | Referenceable::Heading { path, .. }
+        | Referenceable::Block { path, .. } => {
+            path_map(path);
+        }
     }
 }
 
@@ -368,23 +382,12 @@ fn make_referenceable_relative(
     referenceable: &mut Referenceable,
     root_dir: &Path,
 ) {
-    match referenceable {
-        Referenceable::Asset { path } => {
-            make_path_relative(path, root_dir);
+    let make_path_relative = |path: &mut PathBuf| {
+        if let Ok(relative) = path.strip_prefix(root_dir) {
+            *path = relative.to_path_buf();
         }
-        Referenceable::Note { path, children } => {
-            make_path_relative(path, root_dir);
-            for child in children.iter_mut() {
-                make_referenceable_relative(child, root_dir);
-            }
-        }
-        Referenceable::Heading { path, .. } => {
-            make_path_relative(path, root_dir);
-        }
-        Referenceable::Block { path, .. } => {
-            make_path_relative(path, root_dir);
-        }
-    }
+    };
+    mut_transform_referenceable_path(referenceable, &make_path_relative);
 }
 
 /// Scan a vault for referenceables and references.
@@ -405,7 +408,7 @@ pub fn scan_vault(
     let file_referenceables = scan_dir_for_assets_and_notes(dir);
     let mut all_references = Vec::<Reference>::new();
 
-    let file_referenceables_with_children: Vec<Referenceable> =
+    let mut file_referenceables_with_children: Vec<Referenceable> =
         file_referenceables
             .into_iter()
             .map(|mut referenceable| match referenceable {
@@ -423,18 +426,13 @@ pub fn scan_vault(
             })
             .collect();
 
-    // Convert all paths to be relative to root_dir
-    let mut relative_referenceables = file_referenceables_with_children;
-    for referenceable in relative_referenceables.iter_mut() {
-        make_referenceable_relative(referenceable, root_dir);
-    }
+    file_referenceables_with_children
+        .iter_mut()
+        .for_each(|referenceable| {
+            make_referenceable_relative(referenceable, root_dir);
+        });
 
-    // Convert reference paths to be relative to root_dir
-    for reference in all_references.iter_mut() {
-        make_path_relative(&mut reference.path, root_dir);
-    }
-
-    (relative_referenceables, all_references)
+    (file_referenceables_with_children, all_references)
 }
 
 #[cfg(test)]
