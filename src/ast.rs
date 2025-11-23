@@ -21,7 +21,8 @@ pub struct Tree<'a> {
 #[derive(Clone, Debug, PartialEq)]
 pub struct Node<'a> {
     pub children: Vec<Node<'a>>,
-    // byte range
+    // byte range of the inline element or the entire element span
+    // for nested elements
     pub start_byte: usize,
     pub end_byte: usize,
     // position in rows and columns
@@ -66,6 +67,11 @@ impl<'a> Node<'a> {
 }
 
 /// Node kind
+///
+/// pulldown-cmark's `Event` consists of element that can be nested,
+/// representing as Event::Start(Tag) and Event::End(Tag), and event that
+/// can't be nested.
+///
 /// including Tag + Event that is not start or end
 #[derive(Clone, Debug, PartialEq)]
 pub enum NodeKind<'a> {
@@ -110,7 +116,6 @@ pub enum NodeKind<'a> {
         id: CowStr<'a>,
     },
     MetadataBlock(MetadataBlockKind),
-
     /// inline Events
     Text(CowStr<'a>),
     Code(CowStr<'a>),
@@ -488,6 +493,20 @@ fn setup_parent_pointers<'a>(node: &mut Node<'a>) {
     }
 }
 
+/// Builds an AST from the given text and events, with the parent pointers empty.
+///
+/// While iterating over the events, we keep track of
+/// 1. the current parent node (initiated as the root node)
+/// 2. the children of the current parent node
+/// 3. the previous siblings of the current parent node
+///
+/// When we encounter a new tag (`Event::Start`), we go one level deeper
+/// - We create a new node and set it the current working parent
+/// - We create a new empty children vector
+///
+/// When we encounter an end tag (`Event::End`), we go one level up
+/// - The current working parent has collected all its children
+/// - It previous siblings and itself will be the children ready to be appended
 fn build_ast<'a>(
     text: &str,
     events_with_offset: Vec<(Event<'a>, Range<usize>)>,
@@ -513,7 +532,13 @@ fn build_ast<'a>(
         .expect("No events found");
 
     for (event, offset) in events_with_offset {
+        // Dispatch event to the handling of either tag or inline
         match event {
+            // for `Event::Start`, pulldown-cmark provides the offset of the
+            // span of the entire element, including the start and end tags.
+            //
+            // Invariant: the start and end offsets of the element are
+            // the same for the same element.
             Event::Start(tag) => {
                 let node = Node {
                     children: Vec::new(),

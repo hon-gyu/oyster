@@ -8,9 +8,12 @@ license = "AGPL-3.0-or-later"
 clap = { version = "4.5.48", features = ["derive"] }
 ego-tree = "0.10.0"
 itertools = "0.14.0"
+minijinja = "2.12.0"
 nonempty = "0.12.0"
 percent-encoding = "2.3.2"
 pulldown-cmark = "0.13.0"
+pulldown-cmark-escape = "0.11.0"
+serde = { version = "1.0.228", features = ["derive"] }
 similar = "2.7.0"
 tree-sitter = "0.25.9"
 

@@ -30,12 +30,19 @@ pub enum Referenceable {
         path: PathBuf,
         level: HeadingLevel,
         text: String,
+        // The exact range of the heading event from start to end
         range: Range<usize>,
     },
     Block {
         path: PathBuf,
         identifier: String,
         kind: BlockReferenceableKind,
+        // The exact range of the event, including
+        // - paragraph
+        // - list item
+        // - block quote
+        // - table
+        // - list
         range: Range<usize>,
     },
 }
@@ -73,15 +80,11 @@ pub enum ReferenceKind {
 pub struct Reference {
     pub path: PathBuf,
     pub range: Range<usize>,
+    /// The `dest_url` of the raw link in markdown file
+    /// percent-decoded if it's a inline link (markdown link)
     pub dest: String,
     pub kind: ReferenceKind,
     pub display_text: String,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct Link {
-    pub from: Reference,
-    pub to: Referenceable,
 }
 
 impl std::fmt::Display for Referenceable {
@@ -119,6 +122,24 @@ impl std::fmt::Display for Referenceable {
                     range
                 )
             }
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct Link {
+    pub from: Reference,
+    pub to: Referenceable,
+}
+
+impl Link {
+    fn tgt_range(&self) -> Range<usize> {
+        match &self.to {
+            Referenceable::Heading { range, .. } => range.clone(),
+            Referenceable::Block { range, .. } => range.clone(),
+            _ => panic!(
+                "Invalid arguments: No target range for non-in-note referenceable. Only heading and block are valid."
+            ),
         }
     }
 }
