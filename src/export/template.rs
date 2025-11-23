@@ -218,6 +218,7 @@ mod tests {
                 content: "<p>Hello, world!</p>".to_string(),
                 path: "/test.html".to_string(),
             },
+            backlinks: None,
             // links: None,
             // toc: None,
         };

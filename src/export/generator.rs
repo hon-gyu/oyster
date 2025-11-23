@@ -4,9 +4,11 @@ use itertools::Itertools;
 use super::html::export_to_html_body;
 use super::template::render_page;
 use super::types::{LinkInfo, PageContext, PageData, SiteConfig, SiteContext};
+use super::utils::{
+    build_in_note_anchor_id_map, build_vault_paths_to_slug_map,
+};
 use crate::link::{
-    Link, Referenceable, build_in_note_anchor_id_map, build_links,
-    build_vault_paths_to_slug_map, mut_transform_referenceable_path,
+    Link, Referenceable, build_links, mut_transform_referenceable_path,
     scan_vault,
 };
 use std::collections::HashMap;
