@@ -63,6 +63,11 @@ pub fn generate_site(
 
             let note_slug = path_to_slug_map.get(note_path).unwrap();
             let title = note_path.as_os_str().to_string_lossy().to_string();
+            let title = title.strip_suffix(".md").unwrap_or(&title);
+            let title = title
+                .strip_suffix(".markdown")
+                .unwrap_or(&title)
+                .to_string();
             // Create page context
             let context = PageContext {
                 site: SiteContext {
