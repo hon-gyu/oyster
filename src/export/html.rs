@@ -39,19 +39,6 @@ pub fn export_to_html_body(
         .map(|link| (link.from.dest.as_str(), link))
         .collect();
 
-    eprintln!("Link map for {:?}: {} links", path, link_map.len());
-    for (dest, link) in &link_map {
-        eprintln!("  {} -> {:?}", dest, link.to);
-    }
-
-    eprintln!(
-        "in_note_anchor_id_map has {} entries:",
-        in_note_anchor_id_map.len()
-    );
-    for (range, id) in in_note_anchor_id_map {
-        eprintln!("  {:?} -> {}", range, id);
-    }
-
     // Parse with the same options as in link resolution
     let opts = default_opts();
     let parser = Parser::new_ext(md_src, opts);
@@ -87,12 +74,7 @@ pub fn export_to_html_body(
                         dest_url.as_ref()
                     };
 
-                    eprintln!(
-                        "Looking up link: {:?} (type: {:?})",
-                        dest_str, link_type
-                    );
                     let resolved_link_opt = link_map.get(dest_str);
-                    eprintln!("  Found: {}", resolved_link_opt.is_some());
 
                     if let Some(resolved_link) = resolved_link_opt {
                         // Rewrite to point to generated HTML
@@ -114,10 +96,6 @@ pub fn export_to_html_body(
                                 range: in_note_refable_range,
                                 ..
                             } => {
-                                eprintln!(
-                                    "Looking up anchor ID for range: {:?}",
-                                    in_note_refable_range
-                                );
                                 let anchor_id = in_note_anchor_id_map
                                     .get(&in_note_refable_range)
                                     .unwrap()

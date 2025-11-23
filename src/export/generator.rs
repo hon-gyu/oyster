@@ -24,13 +24,7 @@ pub fn generate_site(
 
     // Scan the vault and build links
     let (referenceables, references) = scan_vault(vault_path, vault_path);
-    eprintln!("Found {} referenceables", referenceables.len());
-    eprintln!("Found {} references", references.len());
     let (links, _unresolved) = build_links(references, referenceables.clone());
-    eprintln!("Built {} links", links.len());
-    for link in &links {
-        eprintln!("  Link: {:?} -> {:?}", link.from.path, link.to);
-    }
 
     let pre_slug_paths = referenceables
         .iter()
