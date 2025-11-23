@@ -39,6 +39,19 @@ pub fn export_to_html_body(
         .map(|link| (link.from.dest.as_str(), link))
         .collect();
 
+    eprintln!("Link map for {:?}: {} links", path, link_map.len());
+    for (dest, link) in &link_map {
+        eprintln!("  {} -> {:?}", dest, link.to);
+    }
+
+    eprintln!(
+        "in_note_anchor_id_map has {} entries:",
+        in_note_anchor_id_map.len()
+    );
+    for (range, id) in in_note_anchor_id_map {
+        eprintln!("  {:?} -> {}", range, id);
+    }
+
     // Parse with the same options as in link resolution
     let opts = default_opts();
     let parser = Parser::new_ext(md_src, opts);
@@ -46,12 +59,15 @@ pub fn export_to_html_body(
     // Transform wikilinks and markdown links to .md files
     let transformed = parser.into_offset_iter().map(|(event, range)| {
         let transformed_event = match event {
+            // For links, we rewrite the destination to point to the resolved ones
             Event::Start(Tag::Link {
                 link_type,
                 dest_url,
                 title,
                 id,
             }) => {
+                // Continue if the link is not inline or wikilink, as they
+                // can not be obsidian links
                 if !matches!(
                     link_type,
                     LinkType::Inline | LinkType::WikiLink { .. }
@@ -71,7 +87,12 @@ pub fn export_to_html_body(
                         dest_url.as_ref()
                     };
 
+                    eprintln!(
+                        "Looking up link: {:?} (type: {:?})",
+                        dest_str, link_type
+                    );
                     let resolved_link_opt = link_map.get(dest_str);
+                    eprintln!("  Found: {}", resolved_link_opt.is_some());
 
                     if let Some(resolved_link) = resolved_link_opt {
                         // Rewrite to point to generated HTML
@@ -80,8 +101,10 @@ pub fn export_to_html_body(
                             path_to_slug_map.get(link_tgt.path()).unwrap();
                         let resolved_dest = match link_tgt {
                             // Non-in-note referenceable
-                            Referenceable::Asset { .. }
-                            | Referenceable::Note { .. } => tgt_slug.clone(),
+                            Referenceable::Asset { .. } => tgt_slug.clone(),
+                            Referenceable::Note { .. } => {
+                                format!("{}.html", tgt_slug)
+                            }
                             // In-note referenceable
                             Referenceable::Block {
                                 range: in_note_refable_range,
@@ -91,12 +114,15 @@ pub fn export_to_html_body(
                                 range: in_note_refable_range,
                                 ..
                             } => {
-                                debug_assert!(in_note_refable_range == &range, "In-note referenceable range should match the event range. Guaranteed during extraction.");
+                                eprintln!(
+                                    "Looking up anchor ID for range: {:?}",
+                                    in_note_refable_range
+                                );
                                 let anchor_id = in_note_anchor_id_map
-                                    .get(&range)
+                                    .get(&in_note_refable_range)
                                     .unwrap()
                                     .clone();
-                                format!("{}#{}", tgt_slug, anchor_id)
+                                format!("{}.html#{}", tgt_slug, anchor_id)
                             }
                         };
 

@@ -426,11 +426,18 @@ pub fn scan_vault(
             })
             .collect();
 
+    // Make all referenceables relative to the root directory
     file_referenceables_with_children
         .iter_mut()
         .for_each(|referenceable| {
             make_referenceable_relative(referenceable, root_dir);
         });
+    // Make all references relative to the root directory as well
+    all_references.iter_mut().for_each(|reference| {
+        if let Ok(relative) = reference.path.strip_prefix(root_dir) {
+            reference.path = relative.to_path_buf();
+        }
+    });
 
     (file_referenceables_with_children, all_references)
 }

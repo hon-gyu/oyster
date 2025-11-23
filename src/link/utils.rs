@@ -121,6 +121,10 @@ pub fn build_in_note_anchor_id_map(
             } => {
                 map.insert(range.clone(), identifier.clone());
             }
+            Referenceable::Note { path: _, children } => {
+                let child_map = build_in_note_anchor_id_map(children);
+                map.extend(child_map);
+            }
             _ => {}
         }
     }
