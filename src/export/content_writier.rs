@@ -5,7 +5,7 @@ use crate::ast::{Node, NodeKind::*, Tree};
 use crate::link::types::{Link as ResolvedLink, Reference, Referenceable};
 use crate::link::{build_links, scan_vault};
 use maud::{Markup, PreEscaped, html};
-use pulldown_cmark_escape::{escape_href, escape_html, escape_html_body_text};
+use pulldown_cmark::{BlockQuoteKind, CodeBlockKind, LinkType};
 use std::collections::HashMap;
 use std::fs;
 use std::ops::Range;
@@ -184,17 +184,371 @@ fn render_node(
                 }
             }
         }
-        TaskListMarker(checked) => {
+        TaskListMarker(checked) => match checked {
+            true => html! {
+                input type="checkbox" disabled checked;
+            },
+            false => html! {
+                input type="checkbox" disabled;
+            },
+        },
+        // Container nodes
+        Paragraph => {
+            let children = render_nodes(
+                &node.children,
+                vault_path,
+                ref_slug_map,
+                refable_anchor_id_map,
+            );
             html! {
-                @if *checked {
-                    input type="checkbox" disabled checked;
-                } @else {
-                    input type="checkbox" disabled;
+                p { (PreEscaped(children)) }
+            }
+        }
+        Heading {
+            level,
+            id,
+            classes,
+            attrs,
+        } => {
+            let children = render_nodes(
+                &node.children,
+                vault_path,
+                ref_slug_map,
+                refable_anchor_id_map,
+            );
+            let tag = format!("h{}", level);
+
+            // Build attributes as string parts
+            let id_attr = id
+                .as_ref()
+                .map(|id_val| format!(" id=\"{}\"", id_val.as_ref()))
+                .unwrap_or_default();
+
+            let class_attr = if classes.is_empty() {
+                String::new()
+            } else {
+                let class_str = classes
+                    .iter()
+                    .map(|c| c.as_ref())
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                format!(" class=\"{}\"", class_str)
+            };
+
+            let other_attrs = attrs
+                .iter()
+                .map(|(name, val)| match val {
+                    Some(v) => format!(" {}=\"{}\"", name.as_ref(), v.as_ref()),
+                    None => format!(" {}=\"\"", name.as_ref()),
+                })
+                .collect::<String>();
+
+            html! {
+                (PreEscaped(format!("<{}{}{}{}>{}</{}>",
+                    tag, id_attr, class_attr, other_attrs, children, tag)))
+            }
+        }
+        BlockQuote(kind) => {
+            let children = render_nodes(
+                &node.children,
+                vault_path,
+                ref_slug_map,
+                refable_anchor_id_map,
+            );
+
+            // Extract class name determination
+            let class_name = kind.as_ref().map(|bq_kind| match bq_kind {
+                BlockQuoteKind::Note => "markdown-alert-note",
+                BlockQuoteKind::Tip => "markdown-alert-tip",
+                BlockQuoteKind::Important => "markdown-alert-important",
+                BlockQuoteKind::Warning => "markdown-alert-warning",
+                BlockQuoteKind::Caution => "markdown-alert-caution",
+            });
+
+            match class_name {
+                Some(class) => html! {
+                    blockquote class=(class) {
+                        (PreEscaped(children))
+                    }
+                },
+                None => html! {
+                    blockquote {
+                        (PreEscaped(children))
+                    }
+                },
+            }
+        }
+        CodeBlock(kind) => {
+            let children = render_nodes(
+                &node.children,
+                vault_path,
+                ref_slug_map,
+                refable_anchor_id_map,
+            );
+
+            // Extract language class determination
+            let language_class = match kind {
+                CodeBlockKind::Fenced(info) => {
+                    let lang = info.split(' ').next().unwrap();
+                    if lang.is_empty() {
+                        None
+                    } else {
+                        Some(format!("language-{}", lang))
+                    }
+                }
+                CodeBlockKind::Indented => None,
+            };
+
+            match language_class {
+                Some(class) => html! {
+                    pre {
+                        code class=(class) { (PreEscaped(children)) }
+                    }
+                },
+                None => html! {
+                    pre {
+                        code { (PreEscaped(children)) }
+                    }
+                },
+            }
+        }
+        HtmlBlock => {
+            let children = render_nodes(
+                &node.children,
+                vault_path,
+                ref_slug_map,
+                refable_anchor_id_map,
+            );
+            html! {
+                (PreEscaped(children))
+            }
+        }
+        List(start) => {
+            let children = render_nodes(
+                &node.children,
+                vault_path,
+                ref_slug_map,
+                refable_anchor_id_map,
+            );
+
+            // Extract list type and start attribute determination
+            match start {
+                Some(1) => html! {
+                    ol { (PreEscaped(children)) }
+                },
+                Some(start_num) => html! {
+                    ol start=(start_num) { (PreEscaped(children)) }
+                },
+                None => html! {
+                    ul { (PreEscaped(children)) }
+                },
+            }
+        }
+        Item => {
+            let children = render_nodes(
+                &node.children,
+                vault_path,
+                ref_slug_map,
+                refable_anchor_id_map,
+            );
+            html! {
+                li { (PreEscaped(children)) }
+            }
+        }
+        Emphasis => {
+            let children = render_nodes(
+                &node.children,
+                vault_path,
+                ref_slug_map,
+                refable_anchor_id_map,
+            );
+            html! {
+                em { (PreEscaped(children)) }
+            }
+        }
+        Strong => {
+            let children = render_nodes(
+                &node.children,
+                vault_path,
+                ref_slug_map,
+                refable_anchor_id_map,
+            );
+            html! {
+                strong { (PreEscaped(children)) }
+            }
+        }
+        Strikethrough => {
+            let children = render_nodes(
+                &node.children,
+                vault_path,
+                ref_slug_map,
+                refable_anchor_id_map,
+            );
+            html! {
+                del { (PreEscaped(children)) }
+            }
+        }
+        Superscript => {
+            let children = render_nodes(
+                &node.children,
+                vault_path,
+                ref_slug_map,
+                refable_anchor_id_map,
+            );
+            html! {
+                sup { (PreEscaped(children)) }
+            }
+        }
+        Subscript => {
+            let children = render_nodes(
+                &node.children,
+                vault_path,
+                ref_slug_map,
+                refable_anchor_id_map,
+            );
+            html! {
+                sub { (PreEscaped(children)) }
+            }
+        }
+        Link {
+            link_type,
+            dest_url,
+            title,
+            ..
+        } => {
+            let children = render_nodes(
+                &node.children,
+                vault_path,
+                ref_slug_map,
+                refable_anchor_id_map,
+            );
+            let href = if matches!(link_type, LinkType::Email) {
+                format!("mailto:{}", dest_url.as_ref())
+            } else {
+                dest_url.to_string()
+            };
+            let title_attr = if title.is_empty() {
+                String::new()
+            } else {
+                format!(" title=\"{}\"", title.as_ref())
+            };
+            html! {
+                (PreEscaped(format!("<a href=\"{}\"{}>{}</a>", href, title_attr, children)))
+            }
+        }
+        Image {
+            dest_url, title, ..
+        } => {
+            // For images, children contain the alt text
+            let alt_text = render_nodes(
+                &node.children,
+                vault_path,
+                ref_slug_map,
+                refable_anchor_id_map,
+            );
+            let title_attr = if title.is_empty() {
+                String::new()
+            } else {
+                format!(" title=\"{}\"", title.as_ref())
+            };
+            html! {
+                (PreEscaped(format!("<img src=\"{}\" alt=\"{}\"{}/>", dest_url.as_ref(), alt_text, title_attr)))
+            }
+        }
+        Table(_alignments) => {
+            let children = render_nodes(
+                &node.children,
+                vault_path,
+                ref_slug_map,
+                refable_anchor_id_map,
+            );
+            html! {
+                table { (PreEscaped(children)) }
+            }
+        }
+        TableHead => {
+            let children = render_nodes(
+                &node.children,
+                vault_path,
+                ref_slug_map,
+                refable_anchor_id_map,
+            );
+            html! {
+                thead { (PreEscaped(children)) }
+            }
+        }
+        TableRow => {
+            let children = render_nodes(
+                &node.children,
+                vault_path,
+                ref_slug_map,
+                refable_anchor_id_map,
+            );
+            html! {
+                tr { (PreEscaped(children)) }
+            }
+        }
+        TableCell => {
+            let children = render_nodes(
+                &node.children,
+                vault_path,
+                ref_slug_map,
+                refable_anchor_id_map,
+            );
+            // TODO: handle table alignment based on cell index
+            html! {
+                td { (PreEscaped(children)) }
+            }
+        }
+        DefinitionList => {
+            let children = render_nodes(
+                &node.children,
+                vault_path,
+                ref_slug_map,
+                refable_anchor_id_map,
+            );
+            html! {
+                dl { (PreEscaped(children)) }
+            }
+        }
+        DefinitionListTitle => {
+            let children = render_nodes(
+                &node.children,
+                vault_path,
+                ref_slug_map,
+                refable_anchor_id_map,
+            );
+            html! {
+                dt { (PreEscaped(children)) }
+            }
+        }
+        DefinitionListDefinition => {
+            let children = render_nodes(
+                &node.children,
+                vault_path,
+                ref_slug_map,
+                refable_anchor_id_map,
+            );
+            html! {
+                dd { (PreEscaped(children)) }
+            }
+        }
+        FootnoteDefinition(name) => {
+            let children = render_nodes(
+                &node.children,
+                vault_path,
+                ref_slug_map,
+                refable_anchor_id_map,
+            );
+            html! {
+                div class="footnote-definition" id=(name.as_ref()) {
+                    sup class="footnote-definition-label" { (name.as_ref()) }
+                    (PreEscaped(children))
                 }
             }
         }
-        _ => {
-            // Placeholder for container nodes (to be implemented later)
+        MetadataBlock(_) => {
+            // Metadata blocks should not be rendered
             html! {}
         }
     };
