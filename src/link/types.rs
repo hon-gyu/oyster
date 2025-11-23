@@ -30,19 +30,19 @@ pub enum Referenceable {
         path: PathBuf,
         level: HeadingLevel,
         text: String,
-        // The exact range of the heading event from start to end
+        /// The exact range of the heading event from start to end
         range: Range<usize>,
     },
     Block {
         path: PathBuf,
         identifier: String,
         kind: BlockReferenceableKind,
-        // The exact range of the event, including
-        // - paragraph
-        // - list item
-        // - block quote
-        // - table
-        // - list
+        /// The exact range of the event, including
+        /// - paragraph
+        /// - list item
+        /// - block quote
+        /// - table
+        /// - list
         range: Range<usize>,
     },
 }
@@ -133,13 +133,22 @@ pub struct Link {
 }
 
 impl Link {
-    fn tgt_range(&self) -> Range<usize> {
+    /// Return true if the link is pointing to an in-note referenceable
+    pub fn is_in_note(&self) -> bool {
         match &self.to {
-            Referenceable::Heading { range, .. } => range.clone(),
-            Referenceable::Block { range, .. } => range.clone(),
-            _ => panic!(
-                "Invalid arguments: No target range for non-in-note referenceable. Only heading and block are valid."
-            ),
+            Referenceable::Heading { .. } => true,
+            Referenceable::Block { .. } => true,
+            _ => false,
+        }
+    }
+    /// The byte range of the target in-note referenceable
+    ///
+    /// Return None if the link is pointing to a file
+    fn tgt_range(&self) -> Option<Range<usize>> {
+        match &self.to {
+            Referenceable::Heading { range, .. } => Some(range.clone()),
+            Referenceable::Block { range, .. } => Some(range.clone()),
+            _ => None,
         }
     }
 }
