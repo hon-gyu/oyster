@@ -24,6 +24,7 @@ pub fn generate_site(
 
     // Scan the vault and build links
     let (referenceables, references) = scan_vault(vault_path, vault_path);
+    eprintln!("Found {} referenceables", referenceables.len());
     let (links, _unresolved) = build_links(references, referenceables.clone());
 
     let pre_slug_paths = referenceables
@@ -42,8 +43,11 @@ pub fn generate_site(
             path: note_path, ..
         } = referenceable
         {
-            let note_slug = path_to_slug_map.get(note_path).unwrap();
-            let md_src = fs::read_to_string(note_path)?;
+            let absolute_note_path = vault_path.join(note_path);
+            let md_src =
+                fs::read_to_string(&absolute_note_path).map_err(|e| {
+                    format!("Failed to read {:?}: {}", absolute_note_path, e)
+                })?;
             let html_content = export_to_html_body(
                 &md_src,
                 note_path,
@@ -52,6 +56,7 @@ pub fn generate_site(
                 &in_note_anchor_id_map,
             );
 
+            let note_slug = path_to_slug_map.get(note_path).unwrap();
             let title = note_path.as_os_str().to_string_lossy().to_string();
             // Create page context
             let context = PageContext {
@@ -70,8 +75,11 @@ pub fn generate_site(
             let html = render_page(&context)?;
 
             // Write to output
-            let output_path = config.output_dir.join(note_slug);
-            fs::write(&output_path, html)?;
+            let output_path =
+                config.output_dir.join(note_slug).with_extension("html");
+            fs::write(&output_path, html).map_err(|e| {
+                format!("Failed to write {:?}: {}", output_path, e)
+            })?;
 
             println!("  Generated: {}", output_path.display());
         }

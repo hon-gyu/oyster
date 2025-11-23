@@ -121,7 +121,7 @@ pub fn build_in_note_anchor_id_map(
             } => {
                 map.insert(range.clone(), identifier.clone());
             }
-            _ => panic!("Invalid args: Not in-note referenceable"),
+            _ => {}
         }
     }
     map
