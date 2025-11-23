@@ -29,8 +29,9 @@ pub struct PageContext {
     pub site: SiteContext,
     /// Current page data
     pub page: PageData,
-    // /// Links related to this page
-    // pub backlinks: Option<Vec<LinkInfo>>,
+    /// Links to this page
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub backlinks: Option<Vec<LinkInfo>>,
     // /// Table of contents generated from headings
     // #[serde(skip_serializing_if = "Option::is_none")]
     // pub toc: Option<Vec<TocEntry>>,
@@ -52,4 +53,10 @@ pub struct PageData {
 pub struct SiteContext {
     pub title: String,
     pub base_url: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct LinkInfo {
+    pub title: String,
+    pub path: String,
 }

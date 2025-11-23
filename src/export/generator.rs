@@ -3,7 +3,7 @@ use itertools::Itertools;
 /// Main SSG generator that processes a vault
 use super::html::export_to_html_body;
 use super::template::render_page;
-use super::types::{PageContext, PageData, SiteConfig, SiteContext};
+use super::types::{LinkInfo, PageContext, PageData, SiteConfig, SiteContext};
 use crate::link::{
     Link, Referenceable, build_in_note_anchor_id_map, build_links,
     build_vault_paths_to_slug_map, mut_transform_referenceable_path,
@@ -47,6 +47,8 @@ pub fn generate_site(
                 fs::read_to_string(&absolute_note_path).map_err(|e| {
                     format!("Failed to read {:?}: {}", absolute_note_path, e)
                 })?;
+
+            // Main content
             let html_content = export_to_html_body(
                 &md_src,
                 note_path,
@@ -55,14 +57,39 @@ pub fn generate_site(
                 &in_note_anchor_id_map,
             );
 
-            let note_slug = path_to_slug_map.get(note_path).unwrap();
-            let title = note_path.as_os_str().to_string_lossy().to_string();
-            let title = title.strip_suffix(".md").unwrap_or(&title);
-            let title = title
-                .strip_suffix(".markdown")
-                .unwrap_or(&title)
-                .to_string();
+            // Backlinks
+            let backlinks = links
+                .iter()
+                .filter(|link| {
+                    if link.to.path() == note_path {
+                        true
+                    } else {
+                        false
+                    }
+                })
+                .map(|link| {
+                    let src_vault_path = &link.from.path;
+                    let title = get_title_from_vault_path(&src_vault_path);
+                    let src_slug_path = path_to_slug_map
+                        .get(src_vault_path)
+                        .unwrap()
+                        .to_string();
+
+                    LinkInfo {
+                        title,
+                        path: format!("{}.html", src_slug_path),
+                    }
+                })
+                .collect::<Vec<_>>();
+            let backlinks_opt = if backlinks.len() == 0 {
+                None
+            } else {
+                Some(backlinks)
+            };
+
             // Create page context
+            let title = get_title_from_vault_path(note_path);
+            let note_slug = path_to_slug_map.get(note_path).unwrap();
             let context = PageContext {
                 site: SiteContext {
                     title: config.title.clone(),
@@ -73,12 +100,11 @@ pub fn generate_site(
                     content: html_content,
                     path: note_slug.clone(),
                 },
+                backlinks: backlinks_opt,
             };
 
-            // Render the page
+            // Render the page and write to output
             let html = render_page(&context)?;
-
-            // Write to output
             let output_path =
                 config.output_dir.join(note_slug).with_extension("html");
             fs::write(&output_path, html).map_err(|e| {
@@ -91,4 +117,11 @@ pub fn generate_site(
 
     println!("✓ Site generated in {:?}", config.output_dir);
     Ok(())
+}
+
+fn get_title_from_vault_path(path: &Path) -> String {
+    let path = path.as_os_str().to_string_lossy();
+    let path = path.strip_suffix(".md").unwrap_or(&path);
+    let path = path.strip_suffix(".markdown").unwrap_or(&path);
+    path.to_string()
 }

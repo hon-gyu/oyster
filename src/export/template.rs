@@ -168,12 +168,12 @@ const BASE_TEMPLATE: &str = r#"<!DOCTYPE html>
             {{ page.content | safe }}
         </article>
 
-        {% if links and links.backlinks %}
+        {% if backlinks %}
         <div class="backlinks">
             <h2>Backlinks</h2>
             <ul>
             {% for backlink in backlinks %}
-                <li><a href="{{ backlink.path }}">{{ backlink.title }}</a></li>
+                <li><a href="{{ backlink.path }}"> {{ backlink.title }}</a></li>
             {% endfor %}
             </ul>
         </div>
