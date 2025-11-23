@@ -1,6 +1,6 @@
 mod extract;
 mod resolve;
-mod types;
+pub mod types;
 mod utils;
 
 pub use extract::{mut_transform_referenceable_path, scan_note, scan_vault};

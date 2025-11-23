@@ -5,7 +5,11 @@
 ///   - assets other than notes: images, videos, audios, PDFs, etc.
 use pulldown_cmark::HeadingLevel;
 use std::ops::Range;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+
+// ====================
+// Referenceable
+// ====================
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum BlockReferenceableKind {
@@ -70,20 +74,27 @@ impl Referenceable {
     }
 }
 
+// ====================
+// Reference
+// ====================
 #[derive(Clone, Debug, PartialEq)]
 pub enum ReferenceKind {
     WikiLink,
     MarkdownLink,
 }
 
+/// A wikilink or inline markdown link in markdown file
+///
+/// `[[x#y|z]]` or `[a](b)`
 #[derive(Clone, Debug, PartialEq)]
 pub struct Reference {
+    pub kind: ReferenceKind,
     pub path: PathBuf,
+    /// The byte range of the raw link in markdown file
     pub range: Range<usize>,
     /// The `dest_url` of the raw link in markdown file
     /// percent-decoded if it's a inline link (markdown link)
     pub dest: String,
-    pub kind: ReferenceKind,
     pub display_text: String,
 }
 
@@ -126,6 +137,11 @@ impl std::fmt::Display for Referenceable {
     }
 }
 
+// ====================
+// Link
+// ====================
+
+/// A reference to a referenceable
 #[derive(Clone, Debug, PartialEq)]
 pub struct Link {
     pub from: Reference,
@@ -133,6 +149,14 @@ pub struct Link {
 }
 
 impl Link {
+    pub fn src_path_eq(&self, path: &Path) -> bool {
+        self.from.path == path
+    }
+
+    pub fn tgt_path_eq(&self, path: &Path) -> bool {
+        self.to.path() == path
+    }
+
     /// Return true if the link is pointing to an in-note referenceable
     pub fn is_in_note(&self) -> bool {
         match &self.to {

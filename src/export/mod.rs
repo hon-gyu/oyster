@@ -1,3 +1,4 @@
+pub mod content_writier;
 pub mod generator;
 pub mod html;
 pub mod template;

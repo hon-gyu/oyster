@@ -87,7 +87,7 @@ pub fn build_vault_paths_to_slug_map(
 ///
 /// Note: we don't de-duplicate anchor IDs here.
 pub fn build_in_note_anchor_id_map(
-    referenceables: &[Referenceable],
+    referenceables: &[&Referenceable],
 ) -> HashMap<Range<usize>, String> {
     let mut map: HashMap<Range<usize>, String> = HashMap::new();
     for refable in referenceables {
@@ -110,7 +110,8 @@ pub fn build_in_note_anchor_id_map(
                 map.insert(range.clone(), identifier.clone());
             }
             Referenceable::Note { path: _, children } => {
-                let child_map = build_in_note_anchor_id_map(children);
+                let refs: Vec<&Referenceable> = children.iter().collect();
+                let child_map = build_in_note_anchor_id_map(&refs);
                 map.extend(child_map);
             }
             _ => {}

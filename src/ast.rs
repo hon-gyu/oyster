@@ -592,6 +592,8 @@ fn build_ast<'a>(
     }
 }
 
+// ====================
+
 #[cfg(test)]
 mod tests {
     use super::*;
