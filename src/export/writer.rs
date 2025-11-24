@@ -1,4 +1,5 @@
 use super::content::render_content;
+use super::style::get_style;
 use super::utils::{
     build_in_note_anchor_id_map, build_vault_paths_to_slug_map,
 };
@@ -16,6 +17,7 @@ use std::path::{Path, PathBuf};
 pub fn render_vault(
     vault_root_dir: &Path,
     output_dir: &Path,
+    theme: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
     // Scan the vault and build links
     let (referenceables, references) =
@@ -79,7 +81,8 @@ pub fn render_vault(
             &innote_refable_anchor_id_map,
         );
 
-        let html = render_page(&title, &content, Some(&backlink));
+        let html =
+            render_page(&title, &content, Some(&backlink), get_style(theme));
         let note_slug_path =
             vault_path_to_slug_map.get(note_vault_path).unwrap();
         let output_path = output_dir.join(format!("{}.html", note_slug_path));
@@ -97,18 +100,34 @@ fn render_page(
     title: &str,
     content: &str,
     backlink: Option<&Markup>,
+    style: &str,
 ) -> String {
     html! {
         (DOCTYPE)
-        header {
-            h1 { (title) }
-        }
-        body {
-            (PreEscaped(content))
-        }
-        @if let Some(backlink) = backlink {
-            hr;
-            (backlink)
+        html {
+            head {
+                meta charset="utf-8";
+                meta name="viewport" content="width=device-width, initial-scale=1";
+                title { (title) }
+                style {
+                    (PreEscaped(style))
+                }
+            }
+            body {
+                article {
+                    h1 { (title) }
+                    (PreEscaped(content))
+                }
+                @if let Some(backlink) = backlink {
+                    hr;
+                    section class="backlinks" {
+                        h5 { "Backlinks" }
+                        ul {
+                            (backlink)
+                        }
+                    }
+                }
+            }
         }
     }
     .into_string()
