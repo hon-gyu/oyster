@@ -19,8 +19,6 @@ fn render_vault(
     vault_path: &Path,
     output_dir: &Path,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    fs::create_dir_all(output_dir)?;
-
     // Scan the vault and build links
     let (referenceables, references) = scan_vault(vault_path, vault_path);
     let (links, _unresolved) = build_links(references, referenceables.clone());
@@ -39,6 +37,7 @@ fn render_vault(
     let innote_refable_anchor_id_map =
         build_in_note_anchor_id_map(&referenceable_refs);
 
+    fs::create_dir_all(output_dir)?;
     Ok(())
 }
 
@@ -692,4 +691,50 @@ fn render_node(
     };
 
     markup.into_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use insta::*;
+
+    #[test]
+    fn test_render_note() {
+        let vault_root_dir = Path::new("tests/data/vaults/minimal");
+
+        // Scan the vault
+        let (referenceables, references) =
+            scan_vault(vault_root_dir, vault_root_dir);
+        let (links, _unresolved) =
+            build_links(references, referenceables.clone());
+
+        // Build vault file path to slug map
+        let vault_file_paths = referenceables
+            .iter()
+            .filter(|referenceable| !referenceable.is_innote())
+            .map(|referenceable| referenceable.path().as_path())
+            .collect::<Vec<_>>();
+        let vault_path_to_slug_map =
+            build_vault_paths_to_slug_map(&vault_file_paths);
+
+        // Build in-note anchor id map
+        let referenceable_refs = referenceables.iter().collect::<Vec<_>>();
+        let innote_refable_anchor_id_map =
+            build_in_note_anchor_id_map(&referenceable_refs);
+
+        // Render note
+        let note_path = Path::new("Note 1.md");
+        let md_src =
+            fs::read_to_string(vault_root_dir.join(note_path)).unwrap();
+        let tree = Tree::new(&md_src);
+        let rendered = render_content(
+            &tree,
+            note_path,
+            &links,
+            &vault_path_to_slug_map,
+            &innote_refable_anchor_id_map,
+        );
+
+        assert_snapshot!(rendered, @r#"<article><p>This is the first note with various reference types.</p><p>For more details, see <a href="note-1.html#additional-info">#Additional Info</a> below.</p><p>You can also reference this specific point: <a href="note-1.html#key-point">#^key-point</a></p><hh2 id="direct-note-reference">Direct Note Reference</hh2><p>Check out <a href="note-2.html">Note 2</a> for more information.</p><hh2 id="heading-reference">Heading Reference</hh2><p>See the section on <a href="note-2.html#getting-started">Note 2#Getting Started</a> for details.</p><hh2 id="block-reference">Block Reference</hh2><p>Here’s a reference to a specific block: <a href="note-2.html#important-block">Note 2#^important-block</a></p><hh2 id="image-embed">Image Embed</hh2><p><img src="blue-image.png" alt="blue-image.png"/></p><hh2 id="additional-info">Additional Info</hh2><p>This section is referenced from the top of this note using a same-note heading reference.</p><p id="key-point">This is a key point within the same note. ^key-point</p><p>The line above has a block ID that’s referenced from earlier in this note.</p></article>"#);
+    }
 }
