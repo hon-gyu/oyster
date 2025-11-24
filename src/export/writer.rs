@@ -8,7 +8,7 @@ use maud::{DOCTYPE, PreEscaped, html};
 use std::fs;
 use std::path::Path;
 
-fn render_vault(
+pub fn render_vault(
     vault_root_dir: &Path,
     output_dir: &Path,
 ) -> Result<(), Box<dyn std::error::Error>> {
@@ -42,6 +42,7 @@ fn render_vault(
     for note_vault_path in note_vault_paths {
         let md_src = fs::read_to_string(vault_root_dir.join(note_vault_path))?;
         let tree = Tree::new(&md_src);
+        let title = title_from_path(note_vault_path);
         let content = render_content(
             &tree,
             note_vault_path,
@@ -49,13 +50,25 @@ fn render_vault(
             &vault_path_to_slug_map,
             &innote_refable_anchor_id_map,
         );
+
+        let html = render_page(&title, &content);
+        let note_slug_path =
+            vault_path_to_slug_map.get(note_vault_path).unwrap();
+        fs::write(output_dir.join(note_slug_path), html)?;
     }
     Ok(())
 }
 
+fn title_from_path(path: &Path) -> String {
+    path.file_stem()
+        .and_then(|stem| stem.to_str())
+        .unwrap()
+        .to_string()
+}
+
 fn render_page(title: &str, content: &str) -> String {
     html! {
-        DOCTYPE
+        (DOCTYPE)
         header {
             title { (title) }
         }
