@@ -99,83 +99,46 @@ fn render_nodes(
 fn render_node(
     node: &Node,
     vault_path: &Path,
+    // TODO: maybe we should include original vault path as data-href as well
     ref_map: &HashMap<Range<usize>, String>,
     refable_anchor_id_map: &HashMap<Range<usize>, String>,
 ) -> String {
     let range = node.start_byte..node.end_byte;
     let markup = match &node.kind {
-        Document => {
-            let children_rendered = render_nodes(
+        // Reference nodes
+        Link {
+            link_type: LinkType::WikiLink { .. } | LinkType::Inline,
+            dest_url,
+            title,
+            ..
+        } => {
+            let children = render_nodes(
                 &node.children,
                 vault_path,
                 ref_map,
                 refable_anchor_id_map,
             );
+            let href = dest_url.to_string();
+            // Find matched reference's resolved destination
+            let matched_reference_dest = ref_map.get(&range);
+            let href = if let Some(dest) = matched_reference_dest {
+                dest.clone()
+            } else {
+                href
+            };
+
+            let title_opt = if title.is_empty() {
+                None
+            } else {
+                Some(title.as_ref())
+            };
             html! {
-                article {
-                    (PreEscaped(children_rendered))
+                a href=(href) title=[title_opt] {
+                    (PreEscaped(children))
                 }
             }
         }
-        // Non-container nodes (leaf nodes)
-        Text(text) => {
-            html! {
-                (text.as_ref())
-            }
-        }
-        Code(text) => {
-            html! {
-                code { (text.as_ref()) }
-            }
-        }
-        InlineMath(text) => {
-            html! {
-                span class="math math-inline" { (text.as_ref()) }
-            }
-        }
-        DisplayMath(text) => {
-            html! {
-                span class="math math-display" { (text.as_ref()) }
-            }
-        }
-        Html(text) | InlineHtml(text) => {
-            html! {
-                (PreEscaped(text.as_ref()))
-            }
-        }
-        SoftBreak => {
-            html! {
-                " "
-            }
-        }
-        HardBreak => {
-            html! {
-                br;
-            }
-        }
-        Rule => {
-            html! {
-                hr;
-            }
-        }
-        FootnoteReference(name) => {
-            html! {
-                sup class="footnote-reference" {
-                    a href=(format!("#{}", name)) {
-                        (name.as_ref())
-                    }
-                }
-            }
-        }
-        TaskListMarker(checked) => match checked {
-            true => html! {
-                input type="checkbox" disabled checked;
-            },
-            false => html! {
-                input type="checkbox" disabled;
-            },
-        },
-        // Container nodes
+        // Referenceable nodes
         Paragraph => {
             let children = render_nodes(
                 &node.children,
@@ -295,51 +258,6 @@ fn render_node(
                 }
             }
         }
-        CodeBlock(kind) => {
-            let children = render_nodes(
-                &node.children,
-                vault_path,
-                ref_map,
-                refable_anchor_id_map,
-            );
-
-            // Extract language class determination
-            let language_class = match kind {
-                CodeBlockKind::Fenced(info) => {
-                    let lang = info.split(' ').next().unwrap();
-                    if lang.is_empty() {
-                        None
-                    } else {
-                        Some(format!("language-{}", lang))
-                    }
-                }
-                CodeBlockKind::Indented => None,
-            };
-
-            match language_class {
-                Some(class) => html! {
-                    pre {
-                        code class=(class) { (PreEscaped(children)) }
-                    }
-                },
-                None => html! {
-                    pre {
-                        code { (PreEscaped(children)) }
-                    }
-                },
-            }
-        }
-        HtmlBlock => {
-            let children = render_nodes(
-                &node.children,
-                vault_path,
-                ref_map,
-                refable_anchor_id_map,
-            );
-            html! {
-                (PreEscaped(children))
-            }
-        }
         List(start) => {
             let children = render_nodes(
                 &node.children,
@@ -400,6 +318,124 @@ fn render_node(
                 html! {
                     li { (PreEscaped(children)) }
                 }
+            }
+        }
+        // Nodes unrelated to resolved links
+        // Non-container nodes (leaf nodes)
+        Text(text) => {
+            html! {
+                (text.as_ref())
+            }
+        }
+        Code(text) => {
+            html! {
+                code { (text.as_ref()) }
+            }
+        }
+        InlineMath(text) => {
+            html! {
+                span class="math math-inline" { (text.as_ref()) }
+            }
+        }
+        DisplayMath(text) => {
+            html! {
+                span class="math math-display" { (text.as_ref()) }
+            }
+        }
+        Html(text) | InlineHtml(text) => {
+            html! {
+                (PreEscaped(text.as_ref()))
+            }
+        }
+        SoftBreak => {
+            html! {
+                " "
+            }
+        }
+        HardBreak => {
+            html! {
+                br;
+            }
+        }
+        Rule => {
+            html! {
+                hr;
+            }
+        }
+        FootnoteReference(name) => {
+            html! {
+                sup class="footnote-reference" {
+                    a href=(format!("#{}", name)) {
+                        (name.as_ref())
+                    }
+                }
+            }
+        }
+        TaskListMarker(checked) => match checked {
+            true => html! {
+                input type="checkbox" disabled checked;
+            },
+            false => html! {
+                input type="checkbox" disabled;
+            },
+        },
+        // Container nodes
+        Document => {
+            let children_rendered = render_nodes(
+                &node.children,
+                vault_path,
+                ref_map,
+                refable_anchor_id_map,
+            );
+            html! {
+                article {
+                    (PreEscaped(children_rendered))
+                }
+            }
+        }
+        CodeBlock(kind) => {
+            let children = render_nodes(
+                &node.children,
+                vault_path,
+                ref_map,
+                refable_anchor_id_map,
+            );
+
+            // Extract language class determination
+            let language_class = match kind {
+                CodeBlockKind::Fenced(info) => {
+                    let lang = info.split(' ').next().unwrap();
+                    if lang.is_empty() {
+                        None
+                    } else {
+                        Some(format!("language-{}", lang))
+                    }
+                }
+                CodeBlockKind::Indented => None,
+            };
+
+            match language_class {
+                Some(class) => html! {
+                    pre {
+                        code class=(class) { (PreEscaped(children)) }
+                    }
+                },
+                None => html! {
+                    pre {
+                        code { (PreEscaped(children)) }
+                    }
+                },
+            }
+        }
+        HtmlBlock => {
+            let children = render_nodes(
+                &node.children,
+                vault_path,
+                ref_map,
+                refable_anchor_id_map,
+            );
+            html! {
+                (PreEscaped(children))
             }
         }
         Emphasis => {
@@ -470,38 +506,6 @@ fn render_node(
                 refable_anchor_id_map,
             );
             let href = format!("mailto:{}", dest_url.as_ref());
-            let title_opt = if title.is_empty() {
-                None
-            } else {
-                Some(title.as_ref())
-            };
-            html! {
-                a href=(href) title=[title_opt] {
-                    (PreEscaped(children))
-                }
-            }
-        }
-        Link {
-            link_type: LinkType::WikiLink { .. } | LinkType::Inline,
-            dest_url,
-            title,
-            ..
-        } => {
-            let children = render_nodes(
-                &node.children,
-                vault_path,
-                ref_map,
-                refable_anchor_id_map,
-            );
-            let href = dest_url.to_string();
-            // Find matched reference's resolved destination
-            let matched_reference_dest = ref_map.get(&range);
-            let href = if let Some(dest) = matched_reference_dest {
-                dest.clone()
-            } else {
-                href
-            };
-
             let title_opt = if title.is_empty() {
                 None
             } else {
