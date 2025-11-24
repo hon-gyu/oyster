@@ -63,23 +63,42 @@ fn render_content(
     >,
 ) -> String {
     // Outgoing links
-    // build a map of: src (this) reference's byte range |-> tgt slug
-    let matched_references = resolved_links
+    // build a map of:
+    //   src (this) reference's byte range
+    //   |->
+    //   tgt_slug.html#anchor_id | tgt_slug.html
+    let ref_dest_map: HashMap<Range<usize>, String> = resolved_links
         .iter()
-        .filter(|link| link.tgt_path_eq(vault_path))
-        .map(|link| &link.from)
-        .collect::<Vec<_>>();
-    let reference_slug_dest_map: HashMap<Range<usize>, String> =
-        matched_references
-            .iter()
-            .map(|reference| {
-                let range = &reference.range;
-                let slug = vault_path_to_slug_map
-                    .get(&reference.path)
-                    .expect("reference path not found");
-                (range.clone(), slug.clone())
-            })
-            .collect();
+        .filter(|link| link.src_path_eq(vault_path))
+        .map(|link| {
+            let src_range = &link.from.range;
+            let tgt = &link.to;
+            let tgt_slug = vault_path_to_slug_map
+                .get(tgt.path())
+                .expect("link target path not found");
+            let tgt_anchor_id = match tgt {
+                Referenceable::Block {
+                    path,
+                    range: tgt_range,
+                    ..
+                }
+                | Referenceable::Heading {
+                    path,
+                    range: tgt_range,
+                    ..
+                } => innote_refable_anchor_id_map
+                    .get(path)
+                    .and_then(|anchor_id_map| anchor_id_map.get(tgt_range)),
+                _ => None,
+            };
+            let dest = if let Some(tgt_anchor_id) = tgt_anchor_id {
+                format!("{}.html#{}", tgt_slug, tgt_anchor_id.clone())
+            } else {
+                format!("{}.html", tgt_slug)
+            };
+            (src_range.clone(), dest)
+        })
+        .collect();
 
     // Incoming links
     // obtain a map of: tgt (this) referable's byte range |-> anchor id
@@ -91,7 +110,7 @@ fn render_content(
     let rendered = render_node(
         &tree.root_node,
         vault_path,
-        &reference_slug_dest_map,
+        &ref_dest_map,
         &in_note_anchor_id_map,
     );
     rendered
@@ -100,13 +119,13 @@ fn render_content(
 fn render_nodes(
     nodes: &[Node],
     vault_path: &Path,
-    ref_slug_map: &HashMap<Range<usize>, String>,
+    ref_map: &HashMap<Range<usize>, String>,
     refable_anchor_id_map: &HashMap<Range<usize>, String>,
 ) -> String {
     let mut buffer = String::new();
     for node in nodes {
         let rendered =
-            render_node(node, vault_path, ref_slug_map, refable_anchor_id_map);
+            render_node(node, vault_path, ref_map, refable_anchor_id_map);
         buffer.push_str(rendered.as_str());
     }
 
@@ -116,7 +135,7 @@ fn render_nodes(
 fn render_node(
     node: &Node,
     vault_path: &Path,
-    ref_slug_map: &HashMap<Range<usize>, String>,
+    ref_map: &HashMap<Range<usize>, String>,
     refable_anchor_id_map: &HashMap<Range<usize>, String>,
 ) -> String {
     let range = node.start_byte..node.end_byte;
@@ -125,7 +144,7 @@ fn render_node(
             let children_rendered = render_nodes(
                 &node.children,
                 vault_path,
-                ref_slug_map,
+                ref_map,
                 refable_anchor_id_map,
             );
             html! {
@@ -197,7 +216,7 @@ fn render_node(
             let children = render_nodes(
                 &node.children,
                 vault_path,
-                ref_slug_map,
+                ref_map,
                 refable_anchor_id_map,
             );
             // Inject anchor id for matched referenceable
@@ -220,7 +239,7 @@ fn render_node(
             let children = render_nodes(
                 &node.children,
                 vault_path,
-                ref_slug_map,
+                ref_map,
                 refable_anchor_id_map,
             );
 
@@ -268,7 +287,7 @@ fn render_node(
             let children = render_nodes(
                 &node.children,
                 vault_path,
-                ref_slug_map,
+                ref_map,
                 refable_anchor_id_map,
             );
 
@@ -316,7 +335,7 @@ fn render_node(
             let children = render_nodes(
                 &node.children,
                 vault_path,
-                ref_slug_map,
+                ref_map,
                 refable_anchor_id_map,
             );
 
@@ -350,7 +369,7 @@ fn render_node(
             let children = render_nodes(
                 &node.children,
                 vault_path,
-                ref_slug_map,
+                ref_map,
                 refable_anchor_id_map,
             );
             html! {
@@ -361,7 +380,7 @@ fn render_node(
             let children = render_nodes(
                 &node.children,
                 vault_path,
-                ref_slug_map,
+                ref_map,
                 refable_anchor_id_map,
             );
 
@@ -405,7 +424,7 @@ fn render_node(
             let children = render_nodes(
                 &node.children,
                 vault_path,
-                ref_slug_map,
+                ref_map,
                 refable_anchor_id_map,
             );
             // Inject anchor id for matched referenceable
@@ -423,7 +442,7 @@ fn render_node(
             let children = render_nodes(
                 &node.children,
                 vault_path,
-                ref_slug_map,
+                ref_map,
                 refable_anchor_id_map,
             );
             html! {
@@ -434,7 +453,7 @@ fn render_node(
             let children = render_nodes(
                 &node.children,
                 vault_path,
-                ref_slug_map,
+                ref_map,
                 refable_anchor_id_map,
             );
             html! {
@@ -445,7 +464,7 @@ fn render_node(
             let children = render_nodes(
                 &node.children,
                 vault_path,
-                ref_slug_map,
+                ref_map,
                 refable_anchor_id_map,
             );
             html! {
@@ -456,7 +475,7 @@ fn render_node(
             let children = render_nodes(
                 &node.children,
                 vault_path,
-                ref_slug_map,
+                ref_map,
                 refable_anchor_id_map,
             );
             html! {
@@ -467,7 +486,7 @@ fn render_node(
             let children = render_nodes(
                 &node.children,
                 vault_path,
-                ref_slug_map,
+                ref_map,
                 refable_anchor_id_map,
             );
             html! {
@@ -475,7 +494,7 @@ fn render_node(
             }
         }
         Link {
-            link_type,
+            link_type: LinkType::Email,
             dest_url,
             title,
             ..
@@ -483,21 +502,76 @@ fn render_node(
             let children = render_nodes(
                 &node.children,
                 vault_path,
-                ref_slug_map,
+                ref_map,
                 refable_anchor_id_map,
             );
-            let href = if matches!(link_type, LinkType::Email) {
-                format!("mailto:{}", dest_url.as_ref())
+            let href = format!("mailto:{}", dest_url.as_ref());
+            let title_opt = if title.is_empty() {
+                None
             } else {
-                dest_url.to_string()
-            };
-            let title_attr = if title.is_empty() {
-                String::new()
-            } else {
-                format!(" title=\"{}\"", title.as_ref())
+                Some(title.as_ref())
             };
             html! {
-                (PreEscaped(format!("<a href=\"{}\"{}>{}</a>", href, title_attr, children)))
+                a href=(href) title=[title_opt] {
+                    (PreEscaped(children))
+                }
+            }
+        }
+        Link {
+            link_type: LinkType::WikiLink { .. } | LinkType::Inline,
+            dest_url,
+            title,
+            ..
+        } => {
+            let children = render_nodes(
+                &node.children,
+                vault_path,
+                ref_map,
+                refable_anchor_id_map,
+            );
+            let href = dest_url.to_string();
+            // Find matched reference's resolved destination
+            let matched_reference_dest = ref_map.get(&range);
+            let href = if let Some(dest) = matched_reference_dest {
+                dest.clone()
+            } else {
+                href
+            };
+
+            let title_opt = if title.is_empty() {
+                None
+            } else {
+                Some(title.as_ref())
+            };
+            html! {
+                a href=(href) title=[title_opt] {
+                    (PreEscaped(children))
+                }
+            }
+        }
+        Link {
+            link_type: _,
+            dest_url,
+            title,
+            ..
+        } => {
+            let children = render_nodes(
+                &node.children,
+                vault_path,
+                ref_map,
+                refable_anchor_id_map,
+            );
+            let href = dest_url.to_string();
+
+            let title_opt = if title.is_empty() {
+                None
+            } else {
+                Some(title.as_ref())
+            };
+            html! {
+                a href=(href) title=[title_opt] {
+                    (PreEscaped(children))
+                }
             }
         }
         Image {
@@ -507,7 +581,7 @@ fn render_node(
             let alt_text = render_nodes(
                 &node.children,
                 vault_path,
-                ref_slug_map,
+                ref_map,
                 refable_anchor_id_map,
             );
             let title_attr = if title.is_empty() {
@@ -523,7 +597,7 @@ fn render_node(
             let children = render_nodes(
                 &node.children,
                 vault_path,
-                ref_slug_map,
+                ref_map,
                 refable_anchor_id_map,
             );
             html! {
@@ -534,7 +608,7 @@ fn render_node(
             let children = render_nodes(
                 &node.children,
                 vault_path,
-                ref_slug_map,
+                ref_map,
                 refable_anchor_id_map,
             );
             html! {
@@ -545,7 +619,7 @@ fn render_node(
             let children = render_nodes(
                 &node.children,
                 vault_path,
-                ref_slug_map,
+                ref_map,
                 refable_anchor_id_map,
             );
             html! {
@@ -556,7 +630,7 @@ fn render_node(
             let children = render_nodes(
                 &node.children,
                 vault_path,
-                ref_slug_map,
+                ref_map,
                 refable_anchor_id_map,
             );
             // TODO: handle table alignment based on cell index
@@ -568,7 +642,7 @@ fn render_node(
             let children = render_nodes(
                 &node.children,
                 vault_path,
-                ref_slug_map,
+                ref_map,
                 refable_anchor_id_map,
             );
             html! {
@@ -579,7 +653,7 @@ fn render_node(
             let children = render_nodes(
                 &node.children,
                 vault_path,
-                ref_slug_map,
+                ref_map,
                 refable_anchor_id_map,
             );
             html! {
@@ -590,7 +664,7 @@ fn render_node(
             let children = render_nodes(
                 &node.children,
                 vault_path,
-                ref_slug_map,
+                ref_map,
                 refable_anchor_id_map,
             );
             html! {
@@ -601,7 +675,7 @@ fn render_node(
             let children = render_nodes(
                 &node.children,
                 vault_path,
-                ref_slug_map,
+                ref_map,
                 refable_anchor_id_map,
             );
             html! {
