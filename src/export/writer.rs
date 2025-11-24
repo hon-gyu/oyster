@@ -54,7 +54,13 @@ pub fn render_vault(
         let html = render_page(&title, &content);
         let note_slug_path =
             vault_path_to_slug_map.get(note_vault_path).unwrap();
-        fs::write(output_dir.join(note_slug_path), html)?;
+        let output_path = output_dir.join(format!("{}.html", note_slug_path));
+
+        if let Some(parent) = output_path.parent() {
+            let _ = fs::create_dir_all(parent);
+        }
+
+        fs::write(&output_path, html)?;
     }
     Ok(())
 }
