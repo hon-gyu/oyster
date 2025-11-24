@@ -3,10 +3,15 @@ use super::utils::{
     build_in_note_anchor_id_map, build_vault_paths_to_slug_map,
 };
 use crate::ast::Tree;
-use crate::link::{Referenceable, build_links, scan_vault};
-use maud::{DOCTYPE, PreEscaped, html};
+use crate::export::utils::range_to_anchor_id;
+use crate::link::{
+    Link as ResolvedLink, Referenceable, build_links, scan_vault,
+};
+use maud::{DOCTYPE, Markup, PreEscaped, html};
+use std::collections::HashMap;
 use std::fs;
-use std::path::Path;
+use std::ops::Range;
+use std::path::{Path, PathBuf};
 
 pub fn render_vault(
     vault_root_dir: &Path,
@@ -17,7 +22,7 @@ pub fn render_vault(
         scan_vault(vault_root_dir, vault_root_dir);
     let (links, _unresolved) = build_links(references, referenceables.clone());
 
-    // Build vault file path to slug map
+    // Build map: vault file path |-> slug
     let vault_file_paths = referenceables
         .iter()
         .filter(|referenceable| !referenceable.is_innote())
@@ -26,12 +31,15 @@ pub fn render_vault(
     let vault_path_to_slug_map =
         build_vault_paths_to_slug_map(&vault_file_paths);
 
-    // Build in-note anchor id map
+    // Build map: vault file path |-> in-note refable range |-> anchor id map
     let referenceable_refs = referenceables.iter().collect::<Vec<_>>();
     let innote_refable_anchor_id_map =
         build_in_note_anchor_id_map(&referenceable_refs);
 
-    fs::create_dir_all(output_dir)?;
+    // There's an implicit map: reference path |-> reference range |-> anchor id
+    // where the anchor id IS the byte range of the reference
+
+    // Build map: vault file path |-> title
     let note_vault_paths = referenceables
         .iter()
         .filter(|referenceable| {
@@ -39,10 +47,22 @@ pub fn render_vault(
         })
         .map(|referenceable| referenceable.path().as_path())
         .collect::<Vec<_>>();
+    let vault_path_to_title_map = note_vault_paths
+        .iter()
+        .map(|path| {
+            let title = title_from_path(path);
+            (path.to_path_buf(), title)
+        })
+        .collect::<HashMap<_, _>>();
+
+    fs::create_dir_all(output_dir)?;
+    // Render each page
     for note_vault_path in note_vault_paths {
         let md_src = fs::read_to_string(vault_root_dir.join(note_vault_path))?;
         let tree = Tree::new(&md_src);
-        let title = title_from_path(note_vault_path);
+
+        let title = vault_path_to_title_map.get(note_vault_path).unwrap();
+
         let content = render_content(
             &tree,
             note_vault_path,
@@ -51,7 +71,15 @@ pub fn render_vault(
             &innote_refable_anchor_id_map,
         );
 
-        let html = render_page(&title, &content);
+        let backlink = render_backlinks(
+            note_vault_path,
+            &links,
+            &vault_path_to_slug_map,
+            &vault_path_to_title_map,
+            &innote_refable_anchor_id_map,
+        );
+
+        let html = render_page(&title, &content, Some(&backlink));
         let note_slug_path =
             vault_path_to_slug_map.get(note_vault_path).unwrap();
         let output_path = output_dir.join(format!("{}.html", note_slug_path));
@@ -65,6 +93,28 @@ pub fn render_vault(
     Ok(())
 }
 
+fn render_page(
+    title: &str,
+    content: &str,
+    backlink: Option<&Markup>,
+) -> String {
+    html! {
+        (DOCTYPE)
+        header {
+            h1 { (title) }
+        }
+        body {
+            (PreEscaped(content))
+        }
+        @if let Some(backlink) = backlink {
+            hr;
+            (backlink)
+        }
+    }
+    .into_string()
+}
+
+/// Extract title from path
 fn title_from_path(path: &Path) -> String {
     path.file_stem()
         .and_then(|stem| stem.to_str())
@@ -72,15 +122,56 @@ fn title_from_path(path: &Path) -> String {
         .to_string()
 }
 
-fn render_page(title: &str, content: &str) -> String {
+/// Incoming links for a note
+fn render_backlinks(
+    vault_path: &Path,
+    links: &[ResolvedLink],
+    vault_path_to_slug_map: &HashMap<PathBuf, String>,
+    vault_path_to_title_map: &HashMap<PathBuf, String>,
+    innote_refable_anchor_id_map: &HashMap<
+        PathBuf,
+        HashMap<Range<usize>, String>,
+    >,
+) -> Markup {
+    let refable_anchor_id_map =
+        innote_refable_anchor_id_map.get(vault_path).unwrap();
+
+    // For each incoming linkes
+    // we need:
+    //   - src's title
+    //   - src's slug (for link href)
+    //   - src's anchor id
+    let backlink_infos = links
+        .iter()
+        .filter(|link| link.tgt_path_eq(vault_path))
+        .map(|link| {
+            let src = &link.from;
+            let src_title = vault_path_to_title_map.get(&src.path).unwrap();
+            let src_slug = vault_path_to_slug_map.get(&src.path).unwrap();
+            let src_anchor = range_to_anchor_id(&src.range);
+            let src_href = format!("{}.html#{}", src_slug, src_anchor);
+            let tgt = &link.to;
+            let tgt_anchor: Option<String> = match tgt {
+                Referenceable::Heading { range, .. } => {
+                    let anchor_id = refable_anchor_id_map.get(range).unwrap();
+                    Some(anchor_id.clone())
+                }
+                _ => None,
+            };
+            (src_href, src_title, tgt_anchor)
+        })
+        .collect::<Vec<_>>();
+
     html! {
-        (DOCTYPE)
-        header {
-            title { (title) }
-        }
-        body {
-            (PreEscaped(content))
+        @for backlink_info in backlink_infos {
+            li {
+                a href=(backlink_info.0) { (backlink_info.1) }
+                // If there backlink is in-note, we also show the tgt anchor ID
+                @if let Some(tgt_anchor) = backlink_info.2 {
+                    span { " " }
+                    a href=(format!("#{}", tgt_anchor)) {"⤴"}
+                }
+            }
         }
     }
-    .into_string()
 }

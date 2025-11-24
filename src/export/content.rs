@@ -1,4 +1,5 @@
 use crate::ast::{Node, NodeKind::*, Tree};
+use crate::export::utils::range_to_anchor_id;
 use crate::link::types::{Link as ResolvedLink, Referenceable};
 use maud::{PreEscaped, html};
 use pulldown_cmark::{BlockQuoteKind, CodeBlockKind, LinkType};
@@ -141,7 +142,7 @@ fn render_node(
 
             // Extra internal-link span and anchor id (byte-range) for resolved links
             if matched_reference_dest.is_some() {
-                let anchor_id = format!("{}-{}", range.start, range.end);
+                let anchor_id = range_to_anchor_id(&range);
                 html! {
                     span .internal-link #(anchor_id) {
                         (anchor_markup)

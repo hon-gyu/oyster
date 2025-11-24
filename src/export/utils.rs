@@ -43,6 +43,10 @@ fn text_to_anchor_id(text: &str) -> String {
         .join("-")
 }
 
+pub fn range_to_anchor_id(range: &Range<usize>) -> String {
+    format!("{}-{}", range.start, range.end)
+}
+
 /// Converts a path to a URL-friendly slug
 ///
 /// Examples:
