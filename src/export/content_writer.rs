@@ -4,7 +4,7 @@ use super::utils::{
 use crate::ast::{Node, NodeKind::*, Tree};
 use crate::link::types::{Link as ResolvedLink, Reference, Referenceable};
 use crate::link::{build_links, scan_vault};
-use maud::{Markup, PreEscaped, html};
+use maud::{DOCTYPE, Markup, PreEscaped, html};
 use pulldown_cmark::{BlockQuoteKind, CodeBlockKind, LinkType};
 use std::collections::HashMap;
 use std::fs;
@@ -242,7 +242,7 @@ fn render_node(
                 refable_anchor_id_map,
             );
 
-            let tag = format!("h{}", level);
+            let tag = format!("h{}", level.clone() as usize);
 
             // id: anchor id from matched referenceable takes precedence
             let id_attr = if let Some(id_from_matched_referable) =
@@ -698,6 +698,31 @@ mod tests {
     use super::*;
     use insta::*;
 
+    fn format_html_simple(html: &str) -> String {
+        html.replace("><", ">\n<")
+            .replace("<h", "\n<h")
+            .replace("<p", "\n<p")
+            .replace("</article>", "\n</article>")
+    }
+
+    fn render_full_html(content: &str) -> String {
+        html! {
+            (DOCTYPE)
+            (PreEscaped(content))
+        }
+        .into_string()
+    }
+
+    /// Helper to write HTML to a file for visual inspection
+    fn write_html_preview(html: &str, filename: &str) {
+        let output_dir = PathBuf::from("target/test_output");
+        fs::create_dir_all(&output_dir).unwrap();
+        let output_path = output_dir.join(filename);
+
+        fs::write(&output_path, html).unwrap();
+        println!("HTML preview written to: {}", output_path.display());
+    }
+
     #[test]
     fn test_render_note() {
         let vault_root_dir = Path::new("tests/data/vaults/minimal");
@@ -735,6 +760,50 @@ mod tests {
             &innote_refable_anchor_id_map,
         );
 
-        assert_snapshot!(rendered, @r#"<article><p>This is the first note with various reference types.</p><p>For more details, see <a href="note-1.html#additional-info">#Additional Info</a> below.</p><p>You can also reference this specific point: <a href="note-1.html#key-point">#^key-point</a></p><hh2 id="direct-note-reference">Direct Note Reference</hh2><p>Check out <a href="note-2.html">Note 2</a> for more information.</p><hh2 id="heading-reference">Heading Reference</hh2><p>See the section on <a href="note-2.html#getting-started">Note 2#Getting Started</a> for details.</p><hh2 id="block-reference">Block Reference</hh2><p>Here’s a reference to a specific block: <a href="note-2.html#important-block">Note 2#^important-block</a></p><hh2 id="image-embed">Image Embed</hh2><p><img src="blue-image.png" alt="blue-image.png"/></p><hh2 id="additional-info">Additional Info</hh2><p>This section is referenced from the top of this note using a same-note heading reference.</p><p id="key-point">This is a key point within the same note. ^key-point</p><p>The line above has a block ID that’s referenced from earlier in this note.</p></article>"#);
+        let rendered = format_html_simple(&rendered);
+        let full_html = render_full_html(&rendered);
+
+        // Write HTML to file for visual inspection
+        write_html_preview(&full_html, "test_render_note.html");
+
+        assert_snapshot!(full_html, @r#"
+        <!DOCTYPE html><article>
+
+        <p>This is the first note with various reference types.</p>
+
+        <p>For more details, see <a href="note-1.html#additional-info">#Additional Info</a> below.</p>
+
+        <p>You can also reference this specific point: <a href="note-1.html#key-point">#^key-point</a>
+        </p>
+
+        <h2 id="direct-note-reference">Direct Note Reference</h2>
+
+        <p>Check out <a href="note-2.html">Note 2</a> for more information.</p>
+
+        <h2 id="heading-reference">Heading Reference</h2>
+
+        <p>See the section on <a href="note-2.html#getting-started">Note 2#Getting Started</a> for details.</p>
+
+        <h2 id="block-reference">Block Reference</h2>
+
+        <p>Here’s a reference to a specific block: <a href="note-2.html#important-block">Note 2#^important-block</a>
+        </p>
+
+        <h2 id="image-embed">Image Embed</h2>
+
+        <p>
+        <img src="blue-image.png" alt="blue-image.png"/>
+        </p>
+
+        <h2 id="additional-info">Additional Info</h2>
+
+        <p>This section is referenced from the top of this note using a same-note heading reference.</p>
+
+        <p id="key-point">This is a key point within the same note. ^key-point</p>
+
+        <p>The line above has a block ID that’s referenced from earlier in this note.</p>
+
+        </article>
+        "#);
     }
 }

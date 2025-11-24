@@ -1,4 +1,4 @@
-pub mod content_writier;
+pub mod content_writer;
 pub mod generator;
 pub mod html;
 pub mod template;
