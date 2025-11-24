@@ -1,11 +1,3 @@
-pub mod content_writer;
-pub mod generator;
-pub mod html;
-pub mod template;
-pub mod types;
-mod utils;
+pub mod content;
+pub mod utils;
 pub mod writer;
-
-pub use generator::generate_site;
-pub use types::*;
-pub use writer::{push_html, write_html_fmt, write_html_io};

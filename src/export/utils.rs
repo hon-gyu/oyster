@@ -54,7 +54,7 @@ fn file_path_to_slug(path: &Path) -> String {
 
     without_ext
         .split('/')
-        .map(|s| slugify(s))
+        .map(slugify)
         .collect::<Vec<_>>()
         .join("/")
 }

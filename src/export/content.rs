@@ -1,45 +1,10 @@
-use super::utils::{
-    build_in_note_anchor_id_map, build_vault_paths_to_slug_map,
-};
 use crate::ast::{Node, NodeKind::*, Tree};
-use crate::link::types::{Link as ResolvedLink, Reference, Referenceable};
-use crate::link::{build_links, scan_vault};
-use maud::{DOCTYPE, Markup, PreEscaped, html};
+use crate::link::types::{Link as ResolvedLink, Referenceable};
+use maud::{PreEscaped, html};
 use pulldown_cmark::{BlockQuoteKind, CodeBlockKind, LinkType};
 use std::collections::HashMap;
-use std::fs;
 use std::ops::Range;
 use std::path::{Path, PathBuf};
-
-///
-///
-/// Placeholder for the replacement of `generate_site`
-/// TODO(refactor): move this
-fn render_vault(
-    vault_path: &Path,
-    output_dir: &Path,
-) -> Result<(), Box<dyn std::error::Error>> {
-    // Scan the vault and build links
-    let (referenceables, references) = scan_vault(vault_path, vault_path);
-    let (links, _unresolved) = build_links(references, referenceables.clone());
-
-    // Build vault file path to slug map
-    let vault_file_paths = referenceables
-        .iter()
-        .filter(|referenceable| !referenceable.is_innote())
-        .map(|referenceable| referenceable.path().as_path())
-        .collect::<Vec<_>>();
-    let vault_path_to_slug_map =
-        build_vault_paths_to_slug_map(&vault_file_paths);
-
-    // Build in-note anchor id map
-    let referenceable_refs = referenceables.iter().collect::<Vec<_>>();
-    let innote_refable_anchor_id_map =
-        build_in_note_anchor_id_map(&referenceable_refs);
-
-    fs::create_dir_all(output_dir)?;
-    Ok(())
-}
 
 /// Render content
 ///
@@ -51,7 +16,7 @@ fn render_vault(
 ///   - resolved links
 ///   - valut path to slug map
 ///   - referenceable to anchor id map
-fn render_content(
+pub fn render_content(
     tree: &Tree,
     vault_path: &Path,
     resolved_links: &[ResolvedLink],
@@ -110,7 +75,7 @@ fn render_content(
         &tree.root_node,
         vault_path,
         &ref_dest_map,
-        &in_note_anchor_id_map,
+        in_note_anchor_id_map,
     );
     rendered
 }
@@ -242,7 +207,7 @@ fn render_node(
                 refable_anchor_id_map,
             );
 
-            let tag = format!("h{}", level.clone() as usize);
+            let tag = format!("h{}", *level as usize);
 
             // id: anchor id from matched referenceable takes precedence
             let id_attr = if let Some(id_from_matched_referable) =
@@ -696,7 +661,13 @@ fn render_node(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::export::utils::{
+        build_in_note_anchor_id_map, build_vault_paths_to_slug_map,
+    };
+    use crate::link::{build_links, scan_vault};
     use insta::*;
+    use maud::DOCTYPE;
+    use std::fs;
 
     fn format_html_simple(html: &str) -> String {
         html.replace("><", ">\n<")
@@ -708,7 +679,9 @@ mod tests {
     fn render_full_html(content: &str) -> String {
         html! {
             (DOCTYPE)
-            (PreEscaped(content))
+            body {
+                (PreEscaped(content))
+            }
         }
         .into_string()
     }
@@ -767,7 +740,7 @@ mod tests {
         write_html_preview(&full_html, "test_render_note.html");
 
         assert_snapshot!(full_html, @r#"
-        <!DOCTYPE html><article>
+        <!DOCTYPE html><body><article>
 
         <p>This is the first note with various reference types.</p>
 
@@ -803,7 +776,7 @@ mod tests {
 
         <p>The line above has a block ID that’s referenced from earlier in this note.</p>
 
-        </article>
+        </article></body>
         "#);
     }
 }

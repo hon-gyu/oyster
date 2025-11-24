@@ -177,7 +177,7 @@ fn build_ast<'a>(
     };
 
     Tree {
-        root_node: root_node,
-        opts: opts,
+        root_node,
+        opts,
     }
 }
