@@ -132,10 +132,23 @@ fn render_node(
             } else {
                 Some(title.as_ref())
             };
-            html! {
+
+            let anchor_markup = html! {
                 a href=(href) title=[title_opt] {
                     (PreEscaped(children))
                 }
+            };
+
+            // Extra internal-link span and anchor id (byte-range) for resolved links
+            if matched_reference_dest.is_some() {
+                let anchor_id = format!("{}-{}", range.start, range.end);
+                html! {
+                    span .internal-link #(anchor_id) {
+                        (anchor_markup)
+                    }
+                }
+            } else {
+                anchor_markup
             }
         }
         // Referenceable nodes
@@ -159,7 +172,7 @@ fn render_node(
         }
         Heading {
             level,
-            id: id_from_md_src,
+            id: _,
             classes,
             attrs,
         } => {
@@ -173,15 +186,11 @@ fn render_node(
             let tag = format!("h{}", *level as usize);
 
             // id: anchor id from matched referenceable takes precedence
-            let id_attr = if let Some(id_from_matched_referable) =
-                refable_anchor_id_map.get(&range)
-            {
+            let id_attr = {
+                let id_from_matched_referable = refable_anchor_id_map
+                    .get(&range)
+                    .expect("Heading should always have anchor id");
                 format!(" id=\"{}\"", id_from_matched_referable)
-            } else {
-                id_from_md_src
-                    .as_ref()
-                    .map(|id_val| format!(" id=\"{}\"", id_val.as_ref()))
-                    .unwrap_or_default()
             };
 
             // Class attribute

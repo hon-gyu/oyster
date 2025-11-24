@@ -1,4 +1,4 @@
-use crate::link::Referenceable;
+use crate::link::{Reference, Referenceable};
 use std::collections::HashMap;
 use std::ops::Range;
 use std::path::{Path, PathBuf};
@@ -86,7 +86,10 @@ pub fn build_vault_paths_to_slug_map(
 /// For a list of referenceables, we build a map of their byte ranges to anchor IDs
 ///
 /// Returns: HashMap<PathBuf, HashMap<Range<usize>, String>>
-/// - vault path -> byte range -> anchor ID
+/// - vault path |-> byte range |-> anchor ID
+///
+/// For heading, the anchor ID is kebab-cased text of the heading
+/// For block, the anchor ID is the block identifier
 ///
 /// Note: we don't de-duplicate anchor IDs here.
 pub fn build_in_note_anchor_id_map(
