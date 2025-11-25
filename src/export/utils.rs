@@ -135,6 +135,15 @@ pub fn build_in_note_anchor_id_map(
     map
 }
 
+pub fn get_relative_dest(base_file: &Path, dest: &Path) -> String {
+    let abs_dest = Path::new("root").join(dest);
+    let abs_base_file = Path::new("root").join(base_file);
+    // Get the directory containing the base file
+    let abs_base_dir = abs_base_file.parent().unwrap();
+    let rel_dest = pathdiff::diff_paths(abs_dest, abs_base_dir).unwrap();
+    rel_dest.as_os_str().to_str().unwrap().to_string()
+}
+
 // ====================
 
 #[cfg(test)]

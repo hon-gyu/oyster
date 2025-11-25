@@ -1,5 +1,5 @@
 use crate::ast::{Node, NodeKind::*, Tree};
-use crate::export::utils::range_to_anchor_id;
+use crate::export::utils::{get_relative_dest, range_to_anchor_id};
 use crate::link::types::{Link as ResolvedLink, Referenceable};
 use maud::{PreEscaped, html};
 use pulldown_cmark::{BlockQuoteKind, CodeBlockKind, LinkType};
@@ -41,6 +41,11 @@ pub fn render_content(
             let tgt_slug = vault_path_to_slug_map
                 .get(tgt.path())
                 .expect("link target path not found");
+            let base_slug = vault_path_to_slug_map
+                .get(vault_path)
+                .expect("vault path not found");
+            let rel_tgt_slug =
+                get_relative_dest(Path::new(base_slug), Path::new(tgt_slug));
             let tgt_anchor_id = match tgt {
                 Referenceable::Block {
                     path,
@@ -57,9 +62,9 @@ pub fn render_content(
                 _ => None,
             };
             let dest = if let Some(tgt_anchor_id) = tgt_anchor_id {
-                format!("{}.html#{}", tgt_slug, tgt_anchor_id.clone())
+                format!("{}.html#{}", rel_tgt_slug, tgt_anchor_id.clone())
             } else {
-                format!("{}.html", tgt_slug)
+                format!("{}.html", rel_tgt_slug)
             };
             (src_range.clone(), dest)
         })

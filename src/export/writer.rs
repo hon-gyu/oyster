@@ -2,6 +2,7 @@ use super::content::render_content;
 use super::style::get_style;
 use super::utils::{
     build_in_note_anchor_id_map, build_vault_paths_to_slug_map,
+    get_relative_dest,
 };
 use crate::ast::Tree;
 use crate::export::utils::range_to_anchor_id;
@@ -167,8 +168,11 @@ fn render_backlinks(
             let src = &link.from;
             let src_title = vault_path_to_title_map.get(&src.path).unwrap();
             let src_slug = vault_path_to_slug_map.get(&src.path).unwrap();
+            let base_slug = vault_path_to_slug_map.get(vault_path).unwrap();
+            let rel_src_slug =
+                get_relative_dest(Path::new(base_slug), Path::new(src_slug));
             let src_anchor = range_to_anchor_id(&src.range);
-            let src_href = format!("{}.html#{}", src_slug, src_anchor);
+            let src_href = format!("{}.html#{}", rel_src_slug, src_anchor);
             let tgt = &link.to;
             let tgt_anchor: Option<String> = match tgt {
                 Referenceable::Heading { range, .. } => {
