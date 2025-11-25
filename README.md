@@ -10,9 +10,16 @@ Open-source [Obsidian.md](https://obsidian.md/)
 - ✅ [Block reference](https://help.obsidian.md/links#Link%20to%20a%20block%20in%20a%20note)
 - 🚧 SSG
   - ✅ v0: minijina + pulldown-cmarks's html writer; backlinks component; correct links
-  - 🚧 v1: type-safe ast-based html writer, more configurable components (TOC)
+  - ✅ v1: type-safe ast-based html writer; backlinks component;
+  - 🚧 more components
+    - TOC
+    - Explorer
+    - Graphview
+- ⬜ query CLI
+  - ⬜ fronmatter 
+- ⬜ CodeGen
 - ⬜ Markdown to structured data (YAML / JSON)
-    - ⬜ CHANGELOG validation
+  - ⬜ CHANGELOG validation
 - ⬜ Obsidian [base](https://help.obsidian.md/bases)
 - ⬜ LSP (inspired by [markdown-oxide](https://github.com/Feel-ix-343/markdown-oxide))
 
