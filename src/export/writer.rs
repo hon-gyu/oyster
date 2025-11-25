@@ -82,8 +82,7 @@ pub fn render_vault(
             &innote_refable_anchor_id_map,
         );
 
-        let html =
-            render_page(&title, &content, Some(&backlink), get_style(theme));
+        let html = render_page(&title, &content, &backlink, get_style(theme));
         let note_slug_path =
             vault_path_to_slug_map.get(note_vault_path).unwrap();
         let output_path = output_dir.join(format!("{}.html", note_slug_path));
@@ -100,7 +99,7 @@ pub fn render_vault(
 fn render_page(
     title: &str,
     content: &str,
-    backlink: Option<&Markup>,
+    backlink: &Option<Markup>,
     style: &str,
 ) -> String {
     html! {
@@ -152,7 +151,7 @@ fn render_backlinks(
         PathBuf,
         HashMap<Range<usize>, String>,
     >,
-) -> Markup {
+) -> Option<Markup> {
     let refable_anchor_id_map =
         innote_refable_anchor_id_map.get(vault_path).unwrap();
 
@@ -185,7 +184,11 @@ fn render_backlinks(
         })
         .collect::<Vec<_>>();
 
-    html! {
+    if backlink_infos.is_empty() {
+        return None;
+    }
+
+    let markup = html! {
         @for backlink_info in backlink_infos {
             li {
                 a href=(backlink_info.0) { (backlink_info.1) }
@@ -196,5 +199,6 @@ fn render_backlinks(
                 }
             }
         }
-    }
+    };
+    Some(markup)
 }
