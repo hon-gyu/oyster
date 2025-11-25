@@ -1,5 +1,16 @@
+//!
+//!
+//! File-level information:
+//!   - file referenceable: note and asset
+//!   - in-note referenceable: heading, block
+//!   - reference: outgoing edges
+//! Vault-level information:
+//!   - links: matched edges
+//!   - vault paths to slug map
+//!   - in-note referenceable anchor id map
 use super::content::render_content;
 use super::style::get_style;
+use super::toc::render_toc;
 use super::utils::{
     build_in_note_anchor_id_map, build_vault_paths_to_slug_map,
     get_relative_dest,
@@ -82,7 +93,14 @@ pub fn render_vault(
             &innote_refable_anchor_id_map,
         );
 
-        let html = render_page(&title, &content, &backlink, get_style(theme));
+        let toc = render_toc(
+            note_vault_path,
+            &referenceables,
+            &innote_refable_anchor_id_map,
+        );
+
+        let html =
+            render_page(&title, &content, &toc, &backlink, get_style(theme));
         let note_slug_path =
             vault_path_to_slug_map.get(note_vault_path).unwrap();
         let output_path = output_dir.join(format!("{}.html", note_slug_path));
@@ -99,6 +117,7 @@ pub fn render_vault(
 fn render_page(
     title: &str,
     content: &str,
+    toc: &Option<Markup>,
     backlink: &Option<Markup>,
     style: &str,
 ) -> String {
@@ -114,6 +133,9 @@ fn render_page(
                 }
             }
             body {
+                @if let Some(toc) = toc {
+                    (toc)
+                }
                 article {
                     h1 { (title) }
                     (PreEscaped(content))
@@ -201,4 +223,12 @@ fn render_backlinks(
         }
     };
     Some(markup)
+}
+
+fn render_navigation() -> Markup {
+    todo!()
+}
+
+fn render_home() -> Markup {
+    todo!()
 }
