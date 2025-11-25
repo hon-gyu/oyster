@@ -112,6 +112,20 @@ fn build_ast<'a>(
     let mut stack: Vec<(Node<'a>, Vec<Node<'a>>)> = Vec::new();
     let mut curr_children: Vec<Node<'a>> = Vec::new();
 
+    // Handle empty files
+    if events_with_offset.is_empty() {
+        let root_node = Node {
+            kind: NodeKind::Document,
+            children: Vec::new(),
+            start_byte: 0,
+            end_byte: 0,
+            start_point: Point { row: 0, column: 0 },
+            end_point: Point { row: 0, column: 0 },
+            parent: None,
+        };
+        return Tree { root_node, opts };
+    }
+
     let doc_start = events_with_offset
         .first()
         .map(|(_, r)| r.start)
