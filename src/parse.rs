@@ -12,7 +12,7 @@ pub fn default_opts() -> Options {
     opts.insert(Options::ENABLE_SMART_PUNCTUATION);
     opts.insert(Options::ENABLE_HEADING_ATTRIBUTES);
     opts.insert(Options::ENABLE_YAML_STYLE_METADATA_BLOCKS);
-    opts.insert(Options::ENABLE_PLUSES_DELIMITED_METADATA_BLOCKS);
+    // opts.insert(Options::ENABLE_PLUSES_DELIMITED_METADATA_BLOCKS);
     // opts.insert(Options::ENABLE_OLD_FOOTNOTES);
     opts.insert(Options::ENABLE_MATH);
     opts.insert(Options::ENABLE_GFM);
