@@ -122,7 +122,9 @@ pub fn build_in_note_anchor_id_map(
                 let curr_map = map.entry(path.clone()).or_default();
                 curr_map.insert(range.clone(), identifier.clone());
             }
-            Referenceable::Note { path: _, children } => {
+            Referenceable::Note { path, children } => {
+                // Ensure the note path has an entry even if it has no children
+                map.entry(path.clone()).or_default();
                 let refs: Vec<&Referenceable> = children.iter().collect();
                 let child_map = build_in_note_anchor_id_map(&refs);
                 map.extend(child_map);
