@@ -763,22 +763,32 @@ mod tests {
 
         <p>This is the first note with various reference types.</p>
 
-        <p>For more details, see <a href="note-1.html#additional-info">#Additional Info</a> below.</p>
+        <p>For more details, see <span class="internal-link" id="76-95">
+        <a href="note-1.html#additional-info">#Additional Info</a>
+        </span> below.</p>
 
-        <p>You can also reference this specific point: <a href="note-1.html#key-point">#^key-point</a>
+        <p>You can also reference this specific point: <span class="internal-link" id="149-163">
+        <a href="note-1.html#key-point">#^key-point</a>
+        </span>
         </p>
 
         <h2 id="direct-note-reference">Direct Note Reference</h2>
 
-        <p>Check out <a href="note-2.html">Note 2</a> for more information.</p>
+        <p>Check out <span class="internal-link" id="202-211">
+        <a href="note-2.html">Note 2</a>
+        </span> for more information.</p>
 
         <h2 id="heading-reference">Heading Reference</h2>
 
-        <p>See the section on <a href="note-2.html#getting-started">Note 2#Getting Started</a> for details.</p>
+        <p>See the section on <span class="internal-link" id="277-302">
+        <a href="note-2.html#getting-started">Note 2#Getting Started</a>
+        </span> for details.</p>
 
         <h2 id="block-reference">Block Reference</h2>
 
-        <p>Here’s a reference to a specific block: <a href="note-2.html#important-block">Note 2#^important-block</a>
+        <p>Here’s a reference to a specific block: <span class="internal-link" id="378-404">
+        <a href="note-2.html#important-block">Note 2#^important-block</a>
+        </span>
         </p>
 
         <h2 id="image-embed">Image Embed</h2>
