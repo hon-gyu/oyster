@@ -27,7 +27,9 @@ fn get_dracula_theme() -> &'static str {
         h1 { font-size: 2em; border-bottom: 2px solid #44475a; padding-bottom: 0.3em; }
         h2 { font-size: 1.5em; }
         h3 { font-size: 1.25em; }
-        h5 { font-size: 1em; }
+        h4 { font-size: 1.15em; }
+        h5 { font-size: 1.1em; }
+        h6 { font-size: 1.05em; }
         a { color: #8be9fd; text-decoration: none; }
         a:hover { text-decoration: underline; color: #50fa7b; }
         code {
@@ -104,7 +106,9 @@ fn get_gruvbox_theme() -> &'static str {
         h1 { font-size: 2em; border-bottom: 2px solid #3c3836; padding-bottom: 0.3em; }
         h2 { font-size: 1.5em; }
         h3 { font-size: 1.25em; }
-        h5 { font-size: 1em; }
+        h4 { font-size: 1.15em; }
+        h5 { font-size: 1.1em; }
+        h6 { font-size: 1.05em; }
         a { color: #83a598; text-decoration: none; }
         a:hover { text-decoration: underline; color: #8ec07c; }
         code {
@@ -181,7 +185,9 @@ fn get_tokyonight_theme() -> &'static str {
         h1 { font-size: 2em; border-bottom: 2px solid #24283b; padding-bottom: 0.3em; }
         h2 { font-size: 1.5em; }
         h3 { font-size: 1.25em; }
-        h5 { font-size: 1em; }
+        h4 { font-size: 1.15em; }
+        h5 { font-size: 1.1em; }
+        h6 { font-size: 1.05em; }
         a { color: #2ac3de; text-decoration: none; }
         a:hover { text-decoration: underline; color: #9ece6a; }
         code {
