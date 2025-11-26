@@ -1,5 +1,5 @@
 mod extract;
-mod resolve;
+pub mod resolve;
 pub mod types;
 mod utils;
 
