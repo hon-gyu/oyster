@@ -8,7 +8,7 @@ use std::path::PathBuf;
 fn test_scan_vault() {
     let dir = PathBuf::from("tests/data/vaults/tt");
     let root_dir = PathBuf::from("tests/data/vaults/tt");
-    let (referenceables, references) = scan_vault(&dir, &root_dir);
+    let (_, referenceables, references) = scan_vault(&dir, &root_dir);
     assert_debug_snapshot!(references, @r########"
     [
         Reference {
@@ -878,8 +878,11 @@ fn test_scan_vault() {
 #[test]
 fn test_exract_references_and_referenceables() {
     let path = PathBuf::from("tests/data/vaults/tt/Note 1.md");
-    let (references, referenceables): (Vec<Reference>, Vec<Referenceable>) =
-        scan_note(&path);
+    let (_, references, referenceables): (
+        _,
+        Vec<Reference>,
+        Vec<Referenceable>,
+    ) = scan_note(&path);
     assert_debug_snapshot!(references, @r########"
     [
         Reference {

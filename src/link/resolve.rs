@@ -612,7 +612,7 @@ mod tests {
     fn test_split_dest_string() {
         // Get references from note 1
         let path = PathBuf::from("tests/data/vaults/tt/Note 1.md");
-        let (references, _): (Vec<Reference>, Vec<Referenceable>) =
+        let (_, references, _): (_, Vec<Reference>, Vec<Referenceable>) =
             scan_note(&path);
         let dest_strings: Vec<String> =
             references.iter().map(|r| r.dest.clone()).collect();
@@ -1002,7 +1002,7 @@ mod tests {
     fn test_build_links_node_1() {
         let dir = PathBuf::from("tests/data/vaults/tt");
         let root_dir = PathBuf::from("tests/data/vaults/tt");
-        let (referenceables, references) = scan_vault(&dir, &root_dir);
+        let (_, referenceables, references) = scan_vault(&dir, &root_dir);
         let note_1_references = references
             .into_iter()
             .filter(|r| r.path == PathBuf::from("Note 1.md"))
@@ -1104,7 +1104,7 @@ mod tests {
         let path = PathBuf::from("block.md");
         let block_md = std::fs::read_to_string(root_dir.join(&path)).unwrap();
 
-        let (referenceables, references) = scan_vault(&dir, &root_dir);
+        let (_, referenceables, references) = scan_vault(&dir, &root_dir);
 
         let block_md_references = references
             .into_iter()

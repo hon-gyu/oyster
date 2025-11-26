@@ -1,4 +1,4 @@
-mod extract;
+pub mod extract;
 pub mod resolve;
 pub mod types;
 mod utils;

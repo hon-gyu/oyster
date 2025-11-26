@@ -33,7 +33,7 @@ pub fn render_vault(
     theme: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
     // Scan the vault and build links
-    let (referenceables, references) =
+    let (fms, referenceables, references) =
         scan_vault(vault_root_dir, vault_root_dir);
     let (links, _unresolved) = build_links(references, referenceables.clone());
 

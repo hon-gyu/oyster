@@ -3,6 +3,8 @@ use super::utils::{is_block_identifier, percent_decode};
 use crate::ast::{Node, NodeKind, Tree};
 use crate::link::types::BlockReferenceableKind;
 use pulldown_cmark::LinkType;
+use serde_yaml;
+use serde_yaml::Value as Y;
 use std::fs;
 use std::ops::Range;
 use std::path::{Path, PathBuf};
@@ -10,17 +12,49 @@ use std::path::{Path, PathBuf};
 // Scan a note and return a tuple of references and in-note referenceables
 //
 // Post-condition: the in-note referenceables are in order
-pub fn scan_note(path: &PathBuf) -> (Vec<Reference>, Vec<Referenceable>) {
+pub fn scan_note(
+    path: &PathBuf,
+) -> (Option<Y>, Vec<Reference>, Vec<Referenceable>) {
     let text = fs::read_to_string(path).unwrap();
     if text.is_empty() {
-        return (Vec::new(), Vec::new());
+        return (None, Vec::new(), Vec::new());
     }
 
     let tree = Tree::new(&text);
 
-    let root_children = &tree.root_node.children;
+    // Frontmatter
+    let fm_node = tree.root_node.children.get(0);
+    let fm_content = if let Some(fm_node) = fm_node {
+        if &fm_node.kind
+            == &NodeKind::MetadataBlock(
+                pulldown_cmark::MetadataBlockKind::YamlStyle,
+            )
+        {
+            let content: String = fm_node
+                .children
+                .iter()
+                .map(|child| match &child.kind {
+                    NodeKind::Text(text) => text.as_ref(),
+                    _ => unreachable!(
+                        "Never: Yaml style should only have text children"
+                    ),
+                })
+                .collect();
+            let fm: Option<Y> = serde_yaml::from_str(&content).unwrap_or(None);
+            fm
+        } else {
+            None
+        }
+    } else {
+        None
+    };
 
-    extract_reference_and_referenceable(root_children, path)
+    // Extra link src and tgt
+    let root_children = &tree.root_node.children;
+    let (references, referenceables) =
+        extract_reference_and_referenceable(root_children, path);
+
+    (fm_content, references, referenceables)
 }
 
 /// Extracts all references and referenceables from a list of node.
@@ -404,8 +438,9 @@ fn make_referenceable_relative(
 pub fn scan_vault(
     dir: &Path,
     root_dir: &Path,
-) -> (Vec<Referenceable>, Vec<Reference>) {
+) -> (Vec<Option<Y>>, Vec<Referenceable>, Vec<Reference>) {
     let file_referenceables = scan_dir_for_assets_and_notes(dir);
+    let mut all_fm = Vec::<Option<Y>>::new();
     let mut all_references = Vec::<Reference>::new();
 
     let mut file_referenceables_with_children: Vec<Referenceable> =
@@ -413,7 +448,8 @@ pub fn scan_vault(
             .into_iter()
             .map(|mut referenceable| match referenceable {
                 Referenceable::Note { ref path, .. } => {
-                    let (references, referenceables) = scan_note(path);
+                    let (fm, references, referenceables) = scan_note(path);
+                    all_fm.push(fm);
                     all_references.extend(references);
                     referenceable.add_in_note_referenceables(referenceables);
                     referenceable
@@ -439,7 +475,7 @@ pub fn scan_vault(
         }
     });
 
-    (file_referenceables_with_children, all_references)
+    (all_fm, file_referenceables_with_children, all_references)
 }
 
 #[cfg(test)]
@@ -450,8 +486,11 @@ mod tests {
     #[test]
     fn test_exract_references_and_referenceables() {
         let path = PathBuf::from("tests/data/vaults/tt/block.md");
-        let (references, referenceables): (Vec<Reference>, Vec<Referenceable>) =
-            scan_note(&path);
+        let (_, references, referenceables): (
+            _,
+            Vec<Reference>,
+            Vec<Referenceable>,
+        ) = scan_note(&path);
         assert_debug_snapshot!(references, @r##"
         [
             Reference {

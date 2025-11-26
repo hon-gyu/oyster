@@ -720,7 +720,7 @@ mod tests {
         let vault_root_dir = Path::new("tests/data/vaults/minimal");
 
         // Scan the vault
-        let (referenceables, references) =
+        let (_, referenceables, references) =
             scan_vault(vault_root_dir, vault_root_dir);
         let (links, _unresolved) =
             build_links(references, referenceables.clone());
