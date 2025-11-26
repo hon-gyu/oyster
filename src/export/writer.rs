@@ -1,4 +1,4 @@
-//!
+//! Render a vault to HTML; the SSG
 //!
 //! File-level information:
 //!   - file referenceable: note and asset
@@ -22,6 +22,7 @@ use crate::link::{
     Link as ResolvedLink, Referenceable, build_links, scan_vault,
 };
 use maud::{DOCTYPE, Markup, PreEscaped, html};
+use serde_yaml::Value as Y;
 use std::collections::HashMap;
 use std::fs;
 use std::ops::Range;
@@ -31,10 +32,68 @@ pub fn render_vault(
     vault_root_dir: &Path,
     output_dir: &Path,
     theme: &str,
+    filter_publish: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
     // Scan the vault and build links
     let (fms, referenceables, references) =
         scan_vault(vault_root_dir, vault_root_dir);
+
+    // Filter out unpublished notes
+    let (referenceables, references) = if filter_publish {
+        let publish_flags = fms
+            .iter()
+            .map(|fm| {
+                if let Some(Y::Mapping(fm_val)) = fm {
+                    if let Some(publish) = fm_val.get("publish") {
+                        publish.as_bool().unwrap_or(false)
+                    } else {
+                        false
+                    }
+                } else {
+                    false
+                }
+            })
+            .collect::<Vec<_>>();
+        debug_assert_eq!(
+            publish_flags.len(),
+            referenceables
+                .iter()
+                .filter(|r| matches!(r, Referenceable::Note { .. }))
+                .collect::<Vec<_>>()
+                .len(),
+            r#"publish flags and note referenceables should exactly match,
+            hense the length of publish flags should be equal to the number of notes"#
+        );
+
+        // Build a set of published note paths for quick lookup
+        let published_note_paths = referenceables
+            .iter()
+            .zip(publish_flags.iter())
+            .filter(|(r, publish)| {
+                **publish && matches!(r, Referenceable::Note { .. })
+            })
+            .map(|(r, _)| r.path().clone())
+            .collect::<std::collections::HashSet<_>>();
+
+        // Filter referenceables
+        let filtered_referenceables = referenceables
+            .into_iter()
+            .zip(publish_flags)
+            .filter(|(_, publish)| *publish)
+            .map(|(r, _)| r)
+            .collect::<Vec<_>>();
+
+        // Filter references to only include those from published notes
+        let filtered_references = references
+            .into_iter()
+            .filter(|reference| published_note_paths.contains(&reference.path))
+            .collect::<Vec<_>>();
+
+        (filtered_referenceables, filtered_references)
+    } else {
+        (referenceables, references)
+    };
+
     let (links, _unresolved) = build_links(references, referenceables.clone());
 
     // Build map: vault file path |-> slug

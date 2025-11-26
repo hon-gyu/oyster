@@ -435,6 +435,10 @@ fn make_referenceable_relative(
 /// Returns:
 /// - referenceables: all referenceables (with relative paths)
 /// - references: note references and asset references
+///
+/// Post-condition:
+///   - all referenceables are not in-note referenceables
+///   - path of frontmatter == path of note
 pub fn scan_vault(
     dir: &Path,
     root_dir: &Path,

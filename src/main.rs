@@ -39,7 +39,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 vault_root_dir.display()
             );
 
-            render_vault(&vault_root_dir, &output_dir, &theme)?;
+            render_vault(&vault_root_dir, &output_dir, &theme, true)?;
 
             println!("Site generated to: {}", output_dir.display());
         }
