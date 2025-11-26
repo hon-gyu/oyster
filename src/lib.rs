@@ -1,5 +1,6 @@
 pub mod ast;
 pub mod export;
+pub mod frontmatter;
 pub mod heading;
 pub mod link;
 pub mod parse;
