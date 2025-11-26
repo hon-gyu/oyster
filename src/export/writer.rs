@@ -127,9 +127,7 @@ pub fn render_vault(
         &referenceables,
         &vault_path_to_slug_map,
         Path::new("index"),
-        get_style(theme),
     );
-
     let home_html = html! {
         (DOCTYPE)
         html {
@@ -143,7 +141,7 @@ pub fn render_vault(
             }
             body {
                 article {
-                    h1 { "Notes" }
+                    h1 { "Home" }
                     (home_content)
                 }
             }

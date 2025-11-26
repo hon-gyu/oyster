@@ -74,6 +74,7 @@ fn render_file_tree_node(node: &TreeNode<FileTreeItem>) -> Markup {
 pub fn render_home_page(
     referenceables: &[Referenceable],
     vault_path_to_slug_map: &HashMap<PathBuf, String>,
+    home_slug_path: &Path,
 ) -> Markup {
     use std::collections::BTreeSet;
 
