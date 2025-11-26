@@ -17,7 +17,7 @@ pub fn render_home_ref(
         get_relative_dest(Path::new(note_slug_path), home_slug_path_val);
     let home_href = format!("{}.html", home_href);
 
-    html! {a href=(home_href) class="home-link" { "-" }}
+    html! {a href=(home_href) class="home-link" { "Home" }}
 }
 
 /// Render the home page
@@ -48,7 +48,7 @@ fn render_file_tree_node(node: &TreeNode<FileTreeItem>) -> Markup {
         // Directory with children
         html! {
             li class="directory" {
-                details open {
+                details closed {
                     summary { (node.value.name) "/" }
                     @if !node.children.is_empty() {
                         ul {

@@ -178,11 +178,13 @@ fn render_page(
                 nav class="top-nav" {
                     (home)
                 }
+                header {
+                    h1 { (title) }
+                }
                 @if let Some(toc) = toc {
                     (toc)
                 }
                 article {
-                    h1 { (title) }
                     (PreEscaped(content))
                 }
                 @if let Some(backlink) = backlink {
