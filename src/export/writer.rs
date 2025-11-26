@@ -74,6 +74,8 @@ pub fn render_vault(
     for note_vault_path in note_vault_paths {
         let md_src = fs::read_to_string(vault_root_dir.join(note_vault_path))?;
         let tree = Tree::new(&md_src);
+        let note_slug_path =
+            vault_path_to_slug_map.get(note_vault_path).unwrap();
 
         let title = vault_path_to_title_map.get(note_vault_path).unwrap();
 
@@ -99,10 +101,17 @@ pub fn render_vault(
             &innote_refable_anchor_id_map,
         );
 
-        let html =
-            render_page(&title, &content, &toc, &backlink, get_style(theme));
-        let note_slug_path =
-            vault_path_to_slug_map.get(note_vault_path).unwrap();
+        let home =
+            render_home_ref(note_vault_path, &vault_path_to_slug_map, None);
+
+        let html = render_page(
+            &title,
+            &content,
+            &toc,
+            &backlink,
+            &home,
+            get_style(theme),
+        );
         let output_path = output_dir.join(format!("{}.html", note_slug_path));
 
         if let Some(parent) = output_path.parent() {
@@ -119,6 +128,7 @@ fn render_page(
     content: &str,
     toc: &Option<Markup>,
     backlink: &Option<Markup>,
+    home: &Markup,
     style: &str,
 ) -> String {
     html! {
@@ -133,6 +143,9 @@ fn render_page(
                 }
             }
             body {
+                nav class="top-nav" {
+                    (home)
+                }
                 @if let Some(toc) = toc {
                     (toc)
                 }
@@ -225,8 +238,19 @@ fn render_backlinks(
     Some(markup)
 }
 
-fn render_navigation() -> Markup {
-    todo!()
+fn render_home_ref(
+    note_vault_path: &Path,
+    vault_path_to_slug_map: &HashMap<PathBuf, String>,
+    home_slug_path: Option<&Path>,
+) -> Markup {
+    let note_slug_path = vault_path_to_slug_map.get(note_vault_path).unwrap();
+    let home_slug_path_val = home_slug_path.unwrap_or(Path::new("index"));
+    // Calculate relative path to home (index.html)
+    let home_href =
+        get_relative_dest(Path::new(note_slug_path), home_slug_path_val);
+    let home_href = format!("{}.html", home_href);
+
+    html! {a href=(home_href) class="home-link" { "-" }}
 }
 
 fn render_home() -> Markup {

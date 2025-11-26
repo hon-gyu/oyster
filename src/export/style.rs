@@ -83,6 +83,18 @@ fn get_dracula_theme() -> &'static str {
         .backlinks li {
             margin: 0.5em 0;
         }
+        .top-nav {
+            margin-bottom: 1em;
+            padding-bottom: 0.5em;
+            border-bottom: 1px solid #44475a;
+        }
+        .home-link {
+            font-size: 0.9em;
+            opacity: 0.8;
+        }
+        .home-link:hover {
+            opacity: 1;
+        }
     "#
 }
 
@@ -162,6 +174,18 @@ fn get_gruvbox_theme() -> &'static str {
         .backlinks li {
             margin: 0.5em 0;
         }
+        .top-nav {
+            margin-bottom: 1em;
+            padding-bottom: 0.5em;
+            border-bottom: 1px solid #3c3836;
+        }
+        .home-link {
+            font-size: 0.9em;
+            opacity: 0.8;
+        }
+        .home-link:hover {
+            opacity: 1;
+        }
     "#
 }
 
@@ -240,6 +264,18 @@ fn get_tokyonight_theme() -> &'static str {
         }
         .backlinks li {
             margin: 0.5em 0;
+        }
+        .top-nav {
+            margin-bottom: 1em;
+            padding-bottom: 0.5em;
+            border-bottom: 1px solid #24283b;
+        }
+        .home-link {
+            font-size: 0.9em;
+            opacity: 0.8;
+        }
+        .home-link:hover {
+            opacity: 1;
         }
     "#
 }

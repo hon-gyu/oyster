@@ -107,7 +107,7 @@ pub fn render_toc(
 
     Some(html! {
         nav class="toc" {
-            details open {
+            details open #table-of-contents {
                 summary { "Table of Contents" }
                 ul {
                     @for root in tree {
