@@ -9,6 +9,7 @@
 //!   - vault paths to slug map
 //!   - in-note referenceable anchor id map
 use super::content::render_content;
+use super::home::{render_home_page, render_home_ref};
 use super::style::get_style;
 use super::toc::render_toc;
 use super::utils::{
@@ -105,7 +106,7 @@ pub fn render_vault(
             render_home_ref(note_vault_path, &vault_path_to_slug_map, None);
 
         let html = render_page(
-            &title,
+            title,
             &content,
             &toc,
             &backlink,
@@ -120,6 +121,39 @@ pub fn render_vault(
 
         fs::write(&output_path, html)?;
     }
+
+    // Generate home page
+    let home_content = render_home_page(
+        &referenceables,
+        &vault_path_to_slug_map,
+        Path::new("index"),
+        get_style(theme),
+    );
+
+    let home_html = html! {
+        (DOCTYPE)
+        html {
+            head {
+                meta charset="utf-8";
+                meta name="viewport" content="width=device-width, initial-scale=1";
+                title { "Home" }
+                style {
+                    (PreEscaped(get_style(theme)))
+                }
+            }
+            body {
+                article {
+                    h1 { "Notes" }
+                    (home_content)
+                }
+            }
+        }
+    }
+    .into_string();
+
+    let home_path = output_dir.join("index.html");
+    fs::write(&home_path, home_html)?;
+
     Ok(())
 }
 
@@ -236,23 +270,4 @@ fn render_backlinks(
         }
     };
     Some(markup)
-}
-
-fn render_home_ref(
-    note_vault_path: &Path,
-    vault_path_to_slug_map: &HashMap<PathBuf, String>,
-    home_slug_path: Option<&Path>,
-) -> Markup {
-    let note_slug_path = vault_path_to_slug_map.get(note_vault_path).unwrap();
-    let home_slug_path_val = home_slug_path.unwrap_or(Path::new("index"));
-    // Calculate relative path to home (index.html)
-    let home_href =
-        get_relative_dest(Path::new(note_slug_path), home_slug_path_val);
-    let home_href = format!("{}.html", home_href);
-
-    html! {a href=(home_href) class="home-link" { "-" }}
-}
-
-fn render_home() -> Markup {
-    todo!()
 }

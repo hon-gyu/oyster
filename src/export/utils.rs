@@ -1,4 +1,4 @@
-use crate::link::{Reference, Referenceable};
+use crate::link::Referenceable;
 use std::collections::HashMap;
 use std::ops::Range;
 use std::path::{Path, PathBuf};

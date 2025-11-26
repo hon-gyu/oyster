@@ -95,6 +95,30 @@ fn get_dracula_theme() -> &'static str {
         .home-link:hover {
             opacity: 1;
         }
+        .file-tree ul {
+            list-style: none;
+            padding-left: 1.5em;
+        }
+        .file-tree > ul {
+            padding-left: 0;
+        }
+        .file-tree li {
+            margin: 0.3em 0;
+        }
+        .file-tree summary {
+            cursor: pointer;
+            user-select: none;
+            color: #bd93f9;
+        }
+        .file-tree summary:hover {
+            color: #ff79c6;
+        }
+        .file-tree .file a {
+            color: #f8f8f2;
+        }
+        .file-tree .file a:hover {
+            color: #50fa7b;
+        }
     "#
 }
 
@@ -186,6 +210,30 @@ fn get_gruvbox_theme() -> &'static str {
         .home-link:hover {
             opacity: 1;
         }
+        .file-tree ul {
+            list-style: none;
+            padding-left: 1.5em;
+        }
+        .file-tree > ul {
+            padding-left: 0;
+        }
+        .file-tree li {
+            margin: 0.3em 0;
+        }
+        .file-tree summary {
+            cursor: pointer;
+            user-select: none;
+            color: #fabd2f;
+        }
+        .file-tree summary:hover {
+            color: #fe8019;
+        }
+        .file-tree .file a {
+            color: #ebdbb2;
+        }
+        .file-tree .file a:hover {
+            color: #8ec07c;
+        }
     "#
 }
 
@@ -276,6 +324,30 @@ fn get_tokyonight_theme() -> &'static str {
         }
         .home-link:hover {
             opacity: 1;
+        }
+        .file-tree ul {
+            list-style: none;
+            padding-left: 1.5em;
+        }
+        .file-tree > ul {
+            padding-left: 0;
+        }
+        .file-tree li {
+            margin: 0.3em 0;
+        }
+        .file-tree summary {
+            cursor: pointer;
+            user-select: none;
+            color: #7aa2f7;
+        }
+        .file-tree summary:hover {
+            color: #bb9af7;
+        }
+        .file-tree .file a {
+            color: #c0caf5;
+        }
+        .file-tree .file a:hover {
+            color: #9ece6a;
         }
     "#
 }
