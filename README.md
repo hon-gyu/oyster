@@ -12,9 +12,12 @@ Open-source [Obsidian.md](https://obsidian.md/)
   - ✅ v0: minijina + pulldown-cmarks's html writer; backlinks component; correct links
   - ✅ v1: type-safe ast-based html writer; backlinks component;
   - 🚧 more components
-    - TOC
-    - Explorer
+    - ✅ TOC
+    - ✅ Explorer
+    - ✅ Homepage
+    - ⬜ Sidebar explorer
     - Graphview
+  - ⬜ filter by frontmatter
 - ⬜ query CLI
   - ⬜ fronmatter 
 - ⬜ CodeGen
