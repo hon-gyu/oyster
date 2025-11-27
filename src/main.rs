@@ -20,6 +20,10 @@ enum Commands {
         /// Output directory for the generated site
         #[arg(short, long)]
         output: PathBuf,
+
+        #[arg(short, long)]
+        no_filter_publish: bool,
+
         #[arg(short, long, default_value = "default")]
         theme: String,
     },
@@ -32,6 +36,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Commands::Generate {
             vault_root_dir,
             output: output_dir,
+            no_filter_publish,
             theme,
         } => {
             println!(
@@ -39,7 +44,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 vault_root_dir.display()
             );
 
-            render_vault(&vault_root_dir, &output_dir, &theme, true)?;
+            render_vault(
+                &vault_root_dir,
+                &output_dir,
+                &theme,
+                !no_filter_publish,
+            )?;
 
             println!("Site generated to: {}", output_dir.display());
         }
