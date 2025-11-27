@@ -1,3 +1,4 @@
+#[allow(dead_code)]
 /// Color scheme for a theme
 struct ThemeColors {
     bg_primary: &'static str,

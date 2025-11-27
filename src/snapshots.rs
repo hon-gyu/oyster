@@ -1,3 +1,4 @@
+#[allow(dead_code, unused_imports)]
 #[cfg(test)]
 mod tests {
     use crate::ast::Tree;
@@ -47,23 +48,96 @@ mod tests {
     }
 
     #[test]
-    fn embed_image() {
+    fn embed_image_extract() {
+        let path =
+            std::path::PathBuf::from("tests/data/vaults/embed_image/note.md");
+        let (_fm_opt, references, _referenceables) = scan_note(&path);
+        assert_debug_snapshot!(references, @r#"
+        [
+            Reference {
+                kind: WikiLink,
+                path: "tests/data/vaults/embed_image/note.md",
+                range: 7..24,
+                dest: "blue-image.png",
+                display_text: "blue-image.png",
+            },
+            Reference {
+                kind: Embed,
+                path: "tests/data/vaults/embed_image/note.md",
+                range: 42..60,
+                dest: "blue-image.png",
+                display_text: "blue-image.png",
+            },
+            Reference {
+                kind: Embed,
+                path: "tests/data/vaults/embed_image/note.md",
+                range: 111..135,
+                dest: "blue-image.png",
+                display_text: " 200",
+            },
+            Reference {
+                kind: Embed,
+                path: "tests/data/vaults/embed_image/note.md",
+                range: 167..195,
+                dest: "blue-image.png",
+                display_text: " 100x150",
+            },
+            Reference {
+                kind: Embed,
+                path: "tests/data/vaults/embed_image/note.md",
+                range: 210..219,
+                dest: "note2",
+                display_text: "note2",
+            },
+            Reference {
+                kind: Embed,
+                path: "tests/data/vaults/embed_image/note.md",
+                range: 236..263,
+                dest: "note2#Heading in note 2",
+                display_text: "note2#Heading in note 2",
+            },
+        ]
+        "#);
+    }
+
+    #[test]
+    fn embed_image_parse() {
         let path =
             std::path::PathBuf::from("tests/data/vaults/embed_image/note.md");
         let md_src = std::fs::read_to_string(&path).unwrap();
         let tree = Tree::new(&md_src);
         assert_snapshot!(&tree.root_node, @r#"
-        Document [1..60]
+        Document [1..265]
           Paragraph [1..26]
             Text(Borrowed("Image")) [1..6]
             SoftBreak [6..7]
             Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("blue-image.png"), title: Borrowed(""), id: Borrowed("") } [7..24]
               Text(Borrowed("blue-image.png")) [9..23]
-          Paragraph [28..60]
-            Text(Borrowed("Embed Image")) [28..39]
-            SoftBreak [39..40]
-            Image { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("blue-image.png"), title: Borrowed(""), id: Borrowed("") } [40..58]
-              Text(Borrowed("blue-image.png")) [43..57]
+          Paragraph [28..62]
+            Text(Borrowed("Embeded Image")) [28..41]
+            SoftBreak [41..42]
+            Image { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("blue-image.png"), title: Borrowed(""), id: Borrowed("") } [42..60]
+              Text(Borrowed("blue-image.png")) [45..59]
+          Paragraph [64..137]
+            Text(Borrowed("Scale width according to original aspect ratio")) [64..110]
+            SoftBreak [110..111]
+            Image { link_type: WikiLink { has_pothole: true }, dest_url: Borrowed("blue-image.png "), title: Borrowed(""), id: Borrowed("") } [111..135]
+              Text(Borrowed(" 200")) [130..134]
+          Paragraph [138..197]
+            Text(Borrowed("Resize with width and height")) [138..166]
+            SoftBreak [166..167]
+            Image { link_type: WikiLink { has_pothole: true }, dest_url: Borrowed("blue-image.png "), title: Borrowed(""), id: Borrowed("") } [167..195]
+              Text(Borrowed(" 100x150")) [186..194]
+          Paragraph [199..221]
+            Text(Borrowed("Embed note")) [199..209]
+            SoftBreak [209..210]
+            Image { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("note2"), title: Borrowed(""), id: Borrowed("") } [210..219]
+              Text(Borrowed("note2")) [213..218]
+          Paragraph [222..265]
+            Text(Borrowed("Embed heading")) [222..235]
+            SoftBreak [235..236]
+            Image { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("note2#Heading in note 2"), title: Borrowed(""), id: Borrowed("") } [236..263]
+              Text(Borrowed("note2#Heading in note 2")) [239..262]
         "#);
     }
 
