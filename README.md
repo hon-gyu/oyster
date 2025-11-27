@@ -17,12 +17,20 @@ Open-source [Obsidian.md](https://obsidian.md/)
     - ✅ Homepage
     - ⬜ Sidebar explorer
     - Graphview
-  - ⬜ filter by frontmatter
-- ⬜ query CLI
-  - ⬜ fronmatter 
+  - ✅ filter by frontmatter
+- 🚧 Embed image
+- ⬜ Embed files: note, block, pdf, video, audio
+- ⬜ Bases
+- 🚧 custom callout
+- 🚧 LaTeX support
+  - 🚧 basic support (KaTeX)
+  - ⬜ TikZ; Quiver
 - ⬜ CodeGen
 - ⬜ Markdown to structured data (YAML / JSON)
   - ⬜ CHANGELOG validation
+- ⬜ query CLI
+  - ⬜ fronmatter 
+  - ⬜ table to csv
 - ⬜ Obsidian [base](https://help.obsidian.md/bases)
 - ⬜ LSP (inspired by [markdown-oxide](https://github.com/Feel-ix-343/markdown-oxide))
 
