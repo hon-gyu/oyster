@@ -102,6 +102,8 @@ fn render_nodes(
     buffer
 }
 
+const IMAGE_EXTENSIONS: [&str; 3] = ["png", "jpg", "jpeg"];
+
 fn render_node(
     node: &Node,
     vault_path: &Path,
@@ -155,6 +157,74 @@ fn render_node(
                 }
             } else {
                 anchor_markup
+            }
+        }
+        Image {
+            link_type: LinkType::WikiLink { .. } | LinkType::Inline,
+            dest_url,
+            title,
+            ..
+        } => {
+            // Note: this is `![[]]` embed, not necessarily an image
+            // Could be a note, a block, and etc.
+            let children = render_nodes(
+                &node.children,
+                vault_path,
+                ref_map,
+                refable_anchor_id_map,
+            );
+
+            let title_opt = if title.is_empty() {
+                None
+            } else {
+                Some(title.as_ref())
+            };
+
+            // Find matched tgt destination
+            let matched_tgt_slug_path_opt = ref_map.get(&range);
+
+            if let Some(tgt_slug_path) = matched_tgt_slug_path_opt {
+                let tgt_slug = tgt_slug_path.clone();
+                let anchor_id = range_to_anchor_id(&range);
+                let anchor_markup = html! {
+                    a href=(tgt_slug) title=[title_opt] {
+                        (PreEscaped(&children))
+                    }
+                };
+
+                // Check if this is an image
+                if Path::new(&tgt_slug)
+                    .extension()
+                    .and_then(|ext| {
+                        IMAGE_EXTENSIONS
+                            .iter()
+                            .find(|&&e| e == ext.to_str().unwrap_or(""))
+                    })
+                    .is_some()
+                {
+                    html! {
+                        img src=(tgt_slug) alt=(children) title=[title_opt] {
+                            (anchor_markup)
+                        }
+                    }
+                } else {
+                    // TODO(feature): handle other embedding types
+                    // Fallback to raw url
+                    html! {
+                        span .embed-file #(anchor_id) {
+                            (anchor_markup)
+                        }
+                    }
+                }
+            } else {
+                // No matched, fallback to raw url
+                let href = dest_url.to_string();
+                // Just an anchor
+                html! {
+                    a href=(href) title=[title_opt] {
+                        (PreEscaped(children))
+                    }
+                }
             }
         }
         // Referenceable nodes
@@ -557,6 +627,7 @@ fn render_node(
                 }
             }
         }
+        // Image with link type other than wikilink and inline
         Image {
             dest_url, title, ..
         } => {
@@ -794,7 +865,9 @@ mod tests {
         <h2 id="image-embed">Image Embed</h2>
 
         <p>
-        <img src="blue-image.png" alt="blue-image.png"/>
+        <img src="blue-image.png" alt="blue-image.png">
+        <a href="blue-image.png">blue-image.png</a>
+        </img>
         </p>
 
         <h2 id="additional-info">Additional Info</h2>

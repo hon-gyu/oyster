@@ -91,6 +91,8 @@ fn extract_node_reference_referenceable_and_identifier(
             dest_url,
             ..
         } => {
+            // Note: anything looks like `![[]]` will considered as `Image` event
+            let is_embed = matches!(&node.kind, NodeKind::Image { .. });
             match link_type {
                 LinkType::WikiLink { has_pothole } => {
                     let display_text = if !has_pothole {
@@ -105,11 +107,16 @@ fn extract_node_reference_referenceable_and_identifier(
                             unreachable!("Never: Wikilink should have text");
                         }
                     };
+                    let kind = if !is_embed {
+                        ReferenceKind::WikiLink
+                    } else {
+                        ReferenceKind::Embed
+                    };
                     let reference = Reference {
                         path: path.clone(),
                         range: node.byte_range().clone(),
                         dest: dest_url.trim().to_string(),
-                        kind: ReferenceKind::WikiLink,
+                        kind,
                         display_text,
                     };
                     Some(NodeParsedResult::Refernce(reference))

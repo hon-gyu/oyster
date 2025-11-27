@@ -89,6 +89,7 @@ impl Referenceable {
 pub enum ReferenceKind {
     WikiLink,
     MarkdownLink,
+    Embed,
 }
 
 /// A wikilink or inline markdown link in markdown file
