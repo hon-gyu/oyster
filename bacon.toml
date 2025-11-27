@@ -1,0 +1,8 @@
+# [insta]
+# # Set to "reject" instead of "review"
+# behavior = "reject"
+
+# [jobs.nextest]
+# command = ["cargo", "nextest", "run"]
+# env.INSTA_UPDATE = "no"
+# env.INSTA_FORCE_PASS = "0"

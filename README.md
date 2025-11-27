@@ -8,7 +8,7 @@ Open-source [Obsidian.md](https://obsidian.md/)
 - ✅ [Heading reference](https://help.obsidian.md/links#Link%20to%20a%20heading%20in%20a%20note)
 - ✅ TOC generation
 - ✅ [Block reference](https://help.obsidian.md/links#Link%20to%20a%20block%20in%20a%20note)
-- 🚧 SSG
+- SSG
   - ✅ v0: minijina + pulldown-cmarks's html writer; backlinks component; correct links
   - ✅ v1: type-safe ast-based html writer; backlinks component;
   - 🚧 more components
@@ -18,13 +18,16 @@ Open-source [Obsidian.md](https://obsidian.md/)
     - ⬜ Sidebar explorer
     - Graphview
   - ✅ filter by frontmatter
-- 🚧 Embed image
+- Embed image
+  - 🚧 basic embed
+  - ⬜ resize embed
 - ⬜ Embed files: note, block, pdf, video, audio
-- ⬜ Bases
-- 🚧 custom callout
-- 🚧 LaTeX support
+- LaTeX support
   - 🚧 basic support (KaTeX)
   - ⬜ TikZ; Quiver
+
+- ⬜ Bases
+- 🚧 Custom callout
 - ⬜ CodeGen
 - ⬜ Markdown to structured data (YAML / JSON)
   - ⬜ CHANGELOG validation

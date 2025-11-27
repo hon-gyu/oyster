@@ -418,7 +418,7 @@ fn test_scan_vault() {
             display_text: "Note 1",
         },
         Reference {
-            kind: WikiLink,
+            kind: Embed,
             path: "Note 1.md",
             range: 5896..5911,
             dest: "Figure1.jpg",
@@ -1292,7 +1292,7 @@ fn test_exract_references_and_referenceables() {
             display_text: "Note 1",
         },
         Reference {
-            kind: WikiLink,
+            kind: Embed,
             path: "tests/data/vaults/tt/Note 1.md",
             range: 5896..5911,
             dest: "Figure1.jpg",
