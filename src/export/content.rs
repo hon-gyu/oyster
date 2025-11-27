@@ -31,7 +31,7 @@ pub fn render_content(
     // build a map of:
     //   src (this) reference's byte range
     //   |->
-    //   tgt_slug.html#anchor_id | tgt_slug.html
+    //   tgt_slug.html#anchor_id | tgt_slug.html | tgt_slug.png
     let ref_dest_map: HashMap<Range<usize>, String> = resolved_links
         .iter()
         .filter(|link| link.src_path_eq(vault_path))
@@ -62,9 +62,9 @@ pub fn render_content(
                 _ => None,
             };
             let dest = if let Some(tgt_anchor_id) = tgt_anchor_id {
-                format!("{}.html#{}", rel_tgt_slug, tgt_anchor_id.clone())
+                format!("{}#{}", rel_tgt_slug, tgt_anchor_id.clone())
             } else {
-                format!("{}.html", rel_tgt_slug)
+                format!("{}", rel_tgt_slug)
             };
             (src_range.clone(), dest)
         })

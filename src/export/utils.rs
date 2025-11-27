@@ -52,7 +52,7 @@ pub fn range_to_anchor_id(range: &Range<usize>) -> String {
 /// Examples:
 /// - "Note 1.md" -> "note-1"
 /// - "dir/Note.md" -> "dir/note"
-fn file_path_to_slug(path: &Path) -> String {
+fn file_name_to_slug(path: &Path) -> String {
     let path_str = path.to_str().unwrap();
     let without_ext = path_str.strip_suffix(".md").unwrap_or(path_str);
 
@@ -61,6 +61,21 @@ fn file_path_to_slug(path: &Path) -> String {
         .map(slugify)
         .collect::<Vec<_>>()
         .join("/")
+}
+
+/// Converts a path to a URL-friendly slug with extension
+/// markdown -> html
+/// other -> other
+fn file_path_to_slug(path: &Path) -> String {
+    let slug = file_name_to_slug(&path.with_extension(""));
+    let ext = path.extension().and_then(|s| s.to_str()).unwrap_or("");
+    let slug_ext = if ext == "md" || ext == "markdown" {
+        "html"
+    } else {
+        ext
+    };
+    let full_slug = format!("{}.{}", slug, slug_ext);
+    full_slug
 }
 
 /// Build a map of paths to slugs
@@ -152,22 +167,46 @@ mod tests {
     use insta::assert_snapshot;
 
     #[test]
-    fn test_path_to_slug() {
+    fn test_file_name_to_slug() {
         assert_snapshot!(
-            file_path_to_slug(Path::new("Note 1.md")),
+            file_name_to_slug(Path::new("Note 1")),
             @"note-1"
         );
         assert_snapshot!(
-            file_path_to_slug(Path::new("Three laws of motion.md")),
+            file_name_to_slug(Path::new("Three laws of motion")),
             @"three-laws-of-motion"
         );
         assert_snapshot!(
-            file_path_to_slug(Path::new("dir/Note.md")),
+            file_name_to_slug(Path::new("dir/Note")),
             @"dir/note"
         );
         assert_snapshot!(
-            file_path_to_slug(Path::new("(Test).md")),
+            file_name_to_slug(Path::new("(Test)")),
             @"test"
         );
+    }
+
+    #[test]
+    fn test_file_path_to_slug() {
+        assert_snapshot!(
+            file_path_to_slug(Path::new("Note 1.md")),
+            @"note-1.html"
+        );
+        assert_snapshot!(
+            file_path_to_slug(Path::new("Three laws of motion.md")),
+            @"three-laws-of-motion.html"
+        );
+        assert_snapshot!(
+            file_path_to_slug(Path::new("dir/Note.md")),
+            @"dir/note.html"
+        );
+        assert_snapshot!(
+            file_path_to_slug(Path::new("(Test).md")),
+            @"test.html"
+        );
+        assert_snapshot!(
+            file_path_to_slug(Path::new("img.jpg")),
+            @"img.jpg"
+        )
     }
 }
