@@ -19,7 +19,7 @@ Open-source [Obsidian.md](https://obsidian.md/)
     - Graphview
   - ✅ filter by frontmatter
 - Embed image
-  - 🚧 basic embed
+  - ✅ basic embed
   - ⬜ resize embed
 - ⬜ Embed files: note, block, pdf, video, audio
 - LaTeX support
