@@ -423,12 +423,12 @@ fn render_node(
         }
         InlineMath(text) => {
             html! {
-                (render_latex(text, false))
+                (PreEscaped(render_latex(text.as_ref(), false)))
             }
         }
         DisplayMath(text) => {
             html! {
-                (render_latex(text, true))
+                (PreEscaped(render_latex(text.as_ref(), true)))
             }
         }
         Html(text) | InlineHtml(text) => {
