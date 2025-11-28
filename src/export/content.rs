@@ -1,3 +1,4 @@
+use super::latex::render_latex;
 use crate::ast::{Node, NodeKind::*, Tree};
 use crate::export::utils::{get_relative_dest, range_to_anchor_id};
 use crate::link::types::{Link as ResolvedLink, Referenceable};
@@ -422,12 +423,12 @@ fn render_node(
         }
         InlineMath(text) => {
             html! {
-                span class="math math-inline" { (text.as_ref()) }
+                (render_latex(text, false))
             }
         }
         DisplayMath(text) => {
             html! {
-                span class="math math-display" { (text.as_ref()) }
+                (render_latex(text, true))
             }
         }
         Html(text) | InlineHtml(text) => {
@@ -868,8 +869,7 @@ mod tests {
         <h2 id="image-embed">Image Embed</h2>
 
         <p>
-        <img src="blue-image.png" alt="blue-image.png">
-        <a href="blue-image.png">blue-image.png</a>
+        <img class="embed-file image" id="423-441" src="blue-image.png" alt="blue-image.png">
         </img>
         </p>
 
