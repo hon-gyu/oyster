@@ -10,6 +10,54 @@ mod tests {
     use insta::{assert_debug_snapshot, assert_snapshot};
 
     #[test]
+    fn latex_parse() {
+        let path =
+            std::path::PathBuf::from("tests/data/vaults/latex/basic-math.md");
+        let md_src = std::fs::read_to_string(&path).unwrap();
+        let tree = Tree::new(&md_src);
+        assert_snapshot!(&tree.root_node, @r#"
+        Document [0..363]
+          Heading { level: H1, id: None, classes: [], attrs: [] } [0..22]
+            Text(Borrowed("Basic Math Examples")) [2..21]
+          Heading { level: H2, id: None, classes: [], attrs: [] } [23..38]
+            Text(Borrowed("Inline Math")) [26..37]
+          Paragraph [39..86]
+            Text(Borrowed("Einstein")) [39..47]
+            Text(Inlined(InlineStr { inner: [226, 128, 153, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], len: 3 })) [47..48]
+            Text(Borrowed("s ")) [48..50]
+            InlineMath(Borrowed("E = mc^2")) [50..60]
+            Text(Borrowed(" changed physics forever.")) [60..85]
+          Paragraph [87..148]
+            Text(Borrowed("Quadratic formula: ")) [87..106]
+            InlineMath(Borrowed("x = \\frac{-b \\pm \\sqrt{b^2 - 4ac}}{2a}")) [106..146]
+            Text(Borrowed(".")) [146..147]
+          Paragraph [149..181]
+            Text(Borrowed("Simple variables: ")) [149..167]
+            InlineMath(Borrowed("x")) [167..170]
+            Text(Borrowed(", ")) [170..172]
+            InlineMath(Borrowed("y")) [172..175]
+            Text(Borrowed(", ")) [175..177]
+            InlineMath(Borrowed("z")) [177..180]
+          Heading { level: H2, id: None, classes: [], attrs: [] } [182..198]
+            Text(Borrowed("Display Math")) [185..197]
+          Paragraph [199..222]
+            Text(Borrowed("The Gaussian integral:")) [199..221]
+          Paragraph [223..278]
+            DisplayMath(Boxed("\n\\int_{-\\infty}^{\\infty} e^{-x^2} dx = \\sqrt{\\pi}\n")) [223..277]
+          Paragraph [279..297]
+            Text(Borrowed("Euler")) [279..284]
+            Text(Inlined(InlineStr { inner: [226, 128, 153, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], len: 3 })) [284..285]
+            Text(Borrowed("s identity:")) [285..296]
+          Paragraph [298..321]
+            DisplayMath(Boxed("\ne^{i\\pi} + 1 = 0\n")) [298..320]
+          Paragraph [322..344]
+            Text(Borrowed("The area of a circle:")) [322..343]
+          Paragraph [345..363]
+            DisplayMath(Boxed("\nA = \\pi r^2\n")) [345..362]
+        "#);
+    }
+
+    #[test]
     fn callout() {
         let md_src = r#"> [!NOTE]
 > This is a note
@@ -48,50 +96,50 @@ mod tests {
     }
 
     #[test]
-    fn embed_image_extract() {
+    fn embed_file_extract() {
         let path =
-            std::path::PathBuf::from("tests/data/vaults/embed_image/note.md");
+            std::path::PathBuf::from("tests/data/vaults/embed_file/note.md");
         let (_fm_opt, references, _referenceables) = scan_note(&path);
         assert_debug_snapshot!(references, @r#"
         [
             Reference {
                 kind: WikiLink,
-                path: "tests/data/vaults/embed_image/note.md",
+                path: "tests/data/vaults/embed_file/note.md",
                 range: 7..24,
                 dest: "blue-image.png",
                 display_text: "blue-image.png",
             },
             Reference {
                 kind: Embed,
-                path: "tests/data/vaults/embed_image/note.md",
+                path: "tests/data/vaults/embed_file/note.md",
                 range: 42..60,
                 dest: "blue-image.png",
                 display_text: "blue-image.png",
             },
             Reference {
                 kind: Embed,
-                path: "tests/data/vaults/embed_image/note.md",
+                path: "tests/data/vaults/embed_file/note.md",
                 range: 111..135,
                 dest: "blue-image.png",
                 display_text: " 200",
             },
             Reference {
                 kind: Embed,
-                path: "tests/data/vaults/embed_image/note.md",
+                path: "tests/data/vaults/embed_file/note.md",
                 range: 167..195,
                 dest: "blue-image.png",
                 display_text: " 100x150",
             },
             Reference {
                 kind: Embed,
-                path: "tests/data/vaults/embed_image/note.md",
+                path: "tests/data/vaults/embed_file/note.md",
                 range: 210..219,
                 dest: "note2",
                 display_text: "note2",
             },
             Reference {
                 kind: Embed,
-                path: "tests/data/vaults/embed_image/note.md",
+                path: "tests/data/vaults/embed_file/note.md",
                 range: 236..263,
                 dest: "note2#Heading in note 2",
                 display_text: "note2#Heading in note 2",
@@ -101,9 +149,9 @@ mod tests {
     }
 
     #[test]
-    fn embed_image_parse() {
+    fn embed_file_parse() {
         let path =
-            std::path::PathBuf::from("tests/data/vaults/embed_image/note.md");
+            std::path::PathBuf::from("tests/data/vaults/embed_file/note.md");
         let md_src = std::fs::read_to_string(&path).unwrap();
         let tree = Tree::new(&md_src);
         assert_snapshot!(&tree.root_node, @r#"

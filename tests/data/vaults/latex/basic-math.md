@@ -2,11 +2,11 @@
 
 ## Inline Math
 
-Einstein's famous equation: $E = mc^2$ changed physics forever.
+Einstein's $E = mc^2$ changed physics forever.
 
-The quadratic formula is $x = \frac{-b \pm \sqrt{b^2 - 4ac}}{2a}$.
+Quadratic formula: $x = \frac{-b \pm \sqrt{b^2 - 4ac}}{2a}$.
 
-Simple variables: $x$, $y$, $z$ are commonly used in algebra.
+Simple variables: $x$, $y$, $z$
 
 ## Display Math
 
