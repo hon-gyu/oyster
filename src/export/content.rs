@@ -202,10 +202,13 @@ fn render_node(
                     })
                     .is_some()
                 {
+                    let resize_opt = &children;
+                    // TODO(feature): handle resize
+                    // parse resize
+                    // calculate resize for width-only
+                    let _ = resize_opt;
                     html! {
-                        img src=(tgt_slug) alt=(children) title=[title_opt] {
-                            (anchor_markup)
-                        }
+                        img .embed-file.image src=(tgt_slug) alt=(children) #(anchor_id) {}
                     }
                 } else {
                     // TODO(feature): handle other embedding types

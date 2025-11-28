@@ -130,6 +130,23 @@ pub fn render_vault(
         .collect::<HashMap<_, _>>();
 
     fs::create_dir_all(output_dir)?;
+
+    // Copy matched static assets to output dir
+    let matched_asset_vault_paths = links
+        .iter()
+        .map(|link| &link.to)
+        .filter(|referenceable| {
+            matches!(referenceable, Referenceable::Asset { .. })
+        })
+        .map(|referenceable| referenceable.path().as_path())
+        .collect::<Vec<_>>();
+    matched_asset_vault_paths.iter().for_each(|&vault_path| {
+        let cp_from = vault_root_dir.join(vault_path);
+        let slug_path = vault_path_to_slug_map.get(vault_path).unwrap();
+        let cp_to = output_dir.join(slug_path);
+        fs::copy(cp_from, cp_to).unwrap();
+    });
+
     // Render each page
     for note_vault_path in note_vault_paths {
         let md_src = fs::read_to_string(vault_root_dir.join(note_vault_path))?;
@@ -172,7 +189,7 @@ pub fn render_vault(
             &home,
             get_style(theme),
         );
-        let output_path = output_dir.join(format!("{}.html", note_slug_path));
+        let output_path = output_dir.join(note_slug_path);
 
         if let Some(parent) = output_path.parent() {
             let _ = fs::create_dir_all(parent);
@@ -299,7 +316,7 @@ fn render_backlinks(
             let rel_src_slug =
                 get_relative_dest(Path::new(base_slug), Path::new(src_slug));
             let src_anchor = range_to_anchor_id(&src.range);
-            let src_href = format!("{}.html#{}", rel_src_slug, src_anchor);
+            let src_href = format!("{}#{}", rel_src_slug, src_anchor);
             let tgt = &link.to;
             let tgt_anchor: Option<String> = match tgt {
                 Referenceable::Heading { range, .. } => {
