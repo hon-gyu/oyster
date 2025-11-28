@@ -65,7 +65,7 @@ fn render_file_tree_node(node: &TreeNode<FileTreeItem>) -> Markup {
         let slug = node.value.slug.as_ref().unwrap();
         html! {
             li class="file" {
-                a href=(format!("{}.html", slug)) { (node.value.name) }
+                a href=(slug) { (node.value.name) }
             }
         }
     }

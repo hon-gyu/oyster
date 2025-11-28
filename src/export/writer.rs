@@ -34,6 +34,8 @@ pub fn render_vault(
     theme: &str,
     filter_publish: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    let home_name = "home".to_string();
+
     // Scan the vault and build links
     let (fms, referenceables, references) =
         scan_vault(vault_root_dir, vault_root_dir);
@@ -144,7 +146,10 @@ pub fn render_vault(
         let cp_from = vault_root_dir.join(vault_path);
         let slug_path = vault_path_to_slug_map.get(vault_path).unwrap();
         let cp_to = output_dir.join(slug_path);
-        fs::copy(cp_from, cp_to).unwrap();
+        if let Some(cp_to_parant) = cp_to.parent() {
+            fs::create_dir_all(cp_to_parant).ok();
+        };
+        fs::copy(&cp_from, &cp_to).ok();
     });
 
     // Render each page
@@ -178,8 +183,11 @@ pub fn render_vault(
             &innote_refable_anchor_id_map,
         );
 
-        let home =
-            render_home_ref(note_vault_path, &vault_path_to_slug_map, None);
+        let home = render_home_ref(
+            note_vault_path,
+            &vault_path_to_slug_map,
+            Some(Path::new(&home_name)),
+        );
 
         let html = render_page(
             title,
@@ -202,7 +210,7 @@ pub fn render_vault(
     let home_content = render_home_page(
         &referenceables,
         &vault_path_to_slug_map,
-        Path::new("index"),
+        Path::new(&home_name),
     );
     let home_html = html! {
         (DOCTYPE)
@@ -210,7 +218,7 @@ pub fn render_vault(
             head {
                 meta charset="utf-8";
                 meta name="viewport" content="width=device-width, initial-scale=1";
-                link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.min.css" integrity="sha384-wcIxkf4k558AjM3Yz3BBFQUbk/zgIYC2R0QpeeYb+TwlBVMrlgLqwRjRtGZiK7ww" crossorigin="anonymous";
+                link rel="stylesheet" href="/katex/katex.min.css";
                 title { "Home" }
                 style {
                     (PreEscaped(get_style(theme)))
@@ -225,9 +233,11 @@ pub fn render_vault(
         }
     }
     .into_string();
-
-    let home_path = output_dir.join("index.html");
+    let home_path = output_dir.join(format!("{}.html", home_name));
     fs::write(&home_path, home_html)?;
+
+    // Copy katex assets
+    cp_katex_assets(output_dir)?;
 
     Ok(())
 }
@@ -246,7 +256,7 @@ fn render_page(
             head {
                 meta charset="utf-8";
                 meta name="viewport" content="width=device-width, initial-scale=1";
-                link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.min.css" integrity="sha384-wcIxkf4k558AjM3Yz3BBFQUbk/zgIYC2R0QpeeYb+TwlBVMrlgLqwRjRtGZiK7ww" crossorigin="anonymous";
+                link rel="stylesheet" href="/katex/katex.min.css";
                 title { (title) }
                 style {
                     (PreEscaped(style))
@@ -348,4 +358,27 @@ fn render_backlinks(
         }
     };
     Some(markup)
+}
+
+fn cp_katex_assets(
+    output_dir: &Path,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let katex_src_dir = Path::new("static/katex");
+    let katex_dest_dir = output_dir.join("katex");
+    fs::create_dir_all(&katex_dest_dir)?;
+    if katex_src_dir.exists() {
+        let css_from = katex_src_dir.join("katex.min.css");
+        let css_to = katex_dest_dir.join("katex.min.css");
+        fs::copy(&css_from, &css_to)?;
+
+        let fonts_from = katex_src_dir.join("fonts");
+        let fonts_to = katex_dest_dir.join("fonts");
+        fs::create_dir_all(&fonts_to)?;
+        for entry in fs::read_dir(&fonts_from)?.flatten() {
+            let file_name = entry.file_name();
+            fs::copy(entry.path(), fonts_to.join(file_name))?;
+        }
+    }
+
+    Ok(())
 }
