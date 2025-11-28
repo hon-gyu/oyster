@@ -28,13 +28,16 @@ use std::fs;
 use std::ops::Range;
 use std::path::{Path, PathBuf};
 
+const HOME_NAME: &str = "home";
+const KATEX_ASSETS_DIR_IN_OUTPUT: &str = "katex";
+
 pub fn render_vault(
     vault_root_dir: &Path,
     output_dir: &Path,
     theme: &str,
     filter_publish: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let home_name = "home".to_string();
+    let home_name = HOME_NAME.to_string();
 
     // Scan the vault and build links
     let (fms, referenceables, references) =
@@ -189,6 +192,11 @@ pub fn render_vault(
             Some(Path::new(&home_name)),
         );
 
+        let katex_rel_dir = get_relative_dest(
+            &Path::new(note_slug_path),
+            Path::new(&KATEX_ASSETS_DIR_IN_OUTPUT),
+        );
+        let katex_css_path = format!("{}/{}", katex_rel_dir, "katex.min.css");
         let html = render_page(
             title,
             &content,
@@ -196,6 +204,7 @@ pub fn render_vault(
             &backlink,
             &home,
             get_style(theme),
+            &katex_css_path,
         );
         let output_path = output_dir.join(note_slug_path);
 
@@ -212,13 +221,17 @@ pub fn render_vault(
         &vault_path_to_slug_map,
         Path::new(&home_name),
     );
+    let home_path = output_dir.join(format!("{}.html", home_name));
+    let katex_rel_dir =
+        get_relative_dest(&home_path, Path::new(&KATEX_ASSETS_DIR_IN_OUTPUT));
+    let katex_css_path = format!("{}/{}", katex_rel_dir, "katex.min.css");
     let home_html = html! {
         (DOCTYPE)
         html {
             head {
                 meta charset="utf-8";
                 meta name="viewport" content="width=device-width, initial-scale=1";
-                link rel="stylesheet" href="/katex/katex.min.css";
+                link rel="stylesheet" href=(katex_css_path);
                 title { "Home" }
                 style {
                     (PreEscaped(get_style(theme)))
@@ -233,7 +246,6 @@ pub fn render_vault(
         }
     }
     .into_string();
-    let home_path = output_dir.join(format!("{}.html", home_name));
     fs::write(&home_path, home_html)?;
 
     // Copy katex assets
@@ -249,6 +261,7 @@ fn render_page(
     backlink: &Option<Markup>,
     home: &Markup,
     style: &str,
+    katex_css_path: &str,
 ) -> String {
     html! {
         (DOCTYPE)
@@ -256,7 +269,7 @@ fn render_page(
             head {
                 meta charset="utf-8";
                 meta name="viewport" content="width=device-width, initial-scale=1";
-                link rel="stylesheet" href="/katex/katex.min.css";
+                link rel="stylesheet" href=(katex_css_path);
                 title { (title) }
                 style {
                     (PreEscaped(style))
