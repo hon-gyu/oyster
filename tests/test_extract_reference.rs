@@ -8,7 +8,7 @@ use std::path::PathBuf;
 fn test_scan_vault() {
     let dir = PathBuf::from("tests/data/vaults/tt");
     let root_dir = PathBuf::from("tests/data/vaults/tt");
-    let (_, referenceables, references) = scan_vault(&dir, &root_dir);
+    let (_, referenceables, references) = scan_vault(&dir, &root_dir, false);
     assert_debug_snapshot!(references, @r########"
     [
         Reference {

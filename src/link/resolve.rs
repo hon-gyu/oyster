@@ -1002,7 +1002,8 @@ mod tests {
     fn test_build_links_node_1() {
         let dir = PathBuf::from("tests/data/vaults/tt");
         let root_dir = PathBuf::from("tests/data/vaults/tt");
-        let (_, referenceables, references) = scan_vault(&dir, &root_dir);
+        let (_, referenceables, references) =
+            scan_vault(&dir, &root_dir, false);
         let note_1_references = references
             .into_iter()
             .filter(|r| r.path == PathBuf::from("Note 1.md"))
@@ -1104,7 +1105,8 @@ mod tests {
         let path = PathBuf::from("block.md");
         let block_md = std::fs::read_to_string(root_dir.join(&path)).unwrap();
 
-        let (_, referenceables, references) = scan_vault(&dir, &root_dir);
+        let (_, referenceables, references) =
+            scan_vault(&dir, &root_dir, false);
 
         let block_md_references = references
             .into_iter()

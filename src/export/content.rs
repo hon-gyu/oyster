@@ -796,7 +796,7 @@ mod tests {
 
         // Scan the vault
         let (_, referenceables, references) =
-            scan_vault(vault_root_dir, vault_root_dir);
+            scan_vault(vault_root_dir, vault_root_dir, false);
         let (links, _unresolved) =
             build_links(references, referenceables.clone());
 
