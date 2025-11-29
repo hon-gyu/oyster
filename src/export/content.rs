@@ -114,6 +114,20 @@ fn render_node(
 ) -> String {
     let range = node.start_byte..node.end_byte;
     let markup = match &node.kind {
+        // Tree root
+        Document => {
+            let children_rendered = render_nodes(
+                &node.children,
+                vault_path,
+                ref_map,
+                refable_anchor_id_map,
+            );
+            html! {
+                article {
+                    (PreEscaped(children_rendered))
+                }
+            }
+        }
         // Reference nodes
         Link {
             link_type: LinkType::WikiLink { .. } | LinkType::Inline,
@@ -142,22 +156,36 @@ fn render_node(
                 Some(title.as_ref())
             };
 
-            let anchor_markup = html! {
-                a href=(href) title=[title_opt] {
-                    (PreEscaped(children))
-                }
-            };
-
             // Extra internal-link span and anchor id (byte-range) for resolved links
             if matched_reference_dest.is_some() {
-                let anchor_id = range_to_anchor_id(&range);
+                let anchor_markup = html! {
+                    a href=(href) title=[title_opt] {
+                        (PreEscaped(children))
+                    }
+                };
+                let id = range_to_anchor_id(&range);
                 html! {
-                    span .internal-link #(anchor_id) {
+                    span .internal-link #(id) {
                         (anchor_markup)
                     }
                 }
             } else {
-                anchor_markup
+                // Reference is unresolved
+                let is_abs_url = url::Url::parse(href.as_ref()).is_ok();
+                if is_abs_url {
+                    html! {
+                        a href=(href) title=[title_opt] {
+                            (PreEscaped(children))
+                        }
+                    }
+                } else {
+                    // Unresolved internal link: use span instead of anchor to make it not clickable
+                    html! {
+                        span .internal-link.unresolved title=[title_opt] {
+                            (PreEscaped(children))
+                        }
+                    }
+                }
             }
         }
         Image {
@@ -468,20 +496,7 @@ fn render_node(
                 input type="checkbox" disabled;
             },
         },
-        // Container nodes
-        Document => {
-            let children_rendered = render_nodes(
-                &node.children,
-                vault_path,
-                ref_map,
-                refable_anchor_id_map,
-            );
-            html! {
-                article {
-                    (PreEscaped(children_rendered))
-                }
-            }
-        }
+        // Container nodes (except for Document)
         CodeBlock(kind) => {
             let children = render_nodes(
                 &node.children,

@@ -110,6 +110,17 @@ impl ThemeColors {
         h6 {{ font-size: 1.05em; }}
         a {{ color: {}; text-decoration: none; }}
         a:hover {{ text-decoration: underline; color: {}; }}
+        .internal-link.unresolved {{
+            color: {};
+            opacity: 0.4;
+            cursor: default;
+            text-decoration: none;
+        }}
+        .internal-link.unresolved:hover {{
+            text-decoration: underline;
+            color: {};
+            opacity: 0.4;
+        }}
         code {{
             background: {};
             padding: 0.2em 0.4em;
@@ -204,6 +215,8 @@ impl ThemeColors {
             self.border_primary,    // h1 border-bottom
             self.link_primary,      // a color
             self.link_hover,        // a:hover color
+            self.link_primary,      // .internal-link.unresolved color (same as link color)
+            self.link_hover,        // .internal-link.unresolved:hover color (same as link hover)
             self.bg_secondary,      // code background
             self.code_text,         // code color
             self.bg_tertiary,       // pre background
