@@ -467,15 +467,11 @@ pub fn scan_vault(
                     let publish = if !filter_publish {
                         true
                     } else {
-                        if let Some(Y::Mapping(fm_val)) = &fm {
-                            if let Some(publish) = fm_val.get("publish") {
-                                publish.as_bool().unwrap_or(false)
-                            } else {
-                                false
-                            }
-                        } else {
-                            false
-                        }
+                        fm.as_ref()
+                            .and_then(|fm_val| fm_val.as_mapping())
+                            .and_then(|fm_val| fm_val.get("publish"))
+                            .and_then(|publish| publish.as_bool())
+                            .unwrap_or(false)
                     };
                     if !publish {
                         None
