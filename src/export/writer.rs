@@ -9,7 +9,7 @@
 //!   - vault paths to slug map
 //!   - in-note referenceable anchor id map
 use super::content::render_content;
-use super::home::{render_home_page, render_home_ref};
+use super::home::{render_home_page, render_simple_home_back_nav};
 use super::style::get_style;
 use super::toc::render_toc;
 use super::utils::{
@@ -17,6 +17,7 @@ use super::utils::{
     get_relative_dest,
 };
 use crate::ast::Tree;
+use crate::export::home::render_breadcrumb;
 use crate::export::utils::range_to_anchor_id;
 use crate::link::{
     Link as ResolvedLink, Referenceable, build_links, scan_vault,
@@ -160,7 +161,9 @@ pub fn render_vault(
         let md_src = fs::read_to_string(vault_root_dir.join(note_vault_path))?;
         let tree = Tree::new(&md_src);
         let note_slug_path =
-            vault_path_to_slug_map.get(note_vault_path).unwrap();
+            Path::new(vault_path_to_slug_map.get(note_vault_path).expect(
+                "Note path should be slugified and stored in vault_path_to_slug_map",
+            ));
 
         let title = vault_path_to_title_map.get(note_vault_path).unwrap();
 
@@ -186,10 +189,9 @@ pub fn render_vault(
             &innote_refable_anchor_id_map,
         );
 
-        let home = render_home_ref(
-            note_vault_path,
-            &vault_path_to_slug_map,
-            Some(Path::new(&home_name)),
+        let home_nav = render_simple_home_back_nav(
+            &note_slug_path,
+            &Path::new(&home_name),
         );
 
         let katex_rel_dir = get_relative_dest(
@@ -202,7 +204,7 @@ pub fn render_vault(
             &content,
             &toc,
             &backlink,
-            &home,
+            &home_nav,
             get_style(theme),
             &katex_css_path,
         );
@@ -259,7 +261,7 @@ fn render_page(
     content: &str,
     toc: &Option<Markup>,
     backlink: &Option<Markup>,
-    home: &Markup,
+    home_nav: &Markup,
     style: &str,
     katex_css_path: &str,
 ) -> String {
@@ -277,7 +279,7 @@ fn render_page(
             }
             body {
                 nav class="top-nav" {
-                    (home)
+                    (home_nav)
                 }
                 header {
                     h1 { (title) }

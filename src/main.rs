@@ -21,11 +21,11 @@ enum Commands {
         #[arg(short, long)]
         output: PathBuf,
 
-        #[arg(short, long)]
-        no_filter_publish: bool,
-
         #[arg(short, long, default_value = "default")]
         theme: String,
+
+        #[arg(short, long, default_value = "false")]
+        no_filter_publish: bool,
     },
 }
 
@@ -36,8 +36,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Commands::Generate {
             vault_root_dir,
             output: output_dir,
-            no_filter_publish,
             theme,
+            no_filter_publish,
         } => {
             println!(
                 "Generating site from vault: {}",
