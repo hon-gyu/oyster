@@ -14,7 +14,7 @@ pub fn render_simple_home_back_nav(
     let home_href = get_relative_dest(note_slug_path, home_slug_path);
     let home_href = format!("{}.html", home_href);
 
-    html! {a href=(home_href) class="home-link" { "Home" }}
+    html! {a href=(home_href) class="breadcrumb" { "Home" }}
 }
 
 pub fn render_breadcrumb(
@@ -24,7 +24,8 @@ pub fn render_breadcrumb(
 ) -> Markup {
     let home_href = get_relative_dest(note_slug_path, home_slug_path);
     let home_href = format!("{}.html", home_href);
-    let home_anchor = html! {a href=(home_href) class="home-link" { "Home" }};
+    let home_anchor =
+        html! {a href=(home_href) .breadcrumb.home-link { "Home" }};
 
     let mut crumbs = Vec::new();
     for ancestor in note_slug_path.ancestors().skip(1) {
@@ -45,7 +46,7 @@ pub fn render_breadcrumb(
         nav class="breadcrumb" {
             p { (home_anchor)
             @for crumb in crumbs {
-                (">") (crumb) }
+                (" > ") (crumb) }
             }
         }
     }

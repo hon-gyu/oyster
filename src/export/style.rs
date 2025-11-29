@@ -166,11 +166,11 @@ impl ThemeColors {
             padding-bottom: 0.5em;
             border-bottom: 1px solid {};
         }}
-        .home-link {{
+        .breadcrumb {{
             font-size: 1.2em;
             opacity: 0.8;
         }}
-        .home-link:hover {{
+        .breadcrumb:hover {{
             opacity: 1;
         }}
         .file-tree ul {{
