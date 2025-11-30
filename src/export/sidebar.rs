@@ -1,6 +1,6 @@
 use super::home::FileTreeItem;
 use super::utils::get_relative_dest;
-use crate::heading::{TreeNode, build_tree};
+use crate::hierarchy::{TreeNode, build_tree};
 use crate::link::Referenceable;
 use maud::{Markup, html};
 use std::collections::HashMap;

@@ -1,4 +1,4 @@
-use crate::heading::{Hierarchical, TreeNode, build_tree};
+use crate::hierarchy::{Hierarchical, TreeNode, build_tree};
 use crate::link::Referenceable;
 use maud::{Markup, html};
 use std::collections::HashMap;

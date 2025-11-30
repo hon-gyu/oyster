@@ -1,6 +1,6 @@
 pub mod ast;
 pub mod export;
-pub mod heading;
+pub mod hierarchy;
 pub mod link;
 pub mod parse;
 pub mod snapshots;
