@@ -4,8 +4,8 @@ use maud::{Markup, html};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-/// Render sidebar file explorer for individual pages
-pub fn render_sidebar_explorer(
+/// Render file explorer for individual pages
+pub fn render_explorer(
     vault_slug: &Path,
     referenceables: &[Referenceable],
     vault_path_to_slug_map: &HashMap<PathBuf, String>,
@@ -17,7 +17,7 @@ pub fn render_sidebar_explorer(
     );
 
     html! {
-        aside .sidebar-explorer {
+        aside .file-explorer {
             ( explorer )
         }
     }

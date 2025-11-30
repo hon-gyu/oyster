@@ -162,7 +162,7 @@ pub fn render_vault(
         );
         let katex_css_path = format!("{}/{}", katex_rel_dir, "katex.min.css");
 
-        let sidebar = sidebar::render_sidebar_explorer(
+        let sidebar = sidebar::render_explorer(
             note_slug_path,
             &referenceables,
             &vault_path_to_slug_map,
@@ -214,12 +214,16 @@ pub fn render_vault(
                 title { "Home" }
             }
             body {
-                div class="main-content" {
+                .left-sidebar {
+                }
+                .main-content {
                     article {
                         h1 { "Home" }
                         (home_content)
                     }
                 }
+                .right-sidebar {
+            }
             }
         }
     }
@@ -256,8 +260,10 @@ fn render_page(
                 title { (title) }
             }
             body {
-                (sidebar)
-                div class="main-content" {
+                .left-sidebar {
+                    (sidebar)
+                }
+                .main-content {
                     nav class="top-nav" {
                         (home_nav)
                     }
@@ -282,6 +288,8 @@ fn render_page(
                             }
                         }
                     }
+                }
+                .right-sidebar {
                 }
             }
         }

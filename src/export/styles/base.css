@@ -1,5 +1,13 @@
 /* Base structural styles - independent of theme */
 
+:root {
+    /* Layout widths - adjust these for different layouts */
+    --sidebar-left-width: 20%;
+    --main-content-width: 80%;
+    /* Future: --sidebar-right-width: 20%; */
+    /* For three-column layout, use: 20%, 60%, 20% */
+}
+
 body {
     margin: 0;
     padding: 0;
@@ -18,7 +26,7 @@ body {
 }
 
 /* Body with sidebar layout */
-body:has(.sidebar-explorer) {
+body:has(.left-sidebar) {
     display: flex;
     gap: 2rem;
     padding: 2rem;
@@ -26,16 +34,16 @@ body:has(.sidebar-explorer) {
     min-height: 100vh;
 }
 
-body:has(.sidebar-explorer) .main-content {
-    flex: 1;
-    max-width: 800px;
+body:has(.left-sidebar) .main-content {
+    width: var(--main-content-width);
+    max-width: 1200px;
     margin: 0;
-    padding: 0;
+    padding: 0 2rem;
 }
 
 /* Sidebar explorer */
-.sidebar-explorer {
-    width: 250px;
+.left-sidebar:has(.file-explorer) {
+    width: var(--sidebar-left-width);
     flex-shrink: 0;
     padding: 1rem;
     font-family:
