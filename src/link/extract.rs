@@ -9,6 +9,85 @@ use std::fs;
 use std::ops::Range;
 use std::path::{Path, PathBuf};
 
+/// Scan a vault for referenceables and references.
+///
+/// in-note referenceables are stored in note's children
+///
+/// Arguments:
+/// - `dir`: the directory to scan
+/// - `root_dir`: the root directory - all paths will be made relative to this
+///
+/// Returns:
+/// - referenceables: note and asset referenceables
+/// - references: references
+///
+/// Post-condition:
+///   - all referenceables are not in-note referenceables
+///   - frontmatters match file referenceables
+pub fn scan_vault(
+    dir: &Path,
+    root_dir: &Path,
+    filter_publish: bool,
+) -> (Vec<Option<Y>>, Vec<Referenceable>, Vec<Reference>) {
+    let file_referenceables = scan_dir_for_assets_and_notes(dir);
+
+    // Collect
+    let (
+        fm_by_file,
+        mut referenceables_with_children_by_file,
+        references_by_file,
+    ): (Vec<Option<Y>>, Vec<Referenceable>, Vec<Vec<Reference>>) =
+        file_referenceables
+            .into_iter()
+            .filter_map(|mut file_refable| match file_refable {
+                Referenceable::Note { ref path, .. } => {
+                    let (fm, references, innote_refables) = scan_note(path);
+                    let publish = if !filter_publish {
+                        true
+                    } else {
+                        fm.as_ref()
+                            .and_then(|fm_val| fm_val.as_mapping())
+                            .and_then(|fm_val| fm_val.get("publish"))
+                            .and_then(|publish| publish.as_bool())
+                            .unwrap_or(false)
+                    };
+                    if !publish {
+                        None
+                    } else {
+                        file_refable
+                            .add_in_note_referenceables(innote_refables);
+                        Some((fm, file_refable, references))
+                    }
+                }
+                asset @ Referenceable::Asset { .. } => {
+                    Some((None, asset, Vec::new()))
+                }
+                other => unreachable!(
+                    "in-note referenceable shouldn't present here, got {:?}",
+                    other
+                ),
+            })
+            .collect();
+
+    let mut references =
+        references_by_file.into_iter().flatten().collect::<Vec<_>>();
+
+    // Make all referenceables relative to the root directory
+    referenceables_with_children_by_file
+        .iter_mut()
+        .for_each(|referenceable| {
+            make_referenceable_relative(referenceable, root_dir);
+        });
+    // Make all references relative to the root directory as well
+    references.iter_mut().for_each(|reference| {
+        if let Ok(relative) = reference.path.strip_prefix(root_dir) {
+            reference.path = relative.to_path_buf();
+        }
+    });
+
+    (fm_by_file, referenceables_with_children_by_file, references)
+}
+
 // Scan a note and return a tuple of references and in-note referenceables
 //
 // Post-condition: the in-note referenceables are in order
@@ -429,85 +508,6 @@ fn make_referenceable_relative(
         }
     };
     mut_transform_referenceable_path(referenceable, &make_path_relative);
-}
-
-/// Scan a vault for referenceables and references.
-///
-/// in-note referenceables are stored in note's children
-///
-/// Arguments:
-/// - `dir`: the directory to scan
-/// - `root_dir`: the root directory - all paths will be made relative to this
-///
-/// Returns:
-/// - referenceables: note and asset referenceables
-/// - references: references
-///
-/// Post-condition:
-///   - all referenceables are not in-note referenceables
-///   - path of frontmatter == path of note
-pub fn scan_vault(
-    dir: &Path,
-    root_dir: &Path,
-    filter_publish: bool,
-) -> (Vec<Option<Y>>, Vec<Referenceable>, Vec<Reference>) {
-    let file_referenceables = scan_dir_for_assets_and_notes(dir);
-
-    // Collect
-    let (
-        fm_by_file,
-        mut referenceables_with_children_by_file,
-        references_by_file,
-    ): (Vec<Option<Y>>, Vec<Referenceable>, Vec<Vec<Reference>>) =
-        file_referenceables
-            .into_iter()
-            .filter_map(|mut file_refable| match file_refable {
-                Referenceable::Note { ref path, .. } => {
-                    let (fm, references, innote_refables) = scan_note(path);
-                    let publish = if !filter_publish {
-                        true
-                    } else {
-                        fm.as_ref()
-                            .and_then(|fm_val| fm_val.as_mapping())
-                            .and_then(|fm_val| fm_val.get("publish"))
-                            .and_then(|publish| publish.as_bool())
-                            .unwrap_or(false)
-                    };
-                    if !publish {
-                        None
-                    } else {
-                        file_refable
-                            .add_in_note_referenceables(innote_refables);
-                        Some((fm, file_refable, references))
-                    }
-                }
-                asset @ Referenceable::Asset { .. } => {
-                    Some((None, asset, Vec::new()))
-                }
-                other => unreachable!(
-                    "in-note referenceable shouldn't present here, got {:?}",
-                    other
-                ),
-            })
-            .collect();
-
-    let mut references =
-        references_by_file.into_iter().flatten().collect::<Vec<_>>();
-
-    // Make all referenceables relative to the root directory
-    referenceables_with_children_by_file
-        .iter_mut()
-        .for_each(|referenceable| {
-            make_referenceable_relative(referenceable, root_dir);
-        });
-    // Make all references relative to the root directory as well
-    references.iter_mut().for_each(|reference| {
-        if let Ok(relative) = reference.path.strip_prefix(root_dir) {
-            reference.path = relative.to_path_buf();
-        }
-    });
-
-    (fm_by_file, referenceables_with_children_by_file, references)
 }
 
 #[cfg(test)]
