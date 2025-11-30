@@ -29,22 +29,6 @@ impl Hierarchical for TocItem {
     }
 }
 
-/// Recursively render a TOC tree node and its children as markup
-fn render_toc_node(node: &TreeNode<TocItem>) -> Markup {
-    html! {
-        li {
-            a href=(format!("#{}", node.value.anchor_id)) { (node.value.text) }
-            @if !node.children.is_empty() {
-                ul {
-                    @for child in &node.children {
-                        (render_toc_node(child))
-                    }
-                }
-            }
-        }
-    }
-}
-
 /// Render the table of contents.
 ///
 /// For each note, we need:
@@ -117,4 +101,20 @@ pub fn render_toc(
             }
         }
     })
+}
+
+/// Recursively render a TOC tree node and its children as markup
+fn render_toc_node(node: &TreeNode<TocItem>) -> Markup {
+    html! {
+        li {
+            a href=(format!("#{}", node.value.anchor_id)) { (node.value.text) }
+            @if !node.children.is_empty() {
+                ul {
+                    @for child in &node.children {
+                        (render_toc_node(child))
+                    }
+                }
+            }
+        }
+    }
 }

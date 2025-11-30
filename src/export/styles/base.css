@@ -18,7 +18,9 @@ body {
 
     /* Always use 3-column grid layout */
     display: grid;
-    grid-template-columns: var(--sidebar-left-width) 1fr var(--sidebar-right-width);
+    grid-template-columns: var(--sidebar-left-width) 1fr var(
+            --sidebar-right-width
+        );
     gap: 2rem;
     padding: 2rem;
     min-height: 100vh;
@@ -51,6 +53,32 @@ body {
     max-height: calc(100vh - 60vh - 4rem);
     overflow-y: auto;
     box-sizing: border-box;
+}
+
+.toc {
+    padding: 1em;
+    background: var(--bg-tertiary);
+    border-radius: 5px;
+    border: 1px solid var(--border-secondary);
+}
+
+.toc summary {
+    list-style: none;
+    /*margin-bottom: 0.3em;*/
+}
+
+.toc summary::-webkit-details-marker {
+    display: none;
+}
+
+.toc ul {
+    margin-top: 0;
+    margin-bottom: 0;
+    padding-left: 1.5em;
+}
+
+.toc li {
+    margin: 0.2em 0;
 }
 
 /* Typography */
