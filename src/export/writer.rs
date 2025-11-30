@@ -9,6 +9,8 @@
 //!   - vault paths to slug map
 //!   - in-note referenceable anchor id map
 use super::content::render_content;
+use super::frontmatter;
+use super::frontmatter::render_frontmatter;
 use super::home::{render_home_page, render_simple_home_back_nav};
 use super::style::get_style;
 use super::toc::render_toc;
@@ -39,7 +41,7 @@ pub fn render_vault(
     let home_name = HOME_NAME.to_string();
 
     // Scan the vault and build links
-    let (_fms, referenceables, references) =
+    let (fms, referenceables, references) =
         scan_vault(vault_root_dir, vault_root_dir, filter_publish);
     let (links, _unresolved) = build_links(references, referenceables.clone());
 
@@ -60,7 +62,12 @@ pub fn render_vault(
     // There's an implicit map: reference path |-> reference range |-> anchor id
     // where the anchor id IS the byte range of the reference
 
-    // Build map: vault file path |-> title
+    // Build map: vault file path |-> frontmatter
+    let vault_path_to_frontmatter_map = referenceables
+        .iter()
+        .zip(fms)
+        .map(|(referenceable, fm)| (referenceable.path().as_path(), fm))
+        .collect::<HashMap<_, _>>();
     let note_vault_paths = referenceables
         .iter()
         .filter(|referenceable| {
@@ -68,10 +75,16 @@ pub fn render_vault(
         })
         .map(|referenceable| referenceable.path().as_path())
         .collect::<Vec<_>>();
+    // Build map for notes: vault file path |-> title
     let vault_path_to_title_map = note_vault_paths
         .iter()
         .map(|path| {
-            let title = title_from_path(path);
+            let title = vault_path_to_frontmatter_map
+                .get(path)
+                .expect("Did not find maybe frontmatter for note")
+                .as_ref()
+                .and_then(|fm| frontmatter::get_title(&fm))
+                .unwrap_or_else(|| title_from_path(path));
             (path.to_path_buf(), title)
         })
         .collect::<HashMap<_, _>>();
@@ -108,6 +121,23 @@ pub fn render_vault(
 
         let title = vault_path_to_title_map.get(note_vault_path).unwrap();
 
+        let home_nav = render_simple_home_back_nav(
+            &note_slug_path,
+            &Path::new(&home_name),
+        );
+
+        let frontmatter_info = vault_path_to_frontmatter_map
+            .get(note_vault_path)
+            .expect("Did not find frontmatter for note")
+            .as_ref()
+            .and_then(|fm| frontmatter::render_frontmatter(&fm));
+
+        let toc = render_toc(
+            note_vault_path,
+            &referenceables,
+            &innote_refable_anchor_id_map,
+        );
+
         let content = render_content(
             &tree,
             note_vault_path,
@@ -124,17 +154,6 @@ pub fn render_vault(
             &innote_refable_anchor_id_map,
         );
 
-        let toc = render_toc(
-            note_vault_path,
-            &referenceables,
-            &innote_refable_anchor_id_map,
-        );
-
-        let home_nav = render_simple_home_back_nav(
-            &note_slug_path,
-            &Path::new(&home_name),
-        );
-
         let katex_rel_dir = get_relative_dest(
             &Path::new(note_slug_path),
             Path::new(&KATEX_ASSETS_DIR_IN_OUTPUT),
@@ -142,8 +161,9 @@ pub fn render_vault(
         let katex_css_path = format!("{}/{}", katex_rel_dir, "katex.min.css");
         let html = render_page(
             title,
-            &content,
+            &frontmatter_info,
             &toc,
+            &content,
             &backlink,
             &home_nav,
             get_style(theme),
@@ -199,8 +219,9 @@ pub fn render_vault(
 
 fn render_page(
     title: &str,
-    content: &str,
+    frontmatter: &Option<Markup>,
     toc: &Option<Markup>,
+    content: &str,
     backlink: &Option<Markup>,
     home_nav: &Markup,
     style: &str,
@@ -224,6 +245,9 @@ fn render_page(
                 }
                 header {
                     h1 { (title) }
+                }
+                @if let Some(frontmatter) = frontmatter {
+                    (frontmatter)
                 }
                 @if let Some(toc) = toc {
                     (toc)

@@ -129,6 +129,14 @@ fn handle_tags_value(value: &Value) -> Option<Markup> {
     }
 }
 
+pub fn get_title(fm: &Value) -> Option<String> {
+    let mapping = fm.as_mapping()?;
+    mapping
+        .get("title")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

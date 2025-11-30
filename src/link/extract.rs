@@ -69,6 +69,7 @@ pub fn scan_vault(
             })
             .collect();
 
+    // TODO(maybe): we don't flatten references and just return a Vec of Vec?
     let mut references =
         references_by_file.into_iter().flatten().collect::<Vec<_>>();
 
