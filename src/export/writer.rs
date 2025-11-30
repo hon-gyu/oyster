@@ -10,16 +10,14 @@
 //!   - in-note referenceable anchor id map
 use super::content::render_content;
 use super::frontmatter;
-use super::frontmatter::render_frontmatter;
-use super::home::{render_home_page, render_simple_home_back_nav};
-use super::style::get_style;
-use super::toc::render_toc;
+use super::home;
+use super::style;
+use super::toc;
 use super::utils::{
     build_in_note_anchor_id_map, build_vault_paths_to_slug_map,
-    get_relative_dest,
+    get_relative_dest, range_to_anchor_id,
 };
 use crate::ast::Tree;
-use crate::export::utils::range_to_anchor_id;
 use crate::link::{
     Link as ResolvedLink, Referenceable, build_links, scan_vault,
 };
@@ -121,7 +119,7 @@ pub fn render_vault(
 
         let title = vault_path_to_title_map.get(note_vault_path).unwrap();
 
-        let home_nav = render_simple_home_back_nav(
+        let home_nav = home::render_simple_home_back_nav(
             &note_slug_path,
             &Path::new(&home_name),
         );
@@ -132,7 +130,7 @@ pub fn render_vault(
             .as_ref()
             .and_then(|fm| frontmatter::render_frontmatter(&fm));
 
-        let toc = render_toc(
+        let toc = toc::render_toc(
             note_vault_path,
             &referenceables,
             &innote_refable_anchor_id_map,
@@ -166,7 +164,7 @@ pub fn render_vault(
             &content,
             &backlink,
             &home_nav,
-            get_style(theme),
+            style::get_style(theme),
             &katex_css_path,
         );
         let output_path = output_dir.join(note_slug_path);
@@ -179,7 +177,7 @@ pub fn render_vault(
     }
 
     // Generate home page
-    let home_content = render_home_page(
+    let home_content = home::render_home_page(
         &referenceables,
         &vault_path_to_slug_map,
         Path::new(&home_name),
@@ -197,7 +195,7 @@ pub fn render_vault(
                 link rel="stylesheet" href=(katex_css_path);
                 title { "Home" }
                 style {
-                    (PreEscaped(get_style(theme)))
+                    (PreEscaped(style::get_style(theme)))
                 }
             }
             body {

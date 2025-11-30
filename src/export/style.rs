@@ -208,6 +208,32 @@ impl ThemeColors {
         .file-tree .file a:hover {{
             color: {};
         }}
+        .frontmatter {{
+            width: 100%;
+            margin: 1em 0;
+            border-collapse: collapse;
+            border: 1px solid {};
+        }}
+        .frontmatter td:first-child {{
+            padding: 0.5em;
+            font-weight: bold;
+            background: {};
+            border: 1px solid {};
+            white-space: nowrap;
+            width: 1%;
+        }}
+        .frontmatter td:last-child {{
+            padding: 0.5em 0.5em 0.5em 0.5em;
+            border: 1px solid {};
+        }}
+        .frontmatter-tag {{
+            display: inline-block;
+            background: {};
+            padding: 0.2em 0.6em;
+            border-radius: 3px;
+            font-size: 0.85em;
+            margin-right: 0.3em;
+        }}
     "#,
             self.bg_primary,        // body background
             self.text_primary,      // body color
@@ -215,23 +241,28 @@ impl ThemeColors {
             self.border_primary,    // h1 border-bottom
             self.link_primary,      // a color
             self.link_hover,        // a:hover color
-            self.link_primary,      // .internal-link.unresolved color (same as link color)
-            self.link_hover,        // .internal-link.unresolved:hover color (same as link hover)
-            self.bg_secondary,      // code background
-            self.code_text,         // code color
-            self.bg_tertiary,       // pre background
-            self.border_secondary,  // pre border
+            self.link_primary, // .internal-link.unresolved color (same as link color)
+            self.link_hover, // .internal-link.unresolved:hover color (same as link hover)
+            self.bg_secondary, // code background
+            self.code_text,  // code color
+            self.bg_tertiary, // pre background
+            self.border_secondary, // pre border
             self.blockquote_border, // blockquote border-left
-            self.text_secondary,    // blockquote color
-            self.border_primary,    // hr border-top
-            self.bg_secondary,      // .backlinks background
-            self.border_secondary,  // .backlinks border
+            self.text_secondary, // blockquote color
+            self.border_primary, // hr border-top
+            self.bg_secondary, // .backlinks background
+            self.border_secondary, // .backlinks border
             self.backlinks_heading, // .backlinks h5 color
-            self.border_primary,    // .top-nav border-bottom
-            self.heading_primary,   // .file-tree summary color
-            self.summary_hover,     // .file-tree summary:hover color
-            self.text_primary,      // .file-tree .file a color
-            self.link_hover,        // .file-tree .file a:hover color
+            self.border_primary, // .top-nav border-bottom
+            self.heading_primary, // .file-tree summary color
+            self.summary_hover, // .file-tree summary:hover color
+            self.text_primary, // .file-tree .file a color
+            self.link_hover, // .file-tree .file a:hover color
+            self.border_secondary, // .frontmatter border
+            self.bg_secondary, // .frontmatter dt background
+            self.border_secondary, // .frontmatter dt border
+            self.border_secondary, // .frontmatter dd border
+            self.bg_secondary, // .frontmatter-tag background
         )
     }
 }

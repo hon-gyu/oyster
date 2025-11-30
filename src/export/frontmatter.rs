@@ -1,7 +1,7 @@
 use maud::{Markup, html};
 use serde_yaml::Value;
 
-const FRONTMATTER_IGNORE_KEYS: [&str; 2] = ["publish", "draft"];
+const FRONTMATTER_IGNORE_KEYS: [&str; 3] = ["title", "publish", "draft"];
 
 // Render fronmatter
 //
@@ -47,10 +47,12 @@ pub fn render_frontmatter(value: &Value) -> Option<Markup> {
         }
     }
     let html = html! {
-        dl .frontmatter {
+        table .frontmatter {
             @for (key, val_markup) in key_to_val_html_mapping.iter() {
-                dt { (key) }
-                dd { (val_markup) }
+                tr {
+                    td { (key) }
+                    td { (val_markup) }
+                }
             }
         }
     };
