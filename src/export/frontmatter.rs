@@ -157,13 +157,11 @@ publish: true"#;
         let fm = serde_yaml::from_str::<Value>(fm_src).unwrap();
         let rendered = render_frontmatter(&fm).unwrap();
         assert_snapshot!(rendered.into_string(), @r#"
-        <dl class="frontmatter"><dt>date</dt><dd><div class="frontmatter-title" datetime="Getting Started
-        ">Getting Started
-        </div></dd><dt>author</dt><dd>Jane Doe
-        </dd><dt>date</dt><dd><time class="frontmatter-date" datetime="2024-03-15
+        <table class="frontmatter"><tr><td>author</td><td>Jane Doe
+        </td></tr><tr><td>date</td><td><time class="frontmatter-date" datetime="2024-03-15
         ">2024-03-15
-        </time></dd><dt>tags</dt><dd><span class="frontmatter-tags"><span class="frontmatter-tag">#programming</span>, <span class="frontmatter-tag">#tutorial</span></span></dd><dt>category</dt><dd>tutorials
-        </dd></dl>
+        </time></td></tr><tr><td>tags</td><td><span class="frontmatter-tags"><span class="frontmatter-tag">#programming</span>, <span class="frontmatter-tag">#tutorial</span></span></td></tr><tr><td>category</td><td>tutorials
+        </td></tr></table>
         "#);
     }
 }

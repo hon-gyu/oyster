@@ -234,6 +234,12 @@ impl ThemeColors {
             font-size: 0.85em;
             margin-right: 0.3em;
         }}
+        .embed-file.image {{
+            max-width: 100%;
+            height: auto;
+            display: block;
+            margin: 1em 0;
+        }}
     "#,
             self.bg_primary,        // body background
             self.text_primary,      // body color

@@ -1,4 +1,5 @@
 use super::latex::render_latex;
+use super::utils;
 use crate::ast::{Node, NodeKind::*, Tree};
 use crate::export::utils::{get_relative_dest, range_to_anchor_id};
 use crate::link::types::{Link as ResolvedLink, Referenceable};
@@ -231,13 +232,15 @@ fn render_node(
                     })
                     .is_some()
                 {
-                    let resize_opt = &children;
-                    // TODO(feature): handle resize
-                    // parse resize
-                    // calculate resize for width-only
-                    let _ = resize_opt;
+                    let resize_spec = &children;
+                    let (width, height) = utils::parse_resize_spec(resize_spec);
+                    let alt_text = Path::new(&tgt_slug)
+                        .file_stem()
+                        .unwrap()
+                        .to_str()
+                        .unwrap_or("");
                     html! {
-                        img .embed-file.image src=(tgt_slug) alt=(children) #(anchor_id) {}
+                        img .embed-file.image src=(tgt_slug) alt=(alt_text) #(anchor_id) width=[width] height=[height] {}
                     }
                 } else {
                     // TODO(feature): handle other embedding types
@@ -884,7 +887,7 @@ mod tests {
         <h2 id="image-embed">Image Embed</h2>
 
         <p>
-        <img class="embed-file image" id="423-441" src="blue-image.png" alt="blue-image.png">
+        <img class="embed-file image" id="423-441" src="blue-image.png" alt="blue-image">
         </img>
         </p>
 

@@ -159,6 +159,23 @@ pub fn get_relative_dest(base_file: &Path, dest: &Path) -> String {
     rel_dest.as_os_str().to_str().unwrap().to_string()
 }
 
+pub fn parse_resize_spec(resize_spec: &str) -> (Option<u32>, Option<u32>) {
+    let resize_spec = resize_spec.trim();
+    if let Some((width, height)) = resize_spec.split_once('x') {
+        let width = width.parse::<u32>().ok();
+        let height = height.parse::<u32>().ok();
+        if let (Some(width), Some(height)) = (width, height) {
+            (Some(width), Some(height))
+        } else {
+            (None, None)
+        }
+    } else if let Some(width) = resize_spec.parse::<u32>().ok() {
+        (Some(width), None)
+    } else {
+        (None, None)
+    }
+}
+
 // ====================
 
 #[cfg(test)]
