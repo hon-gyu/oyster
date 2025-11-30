@@ -1,3 +1,4 @@
+pub mod codeblock;
 pub mod content;
 pub mod file_tree_component;
 pub mod frontmatter;

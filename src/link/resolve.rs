@@ -315,6 +315,9 @@ fn resolve_nested_headings<'a>(
 ///
 /// - If heading reference is not found, fallback to note / asset reference.
 ///   - a reference to figure's heading is allowed but the heading part gets ignored.
+///
+/// TODO: if there's a dir that has the same name as the note,
+///       we should prioritize referenceables inside it
 pub fn build_links(
     references: Vec<Reference>,
     referenceable: Vec<Referenceable>,
