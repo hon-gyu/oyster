@@ -15,16 +15,18 @@ Open-source [Obsidian.md](https://obsidian.md/)
     - ✅ TOC
     - ✅ Explorer
     - ✅ Homepage
-    - ⬜ Sidebar explorer
+    - ✅ Sidebar explorer
     - Graphview
   - ✅ filter by frontmatter
+  - ⬜ Tag page
 - Embed image
   - ✅ basic embed
-  - ⬜ resize embed
+  - ✅ resize embed
 - ⬜ Embed files: note, block, pdf, video, audio
 - LaTeX support
-  - 🚧 basic support (KaTeX)
+  - ✅ basic support (KaTeX)
   - ⬜ TikZ; Quiver
+- ⬜ Mermaid diagram
 
 - ⬜ Bases
 - 🚧 Custom callout
