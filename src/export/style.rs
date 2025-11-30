@@ -221,6 +221,12 @@ impl ThemeColors {
             margin: 0;
             white-space: pre;
         }}
+        .tree-item.file .connector-prefix,
+        .tree-item.directory .connector-prefix {{
+            color: {};
+            display: inline-block;
+            vertical-align: top;
+        }}
         .tree-item.directory details {{
             display: inline;
         }}
@@ -240,11 +246,6 @@ impl ThemeColors {
         .tree-item.file {{
             display: block;
             line-height: 1.4;
-        }}
-        .tree-item.file span {{
-            color: {};
-            display: inline-block;
-            vertical-align: top;
         }}
         .tree-item.file a {{
             color: {};
@@ -309,9 +310,9 @@ impl ThemeColors {
             self.border_secondary, // .backlinks border
             self.backlinks_heading, // .backlinks h5 color
             self.border_primary, // .top-nav border-bottom
+            self.text_secondary, // .tree-item.file span color (tree characters)
             self.heading_primary, // .tree-item.directory summary color
             self.summary_hover, // .tree-item.directory summary:hover color
-            self.text_secondary, // .tree-item.file span color (tree characters)
             self.text_primary, // .tree-item.file a color
             self.link_hover, // .tree-item.file a:hover color
             self.bg_secondary, // .tree-item.file a:hover background

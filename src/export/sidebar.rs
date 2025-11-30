@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 
 /// Render sidebar file explorer for individual pages
 pub fn render_sidebar_explorer(
-    current_page_slug: &Path,
+    vault_slug: &Path,
     referenceables: &[Referenceable],
     vault_path_to_slug_map: &HashMap<PathBuf, String>,
 ) -> Markup {
@@ -46,7 +46,7 @@ pub fn render_sidebar_explorer(
         let absolute_slug = vault_path_to_slug_map.get(note_path).unwrap();
         // Convert to relative path from current page
         let relative_slug =
-            get_relative_dest(current_page_slug, Path::new(absolute_slug));
+            get_relative_dest(vault_slug, Path::new(absolute_slug));
         items.push(FileTreeItem {
             name,
             path: note_path.clone(),
@@ -100,9 +100,10 @@ fn render_file_tree_node(
     if node.value.is_directory() {
         // Directory with children
         html! {
-            div tree-item.directory {
+            div .tree-item.directory {
+                span .connector-prefix { (prefix)(connector) }
                 details {
-                    summary { (prefix)(connector)(node.value.name)"/" }
+                    summary { (node.value.name)"/" }
                     @if !node.children.is_empty() {
                         @for (idx, child) in node.children.iter().enumerate() {
                             (render_file_tree_node(child, idx == node.children.len() - 1, &new_prefix))
@@ -115,8 +116,8 @@ fn render_file_tree_node(
         // File (note)
         let slug = node.value.slug.as_ref().unwrap();
         html! {
-            div tree-item.file {
-                span { (prefix)(connector) }
+            div .tree-item.file {
+                span .connector-prefix { (prefix)(connector) }
                 a href=(slug) { (node.value.name) }
             }
         }
