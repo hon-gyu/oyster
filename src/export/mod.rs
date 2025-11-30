@@ -1,4 +1,5 @@
 pub mod content;
+pub mod file_tree_component;
 pub mod frontmatter;
 pub mod home;
 pub mod latex;

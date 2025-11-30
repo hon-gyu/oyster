@@ -1,4 +1,10 @@
 //! Generic trait and utilities for building hierarchical tree structures
+use crate::export::utils::get_relative_dest;
+use crate::link::Referenceable;
+use maud::{Markup, html};
+use std::collections::BTreeSet;
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 
 /// Trait for types that have a hierarchical level
 pub trait Hierarchical {
@@ -65,6 +71,102 @@ pub fn build_tree<T: Hierarchical>(items: Vec<T>) -> Vec<TreeNode<T>> {
     }
 
     roots
+}
+
+// ====================
+// File tree
+// ====================
+
+/// File tree item for home page
+#[derive(Debug)]
+pub struct FileTreeItem {
+    pub name: String,
+    pub path: PathBuf,
+    pub slug: Option<String>, // None for directories, Some for files
+    pub depth: usize,
+}
+
+impl FileTreeItem {
+    pub fn is_directory(&self) -> bool {
+        self.slug.is_none()
+    }
+}
+
+impl Hierarchical for FileTreeItem {
+    fn level(&self) -> usize {
+        self.depth
+    }
+}
+
+/// Build a file tree (note paths only)
+pub fn build_file_tree(
+    vault_slug: &Path,
+    referenceables: &[Referenceable],
+    vault_path_to_slug_map: &HashMap<PathBuf, String>,
+) -> Vec<TreeNode<FileTreeItem>> {
+    // Extract note paths
+    let note_paths: Vec<&PathBuf> = referenceables
+        .iter()
+        .filter_map(|r| match r {
+            Referenceable::Note { path, .. } => Some(path),
+            _ => None,
+        })
+        .collect();
+
+    // Build a set of all directories and files with their depths
+    let mut items = Vec::new();
+    let mut all_dirs: BTreeSet<(PathBuf, usize)> = BTreeSet::new();
+
+    for note_path in note_paths {
+        // Add all parent directories
+        let mut current = note_path.as_path();
+        let mut depth = note_path.components().count() - 1;
+
+        while let Some(parent) = current.parent() {
+            if parent != Path::new("") {
+                all_dirs.insert((parent.to_path_buf(), depth - 1));
+            }
+            current = parent;
+            depth = depth.saturating_sub(1);
+        }
+
+        // Add the file itself with relative link
+        let file_depth = note_path.components().count() - 1;
+        let name = note_path.file_stem().unwrap().to_string_lossy().to_string();
+        let absolute_slug = vault_path_to_slug_map.get(note_path).unwrap();
+        // Convert to relative path from current page
+        let relative_slug =
+            get_relative_dest(vault_slug, Path::new(absolute_slug));
+        items.push(FileTreeItem {
+            name,
+            path: note_path.clone(),
+            slug: Some(relative_slug),
+            depth: file_depth,
+        });
+    }
+
+    // Add directories
+    for (dir_path, depth) in all_dirs {
+        let name = dir_path
+            .file_name()
+            .unwrap_or(dir_path.as_os_str())
+            .to_string_lossy()
+            .to_string();
+        items.push(FileTreeItem {
+            name,
+            path: dir_path,
+            slug: None,
+            depth,
+        });
+    }
+
+    // Sort items by path for consistent tree building
+    items.sort_by(|a, b| a.path.cmp(&b.path));
+
+    // Build tree using Hierarchical trait
+    let tree = build_tree(items);
+
+    tree
 }
 
 #[cfg(test)]

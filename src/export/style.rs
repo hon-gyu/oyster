@@ -214,7 +214,7 @@ impl ThemeColors {
         .breadcrumb:hover {{
             opacity: 1;
         }}
-        .file-tree {{
+        .home.file-tree {{
             line-height: 1.4;
         }}
         .tree-item {{
