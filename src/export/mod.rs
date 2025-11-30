@@ -1,4 +1,5 @@
 pub mod content;
+pub mod frontmatter;
 pub mod home;
 pub mod latex;
 pub mod style;
