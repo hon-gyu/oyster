@@ -90,6 +90,9 @@ pub fn render_vault(
 
     fs::create_dir_all(output_dir)?;
 
+    // Setup CSS files
+    style::setup_styles(output_dir, theme)?;
+
     // Copy matched static assets to output dir
     let matched_asset_vault_paths = links
         .iter()
@@ -165,6 +168,9 @@ pub fn render_vault(
             &vault_path_to_slug_map,
         );
 
+        let output_path = output_dir.join(note_slug_path);
+        let css_paths = style::get_style_paths(&output_path, output_dir, theme);
+
         let html = render_page(
             title,
             &frontmatter_info,
@@ -173,10 +179,9 @@ pub fn render_vault(
             &backlink,
             &home_nav,
             &sidebar,
-            style::get_style(theme),
+            &css_paths,
             &katex_css_path,
         );
-        let output_path = output_dir.join(note_slug_path);
 
         if let Some(parent) = output_path.parent() {
             let _ = fs::create_dir_all(parent);
@@ -195,6 +200,7 @@ pub fn render_vault(
     let katex_rel_dir =
         get_relative_dest(&home_path, Path::new(&KATEX_ASSETS_DIR_IN_OUTPUT));
     let katex_css_path = format!("{}/{}", katex_rel_dir, "katex.min.css");
+    let home_css_paths = style::get_style_paths(&home_path, output_dir, theme);
     let home_html = html! {
         (DOCTYPE)
         html {
@@ -202,10 +208,10 @@ pub fn render_vault(
                 meta charset="utf-8";
                 meta name="viewport" content="width=device-width, initial-scale=1";
                 link rel="stylesheet" href=(katex_css_path);
-                title { "Home" }
-                style {
-                    (PreEscaped(style::get_style(theme)))
+                @for css_path in &home_css_paths {
+                    link rel="stylesheet" href=(css_path);
                 }
+                title { "Home" }
             }
             body {
                 div class="main-content" {
@@ -234,7 +240,7 @@ fn render_page(
     backlink: &Option<Markup>,
     home_nav: &Markup,
     sidebar: &Markup,
-    style: &str,
+    css_paths: &[String],
     katex_css_path: &str,
 ) -> String {
     html! {
@@ -244,10 +250,10 @@ fn render_page(
                 meta charset="utf-8";
                 meta name="viewport" content="width=device-width, initial-scale=1";
                 link rel="stylesheet" href=(katex_css_path);
-                title { (title) }
-                style {
-                    (PreEscaped(style))
+                @for css_path in css_paths {
+                    link rel="stylesheet" href=(css_path);
                 }
+                title { (title) }
             }
             body {
                 (sidebar)

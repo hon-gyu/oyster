@@ -1,0 +1,19 @@
+/* TokyoNight Theme */
+:root {
+    --bg-primary: #1a1b26;
+    --bg-secondary: #24283b;
+    --bg-tertiary: #24283b;
+    --text-primary: #c0caf5;
+    --text-secondary: #565f89;
+    --accent-primary: #7aa2f7;
+    --accent-secondary: #bb9af7;
+    --link-primary: #2ac3de;
+    --link-hover: #9ece6a;
+    --code-text: #9ece6a;
+    --border-primary: #24283b;
+    --border-secondary: #414868;
+    --blockquote-border: #bb9af7;
+    --backlinks-heading: #ff9e64;
+    --heading-primary: #7aa2f7;
+    --summary-hover: #bb9af7;
+}

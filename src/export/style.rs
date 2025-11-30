@@ -1,358 +1,61 @@
-#[allow(dead_code)]
-/// Color scheme for a theme
-struct ThemeColors {
-    bg_primary: &'static str,
-    bg_secondary: &'static str,
-    bg_tertiary: &'static str,
-    text_primary: &'static str,
-    text_secondary: &'static str,
-    accent_primary: &'static str,
-    accent_secondary: &'static str,
-    link_primary: &'static str,
-    link_hover: &'static str,
-    code_text: &'static str,
-    border_primary: &'static str,
-    border_secondary: &'static str,
-    blockquote_border: &'static str,
-    backlinks_heading: &'static str,
-    heading_primary: &'static str,
-    summary_hover: &'static str,
-}
+use std::fs;
+use std::path::Path;
 
-impl ThemeColors {
-    fn dracula() -> Self {
-        Self {
-            bg_primary: "#282a36",
-            bg_secondary: "#44475a",
-            bg_tertiary: "#44475a",
-            text_primary: "#f8f8f2",
-            text_secondary: "#6272a4",
-            accent_primary: "#bd93f9",
-            accent_secondary: "#ff79c6",
-            link_primary: "#8be9fd",
-            link_hover: "#50fa7b",
-            code_text: "#50fa7b",
-            border_primary: "#44475a",
-            border_secondary: "#6272a4",
-            blockquote_border: "#bd93f9",
-            backlinks_heading: "#ffb86c",
-            heading_primary: "#bd93f9",
-            summary_hover: "#ff79c6",
-        }
-    }
+/// Base CSS file (structural, theme-independent)
+const BASE_CSS: &str = include_str!("styles/base.css");
 
-    fn gruvbox() -> Self {
-        Self {
-            bg_primary: "#282828",
-            bg_secondary: "#3c3836",
-            bg_tertiary: "#3c3836",
-            text_primary: "#ebdbb2",
-            text_secondary: "#a89984",
-            accent_primary: "#fabd2f",
-            accent_secondary: "#fe8019",
-            link_primary: "#83a598",
-            link_hover: "#8ec07c",
-            code_text: "#b8bb26",
-            border_primary: "#3c3836",
-            border_secondary: "#504945",
-            blockquote_border: "#d79921",
-            backlinks_heading: "#fe8019",
-            heading_primary: "#fabd2f",
-            summary_hover: "#fe8019",
-        }
-    }
+/// Theme CSS files
+const DRACULA_CSS: &str = include_str!("styles/themes/dracula.css");
+const GRUVBOX_CSS: &str = include_str!("styles/themes/gruvbox.css");
+const TOKYONIGHT_CSS: &str = include_str!("styles/themes/tokyonight.css");
 
-    fn tokyonight() -> Self {
-        Self {
-            bg_primary: "#1a1b26",
-            bg_secondary: "#24283b",
-            bg_tertiary: "#24283b",
-            text_primary: "#c0caf5",
-            text_secondary: "#565f89",
-            accent_primary: "#7aa2f7",
-            accent_secondary: "#bb9af7",
-            link_primary: "#2ac3de",
-            link_hover: "#9ece6a",
-            code_text: "#9ece6a",
-            border_primary: "#24283b",
-            border_secondary: "#414868",
-            blockquote_border: "#bb9af7",
-            backlinks_heading: "#ff9e64",
-            heading_primary: "#7aa2f7",
-            summary_hover: "#bb9af7",
-        }
-    }
-
-    /// Generate CSS for the given theme colors
-    fn to_css(&self) -> String {
-        format!(
-            r#"
-        body {{
-            margin: 0;
-            padding: 0;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-            line-height: 1.6;
-            background: {};
-            color: {};
-        }}
-        .main-content {{
-            max-width: 800px;
-            padding: 2rem;
-            margin: 0 auto;
-        }}
-        body:has(.sidebar-explorer) {{
-            display: flex;
-            gap: 2rem;
-            padding: 2rem;
-            align-items: flex-start;
-            min-height: 100vh;
-        }}
-        body:has(.sidebar-explorer) .main-content {{
-            flex: 1;
-            max-width: 800px;
-            margin: 0;
-            padding: 0;
-        }}
-        .sidebar-explorer {{
-            width: 250px;
-            flex-shrink: 0;
-            padding: 1rem;
-            font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
-            font-size: 0.85em;
-            border: 1px solid {};
-            background: {};
-            position: sticky;
-            top: 40vh;
-            transform: translateY(-50%);
-            max-height: calc(100vh - 4rem);
-            overflow-y: auto;
-        }}
-        h1, h2, h3, h4, h5, h6 {{
-            margin-top: 1.5em;
-            margin-bottom: 0.5em;
-            line-height: 1.3;
-            color: {};
-        }}
-        h1 {{ font-size: 2em; border-bottom: 2px solid {}; padding-bottom: 0.3em; }}
-        h2 {{ font-size: 1.5em; }}
-        h3 {{ font-size: 1.25em; }}
-        h4 {{ font-size: 1.15em; }}
-        h5 {{ font-size: 1.1em; }}
-        h6 {{ font-size: 1.05em; }}
-        a {{ color: {}; text-decoration: none; }}
-        a:hover {{ text-decoration: underline; color: {}; }}
-        .internal-link.unresolved {{
-            color: {};
-            opacity: 0.4;
-            cursor: default;
-            text-decoration: none;
-        }}
-        .internal-link.unresolved:hover {{
-            text-decoration: underline;
-            color: {};
-            opacity: 0.4;
-        }}
-        code {{
-            background: {};
-            padding: 0.2em 0.4em;
-            border-radius: 3px;
-            font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
-            font-size: 0.9em;
-            color: {};
-        }}
-        pre {{
-            background: {};
-            padding: 1em;
-            border-radius: 5px;
-            overflow-x: auto;
-            border: 1px solid {};
-        }}
-        pre code {{
-            background: none;
-            padding: 0;
-        }}
-        blockquote {{
-            border-left: 4px solid {};
-            padding-left: 1em;
-            margin-left: 0;
-            color: {};
-        }}
-        hr {{
-            border: none;
-            border-top: 2px solid {};
-            margin: 2em 0;
-        }}
-        .backlinks {{
-            margin-top: 2em;
-            padding: 1em;
-            background: {};
-            border-radius: 5px;
-            border: 1px solid {};
-        }}
-        .backlinks h5 {{
-            margin-top: 0;
-            font-size: 1em;
-            color: {};
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-        }}
-        .backlinks ul {{
-            list-style: none;
-            padding: 0;
-        }}
-        .backlinks li {{
-            margin: 0.5em 0;
-        }}
-        .top-nav {{
-            margin-bottom: 1em;
-            padding-bottom: 0.5em;
-            border-bottom: 1px solid {};
-        }}
-        .breadcrumb {{
-            font-size: 1.2em;
-            opacity: 0.8;
-        }}
-        .breadcrumb:hover {{
-            opacity: 1;
-        }}
-        .home-page.file-tree {{
-            line-height: 1.4;
-            list-style: none;
-        }}
-        .home-page.file-tree details summary {{
-            list-style: none;
-        }}
-        .home-page.file-tree details summary::-webkit-details-marker {{
-            display: none;
-        }}
-        .home-page.file-tree details summary::marker {{
-            display: none;
-        }}
-        .tree-item {{
-            margin: 0;
-            white-space: pre;
-        }}
-        .tree-item.file .connector-prefix,
-        .tree-item.directory .connector-prefix {{
-            color: {};
-            display: inline-block;
-            vertical-align: top;
-        }}
-        .tree-item.directory details {{
-            display: inline;
-        }}
-        .tree-item.directory summary {{
-            cursor: pointer;
-            user-select: none;
-            color: {};
-            list-style: none;
-            display: inline;
-        }}
-        .tree-item.directory summary::-webkit-details-marker {{
-            display: none;
-        }}
-        .tree-item.directory summary:hover {{
-            color: {};
-        }}
-        .tree-item.file {{
-            display: block;
-            line-height: 1.4;
-        }}
-        .tree-item.file a {{
-            color: {};
-            text-decoration: none;
-            display: inline;
-        }}
-        .tree-item.file a:hover {{
-            color: {};
-            background: {};
-        }}
-        .frontmatter {{
-            width: 100%;
-            margin: 1em 0;
-            border-collapse: collapse;
-            border: 1px solid {};
-        }}
-        .frontmatter td:first-child {{
-            padding: 0.5em;
-            font-weight: bold;
-            background: {};
-            border: 1px solid {};
-            white-space: nowrap;
-            width: 1%;
-        }}
-        .frontmatter td:last-child {{
-            padding: 0.5em 0.5em 0.5em 0.5em;
-            border: 1px solid {};
-        }}
-        .frontmatter-tag {{
-            display: inline-block;
-            background: {};
-            padding: 0.2em 0.6em;
-            border-radius: 3px;
-            font-size: 0.85em;
-            margin-right: 0.3em;
-        }}
-        .embed-file.image {{
-            max-width: 100%;
-            height: auto;
-            display: block;
-            margin: 1em 0;
-        }}
-    "#,
-            self.bg_primary,        // body background
-            self.text_primary,      // body color
-            self.border_secondary,  // .sidebar-explorer border
-            self.bg_primary, // .sidebar-explorer background (same as body)
-            self.heading_primary, // h1-h6 color
-            self.border_primary, // h1 border-bottom
-            self.link_primary, // a color
-            self.link_hover, // a:hover color
-            self.link_primary, // .internal-link.unresolved color (same as link color)
-            self.link_hover, // .internal-link.unresolved:hover color (same as link hover)
-            self.bg_secondary, // code background
-            self.code_text,  // code color
-            self.bg_tertiary, // pre background
-            self.border_secondary, // pre border
-            self.blockquote_border, // blockquote border-left
-            self.text_secondary, // blockquote color
-            self.border_primary, // hr border-top
-            self.bg_secondary, // .backlinks background
-            self.border_secondary, // .backlinks border
-            self.backlinks_heading, // .backlinks h5 color
-            self.border_primary, // .top-nav border-bottom
-            self.text_secondary, // .tree-item.file span color (tree characters)
-            self.heading_primary, // .tree-item.directory summary color
-            self.summary_hover, // .tree-item.directory summary:hover color
-            self.text_primary, // .tree-item.file a color
-            self.link_hover, // .tree-item.file a:hover color
-            self.bg_secondary, // .tree-item.file a:hover background
-            self.border_secondary, // .frontmatter border
-            self.bg_secondary, // .frontmatter dt background
-            self.border_secondary, // .frontmatter dt border
-            self.border_secondary, // .frontmatter dd border
-            self.bg_secondary, // .frontmatter-tag background
-        )
-    }
-}
-
-pub fn get_style(name: &str) -> &'static str {
+/// Get the CSS content for a theme
+fn get_theme_css(name: &str) -> &'static str {
     match name {
-        "dracula" => get_dracula_theme(),
-        "gruvbox" => get_gruvbox_theme(),
-        "tokyonight" => get_tokyonight_theme(),
-        _ => get_gruvbox_theme(),
+        "dracula" => DRACULA_CSS,
+        "gruvbox" => GRUVBOX_CSS,
+        "tokyonight" => TOKYONIGHT_CSS,
+        _ => GRUVBOX_CSS,
     }
 }
 
-fn get_dracula_theme() -> &'static str {
-    Box::leak(ThemeColors::dracula().to_css().into_boxed_str())
+/// Copy CSS files to the output directory
+/// Returns the relative paths to the CSS files
+pub fn setup_styles(output_dir: &Path, theme: &str) -> Result<Vec<String>, std::io::Error> {
+    // Create styles directory in output
+    let styles_dir = output_dir.join("styles");
+    let themes_dir = styles_dir.join("themes");
+
+    fs::create_dir_all(&themes_dir)?;
+
+    // Write base CSS
+    let base_path = styles_dir.join("base.css");
+    fs::write(&base_path, BASE_CSS)?;
+
+    // Write theme CSS
+    let theme_filename = format!("{}.css", theme);
+    let theme_path = themes_dir.join(&theme_filename);
+    fs::write(&theme_path, get_theme_css(theme))?;
+
+    // Return relative paths
+    Ok(vec![
+        "styles/base.css".to_string(),
+        format!("styles/themes/{}", theme_filename),
+    ])
 }
 
-fn get_gruvbox_theme() -> &'static str {
-    Box::leak(ThemeColors::gruvbox().to_css().into_boxed_str())
-}
+/// Get CSS file paths relative to a page
+/// page_path: the path to the HTML page (e.g., "output/notes/page.html")
+/// output_dir: the root output directory (e.g., "output")
+/// theme: the theme name
+pub fn get_style_paths(page_path: &Path, output_dir: &Path, theme: &str) -> Vec<String> {
+    use crate::export::utils::get_relative_dest;
 
-fn get_tokyonight_theme() -> &'static str {
-    Box::leak(ThemeColors::tokyonight().to_css().into_boxed_str())
+    let base_path = output_dir.join("styles/base.css");
+    let theme_path = output_dir.join(format!("styles/themes/{}.css", theme));
+
+    vec![
+        get_relative_dest(page_path, &base_path),
+        get_relative_dest(page_path, &theme_path),
+    ]
 }
