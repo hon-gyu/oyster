@@ -198,17 +198,17 @@ mod tests {
 
         let tree = Tree::new(&md_src);
         assert_snapshot!(&tree.root_node, @r#"
-        Document [0..243]
-          MetadataBlock(YamlStyle) [0..135]
-            Text(Borrowed("title: Getting Started\nauthor: Jane Doe\ndate: 2024-03-15\ntags:\n  - programming\n  - tutorial\ncategory: tutorials\npublished: true\n")) [4..132]
-          Heading { level: H1, id: None, classes: [], attrs: [] } [137..155]
-            Text(Borrowed("Getting Started")) [139..154]
-          Paragraph [156..210]
-            Text(Borrowed("This is a comprehensive guide to getting with started")) [156..209]
-          Heading { level: H2, id: None, classes: [], attrs: [] } [211..227]
-            Text(Borrowed("Installation")) [214..226]
-          Paragraph [228..243]
-            Text(Borrowed("First, install")) [228..242]
+        Document [0..241]
+          MetadataBlock(YamlStyle) [0..133]
+            Text(Borrowed("title: Getting Started\nauthor: Jane Doe\ndate: 2024-03-15\ntags:\n  - programming\n  - tutorial\ncategory: tutorials\npublish: true\n")) [4..130]
+          Heading { level: H1, id: None, classes: [], attrs: [] } [135..153]
+            Text(Borrowed("Getting Started")) [137..152]
+          Paragraph [154..208]
+            Text(Borrowed("This is a comprehensive guide to getting with started")) [154..207]
+          Heading { level: H2, id: None, classes: [], attrs: [] } [209..225]
+            Text(Borrowed("Installation")) [212..224]
+          Paragraph [226..241]
+            Text(Borrowed("First, install")) [226..240]
         "#);
 
         let (fm_opt, _, _) = scan_note(&path);
@@ -225,7 +225,7 @@ mod tests {
                 String("tutorial"),
             ],
             "category": String("tutorials"),
-            "published": Bool(true),
+            "publish": Bool(true),
         }
         "#);
     }
