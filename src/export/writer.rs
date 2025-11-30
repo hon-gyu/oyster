@@ -11,6 +11,7 @@
 use super::content::render_content;
 use super::frontmatter;
 use super::home;
+use super::sidebar;
 use super::style;
 use super::toc;
 use super::utils::{
@@ -157,6 +158,13 @@ pub fn render_vault(
             Path::new(&KATEX_ASSETS_DIR_IN_OUTPUT),
         );
         let katex_css_path = format!("{}/{}", katex_rel_dir, "katex.min.css");
+
+        let sidebar = sidebar::render_sidebar_explorer(
+            note_slug_path,
+            &referenceables,
+            &vault_path_to_slug_map,
+        );
+
         let html = render_page(
             title,
             &frontmatter_info,
@@ -164,6 +172,7 @@ pub fn render_vault(
             &content,
             &backlink,
             &home_nav,
+            &sidebar,
             style::get_style(theme),
             &katex_css_path,
         );
@@ -199,9 +208,11 @@ pub fn render_vault(
                 }
             }
             body {
-                article {
-                    h1 { "Home" }
-                    (home_content)
+                div class="main-content" {
+                    article {
+                        h1 { "Home" }
+                        (home_content)
+                    }
                 }
             }
         }
@@ -222,6 +233,7 @@ fn render_page(
     content: &str,
     backlink: &Option<Markup>,
     home_nav: &Markup,
+    sidebar: &Markup,
     style: &str,
     katex_css_path: &str,
 ) -> String {
@@ -238,27 +250,30 @@ fn render_page(
                 }
             }
             body {
-                nav class="top-nav" {
-                    (home_nav)
-                }
-                header {
-                    h1 { (title) }
-                }
-                @if let Some(frontmatter) = frontmatter {
-                    (frontmatter)
-                }
-                @if let Some(toc) = toc {
-                    (toc)
-                }
-                article {
-                    (PreEscaped(content))
-                }
-                @if let Some(backlink) = backlink {
-                    hr;
-                    section class="backlinks" {
-                        h5 { "Backlinks" }
-                        ul {
-                            (backlink)
+                (sidebar)
+                div class="main-content" {
+                    nav class="top-nav" {
+                        (home_nav)
+                    }
+                    header {
+                        h1 { (title) }
+                    }
+                    @if let Some(frontmatter) = frontmatter {
+                        (frontmatter)
+                    }
+                    @if let Some(toc) = toc {
+                        (toc)
+                    }
+                    article {
+                        (PreEscaped(content))
+                    }
+                    @if let Some(backlink) = backlink {
+                        hr;
+                        section class="backlinks" {
+                            h5 { "Backlinks" }
+                            ul {
+                                (backlink)
+                            }
                         }
                     }
                 }

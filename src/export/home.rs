@@ -55,15 +55,15 @@ pub fn render_breadcrumb(
 /// Render the home page
 /// File tree item for home page
 #[derive(Debug)]
-struct FileTreeItem {
-    name: String,
-    path: PathBuf,
-    slug: Option<String>, // None for directories, Some for files
-    depth: usize,
+pub struct FileTreeItem {
+    pub name: String,
+    pub path: PathBuf,
+    pub slug: Option<String>, // None for directories, Some for files
+    pub depth: usize,
 }
 
 impl FileTreeItem {
-    fn is_directory(&self) -> bool {
+    pub fn is_directory(&self) -> bool {
         self.slug.is_none()
     }
 }

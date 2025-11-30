@@ -88,13 +88,43 @@ impl ThemeColors {
         format!(
             r#"
         body {{
-            max-width: 800px;
-            margin: 0 auto;
-            padding: 2rem;
+            margin: 0;
+            padding: 0;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             line-height: 1.6;
             background: {};
             color: {};
+        }}
+        .main-content {{
+            max-width: 800px;
+            padding: 2rem;
+            margin: 0 auto;
+        }}
+        body:has(.sidebar-explorer) {{
+            display: flex;
+            gap: 2rem;
+            padding: 2rem;
+            align-items: flex-start;
+        }}
+        body:has(.sidebar-explorer) .main-content {{
+            flex: 1;
+            max-width: 800px;
+            margin: 0;
+            padding: 0;
+        }}
+        .sidebar-explorer {{
+            width: 250px;
+            flex-shrink: 0;
+            padding: 1rem;
+            font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+            font-size: 0.85em;
+            border: 1px solid {};
+            background: {};
+            position: sticky;
+            top: 50%;
+            transform: translateY(-50%);
+            max-height: calc(100vh - 4rem);
+            overflow-y: auto;
         }}
         h1, h2, h3, h4, h5, h6 {{
             margin-top: 1.5em;
@@ -184,29 +214,46 @@ impl ThemeColors {
         .breadcrumb:hover {{
             opacity: 1;
         }}
-        .file-tree ul {{
-            list-style: none;
-            padding-left: 1.5em;
+        .file-tree {{
+            line-height: 1.4;
         }}
-        .file-tree > ul {{
-            padding-left: 0;
+        .tree-item {{
+            margin: 0;
+            white-space: pre;
         }}
-        .file-tree li {{
-            margin: 0.3em 0;
+        .tree-item.directory details {{
+            display: inline;
         }}
-        .file-tree summary {{
+        .tree-item.directory summary {{
             cursor: pointer;
             user-select: none;
             color: {};
+            list-style: none;
+            display: inline;
         }}
-        .file-tree summary:hover {{
+        .tree-item.directory summary::-webkit-details-marker {{
+            display: none;
+        }}
+        .tree-item.directory summary:hover {{
             color: {};
         }}
-        .file-tree .file a {{
-            color: {};
+        .tree-item.file {{
+            display: block;
+            line-height: 1.4;
         }}
-        .file-tree .file a:hover {{
+        .tree-item.file span {{
             color: {};
+            display: inline-block;
+            vertical-align: top;
+        }}
+        .tree-item.file a {{
+            color: {};
+            text-decoration: none;
+            display: inline;
+        }}
+        .tree-item.file a:hover {{
+            color: {};
+            background: {};
         }}
         .frontmatter {{
             width: 100%;
@@ -243,10 +290,12 @@ impl ThemeColors {
     "#,
             self.bg_primary,        // body background
             self.text_primary,      // body color
-            self.heading_primary,   // h1-h6 color
-            self.border_primary,    // h1 border-bottom
-            self.link_primary,      // a color
-            self.link_hover,        // a:hover color
+            self.border_secondary,  // .sidebar-explorer border
+            self.bg_primary, // .sidebar-explorer background (same as body)
+            self.heading_primary, // h1-h6 color
+            self.border_primary, // h1 border-bottom
+            self.link_primary, // a color
+            self.link_hover, // a:hover color
             self.link_primary, // .internal-link.unresolved color (same as link color)
             self.link_hover, // .internal-link.unresolved:hover color (same as link hover)
             self.bg_secondary, // code background
@@ -260,10 +309,12 @@ impl ThemeColors {
             self.border_secondary, // .backlinks border
             self.backlinks_heading, // .backlinks h5 color
             self.border_primary, // .top-nav border-bottom
-            self.heading_primary, // .file-tree summary color
-            self.summary_hover, // .file-tree summary:hover color
-            self.text_primary, // .file-tree .file a color
-            self.link_hover, // .file-tree .file a:hover color
+            self.heading_primary, // .tree-item.directory summary color
+            self.summary_hover, // .tree-item.directory summary:hover color
+            self.text_secondary, // .tree-item.file span color (tree characters)
+            self.text_primary, // .tree-item.file a color
+            self.link_hover, // .tree-item.file a:hover color
+            self.bg_secondary, // .tree-item.file a:hover background
             self.border_secondary, // .frontmatter border
             self.bg_secondary, // .frontmatter dt background
             self.border_secondary, // .frontmatter dt border

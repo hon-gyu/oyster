@@ -2,6 +2,7 @@ pub mod content;
 pub mod frontmatter;
 pub mod home;
 pub mod latex;
+pub mod sidebar;
 pub mod style;
 pub mod toc;
 pub mod utils;
