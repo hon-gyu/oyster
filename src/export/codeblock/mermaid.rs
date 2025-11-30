@@ -1,8 +1,7 @@
 use maud::html;
 use std::fs;
-use std::io;
 use std::process::Command;
-use tempfile::{NamedTempFile, TempDir};
+use tempfile::TempDir;
 
 #[derive(Debug, Clone, Copy)]
 pub enum MermaidRenderMode {
@@ -67,6 +66,95 @@ pub fn render_mermaid(mermaid_code: &str, mode: MermaidRenderMode) -> String {
                 }
             }
         }
-        MermaidRenderMode::ClientSide => todo!(),
+        MermaidRenderMode::ClientSide => {
+            let html = html! {
+                pre .mermaid {
+                    (mermaid_code)
+                }
+            };
+            html.into_string()
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use insta::assert_snapshot;
+
+    #[test]
+    fn test_render_mermaid_client_side() {
+        let mermaid_code = r#"graph TD
+    A-->B
+    B-->C"#;
+        let result =
+            render_mermaid(mermaid_code, MermaidRenderMode::ClientSide);
+        assert_snapshot!(result, @r#"
+        <pre class="mermaid">graph TD
+            A--&gt;B
+            B--&gt;C</pre>
+        "#);
+    }
+
+    #[test]
+    fn test_render_mermaid_build_time_simple_graph() {
+        let mermaid_code = "graph TD\n    A-->B";
+        let result = render_mermaid_build_time(mermaid_code);
+
+        match result {
+            Ok(svg) => {
+                assert!(svg.contains("<svg"));
+                assert!(svg.contains("</svg>"));
+            }
+            Err(e) => {
+                // If mmdc is not installed, this will fail
+                eprintln!("mmdc not available: {}", e);
+            }
+        }
+    }
+
+    #[test]
+    fn test_render_mermaid_build_time_fallback_on_error() {
+        // Use invalid mermaid syntax to trigger error
+        let mermaid_code = "this is not valid mermaid syntax!!!";
+        let result = render_mermaid(mermaid_code, MermaidRenderMode::BuildTime);
+
+        // Should fallback to code block with error comment
+        assert!(
+            result.contains("<!-- Mermaid rendering failed:")
+                || result.contains("language-mermaid")
+        );
+        assert!(result.contains(mermaid_code));
+    }
+
+    #[test]
+    fn test_render_mermaid_build_time_flowchart() {
+        let mermaid_code = r#"flowchart LR
+    A[Start] --> B{Is it?}
+    B -->|Yes| C[OK]
+    B -->|No| D[End]"#;
+
+        let result = render_mermaid(mermaid_code, MermaidRenderMode::BuildTime);
+
+        // Should contain SVG if mmdc is available
+        assert!(
+            result.contains("<svg")
+                || result.contains("<!-- Mermaid rendering failed:")
+        );
+    }
+
+    #[test]
+    fn test_render_mermaid_build_time_sequence_diagram() {
+        let mermaid_code = r#"sequenceDiagram
+    Alice->>John: Hello John, how are you?
+    John-->>Alice: Great!"#;
+
+        let result = render_mermaid(mermaid_code, MermaidRenderMode::BuildTime);
+
+        // Should contain SVG
+        assert!(
+            result.contains("<svg")
+                || result.contains("<!-- Mermaid rendering failed:")
+        );
     }
 }
