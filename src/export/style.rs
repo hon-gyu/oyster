@@ -105,6 +105,7 @@ impl ThemeColors {
             gap: 2rem;
             padding: 2rem;
             align-items: flex-start;
+            min-height: 100vh;
         }}
         body:has(.sidebar-explorer) .main-content {{
             flex: 1;
@@ -121,7 +122,7 @@ impl ThemeColors {
             border: 1px solid {};
             background: {};
             position: sticky;
-            top: 50%;
+            top: 40vh;
             transform: translateY(-50%);
             max-height: calc(100vh - 4rem);
             overflow-y: auto;
@@ -214,8 +215,18 @@ impl ThemeColors {
         .breadcrumb:hover {{
             opacity: 1;
         }}
-        .home.file-tree {{
+        .home-page.file-tree {{
             line-height: 1.4;
+            list-style: none;
+        }}
+        .home-page.file-tree details summary {{
+            list-style: none;
+        }}
+        .home-page.file-tree details summary::-webkit-details-marker {{
+            display: none;
+        }}
+        .home-page.file-tree details summary::marker {{
+            display: none;
         }}
         .tree-item {{
             margin: 0;

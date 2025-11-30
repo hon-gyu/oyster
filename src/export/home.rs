@@ -60,7 +60,7 @@ fn render_file_tree_node(node: &TreeNode<FileTreeItem>) -> Markup {
         // Directory with children
         html! {
             li class="directory" {
-                details closed {
+                details open {
                     summary { (node.value.name) "/" }
                     @if !node.children.is_empty() {
                         ul {
@@ -92,7 +92,7 @@ pub fn render_home_page(
         build_file_tree(home_slug_path, referenceables, vault_path_to_slug_map);
 
     html! {
-        nav .home.file-tree {
+        nav .home-page.file-tree {
             ul {
                 @for node in tree {
                     (render_file_tree_node(&node))
