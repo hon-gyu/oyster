@@ -4,7 +4,7 @@ use super::utils;
 use crate::ast::{Node, NodeKind::*, Tree};
 use crate::export::utils::{get_relative_dest, range_to_anchor_id};
 use crate::link::types::{Link as ResolvedLink, Referenceable};
-use maud::{PreEscaped, html};
+use maud::{Markup, PreEscaped, html};
 use pulldown_cmark::{BlockQuoteKind, CodeBlockKind, LinkType};
 use std::collections::HashMap;
 use std::ops::Range;
@@ -34,7 +34,7 @@ pub fn render_content(
         HashMap<Range<usize>, String>,
     >,
     node_render_config: &NodeRenderConfig,
-) -> String {
+) -> Markup {
     // Outgoing links
     // build a map of:
     //   src (this) reference's byte range
@@ -111,7 +111,7 @@ fn render_nodes(
             refable_anchor_id_map,
             node_render_config,
         );
-        buffer.push_str(rendered.as_str());
+        buffer.push_str(&rendered.into_string());
     }
 
     buffer
@@ -126,7 +126,7 @@ fn render_node(
     ref_map: &HashMap<Range<usize>, String>,
     refable_anchor_id_map: &HashMap<Range<usize>, String>,
     node_render_config: &NodeRenderConfig,
-) -> String {
+) -> Markup {
     let range = node.start_byte..node.end_byte;
     let markup = match &node.kind {
         // Tree root
@@ -807,7 +807,7 @@ fn render_node(
         }
     };
 
-    markup.into_string()
+    markup
 }
 
 #[cfg(test)]
@@ -890,7 +890,7 @@ mod tests {
             &node_render_config,
         );
 
-        let rendered = format_html_simple(&rendered);
+        let rendered = format_html_simple(&rendered.into_string());
         let full_html = render_full_html(&rendered);
 
         // Write HTML to file for visual inspection

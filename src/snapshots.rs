@@ -2,6 +2,7 @@
 #[cfg(test)]
 mod tests {
     use crate::ast::Tree;
+    use crate::export::content::render_content;
     use crate::link::Referenceable;
     use crate::link::build_links;
 

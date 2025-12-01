@@ -8,6 +8,7 @@
 //!   - links: matched edges
 //!   - vault paths to slug map
 //!   - in-note referenceable anchor id map
+use super::codeblock::mermaid::MermaidRenderMode;
 use super::content::{NodeRenderConfig, render_content};
 use super::frontmatter;
 use super::home;
@@ -177,12 +178,13 @@ pub fn render_vault(
             title,
             &frontmatter_info,
             &toc,
-            &content,
+            &Some(content),
             &backlink,
-            &home_nav,
-            &sidebar,
+            &Some(home_nav),
+            &Some(sidebar),
             &css_paths,
             &katex_css_path,
+            node_render_config.mermaid_render_mode,
         );
 
         if let Some(parent) = output_path.parent() {
@@ -203,33 +205,24 @@ pub fn render_vault(
         get_relative_dest(&home_path, Path::new(&KATEX_ASSETS_DIR_IN_OUTPUT));
     let katex_css_path = format!("{}/{}", katex_rel_dir, "katex.min.css");
     let home_css_paths = style::get_style_paths(&home_path, output_dir, theme);
-    let home_html = html! {
-        (DOCTYPE)
-        html {
-            head {
-                meta charset="utf-8";
-                meta name="viewport" content="width=device-width, initial-scale=1";
-                link rel="stylesheet" href=(katex_css_path);
-                @for css_path in &home_css_paths {
-                    link rel="stylesheet" href=(css_path);
-                }
-                title { "Home" }
-            }
-            body {
-                .left-sidebar {
-                }
-                .main-content {
-                    article {
-                        h1 { "Home" }
-                        (home_content)
-                    }
-                }
-                .right-sidebar {
-            }
-            }
+    let home_main_content = html! {
+        article {
+            h1 { "Home" }
+            (home_content)
         }
-    }
-    .into_string();
+    };
+    let home_html = render_page(
+        &home_name,
+        &None,
+        &None,
+        &Some(home_main_content),
+        &None,
+        &None,
+        &None,
+        &home_css_paths,
+        &katex_css_path,
+        node_render_config.mermaid_render_mode,
+    );
     fs::write(&home_path, home_html)?;
 
     // Copy katex assets
@@ -242,12 +235,13 @@ fn render_page(
     title: &str,
     frontmatter: &Option<Markup>,
     toc: &Option<Markup>,
-    content: &str,
+    content: &Option<Markup>,
     backlink: &Option<Markup>,
-    home_nav: &Markup,
-    sidebar: &Markup,
+    home_nav: &Option<Markup>,
+    left_sidebar: &Option<Markup>,
     css_paths: &[String],
     katex_css_path: &str,
+    mermaid_mode: MermaidRenderMode,
 ) -> String {
     html! {
         (DOCTYPE)
@@ -259,15 +253,27 @@ fn render_page(
                 @for css_path in css_paths {
                     link rel="stylesheet" href=(css_path);
                 }
+                @if matches!(mermaid_mode, MermaidRenderMode::ClientSide) {
+                    script type="module" {
+                        (PreEscaped(r#"
+import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+mermaid.initialize({ startOnLoad: true });
+"#))
+                    }
+                }
                 title { (title) }
             }
             body {
                 .left-sidebar {
-                    (sidebar)
+                    @if let Some(left_sidebar) = left_sidebar {
+                        (left_sidebar)
+                    }
                 }
                 .main-content {
                     nav class="top-nav" {
-                        (home_nav)
+                        @if let Some(home_nav) = home_nav {
+                            (home_nav)
+                        }
                     }
                     header {
                         h1 { (title) }
@@ -278,8 +284,8 @@ fn render_page(
                     @if let Some(toc) = toc {
                         (toc)
                     }
-                    article {
-                        (PreEscaped(content))
+                    @if let Some(content) = content {
+                        (content)
                     }
                     @if let Some(backlink) = backlink {
                         hr;

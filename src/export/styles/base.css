@@ -2,8 +2,8 @@
 
 :root {
     /* Layout widths for sidebars */
-    --sidebar-left-width: 20%;
-    --sidebar-right-width: 20%;
+    --sidebar-left-width: 15%;
+    --sidebar-right-width: 15%;
 }
 
 body {
@@ -37,7 +37,7 @@ body {
 .main-content {
     width: 100%;
     max-width: 1200px;
-    padding: 2rem;
+    padding: 1rem;
     margin: 0 auto;
     box-sizing: border-box;
 }
