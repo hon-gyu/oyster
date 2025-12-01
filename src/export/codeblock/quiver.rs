@@ -42,6 +42,7 @@ pub fn render_quiver_build_time(quiver_code: &str) -> Result<String, String> {
         // Already has tikzcd environment
         format!(
             r#"\documentclass[tikz,border=2pt]{{standalone}}
+\usepackage{{amssymb}}
 \usepackage{{tikz-cd}}
 \begin{{document}}
 {}
@@ -52,6 +53,7 @@ pub fn render_quiver_build_time(quiver_code: &str) -> Result<String, String> {
         // Wrap in tikzcd environment
         format!(
             r#"\documentclass[tikz,border=2pt]{{standalone}}
+\usepackage{{amssymb}}
 \usepackage{{tikz-cd}}
 \begin{{document}}
 \begin{{tikzcd}}

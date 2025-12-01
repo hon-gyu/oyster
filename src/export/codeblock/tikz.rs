@@ -39,6 +39,7 @@ pub fn render_tikz_build_time(tikz_code: &str) -> Result<String, String> {
     // Wrap TikZ code in a minimal LaTeX document
     let latex_doc = format!(
         r#"\documentclass[tikz,border=2pt]{{standalone}}
+\usepackage{{amssymb}}
 \usepackage{{tikz}}
 \usetikzlibrary{{arrows.meta,positioning,shapes,calc}}
 \begin{{document}}

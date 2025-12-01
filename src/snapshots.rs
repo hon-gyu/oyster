@@ -11,6 +11,23 @@ mod tests {
     use insta::{assert_debug_snapshot, assert_snapshot};
 
     #[test]
+    fn mermaid_parse() {
+        let path =
+            std::path::PathBuf::from("tests/data/vaults/mermaid/note.md");
+        let md_src = std::fs::read_to_string(&path).unwrap();
+        let tree = Tree::new(&md_src);
+        assert_snapshot!(&tree.root_node, @r#"
+        Document [0..197]
+          CodeBlock(Fenced(Borrowed("mermaid"))) [0..43]
+            Text(Borrowed("graph TD\n    A-->B\n    B-->C\n")) [11..40]
+          CodeBlock(Fenced(Borrowed("mermaid"))) [46..177]
+            Text(Borrowed("sequenceDiagram\n    Alice->>John: Hello John, how are you?\n    John-->>Alice: Great!\n    Alice-)John: See you later!\n")) [57..174]
+          CodeBlock(Fenced(Borrowed("mermaid"))) [179..197]
+            Text(Borrowed("err\n")) [190..194]
+        "#);
+    }
+
+    #[test]
     fn latex_parse() {
         let path =
             std::path::PathBuf::from("tests/data/vaults/latex/basic-math.md");
