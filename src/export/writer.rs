@@ -200,9 +200,10 @@ pub fn render_vault(
         &vault_path_to_slug_map,
         Path::new(&home_name),
     );
-    let home_path = output_dir.join(format!("{}.html", home_name));
+    let home_slug_path = format!("{}.html", home_name);
+    let home_path = output_dir.join(&home_slug_path);
     let katex_rel_dir =
-        get_relative_dest(&home_path, Path::new(&KATEX_ASSETS_DIR_IN_OUTPUT));
+        get_relative_dest(Path::new(&home_slug_path), Path::new(&KATEX_ASSETS_DIR_IN_OUTPUT));
     let katex_css_path = format!("{}/{}", katex_rel_dir, "katex.min.css");
     let home_css_paths = style::get_style_paths(&home_path, output_dir, theme);
     let home_main_content = html! {
