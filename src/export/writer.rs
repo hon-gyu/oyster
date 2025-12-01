@@ -8,7 +8,7 @@
 //!   - links: matched edges
 //!   - vault paths to slug map
 //!   - in-note referenceable anchor id map
-use super::content::render_content;
+use super::content::{NodeRenderConfig, render_content};
 use super::frontmatter;
 use super::home;
 use super::sidebar;
@@ -36,6 +36,7 @@ pub fn render_vault(
     output_dir: &Path,
     theme: &str,
     filter_publish: bool,
+    node_render_config: NodeRenderConfig,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let home_name = HOME_NAME.to_string();
 
@@ -146,6 +147,7 @@ pub fn render_vault(
             &links,
             &vault_path_to_slug_map,
             &innote_refable_anchor_id_map,
+            &node_render_config,
         );
 
         let backlink = render_backlinks(

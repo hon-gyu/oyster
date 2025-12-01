@@ -1,3 +1,4 @@
+use super::codeblock::{MermaidRenderMode, render_mermaid};
 use super::latex::render_latex;
 use super::utils;
 use crate::ast::{Node, NodeKind::*, Tree};
@@ -8,6 +9,10 @@ use pulldown_cmark::{BlockQuoteKind, CodeBlockKind, LinkType};
 use std::collections::HashMap;
 use std::ops::Range;
 use std::path::{Path, PathBuf};
+
+pub struct NodeRenderConfig {
+    mermaid_render_mode: MermaidRenderMode,
+}
 
 /// Render content
 ///
@@ -28,6 +33,7 @@ pub fn render_content(
         PathBuf,
         HashMap<Range<usize>, String>,
     >,
+    node_render_config: &NodeRenderConfig,
 ) -> String {
     // Outgoing links
     // build a map of:
@@ -84,6 +90,7 @@ pub fn render_content(
         vault_path,
         &ref_dest_map,
         in_note_anchor_id_map,
+        node_render_config,
     );
     rendered
 }
@@ -93,11 +100,17 @@ fn render_nodes(
     vault_path: &Path,
     ref_map: &HashMap<Range<usize>, String>,
     refable_anchor_id_map: &HashMap<Range<usize>, String>,
+    node_render_config: &NodeRenderConfig,
 ) -> String {
     let mut buffer = String::new();
     for node in nodes {
-        let rendered =
-            render_node(node, vault_path, ref_map, refable_anchor_id_map);
+        let rendered = render_node(
+            node,
+            vault_path,
+            ref_map,
+            refable_anchor_id_map,
+            node_render_config,
+        );
         buffer.push_str(rendered.as_str());
     }
 
@@ -112,6 +125,7 @@ fn render_node(
     // TODO: maybe we should include original vault path as data-href as well
     ref_map: &HashMap<Range<usize>, String>,
     refable_anchor_id_map: &HashMap<Range<usize>, String>,
+    node_render_config: &NodeRenderConfig,
 ) -> String {
     let range = node.start_byte..node.end_byte;
     let markup = match &node.kind {
@@ -122,6 +136,7 @@ fn render_node(
                 vault_path,
                 ref_map,
                 refable_anchor_id_map,
+                node_render_config,
             );
             html! {
                 article {
@@ -141,6 +156,7 @@ fn render_node(
                 vault_path,
                 ref_map,
                 refable_anchor_id_map,
+                node_render_config,
             );
             let href = dest_url.to_string();
             // Find matched reference's resolved destination
@@ -202,6 +218,7 @@ fn render_node(
                 vault_path,
                 ref_map,
                 refable_anchor_id_map,
+                node_render_config,
             );
 
             let title_opt = if title.is_empty() {
@@ -269,6 +286,7 @@ fn render_node(
                 vault_path,
                 ref_map,
                 refable_anchor_id_map,
+                node_render_config,
             );
             // Inject anchor id for matched referenceable
             if let Some(id) = refable_anchor_id_map.get(&range) {
@@ -292,6 +310,7 @@ fn render_node(
                 vault_path,
                 ref_map,
                 refable_anchor_id_map,
+                node_render_config,
             );
 
             let tag = format!("h{}", *level as usize);
@@ -336,6 +355,7 @@ fn render_node(
                 vault_path,
                 ref_map,
                 refable_anchor_id_map,
+                node_render_config,
             );
 
             // Extract class name determination
@@ -384,6 +404,7 @@ fn render_node(
                 vault_path,
                 ref_map,
                 refable_anchor_id_map,
+                node_render_config,
             );
 
             let id_opt = refable_anchor_id_map.get(&range);
@@ -428,6 +449,7 @@ fn render_node(
                 vault_path,
                 ref_map,
                 refable_anchor_id_map,
+                node_render_config,
             );
             // Inject anchor id for matched referenceable
             if let Some(id) = refable_anchor_id_map.get(&range) {
@@ -501,37 +523,38 @@ fn render_node(
         },
         // Container nodes (except for Document)
         CodeBlock(kind) => {
-            let children = render_nodes(
+            let code_src = render_nodes(
                 &node.children,
                 vault_path,
                 ref_map,
                 refable_anchor_id_map,
+                node_render_config,
             );
 
-            // Extract language class determination
-            let language_class = match kind {
+            // Extract language
+            let lang = match kind {
                 CodeBlockKind::Fenced(info) => {
                     let lang = info.split(' ').next().unwrap();
-                    if lang.is_empty() {
-                        None
-                    } else {
-                        Some(format!("language-{}", lang))
-                    }
+                    if lang.is_empty() { None } else { Some(lang) }
                 }
                 CodeBlockKind::Indented => None,
             };
 
-            match language_class {
-                Some(class) => html! {
-                    pre {
-                        code class=(class) { (PreEscaped(children)) }
+            // Render code block
+            match lang {
+                Some(lang) if lang == "mermaid" => render_mermaid(
+                    &code_src,
+                    node_render_config.mermaid_render_mode,
+                ),
+                _ => {
+                    let language_class =
+                        lang.map(|lang| format!("language-{}", lang));
+                    html! {
+                        pre {
+                            code class=[language_class] { (PreEscaped(code_src)) }
+                        }
                     }
-                },
-                None => html! {
-                    pre {
-                        code { (PreEscaped(children)) }
-                    }
-                },
+                }
             }
         }
         HtmlBlock => {
@@ -540,6 +563,7 @@ fn render_node(
                 vault_path,
                 ref_map,
                 refable_anchor_id_map,
+                node_render_config,
             );
             html! {
                 (PreEscaped(children))
@@ -551,6 +575,7 @@ fn render_node(
                 vault_path,
                 ref_map,
                 refable_anchor_id_map,
+                node_render_config,
             );
             html! {
                 em { (PreEscaped(children)) }
@@ -562,6 +587,7 @@ fn render_node(
                 vault_path,
                 ref_map,
                 refable_anchor_id_map,
+                node_render_config,
             );
             html! {
                 strong { (PreEscaped(children)) }
@@ -573,6 +599,7 @@ fn render_node(
                 vault_path,
                 ref_map,
                 refable_anchor_id_map,
+                node_render_config,
             );
             html! {
                 del { (PreEscaped(children)) }
@@ -584,6 +611,7 @@ fn render_node(
                 vault_path,
                 ref_map,
                 refable_anchor_id_map,
+                node_render_config,
             );
             html! {
                 sup { (PreEscaped(children)) }
@@ -595,6 +623,7 @@ fn render_node(
                 vault_path,
                 ref_map,
                 refable_anchor_id_map,
+                node_render_config,
             );
             html! {
                 sub { (PreEscaped(children)) }
@@ -611,6 +640,7 @@ fn render_node(
                 vault_path,
                 ref_map,
                 refable_anchor_id_map,
+                node_render_config,
             );
             let href = format!("mailto:{}", dest_url.as_ref());
             let title_opt = if title.is_empty() {
@@ -635,6 +665,7 @@ fn render_node(
                 vault_path,
                 ref_map,
                 refable_anchor_id_map,
+                node_render_config,
             );
             let href = dest_url.to_string();
 
@@ -659,6 +690,7 @@ fn render_node(
                 vault_path,
                 ref_map,
                 refable_anchor_id_map,
+                node_render_config,
             );
             let title_attr = if title.is_empty() {
                 String::new()
@@ -675,6 +707,7 @@ fn render_node(
                 vault_path,
                 ref_map,
                 refable_anchor_id_map,
+                node_render_config,
             );
             html! {
                 table { (PreEscaped(children)) }
@@ -686,6 +719,7 @@ fn render_node(
                 vault_path,
                 ref_map,
                 refable_anchor_id_map,
+                node_render_config,
             );
             html! {
                 thead { (PreEscaped(children)) }
@@ -697,6 +731,7 @@ fn render_node(
                 vault_path,
                 ref_map,
                 refable_anchor_id_map,
+                node_render_config,
             );
             html! {
                 tr { (PreEscaped(children)) }
@@ -708,6 +743,7 @@ fn render_node(
                 vault_path,
                 ref_map,
                 refable_anchor_id_map,
+                node_render_config,
             );
             // TODO: handle table alignment based on cell index
             html! {
@@ -720,6 +756,7 @@ fn render_node(
                 vault_path,
                 ref_map,
                 refable_anchor_id_map,
+                node_render_config,
             );
             html! {
                 dl { (PreEscaped(children)) }
@@ -731,6 +768,7 @@ fn render_node(
                 vault_path,
                 ref_map,
                 refable_anchor_id_map,
+                node_render_config,
             );
             html! {
                 dt { (PreEscaped(children)) }
@@ -742,6 +780,7 @@ fn render_node(
                 vault_path,
                 ref_map,
                 refable_anchor_id_map,
+                node_render_config,
             );
             html! {
                 dd { (PreEscaped(children)) }
@@ -753,6 +792,7 @@ fn render_node(
                 vault_path,
                 ref_map,
                 refable_anchor_id_map,
+                node_render_config,
             );
             html! {
                 div class="footnote-definition" id=(name.as_ref()) {
@@ -837,12 +877,17 @@ mod tests {
         let md_src =
             fs::read_to_string(vault_root_dir.join(note_path)).unwrap();
         let tree = Tree::new(&md_src);
+        let node_render_config = NodeRenderConfig {
+            mermaid_render_mode: MermaidRenderMode::from_str("client-side")
+                .unwrap(),
+        };
         let rendered = render_content(
             &tree,
             note_path,
             &links,
             &vault_path_to_slug_map,
             &innote_refable_anchor_id_map,
+            &node_render_config,
         );
 
         let rendered = format_html_simple(&rendered);

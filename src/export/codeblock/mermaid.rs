@@ -1,4 +1,4 @@
-use maud::html;
+use maud::{Markup, PreEscaped, html};
 use std::fs;
 use std::process::Command;
 use tempfile::TempDir;
@@ -15,6 +15,17 @@ impl MermaidRenderMode {
             "buildtime" | "build-time" => Some(Self::BuildTime),
             "clientside" | "client-side" => Some(Self::ClientSide),
             _ => None,
+        }
+    }
+}
+
+impl TryFrom<&str> for MermaidRenderMode {
+    type Error = String;
+
+    fn try_from(s: &str) -> Result<Self, Self::Error> {
+        match Self::from_str(s) {
+            Some(mode) => Ok(mode),
+            None => Err(format!("Invalid mermaid render mode: {}", s)),
         }
     }
 }
@@ -48,31 +59,31 @@ pub fn render_mermaid_build_time(mermaid_code: &str) -> Result<String, String> {
     Ok(svg)
 }
 
-pub fn render_mermaid(mermaid_code: &str, mode: MermaidRenderMode) -> String {
+pub fn render_mermaid(mermaid_code: &str, mode: MermaidRenderMode) -> Markup {
     match mode {
         MermaidRenderMode::BuildTime => {
             match render_mermaid_build_time(mermaid_code) {
-                Ok(svg) => svg,
+                Ok(svg) => html! {
+                    ( PreEscaped(svg) )
+                },
                 Err(e) => {
-                    let html = html! {
+                    html! {
                         "<!-- Mermaid rendering failed: " (e) " -->"
                         pre {
                                 code .language-mermaid {
                                 (mermaid_code)
                             }
                         }
-                    };
-                    html.into_string()
+                    }
                 }
             }
         }
         MermaidRenderMode::ClientSide => {
-            let html = html! {
+            html! {
                 pre .mermaid {
                     (mermaid_code)
                 }
-            };
-            html.into_string()
+            }
         }
     }
 }
@@ -89,7 +100,7 @@ mod tests {
     B-->C"#;
         let result =
             render_mermaid(mermaid_code, MermaidRenderMode::ClientSide);
-        assert_snapshot!(result, @r#"
+        assert_snapshot!(result.into_string(), @r#"
         <pre class="mermaid">graph TD
             A--&gt;B
             B--&gt;C</pre>
@@ -117,7 +128,8 @@ mod tests {
     fn test_render_mermaid_build_time_fallback_on_error() {
         // Use invalid mermaid syntax to trigger error
         let mermaid_code = "this is not valid mermaid syntax!!!";
-        let result = render_mermaid(mermaid_code, MermaidRenderMode::BuildTime);
+        let result = render_mermaid(mermaid_code, MermaidRenderMode::BuildTime)
+            .into_string();
 
         // Should fallback to code block with error comment
         assert!(
@@ -134,7 +146,8 @@ mod tests {
     B -->|Yes| C[OK]
     B -->|No| D[End]"#;
 
-        let result = render_mermaid(mermaid_code, MermaidRenderMode::BuildTime);
+        let result = render_mermaid(mermaid_code, MermaidRenderMode::BuildTime)
+            .into_string();
 
         // Should contain SVG if mmdc is available
         assert!(
@@ -149,7 +162,8 @@ mod tests {
     Alice->>John: Hello John, how are you?
     John-->>Alice: Great!"#;
 
-        let result = render_mermaid(mermaid_code, MermaidRenderMode::BuildTime);
+        let result = render_mermaid(mermaid_code, MermaidRenderMode::BuildTime)
+            .into_string();
 
         // Should contain SVG
         assert!(
