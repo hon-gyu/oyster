@@ -11,7 +11,7 @@ use std::ops::Range;
 use std::path::{Path, PathBuf};
 
 pub struct NodeRenderConfig {
-    mermaid_render_mode: MermaidRenderMode,
+    pub mermaid_render_mode: MermaidRenderMode,
 }
 
 /// Render content

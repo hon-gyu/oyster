@@ -36,7 +36,7 @@ pub fn render_vault(
     output_dir: &Path,
     theme: &str,
     filter_publish: bool,
-    node_render_config: NodeRenderConfig,
+    node_render_config: &NodeRenderConfig,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let home_name = HOME_NAME.to_string();
 

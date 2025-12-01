@@ -10,4 +10,6 @@ pub mod toc;
 pub mod utils;
 pub mod writer;
 
+pub use codeblock::MermaidRenderMode;
+pub use content::NodeRenderConfig;
 pub use writer::render_vault;

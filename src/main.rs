@@ -1,5 +1,7 @@
 use clap::{Parser, Subcommand};
-use markdown_tools::export::render_vault;
+use markdown_tools::export::{
+    MermaidRenderMode, NodeRenderConfig, render_vault,
+};
 use std::path::PathBuf;
 
 #[derive(Parser)]
@@ -26,6 +28,9 @@ enum Commands {
 
         #[arg(short, long, default_value = "false")]
         no_filter_publish: bool,
+
+        #[arg(short, long, default_value = "build-time")]
+        mermaid_render_mode: String,
     },
 }
 
@@ -38,17 +43,26 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             output: output_dir,
             theme,
             no_filter_publish,
+            mermaid_render_mode,
         } => {
             println!(
                 "Generating site from vault: {}",
                 vault_root_dir.display()
             );
 
+            let mermaid_render_mode =
+                MermaidRenderMode::from_str(&mermaid_render_mode)
+                    .unwrap_or(MermaidRenderMode::BuildTime);
+            let node_render_config = NodeRenderConfig {
+                mermaid_render_mode,
+            };
+
             render_vault(
                 &vault_root_dir,
                 &output_dir,
                 &theme,
                 !no_filter_publish,
+                &node_render_config,
             )?;
 
             println!("Site generated to: {}", output_dir.display());
