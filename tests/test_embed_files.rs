@@ -6,6 +6,9 @@ use markdown_tools::export::content;
 use markdown_tools::export::utils::{
     build_in_note_anchor_id_map, build_vault_paths_to_slug_map,
 };
+use markdown_tools::export::{
+    MermaidRenderMode, NodeRenderConfig, QuiverRenderMode, TikzRenderMode,
+};
 use markdown_tools::link::{build_links, scan_vault};
 use std::fs;
 use std::path::Path;
@@ -38,15 +41,21 @@ fn test_render_image_resize() {
     let note_path = Path::new("note.md");
     let md_src = fs::read_to_string(vault_root_dir.join(note_path)).unwrap();
     let tree = Tree::new(&md_src);
+    let node_render_config = NodeRenderConfig {
+        mermaid_render_mode: MermaidRenderMode::from_str("client-side").unwrap(),
+        tikz_render_mode: TikzRenderMode::from_str("client-side").unwrap(),
+        quiver_render_mode: QuiverRenderMode::from_str("raw").unwrap(),
+    };
     let rendered = content::render_content(
         &tree,
         note_path,
         &links,
         &vault_path_to_slug_map,
         &innote_refable_anchor_id_map,
+        &node_render_config,
     );
 
-    let rendered = format_html_simple(&rendered);
+    let rendered = format_html_simple(&rendered.into_string());
     let full_html = render_full_html(&rendered);
 
     assert_snapshot!(full_html, @r#"

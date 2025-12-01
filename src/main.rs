@@ -1,6 +1,7 @@
 use clap::{Parser, Subcommand};
 use markdown_tools::export::{
-    MermaidRenderMode, NodeRenderConfig, render_vault,
+    MermaidRenderMode, NodeRenderConfig, QuiverRenderMode, TikzRenderMode,
+    render_vault,
 };
 use std::path::PathBuf;
 
@@ -31,6 +32,12 @@ enum Commands {
 
         #[arg(short, long, default_value = "build-time")]
         mermaid_render_mode: String,
+
+        #[arg(long, default_value = "build-time")]
+        tikz_render_mode: String,
+
+        #[arg(long, default_value = "build-time")]
+        quiver_render_mode: String,
     },
 }
 
@@ -44,6 +51,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             theme,
             no_filter_publish,
             mermaid_render_mode,
+            tikz_render_mode,
+            quiver_render_mode,
         } => {
             println!(
                 "Generating site from vault: {}",
@@ -53,8 +62,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let mermaid_render_mode =
                 MermaidRenderMode::from_str(&mermaid_render_mode)
                     .unwrap_or(MermaidRenderMode::BuildTime);
+            let tikz_render_mode = TikzRenderMode::from_str(&tikz_render_mode)
+                .unwrap_or(TikzRenderMode::ClientSide);
+            let quiver_render_mode =
+                QuiverRenderMode::from_str(&quiver_render_mode)
+                    .unwrap_or(QuiverRenderMode::Raw);
             let node_render_config = NodeRenderConfig {
                 mermaid_render_mode,
+                tikz_render_mode,
+                quiver_render_mode,
             };
 
             render_vault(

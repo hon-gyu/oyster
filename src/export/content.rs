@@ -1,7 +1,14 @@
-use super::codeblock::{MermaidRenderMode, render_mermaid};
+use super::codeblock::{
+    MermaidRenderMode, render_mermaid, QuiverRenderMode, TikzRenderMode, render_quiver,
+    render_tikz,
+};
 use super::latex::render_latex;
 use super::utils;
-use crate::ast::{Node, NodeKind::*, Tree};
+use crate::ast::{
+    Node,
+    NodeKind::{self, *},
+    Tree,
+};
 use crate::export::utils::{get_relative_dest, range_to_anchor_id};
 use crate::link::types::{Link as ResolvedLink, Referenceable};
 use maud::{Markup, PreEscaped, html};
@@ -12,6 +19,8 @@ use std::path::{Path, PathBuf};
 
 pub struct NodeRenderConfig {
     pub mermaid_render_mode: MermaidRenderMode,
+    pub tikz_render_mode: TikzRenderMode,
+    pub quiver_render_mode: QuiverRenderMode,
 }
 
 /// Render content
@@ -523,14 +532,15 @@ fn render_node(
         },
         // Container nodes (except for Document)
         CodeBlock(kind) => {
-            let code_src = render_nodes(
-                &node.children,
-                vault_path,
-                ref_map,
-                refable_anchor_id_map,
-                node_render_config,
-            );
-
+            let code_src = &node
+                .children
+                .iter()
+                .map(|child| match &child.kind {
+                    NodeKind::Text(text) => text.as_ref(),
+                    _ => panic!("CodeBlock should only contain Text nodes"),
+                })
+                .collect::<Vec<_>>()
+                .join("");
             // Extract language
             let lang = match kind {
                 CodeBlockKind::Fenced(info) => {
@@ -542,10 +552,33 @@ fn render_node(
 
             // Render code block
             match lang {
-                Some(lang) if lang == "mermaid" => render_mermaid(
-                    &code_src,
-                    node_render_config.mermaid_render_mode,
-                ),
+                Some(lang) if lang == "mermaid" => {
+                    let mermaid = render_mermaid(
+                        &code_src,
+                        node_render_config.mermaid_render_mode,
+                    );
+                    html! {
+                        (mermaid)
+                    }
+                }
+                Some(lang) if lang == "tikz" => {
+                    let tikz = render_tikz(
+                        &code_src,
+                        node_render_config.tikz_render_mode,
+                    );
+                    html! {
+                        (tikz)
+                    }
+                }
+                Some(lang) if lang == "quiver" => {
+                    let quiver = render_quiver(
+                        &code_src,
+                        node_render_config.quiver_render_mode,
+                    );
+                    html! {
+                        (quiver)
+                    }
+                }
                 _ => {
                     let language_class =
                         lang.map(|lang| format!("language-{}", lang));
@@ -880,6 +913,8 @@ mod tests {
         let node_render_config = NodeRenderConfig {
             mermaid_render_mode: MermaidRenderMode::from_str("client-side")
                 .unwrap(),
+            tikz_render_mode: TikzRenderMode::from_str("client-side").unwrap(),
+            quiver_render_mode: QuiverRenderMode::from_str("raw").unwrap(),
         };
         let rendered = render_content(
             &tree,

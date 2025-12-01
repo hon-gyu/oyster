@@ -11,9 +11,25 @@ use pulldown_cmark::{
     LinkType, MetadataBlockKind, Tag,
 };
 
+// Node
 // ====================
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct Node<'a> {
+    pub children: Vec<Node<'a>>,
+    // byte range of the inline element or the entire element span
+    // for nested elements
+    pub start_byte: usize,
+    pub end_byte: usize,
+    // position in rows and columns
+    pub start_point: Point,
+    pub end_point: Point,
+    pub kind: NodeKind<'a>,
+    pub(crate) parent: Option<*const Node<'a>>,
+}
+
 // Node kind
-// ====================
+// --------------------
 
 /// Node kind
 ///
@@ -238,24 +254,6 @@ impl<'a> NodeKind<'a> {
             NodeKind::TaskListMarker(b) => NodeKind::TaskListMarker(b),
         }
     }
-}
-
-// ====================
-// Node
-// ====================
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct Node<'a> {
-    pub children: Vec<Node<'a>>,
-    // byte range of the inline element or the entire element span
-    // for nested elements
-    pub start_byte: usize,
-    pub end_byte: usize,
-    // position in rows and columns
-    pub start_point: Point,
-    pub end_point: Point,
-    pub kind: NodeKind<'a>,
-    pub(crate) parent: Option<*const Node<'a>>,
 }
 
 impl<'a> Display for Node<'a> {

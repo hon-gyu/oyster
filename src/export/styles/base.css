@@ -331,3 +331,20 @@ hr {
     display: block;
     margin: 1em 0;
 }
+
+/* Mermaid diagrams */
+.mermaid-diagram {
+    background: var(--bg-tertiary);
+    padding: 1em;
+    border-radius: 5px;
+    border: 1px solid var(--border-secondary);
+    overflow-x: auto;
+    display: block;
+    margin: 1em 0;
+}
+
+.mermaid-diagram svg {
+    max-width: 100%;
+    height: auto;
+    display: block;
+}

@@ -12,8 +12,8 @@ pub enum MermaidRenderMode {
 impl MermaidRenderMode {
     pub fn from_str(s: &str) -> Option<Self> {
         match s.to_lowercase().as_str() {
-            "buildtime" | "build-time" => Some(Self::BuildTime),
-            "clientside" | "client-side" => Some(Self::ClientSide),
+            "buildtime" | "build-time" | "build" => Some(Self::BuildTime),
+            "clientside" | "client-side" | "client" => Some(Self::ClientSide),
             _ => None,
         }
     }
@@ -64,14 +64,20 @@ pub fn render_mermaid(mermaid_code: &str, mode: MermaidRenderMode) -> Markup {
         MermaidRenderMode::BuildTime => {
             match render_mermaid_build_time(mermaid_code) {
                 Ok(svg) => html! {
-                    ( PreEscaped(svg) )
+                    .mermaid-diagram {
+                        ( PreEscaped(svg) )
+                    }
                 },
-                Err(e) => {
+                Err(_) => {
                     html! {
-                        "<!-- Mermaid rendering failed: " (e) " -->"
-                        pre {
-                                code .language-mermaid {
-                                (mermaid_code)
+                        .mermaid-error {
+                            pre {
+                                    code .language-mermaid {
+                                    p .error-message {
+                                        "<!-- Mermaid rendering failed: -->"
+                                    }
+                                    (mermaid_code)
+                                }
                             }
                         }
                     }
