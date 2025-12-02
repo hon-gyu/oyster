@@ -14,6 +14,7 @@ use crate::ast::{
 };
 use crate::export::utils::{get_relative_dest, range_to_anchor_id};
 use crate::link::types::{Link as ResolvedLink, Referenceable};
+use crate::tree_provider::TreeProvider;
 use maud::{Markup, PreEscaped, html};
 use pulldown_cmark::{BlockQuoteKind, CodeBlockKind, LinkType};
 use std::collections::HashMap;
@@ -46,6 +47,9 @@ pub fn render_content(
         HashMap<Range<usize>, String>,
     >,
     node_render_config: &NodeRenderConfig,
+    tree_provider: &dyn TreeProvider,
+    embed_depth: usize,     // Current embed depth
+    max_embed_depth: usize, // Max embed depth
 ) -> Markup {
     // Outgoing links
     // build a map of:
@@ -103,6 +107,9 @@ pub fn render_content(
         &ref_dest_map,
         in_note_anchor_id_map,
         node_render_config,
+        tree_provider,
+        embed_depth,
+        max_embed_depth,
     );
     rendered
 }
@@ -113,6 +120,9 @@ fn render_nodes(
     ref_map: &HashMap<Range<usize>, String>,
     refable_anchor_id_map: &HashMap<Range<usize>, String>,
     node_render_config: &NodeRenderConfig,
+    tree_provider: &dyn TreeProvider,
+    embed_depth: usize,     // Current embed depth
+    max_embed_depth: usize, // Max embed depth
 ) -> String {
     let mut buffer = String::new();
     for node in nodes {
@@ -122,6 +132,9 @@ fn render_nodes(
             ref_map,
             refable_anchor_id_map,
             node_render_config,
+            tree_provider,
+            embed_depth,
+            max_embed_depth,
         );
         buffer.push_str(&rendered.into_string());
     }
@@ -138,6 +151,9 @@ fn render_node(
     ref_map: &HashMap<Range<usize>, String>,
     refable_anchor_id_map: &HashMap<Range<usize>, String>,
     node_render_config: &NodeRenderConfig,
+    tree_provider: &dyn TreeProvider,
+    embed_depth: usize,     // Current embed depth
+    max_embed_depth: usize, // Max embed depth
 ) -> Markup {
     let range = node.start_byte..node.end_byte;
     let markup = match &node.kind {
@@ -149,6 +165,9 @@ fn render_node(
                 ref_map,
                 refable_anchor_id_map,
                 node_render_config,
+                tree_provider,
+                embed_depth,
+                max_embed_depth,
             );
             html! {
                 article {
@@ -169,6 +188,9 @@ fn render_node(
                 ref_map,
                 refable_anchor_id_map,
                 node_render_config,
+                tree_provider,
+                embed_depth,
+                max_embed_depth,
             );
             let href = dest_url.to_string();
             // Find matched reference's resolved destination
@@ -231,6 +253,9 @@ fn render_node(
                 ref_map,
                 refable_anchor_id_map,
                 node_render_config,
+                tree_provider,
+                embed_depth,
+                max_embed_depth,
             );
 
             let title_opt = if title.is_empty() {
@@ -300,6 +325,9 @@ fn render_node(
                 ref_map,
                 refable_anchor_id_map,
                 node_render_config,
+                tree_provider,
+                embed_depth,
+                max_embed_depth,
             );
             // Inject anchor id for matched referenceable
             if let Some(id) = refable_anchor_id_map.get(&range) {
@@ -324,6 +352,9 @@ fn render_node(
                 ref_map,
                 refable_anchor_id_map,
                 node_render_config,
+                tree_provider,
+                embed_depth,
+                max_embed_depth,
             );
 
             let tag = format!("h{}", *level as usize);
@@ -369,6 +400,9 @@ fn render_node(
                 ref_map,
                 refable_anchor_id_map,
                 node_render_config,
+                tree_provider,
+                embed_depth,
+                max_embed_depth,
             );
 
             // Extract class name determination
@@ -418,6 +452,9 @@ fn render_node(
                 ref_map,
                 refable_anchor_id_map,
                 node_render_config,
+                tree_provider,
+                embed_depth,
+                max_embed_depth,
             );
 
             let id_opt = refable_anchor_id_map.get(&range);
@@ -463,6 +500,9 @@ fn render_node(
                 ref_map,
                 refable_anchor_id_map,
                 node_render_config,
+                tree_provider,
+                embed_depth,
+                max_embed_depth,
             );
             // Inject anchor id for matched referenceable
             if let Some(id) = refable_anchor_id_map.get(&range) {
@@ -601,6 +641,9 @@ fn render_node(
                 ref_map,
                 refable_anchor_id_map,
                 node_render_config,
+                tree_provider,
+                embed_depth,
+                max_embed_depth,
             );
             html! {
                 (PreEscaped(children))
@@ -613,6 +656,9 @@ fn render_node(
                 ref_map,
                 refable_anchor_id_map,
                 node_render_config,
+                tree_provider,
+                embed_depth,
+                max_embed_depth,
             );
             html! {
                 em { (PreEscaped(children)) }
@@ -625,6 +671,9 @@ fn render_node(
                 ref_map,
                 refable_anchor_id_map,
                 node_render_config,
+                tree_provider,
+                embed_depth,
+                max_embed_depth,
             );
             html! {
                 strong { (PreEscaped(children)) }
@@ -637,6 +686,9 @@ fn render_node(
                 ref_map,
                 refable_anchor_id_map,
                 node_render_config,
+                tree_provider,
+                embed_depth,
+                max_embed_depth,
             );
             html! {
                 del { (PreEscaped(children)) }
@@ -649,6 +701,9 @@ fn render_node(
                 ref_map,
                 refable_anchor_id_map,
                 node_render_config,
+                tree_provider,
+                embed_depth,
+                max_embed_depth,
             );
             html! {
                 sup { (PreEscaped(children)) }
@@ -661,6 +716,9 @@ fn render_node(
                 ref_map,
                 refable_anchor_id_map,
                 node_render_config,
+                tree_provider,
+                embed_depth,
+                max_embed_depth,
             );
             html! {
                 sub { (PreEscaped(children)) }
@@ -678,6 +736,9 @@ fn render_node(
                 ref_map,
                 refable_anchor_id_map,
                 node_render_config,
+                tree_provider,
+                embed_depth,
+                max_embed_depth,
             );
             let href = format!("mailto:{}", dest_url.as_ref());
             let title_opt = if title.is_empty() {
@@ -703,6 +764,9 @@ fn render_node(
                 ref_map,
                 refable_anchor_id_map,
                 node_render_config,
+                tree_provider,
+                embed_depth,
+                max_embed_depth,
             );
             let href = dest_url.to_string();
 
@@ -728,6 +792,9 @@ fn render_node(
                 ref_map,
                 refable_anchor_id_map,
                 node_render_config,
+                tree_provider,
+                embed_depth,
+                max_embed_depth,
             );
             let title_attr = if title.is_empty() {
                 String::new()
@@ -745,6 +812,9 @@ fn render_node(
                 ref_map,
                 refable_anchor_id_map,
                 node_render_config,
+                tree_provider,
+                embed_depth,
+                max_embed_depth,
             );
             html! {
                 table { (PreEscaped(children)) }
@@ -757,6 +827,9 @@ fn render_node(
                 ref_map,
                 refable_anchor_id_map,
                 node_render_config,
+                tree_provider,
+                embed_depth,
+                max_embed_depth,
             );
             html! {
                 thead { (PreEscaped(children)) }
@@ -769,6 +842,9 @@ fn render_node(
                 ref_map,
                 refable_anchor_id_map,
                 node_render_config,
+                tree_provider,
+                embed_depth,
+                max_embed_depth,
             );
             html! {
                 tr { (PreEscaped(children)) }
@@ -781,6 +857,9 @@ fn render_node(
                 ref_map,
                 refable_anchor_id_map,
                 node_render_config,
+                tree_provider,
+                embed_depth,
+                max_embed_depth,
             );
             // TODO: handle table alignment based on cell index
             html! {
@@ -794,6 +873,9 @@ fn render_node(
                 ref_map,
                 refable_anchor_id_map,
                 node_render_config,
+                tree_provider,
+                embed_depth,
+                max_embed_depth,
             );
             html! {
                 dl { (PreEscaped(children)) }
@@ -806,6 +888,9 @@ fn render_node(
                 ref_map,
                 refable_anchor_id_map,
                 node_render_config,
+                tree_provider,
+                embed_depth,
+                max_embed_depth,
             );
             html! {
                 dt { (PreEscaped(children)) }
@@ -818,6 +903,9 @@ fn render_node(
                 ref_map,
                 refable_anchor_id_map,
                 node_render_config,
+                tree_provider,
+                embed_depth,
+                max_embed_depth,
             );
             html! {
                 dd { (PreEscaped(children)) }
@@ -830,6 +918,9 @@ fn render_node(
                 ref_map,
                 refable_anchor_id_map,
                 node_render_config,
+                tree_provider,
+                embed_depth,
+                max_embed_depth,
             );
             html! {
                 div class="footnote-definition" id=(name.as_ref()) {
@@ -854,6 +945,7 @@ mod tests {
         build_in_note_anchor_id_map, build_vault_paths_to_slug_map,
     };
     use crate::link::{build_links, scan_vault};
+    use crate::tree_provider::PreloadedTrees;
     use insta::*;
     use maud::DOCTYPE;
     use std::fs;
@@ -927,6 +1019,9 @@ mod tests {
             &vault_path_to_slug_map,
             &innote_refable_anchor_id_map,
             &node_render_config,
+            &PreloadedTrees::default(),
+            0,
+            5,
         );
 
         let rendered = format_html_simple(&rendered.into_string());

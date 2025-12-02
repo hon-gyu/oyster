@@ -10,11 +10,21 @@ pub struct PreloadedTrees<'a> {
     trees: HashMap<PathBuf, Tree<'a>>,
 }
 
-impl<'a> PreloadedTrees<'a> {
+impl<'a> TreeProvider for PreloadedTrees<'a> {
     fn get_tree(&self, path: &Path) -> Option<&Tree> {
         self.trees.get(path)
     }
 }
+
+impl Default for PreloadedTrees<'_> {
+    fn default() -> Self {
+        Self {
+            trees: HashMap::new(),
+        }
+    }
+}
+
+// ====================
 
 pub struct LazyTreeCache {
     vault_root: PathBuf,
