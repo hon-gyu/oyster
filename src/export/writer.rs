@@ -4,10 +4,15 @@
 //!   - file referenceable: note and asset
 //!   - in-note referenceable: heading, block
 //!   - reference: outgoing edges
+//!
 //! Vault-level information:
 //!   - links: matched edges
-//!   - vault paths to slug map
-//!   - in-note referenceable anchor id map
+//!   - map: file vault path |-> slug path
+//!   - map: file valut path |-> in-note referenceable range |-> anchod id
+//!   - map: file vault path |-> frontmatter
+//!   - map: file vault path |-> title
+//!   - implicit map: reference path |-> reference range |-> anchor id
+//!     - where the anchor id = the byte range of the reference
 use super::codeblock::mermaid::MermaidRenderMode;
 use super::content::{NodeRenderConfig, render_content};
 use super::frontmatter;
@@ -202,8 +207,10 @@ pub fn render_vault(
     );
     let home_slug_path = format!("{}.html", home_name);
     let home_path = output_dir.join(&home_slug_path);
-    let katex_rel_dir =
-        get_relative_dest(Path::new(&home_slug_path), Path::new(&KATEX_ASSETS_DIR_IN_OUTPUT));
+    let katex_rel_dir = get_relative_dest(
+        Path::new(&home_slug_path),
+        Path::new(&KATEX_ASSETS_DIR_IN_OUTPUT),
+    );
     let katex_css_path = format!("{}/{}", katex_rel_dir, "katex.min.css");
     let home_css_paths = style::get_style_paths(&home_path, output_dir, theme);
     let home_main_content = html! {

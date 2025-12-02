@@ -1,6 +1,9 @@
+//! Render content
+//!
+//! See `write.rs` for information used
 use super::codeblock::{
-    MermaidRenderMode, render_mermaid, QuiverRenderMode, TikzRenderMode, render_quiver,
-    render_tikz,
+    MermaidRenderMode, QuiverRenderMode, TikzRenderMode, render_mermaid,
+    render_quiver, render_tikz,
 };
 use super::latex::render_latex;
 use super::utils;
@@ -240,16 +243,16 @@ fn render_node(
             let matched_tgt_slug_path_opt = ref_map.get(&range);
 
             if let Some(tgt_slug_path) = matched_tgt_slug_path_opt {
-                let tgt_slug = tgt_slug_path.clone();
-                let anchor_id = range_to_anchor_id(&range);
+                // Case: matched link
+                let backlink_anchor_id = range_to_anchor_id(&range);
                 let anchor_markup = html! {
-                    a href=(tgt_slug) title=[title_opt] {
+                    a href=(tgt_slug_path) title=[title_opt] {
                         (PreEscaped(&children))
                     }
                 };
 
                 // Check if this is an image
-                if Path::new(&tgt_slug)
+                if Path::new(&tgt_slug_path)
                     .extension()
                     .and_then(|ext| {
                         IMAGE_EXTENSIONS
@@ -258,21 +261,22 @@ fn render_node(
                     })
                     .is_some()
                 {
+                    // Case: image
                     let resize_spec = &children;
                     let (width, height) = utils::parse_resize_spec(resize_spec);
-                    let alt_text = Path::new(&tgt_slug)
+                    let alt_text = Path::new(&tgt_slug_path)
                         .file_stem()
                         .unwrap()
                         .to_str()
                         .unwrap_or("");
                     html! {
-                        img .embed-file.image src=(tgt_slug) alt=(alt_text) #(anchor_id) width=[width] height=[height] {}
+                        img .embed-file.image src=(tgt_slug_path) alt=(alt_text) #(backlink_anchor_id) width=[width] height=[height] {}
                     }
                 } else {
                     // TODO(feature): handle other embedding types
                     // Fallback to raw url
                     html! {
-                        span .embed-file #(anchor_id) {
+                        span .embed-file #(backlink_anchor_id) {
                             (anchor_markup)
                         }
                     }
