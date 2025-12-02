@@ -84,6 +84,12 @@ pub fn render_tikz_build_time(tikz_code: &str) -> Result<String, String> {
     let svg = fs::read_to_string(&svg_path)
         .map_err(|e| format!("Failed to read generated SVG: {}", e))?;
 
+    // Check if SVG is suspiciously large (likely an empty page from failed compilation)
+    // Standard page sizes are 612x792 (US Letter) or 595x842 (A4)
+    if svg.contains("height=\"792pt\"") || svg.contains("height=\"842pt\"") {
+        return Err("Generated SVG appears to be an empty page".to_string());
+    }
+
     Ok(svg)
 }
 
