@@ -348,3 +348,39 @@ hr {
     height: auto;
     display: block;
 }
+
+/* TikZ diagrams */
+.tikz-diagram {
+    background: var(--bg-tertiary);
+    padding: 1em;
+    border-radius: 5px;
+    border: 1px solid var(--border-secondary);
+    overflow-x: auto;
+    display: block;
+    margin: 1em 0;
+}
+
+.tikz-diagram svg {
+    max-width: 100%;
+    height: auto;
+    display: block;
+    filter: invert(1) hue-rotate(180deg);
+}
+
+/* Quiver diagrams */
+.quiver-diagram {
+    background: var(--bg-tertiary);
+    padding: 1em;
+    border-radius: 5px;
+    border: 1px solid var(--border-secondary);
+    overflow-x: auto;
+    display: block;
+    margin: 1em 0;
+}
+
+.quiver-diagram svg {
+    max-width: 100%;
+    height: auto;
+    display: block;
+    filter: invert(1) hue-rotate(180deg);
+}
