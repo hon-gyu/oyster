@@ -99,11 +99,14 @@ impl Hierarchical for FileTreeItem {
 }
 
 /// Build a file tree (note paths only)
-pub fn build_file_tree(
+pub fn build_file_tree<F>(
     vault_slug: &Path,
     referenceables: &[Referenceable],
-    vault_path_to_slug_map: &HashMap<PathBuf, String>,
-) -> Vec<TreeNode<FileTreeItem>> {
+    vault_path_to_slug: &F,
+) -> Vec<TreeNode<FileTreeItem>>
+where
+    F: Fn(&PathBuf) -> Option<String>,
+{
     // Extract note paths
     let note_paths: Vec<&PathBuf> = referenceables
         .iter()
@@ -133,7 +136,7 @@ pub fn build_file_tree(
         // Add the file itself with relative link
         let file_depth = note_path.components().count() - 1;
         let name = note_path.file_stem().unwrap().to_string_lossy().to_string();
-        let absolute_slug = vault_path_to_slug_map.get(note_path).unwrap();
+        let absolute_slug = vault_path_to_slug(note_path).unwrap();
         // Convert to relative path from current page
         let relative_slug =
             get_relative_dest(vault_slug, Path::new(absolute_slug));
