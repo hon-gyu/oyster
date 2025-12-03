@@ -190,8 +190,5 @@ fn build_ast<'a>(
         parent: None,
     };
 
-    Tree {
-        root_node,
-        opts,
-    }
+    Tree { root_node, opts }
 }

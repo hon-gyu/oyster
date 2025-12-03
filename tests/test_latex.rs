@@ -25,9 +25,7 @@ fn test_latex_error_handling() {
     let invalid_latex = r"\invalid{command}";
     let rendered = render_latex(invalid_latex, false);
     // Should contain error class or the original LaTeX
-    assert!(
-        rendered.contains("math-error") || rendered.contains("invalid")
-    );
+    assert!(rendered.contains("math-error") || rendered.contains("invalid"));
 }
 
 #[test]

@@ -42,7 +42,8 @@ fn test_render_image_resize() {
     let md_src = fs::read_to_string(vault_root_dir.join(note_path)).unwrap();
     let tree = Tree::new(&md_src);
     let node_render_config = NodeRenderConfig {
-        mermaid_render_mode: MermaidRenderMode::from_str("client-side").unwrap(),
+        mermaid_render_mode: MermaidRenderMode::from_str("client-side")
+            .unwrap(),
         tikz_render_mode: TikzRenderMode::from_str("client-side").unwrap(),
         quiver_render_mode: QuiverRenderMode::from_str("raw").unwrap(),
     };
