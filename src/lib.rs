@@ -4,6 +4,5 @@ pub mod hierarchy;
 pub mod link;
 pub mod parse;
 pub mod snapshots;
-pub mod tree_provider;
 pub mod validate;
 pub mod value;
