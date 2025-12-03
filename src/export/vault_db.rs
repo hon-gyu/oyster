@@ -36,10 +36,10 @@ use std::path::{Path, PathBuf};
 pub struct FileLevelInfo {
     /// Both file (note and asset) referenceables,
     /// and in-note (heading and block) referenceables
-    referenceables: Vec<Referenceable>,
-    references: Vec<Reference>,
+    pub referenceables: Vec<Referenceable>,
+    pub references: Vec<Reference>,
     /// Map: file vault path |-> frontmatter
-    fronmatters: HashMap<PathBuf, Option<Value>>,
+    pub fronmatters: HashMap<PathBuf, Option<Value>>,
 }
 
 pub struct VaultLevelInfo {
@@ -133,6 +133,7 @@ impl VaultLevelInfo {
 pub trait VaultDB {
     // Getter
     // ====================
+    fn get_referenceables(&self) -> &[Referenceable];
     fn get_resolved_links(&self) -> &[ResolvedLink];
     fn get_unresolved_references(&self) -> &[Reference];
     // File referenceables
@@ -323,6 +324,10 @@ impl StaticVaultStore {
 }
 
 impl VaultDB for StaticVaultStore {
+    fn get_referenceables(&self) -> &[Referenceable] {
+        &self.file_level_info.referenceables
+    }
+
     fn get_resolved_links(&self) -> &[ResolvedLink] {
         &self.vault_level_info.links
     }
