@@ -4,15 +4,22 @@
 //!   - file referenceable: note and asset
 //!   - in-note referenceable: heading, block
 //!   - reference: outgoing edges
+//!   - frontmatter: note referenceable path |-> frontmatter
 //!
 //! Vault-level information:
 //!   - links: matched edges
+//!   - unresolved references
 //!   - map: file vault path |-> slug path
-//!   - map: file valut path |-> in-note referenceable range |-> anchod id
-//!   - map: file vault path |-> frontmatter
 //!   - map: file vault path |-> title
-//!   - implicit map: reference path |-> reference range |-> anchor id
+//!   - map: file valut path |-> in-note referenceable range |-> anchod id
+//!   - map: reference path |-> reference range |-> anchor id
 //!     - where the anchor id = the byte range of the reference
+//!
+//! Render a note (file referenceable) to HTML
+//! - Args
+//!   - its vault path
+//!   - its content (Tree)
+//!   - vault-level info
 use super::codeblock::mermaid::MermaidRenderMode;
 use super::content::{NodeRenderConfig, render_content};
 use super::frontmatter;
@@ -26,9 +33,11 @@ use super::utils::{
 };
 use crate::ast::Tree;
 use crate::link::{
-    Link as ResolvedLink, Referenceable, build_links, scan_vault,
+    Link as ResolvedLink, Reference, Referenceable, build_links, scan_vault,
 };
+use crate::tree_provider::PreloadedTrees;
 use maud::{DOCTYPE, Markup, PreEscaped, html};
+use serde_yaml::Value;
 use std::collections::HashMap;
 use std::fs;
 use std::ops::Range;
@@ -36,6 +45,105 @@ use std::path::{Path, PathBuf};
 
 const HOME_NAME: &str = "home";
 const KATEX_ASSETS_DIR_IN_OUTPUT: &str = "katex";
+
+pub struct FileLevelInfo {
+    /// Both file (note and asset) referenceables,
+    /// and in-note (heading and block) referenceables
+    referenceables: Vec<Referenceable>,
+    references: Vec<Reference>,
+    /// Map: file vault path |-> frontmatter
+    fronmatters: HashMap<PathBuf, Option<Value>>,
+}
+
+pub struct VaultLevelInfo {
+    links: Vec<ResolvedLink>,
+    unresolved: Vec<Reference>,
+    // File referenceables
+    file_vault_path_to_slug_map: HashMap<PathBuf, String>,
+    note_vault_path_to_title_map: HashMap<PathBuf, String>,
+    /// file vault path (parent referenceable)
+    /// |-> in-note referenceable range
+    /// |-> anchor id
+    innote_refable_anchor_id_map:
+        HashMap<PathBuf, HashMap<Range<usize>, String>>,
+    /// reference path |-> (reference range, anchor id)
+    reference_anchor_id_map: HashMap<PathBuf, (Range<usize>, String)>,
+}
+
+impl VaultLevelInfo {
+    // From file-level information to vault-level information
+    pub fn new(
+        referenceables: &Vec<Referenceable>,
+        references: &Vec<Reference>,
+        fronmatters: &HashMap<PathBuf, Option<Value>>,
+    ) -> VaultLevelInfo {
+        let (links, unresolved) =
+            // TODO: can we avoid the clone?
+            build_links(references.clone(), referenceables.clone());
+
+        // Build map: vault file path |-> slug
+        let vault_file_paths = referenceables
+            .iter()
+            .filter(|referenceable| !referenceable.is_innote())
+            .map(|referenceable| referenceable.path().as_path())
+            .collect::<Vec<_>>();
+        let file_vault_path_to_slug_map =
+            build_vault_paths_to_slug_map(&vault_file_paths);
+
+        let note_vault_paths = referenceables
+            .iter()
+            .filter(|referenceable| {
+                matches!(referenceable, Referenceable::Note { .. })
+            })
+            .map(|referenceable| referenceable.path().as_path())
+            .collect::<Vec<_>>();
+
+        // Build map for notes: vault file path |-> title
+        let note_vault_path_to_title_map = note_vault_paths
+            .iter()
+            .map(|&path| {
+                let title = fronmatters
+                    .get(path)
+                    .expect("Did not find maybe frontmatter for note")
+                    .as_ref()
+                    .and_then(|fm| frontmatter::get_title(&fm))
+                    .unwrap_or_else(|| title_from_path(path));
+                (path.to_path_buf(), title)
+            })
+            .collect::<HashMap<_, _>>();
+
+        // Build map: vault file path |-> in-note refable range |-> anchor id map
+        let referenceable_refs = referenceables.iter().collect::<Vec<_>>();
+        let innote_refable_anchor_id_map =
+            build_in_note_anchor_id_map(&referenceable_refs);
+
+        // There's an implicit map: reference path |-> reference range |-> anchor id
+        // where the anchor id IS the byte range of the reference
+        let reference_to_range_and_anchor_id_map: HashMap<
+            PathBuf,
+            (Range<usize>, String),
+        > = references
+            .iter()
+            .map(|r| {
+                let ref_path = r.path.clone();
+                let ref_range = r.range.clone();
+                let anchor_id = range_to_anchor_id(&ref_range);
+                (ref_path, (ref_range, anchor_id))
+            })
+            .collect();
+
+        VaultLevelInfo {
+            links,
+            unresolved,
+            file_vault_path_to_slug_map,
+            note_vault_path_to_title_map,
+            innote_refable_anchor_id_map,
+            reference_anchor_id_map: reference_to_range_and_anchor_id_map,
+        }
+    }
+}
+
+pub trait VaultDB {}
 
 pub fn render_vault(
     vault_root_dir: &Path,
@@ -49,6 +157,12 @@ pub fn render_vault(
     // Scan the vault and build links
     let (fms, referenceables, references) =
         scan_vault(vault_root_dir, vault_root_dir, filter_publish);
+    // Build map: vault file path |-> frontmatter
+    let file_vault_path_to_frontmatter_map = referenceables
+        .iter()
+        .zip(fms)
+        .map(|(referenceable, fm)| (referenceable.path().as_path(), fm))
+        .collect::<HashMap<_, _>>();
     let (links, _unresolved) = build_links(references, referenceables.clone());
 
     // Build map: vault file path |-> slug
@@ -60,20 +174,6 @@ pub fn render_vault(
     let vault_path_to_slug_map =
         build_vault_paths_to_slug_map(&vault_file_paths);
 
-    // Build map: vault file path |-> in-note refable range |-> anchor id map
-    let referenceable_refs = referenceables.iter().collect::<Vec<_>>();
-    let innote_refable_anchor_id_map =
-        build_in_note_anchor_id_map(&referenceable_refs);
-
-    // There's an implicit map: reference path |-> reference range |-> anchor id
-    // where the anchor id IS the byte range of the reference
-
-    // Build map: vault file path |-> frontmatter
-    let vault_path_to_frontmatter_map = referenceables
-        .iter()
-        .zip(fms)
-        .map(|(referenceable, fm)| (referenceable.path().as_path(), fm))
-        .collect::<HashMap<_, _>>();
     let note_vault_paths = referenceables
         .iter()
         .filter(|referenceable| {
@@ -85,7 +185,7 @@ pub fn render_vault(
     let vault_path_to_title_map = note_vault_paths
         .iter()
         .map(|path| {
-            let title = vault_path_to_frontmatter_map
+            let title = file_vault_path_to_frontmatter_map
                 .get(path)
                 .expect("Did not find maybe frontmatter for note")
                 .as_ref()
@@ -94,6 +194,14 @@ pub fn render_vault(
             (path.to_path_buf(), title)
         })
         .collect::<HashMap<_, _>>();
+
+    // Build map: vault file path |-> in-note refable range |-> anchor id map
+    let referenceable_refs = referenceables.iter().collect::<Vec<_>>();
+    let innote_refable_anchor_id_map =
+        build_in_note_anchor_id_map(&referenceable_refs);
+
+    // There's an implicit map: reference path |-> reference range |-> anchor id
+    // where the anchor id IS the byte range of the reference
 
     fs::create_dir_all(output_dir)?;
 
@@ -135,7 +243,7 @@ pub fn render_vault(
             &Path::new(&home_name),
         );
 
-        let frontmatter_info = vault_path_to_frontmatter_map
+        let frontmatter_info = file_vault_path_to_frontmatter_map
             .get(note_vault_path)
             .expect("Did not find frontmatter for note")
             .as_ref()
@@ -154,6 +262,9 @@ pub fn render_vault(
             &vault_path_to_slug_map,
             &innote_refable_anchor_id_map,
             &node_render_config,
+            &PreloadedTrees::default(),
+            0,
+            5,
         );
 
         let backlink = render_backlinks(
