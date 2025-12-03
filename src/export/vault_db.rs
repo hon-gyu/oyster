@@ -152,9 +152,13 @@ pub trait VaultDB {
         path: &PathBuf,
         ref_range: &Range<usize>,
     ) -> Option<String>;
+
     // Derived
     // ====================
 
+    /// Not very efficient.
+    /// We override this with optimized O(1) lookup using pre-computed map
+    /// in static store
     fn get_tgt_slug_from_src(
         &self,
         src_note_vault_path: &Path,
@@ -315,5 +319,69 @@ impl StaticVaultStore {
             vault_level_info,
             ref_to_tgt_slug_and_link_map: src_to_tgt_slug_and_link_map,
         }
+    }
+}
+
+impl VaultDB for StaticVaultStore {
+    fn get_resolved_links(&self) -> &[ResolvedLink] {
+        &self.vault_level_info.links
+    }
+
+    fn get_unresolved_references(&self) -> &[Reference] {
+        &self.vault_level_info.unresolved
+    }
+
+    fn get_slug_from_file_vault_path(&self, path: &PathBuf) -> Option<String> {
+        self.vault_level_info
+            .file_vault_path_to_slug_map
+            .get(path)
+            .cloned()
+    }
+
+    fn get_title_from_note_vault_path(&self, path: &PathBuf) -> Option<String> {
+        self.vault_level_info
+            .note_vault_path_to_title_map
+            .get(path)
+            .cloned()
+    }
+
+    fn get_innote_refable_anchor_id(
+        &self,
+        path: &PathBuf,
+        refable_range: &Range<usize>,
+    ) -> Option<String> {
+        self.vault_level_info
+            .innote_refable_anchor_id_map
+            .get(path)
+            .and_then(|anchor_id_map| anchor_id_map.get(refable_range))
+            .cloned()
+    }
+
+    fn get_reference_anchor_id(
+        &self,
+        path: &PathBuf,
+        ref_range: &Range<usize>,
+    ) -> Option<String> {
+        self.vault_level_info
+            .reference_anchor_id_map
+            .get(path)
+            .and_then(|(range, anchor_id)| {
+                if range == ref_range {
+                    Some(anchor_id.clone())
+                } else {
+                    None
+                }
+            })
+    }
+
+    // Override with optimized O(1) lookup using pre-computed map
+    fn get_tgt_slug_from_src(
+        &self,
+        src_note_vault_path: &Path,
+        range: &Range<usize>,
+    ) -> Option<String> {
+        self.ref_to_tgt_slug_and_link_map
+            .get(&(src_note_vault_path.to_path_buf(), range.clone()))
+            .map(|(dest, _link)| dest.clone())
     }
 }
