@@ -225,12 +225,13 @@ impl StaticVaultStore {
         file_level_info: FileLevelInfo,
         vault_level_info: VaultLevelInfo,
     ) -> Self {
-        let references = file_level_info.references;
-        let resolved_links = vault_level_info.links;
+        // Unpack
+        let references = &file_level_info.references;
+        let resolved_links = &vault_level_info.links;
         let vault_path_to_slug_map =
-            vault_level_info.file_vault_path_to_slug_map;
+            &vault_level_info.file_vault_path_to_slug_map;
         let innote_refable_anchor_id_map =
-            vault_level_info.innote_refable_anchor_id_map;
+            &vault_level_info.innote_refable_anchor_id_map;
 
         // Outgoing links
         // build a map of:
@@ -248,20 +249,24 @@ impl StaticVaultStore {
             (String, ResolvedLink),
         > = references
             .iter()
-            .map(|reference| {
-                let src_note_vault_path = reference.path;
-                let src_ref_range = reference.range;
+            .flat_map(|reference| {
+                let src_note_vault_path = reference.path.clone();
+                let src_ref_range = reference.range.clone();
+
+                // Clone for use in the filter_map closure
+                let src_note_vault_path_for_map = src_note_vault_path.clone();
+                let src_ref_range_for_map = src_ref_range.clone();
+
                 resolved_links
                     .iter()
-                    .filter(|link| link.src_path_eq(&src_note_vault_path))
-                    .map(|link| {
-                        let src_range = &link.from.range;
+                    .filter(move |link| link.src_path_eq(&src_note_vault_path))
+                    .filter_map(move |link| {
                         let tgt = &link.to;
                         let tgt_slug = vault_path_to_slug_map
                             .get(tgt.path())
                             .expect("link target path not found");
                         let base_slug = vault_path_to_slug_map
-                            .get(&src_note_vault_path)
+                            .get(&src_note_vault_path_for_map)
                             .expect("vault path not found");
                         let rel_tgt_slug = get_relative_dest(
                             Path::new(base_slug),
@@ -293,12 +298,15 @@ impl StaticVaultStore {
                         } else {
                             format!("{}", rel_tgt_slug)
                         };
-                        (
-                            (src_note_vault_path, src_ref_range.clone()),
+                        Some((
+                            (
+                                src_note_vault_path_for_map.clone(),
+                                src_ref_range_for_map.clone(),
+                            ),
                             (dest, link.clone()),
-                        )
+                        ))
                     })
-                    .collect()
+                    .collect::<Vec<_>>()
             })
             .collect();
 
