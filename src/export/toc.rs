@@ -34,26 +34,27 @@ impl Hierarchical for TocItem {
 /// For each note, we need:
 ///   - heading texts
 ///   - heading anchor id
-pub fn render_toc(
+pub fn render_toc<M>(
     vault_path: &Path,
     referenceables: &[Referenceable],
-    innote_refable_anchor_id_map: &HashMap<
-        PathBuf,
-        HashMap<Range<usize>, String>,
-    >,
-) -> Option<Markup> {
-    let refable_anchor_id_map = innote_refable_anchor_id_map.get(vault_path)?;
-
+    innote_refable_anchor_id_map: M,
+) -> Option<Markup>
+where
+    M: Fn(&Path, Range<usize>) -> Option<String>,
+{
     let this_referenceables = referenceables
         .iter()
         .filter(|refable| refable.path() == vault_path)
         .collect::<Vec<_>>();
 
-    fn get_heading(
+    fn get_heading<M>(
+        vault_path: &Path,
         referenceable: &Referenceable,
         toc_items: &mut Vec<TocItem>,
-        refable_anchor_id_map: &HashMap<Range<usize>, String>,
-    ) {
+        refable_anchor_id_map: &M,
+    ) where
+        M: Fn(&Path, Range<usize>) -> Option<String>,
+    {
         match referenceable {
             Referenceable::Heading {
                 path: _,
@@ -61,7 +62,8 @@ pub fn render_toc(
                 text,
                 range,
             } => {
-                let anchor_id = refable_anchor_id_map.get(range).unwrap();
+                let anchor_id =
+                    refable_anchor_id_map(vault_path, range.clone()).unwrap();
                 let toc_item = TocItem::new(
                     text.to_string(),
                     anchor_id.clone(),
@@ -71,7 +73,12 @@ pub fn render_toc(
             }
             Referenceable::Note { children, .. } => {
                 for child in children {
-                    get_heading(child, toc_items, refable_anchor_id_map);
+                    get_heading(
+                        vault_path,
+                        child,
+                        toc_items,
+                        refable_anchor_id_map,
+                    );
                 }
             }
             _ => {}
@@ -80,7 +87,12 @@ pub fn render_toc(
 
     let mut toc_items = Vec::new();
     for referenceable in this_referenceables {
-        get_heading(referenceable, &mut toc_items, refable_anchor_id_map);
+        get_heading(
+            vault_path,
+            referenceable,
+            &mut toc_items,
+            &innote_refable_anchor_id_map,
+        );
     }
 
     if toc_items.is_empty() {
