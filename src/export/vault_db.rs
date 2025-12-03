@@ -252,66 +252,44 @@ impl StaticVaultStore {
         let src_to_tgt_slug_and_link_map: HashMap<
             (PathBuf, Range<usize>),
             (String, ResolvedLink),
-        > = references
+        > = resolved_links
             .iter()
-            .flat_map(|reference| {
-                let src_note_vault_path = reference.path.clone();
-                let src_ref_range = reference.range.clone();
+            .map(|link| {
+                let src_note_vault_path = link.from.path.clone();
+                let src_ref_range = link.from.range.clone();
+                let tgt = &link.to;
 
-                // Clone for use in the filter_map closure
-                let src_note_vault_path_for_map = src_note_vault_path.clone();
-                let src_ref_range_for_map = src_ref_range.clone();
-
-                resolved_links
-                    .iter()
-                    .filter(move |link| link.src_path_eq(&src_note_vault_path))
-                    .filter_map(move |link| {
-                        let tgt = &link.to;
-                        let tgt_slug = vault_path_to_slug_map
-                            .get(tgt.path())
-                            .expect("link target path not found");
-                        let base_slug = vault_path_to_slug_map
-                            .get(&src_note_vault_path_for_map)
-                            .expect("vault path not found");
-                        let rel_tgt_slug = get_relative_dest(
-                            Path::new(base_slug),
-                            Path::new(tgt_slug),
-                        );
-                        let tgt_anchor_id = match tgt {
-                            Referenceable::Block {
-                                path,
-                                range: tgt_range,
-                                ..
-                            }
-                            | Referenceable::Heading {
-                                path,
-                                range: tgt_range,
-                                ..
-                            } => innote_refable_anchor_id_map
-                                .get(path)
-                                .and_then(|anchor_id_map| {
-                                    anchor_id_map.get(tgt_range)
-                                }),
-                            _ => None,
-                        };
-                        let dest = if let Some(tgt_anchor_id) = tgt_anchor_id {
-                            format!(
-                                "{}#{}",
-                                rel_tgt_slug,
-                                tgt_anchor_id.clone()
-                            )
-                        } else {
-                            format!("{}", rel_tgt_slug)
-                        };
-                        Some((
-                            (
-                                src_note_vault_path_for_map.clone(),
-                                src_ref_range_for_map.clone(),
-                            ),
-                            (dest, link.clone()),
-                        ))
-                    })
-                    .collect::<Vec<_>>()
+                let tgt_slug = vault_path_to_slug_map
+                    .get(tgt.path())
+                    .expect("link target path not found");
+                let base_slug = vault_path_to_slug_map
+                    .get(&src_note_vault_path)
+                    .expect("vault path not found");
+                let rel_tgt_slug = get_relative_dest(
+                    Path::new(base_slug),
+                    Path::new(tgt_slug),
+                );
+                let tgt_anchor_id = match tgt {
+                    Referenceable::Block {
+                        path,
+                        range: tgt_range,
+                        ..
+                    }
+                    | Referenceable::Heading {
+                        path,
+                        range: tgt_range,
+                        ..
+                    } => innote_refable_anchor_id_map
+                        .get(path)
+                        .and_then(|anchor_id_map| anchor_id_map.get(tgt_range)),
+                    _ => None,
+                };
+                let dest = if let Some(tgt_anchor_id) = tgt_anchor_id {
+                    format!("{}#{}", rel_tgt_slug, tgt_anchor_id.clone())
+                } else {
+                    format!("{}", rel_tgt_slug)
+                };
+                ((src_note_vault_path, src_ref_range), (dest, link.clone()))
             })
             .collect();
 

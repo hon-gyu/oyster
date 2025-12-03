@@ -905,20 +905,21 @@ mod tests {
         let vault_root_dir = Path::new("tests/data/vaults/minimal");
 
         // Scan the vault
-        let (fronmatter_vec, referenceables, references) =
+        let (fronmatters_vec, referenceables, references) =
             scan_vault(vault_root_dir, vault_root_dir, false);
 
-        let frontmatters: HashMap<PathBuf, Option<Value>> = fronmatter_vec
-            .into_iter()
-            .zip(&references)
-            .map(|(fm, ref_src)| (ref_src.path.clone(), fm))
+        // Build frontmatters map
+        let fronmatters = referenceables
+            .iter()
+            .zip(fronmatters_vec)
+            .map(|(referenceable, fm)| (referenceable.path().to_path_buf(), fm))
             .collect();
 
         // Build file and vault level info
         let file_level_info = FileLevelInfo {
             referenceables,
             references,
-            fronmatters: frontmatters,
+            fronmatters,
         };
         let vault_level_info = VaultLevelInfo::new(
             &file_level_info.referenceables,

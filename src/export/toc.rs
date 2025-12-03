@@ -1,9 +1,8 @@
 use crate::hierarchy::{Hierarchical, TreeNode, build_tree};
 use crate::link::Referenceable;
 use maud::{Markup, html};
-use std::collections::HashMap;
 use std::ops::Range;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 /// Table of contents item
 #[derive(Debug)]

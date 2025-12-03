@@ -1,7 +1,6 @@
 use crate::hierarchy::{FileTreeItem, TreeNode, build_file_tree};
 use crate::link::Referenceable;
 use maud::{Markup, html};
-use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 /// Render a file tree
@@ -9,14 +8,16 @@ use std::path::{Path, PathBuf};
 /// Arguments:
 /// - `vault_slug`: path in the vault of the current page
 /// - `referenceables`: all referenceables in the vault
-/// - `vault_path_to_slug_map`
-pub fn render_file_tree(
+/// - `vault_path_to_slug`: closure that maps vault path to slug
+pub fn render_file_tree<F>(
     vault_slug: &Path,
     referenceables: &[Referenceable],
-    vault_path_to_slug_map: &HashMap<PathBuf, String>,
-) -> Markup {
-    let tree =
-        build_file_tree(vault_slug, referenceables, vault_path_to_slug_map);
+    vault_path_to_slug: F,
+) -> Markup
+where
+    F: Fn(&PathBuf) -> Option<String>,
+{
+    let tree = build_file_tree(vault_slug, referenceables, &vault_path_to_slug);
     html! {
         nav .file-tree {
             span { "." }  // Root

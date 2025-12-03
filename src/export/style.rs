@@ -21,7 +21,10 @@ fn get_theme_css(name: &str) -> &'static str {
 
 /// Copy CSS files to the output directory
 /// Returns the relative paths to the CSS files
-pub fn setup_styles(output_dir: &Path, theme: &str) -> Result<Vec<String>, std::io::Error> {
+pub fn setup_styles(
+    output_dir: &Path,
+    theme: &str,
+) -> Result<Vec<String>, std::io::Error> {
     // Create styles directory in output
     let styles_dir = output_dir.join("styles");
     let themes_dir = styles_dir.join("themes");
@@ -48,7 +51,11 @@ pub fn setup_styles(output_dir: &Path, theme: &str) -> Result<Vec<String>, std::
 /// page_path: the path to the HTML page (e.g., "output/notes/page.html")
 /// output_dir: the root output directory (e.g., "output")
 /// theme: the theme name
-pub fn get_style_paths(page_path: &Path, output_dir: &Path, theme: &str) -> Vec<String> {
+pub fn get_style_paths(
+    page_path: &Path,
+    output_dir: &Path,
+    theme: &str,
+) -> Vec<String> {
     use crate::export::utils::get_relative_dest;
 
     let base_path = output_dir.join("styles/base.css");

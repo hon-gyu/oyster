@@ -1,10 +1,7 @@
 use super::utils::get_relative_dest;
-use crate::hierarchy::{
-    FileTreeItem, Hierarchical, TreeNode, build_file_tree, build_tree,
-};
+use crate::hierarchy::{FileTreeItem, TreeNode, build_file_tree};
 use crate::link::Referenceable;
 use maud::{Markup, html};
-use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 /// Render the link to the home page
@@ -83,13 +80,16 @@ fn render_file_tree_node(node: &TreeNode<FileTreeItem>) -> Markup {
     }
 }
 
-pub fn render_home_page(
+pub fn render_home_page<F>(
     referenceables: &[Referenceable],
-    vault_path_to_slug_map: &HashMap<PathBuf, String>,
+    vault_path_to_slug: F,
     home_slug_path: &Path,
-) -> Markup {
+) -> Markup
+where
+    F: Fn(&PathBuf) -> Option<String>,
+{
     let tree =
-        build_file_tree(home_slug_path, referenceables, vault_path_to_slug_map);
+        build_file_tree(home_slug_path, referenceables, &vault_path_to_slug);
 
     html! {
         nav .home-page.file-tree {

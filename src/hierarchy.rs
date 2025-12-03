@@ -1,9 +1,7 @@
 //! Generic trait and utilities for building hierarchical tree structures
 use crate::export::utils::get_relative_dest;
 use crate::link::Referenceable;
-use maud::{Markup, html};
 use std::collections::BTreeSet;
-use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 /// Trait for types that have a hierarchical level
@@ -139,7 +137,7 @@ where
         let absolute_slug = vault_path_to_slug(note_path).unwrap();
         // Convert to relative path from current page
         let relative_slug =
-            get_relative_dest(vault_slug, Path::new(absolute_slug));
+            get_relative_dest(vault_slug, Path::new(&absolute_slug));
         items.push(FileTreeItem {
             name,
             path: note_path.clone(),
