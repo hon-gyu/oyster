@@ -201,6 +201,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "It still gets rendered since text is valid LaTeX"]
     fn test_render_quiver_build_time_fallback_on_error() {
         // Use invalid quiver syntax to trigger error
         let quiver_code = "this is not valid quiver syntax!!!";

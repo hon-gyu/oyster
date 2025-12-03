@@ -151,16 +151,37 @@ mod tests {
             Reference {
                 kind: Embed,
                 path: "tests/data/vaults/embed_file/note.md",
-                range: 210..219,
+                range: 224..233,
                 dest: "note2",
                 display_text: "note2",
             },
             Reference {
                 kind: Embed,
                 path: "tests/data/vaults/embed_file/note.md",
-                range: 236..263,
+                range: 283..310,
                 dest: "note2#Heading in note 2",
                 display_text: "note2#Heading in note 2",
+            },
+            Reference {
+                kind: Embed,
+                path: "tests/data/vaults/embed_file/note.md",
+                range: 357..374,
+                dest: "note2#^60a916",
+                display_text: "note2#^60a916",
+            },
+            Reference {
+                kind: Embed,
+                path: "tests/data/vaults/embed_file/note.md",
+                range: 427..444,
+                dest: "note2#^7e162c",
+                display_text: "note2#^7e162c",
+            },
+            Reference {
+                kind: Embed,
+                path: "tests/data/vaults/embed_file/note.md",
+                range: 492..510,
+                dest: "note2#^warning",
+                display_text: "note2#^warning",
             },
         ]
         "#);
@@ -173,7 +194,7 @@ mod tests {
         let md_src = std::fs::read_to_string(&path).unwrap();
         let tree = Tree::new(&md_src);
         assert_snapshot!(&tree.root_node, @r#"
-        Document [1..265]
+        Document [1..511]
           Paragraph [1..26]
             Text(Borrowed("Image")) [1..6]
             SoftBreak [6..7]
@@ -194,16 +215,36 @@ mod tests {
             SoftBreak [166..167]
             Image { link_type: WikiLink { has_pothole: true }, dest_url: Borrowed("blue-image.png "), title: Borrowed(""), id: Borrowed("") } [167..195]
               Text(Borrowed(" 100x150")) [186..194]
-          Paragraph [199..221]
-            Text(Borrowed("Embed note")) [199..209]
-            SoftBreak [209..210]
-            Image { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("note2"), title: Borrowed(""), id: Borrowed("") } [210..219]
-              Text(Borrowed("note2")) [213..218]
-          Paragraph [222..265]
-            Text(Borrowed("Embed heading")) [222..235]
-            SoftBreak [235..236]
-            Image { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("note2#Heading in note 2"), title: Borrowed(""), id: Borrowed("") } [236..263]
-              Text(Borrowed("note2#Heading in note 2")) [239..262]
+          Paragraph [199..235]
+            Text(Borrowed("Embed note: ")) [199..211]
+            Code(Borrowed("![[note2]]")) [211..223]
+            SoftBreak [223..224]
+            Image { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("note2"), title: Borrowed(""), id: Borrowed("") } [224..233]
+              Text(Borrowed("note2")) [227..232]
+          Paragraph [237..312]
+            Text(Borrowed("Embed heading: ")) [237..252]
+            Code(Borrowed("![[note2#Heading in note 2]]")) [252..282]
+            SoftBreak [282..283]
+            Image { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("note2#Heading in note 2"), title: Borrowed(""), id: Borrowed("") } [283..310]
+              Text(Borrowed("note2#Heading in note 2")) [286..309]
+          Paragraph [314..376]
+            Text(Borrowed("Embed block - a list: ")) [314..336]
+            Code(Borrowed("![[note2#^60a916]]")) [336..356]
+            SoftBreak [356..357]
+            Image { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("note2#^60a916"), title: Borrowed(""), id: Borrowed("") } [357..374]
+              Text(Borrowed("note2#^60a916")) [360..373]
+          Paragraph [378..446]
+            Text(Borrowed("Embed block - a paragraph : ")) [378..406]
+            Code(Borrowed("![[note2#^7e162c]]")) [406..426]
+            SoftBreak [426..427]
+            Image { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("note2#^7e162c"), title: Borrowed(""), id: Borrowed("") } [427..444]
+              Text(Borrowed("note2#^7e162c")) [430..443]
+          Paragraph [447..511]
+            Text(Borrowed("Embed block - callout: ")) [447..470]
+            Code(Borrowed("![[note2#^warning]]")) [470..491]
+            SoftBreak [491..492]
+            Image { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("note2#^warning"), title: Borrowed(""), id: Borrowed("") } [492..510]
+              Text(Borrowed("note2#^warning")) [495..509]
         "#);
     }
 

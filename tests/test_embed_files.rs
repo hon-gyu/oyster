@@ -6,6 +6,7 @@ use markdown_tools::export::content;
 use markdown_tools::export::utils::{
     build_in_note_anchor_id_map, build_vault_paths_to_slug_map,
 };
+use markdown_tools::export::vault_db::StaticVaultStore;
 use markdown_tools::export::{
     MermaidRenderMode, NodeRenderConfig, QuiverRenderMode, TikzRenderMode,
 };
@@ -17,25 +18,7 @@ use test_utils::{format_html_simple, render_full_html};
 #[test]
 fn test_render_image_resize() {
     let vault_root_dir = Path::new("tests/data/vaults/embed_file");
-
-    // Scan the vault
-    let (_, referenceables, references) =
-        scan_vault(vault_root_dir, vault_root_dir, false);
-    let (links, _unresolved) = build_links(references, referenceables.clone());
-
-    // Build vault file path to slug map
-    let vault_file_paths = referenceables
-        .iter()
-        .filter(|referenceable| !referenceable.is_innote())
-        .map(|referenceable| referenceable.path().as_path())
-        .collect::<Vec<_>>();
-    let vault_path_to_slug_map =
-        build_vault_paths_to_slug_map(&vault_file_paths);
-
-    // Build in-note anchor id map
-    let referenceable_refs = referenceables.iter().collect::<Vec<_>>();
-    let innote_refable_anchor_id_map =
-        build_in_note_anchor_id_map(&referenceable_refs);
+    let vault_db = StaticVaultStore::new_from_dir(vault_root_dir, false);
 
     // Render note
     let note_path = Path::new("note.md");
@@ -50,10 +33,10 @@ fn test_render_image_resize() {
     let rendered = content::render_content(
         &tree,
         note_path,
-        &links,
-        &vault_path_to_slug_map,
-        &innote_refable_anchor_id_map,
+        &vault_db,
         &node_render_config,
+        0,
+        1,
     );
 
     let rendered = format_html_simple(&rendered.into_string());
