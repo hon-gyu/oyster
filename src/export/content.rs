@@ -15,14 +15,10 @@ use crate::ast::{
     NodeKind::{self, *},
     Tree,
 };
-use crate::export::utils::{get_relative_dest, range_to_anchor_id};
-use crate::link::types::{Link as ResolvedLink, Referenceable};
-use crate::tree_provider::TreeProvider;
+use crate::export::utils::range_to_anchor_id;
 use maud::{Markup, PreEscaped, html};
 use pulldown_cmark::{BlockQuoteKind, CodeBlockKind, LinkType};
-use std::collections::HashMap;
-use std::ops::Range;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 pub struct NodeRenderConfig {
     pub mermaid_render_mode: MermaidRenderMode,
@@ -44,80 +40,15 @@ pub fn render_content(
     tree: &Tree,
     vault_path: &Path,
     vault_db: &dyn VaultDB,
-    // resolved_links: &[ResolvedLink],
-    // vault_path_to_slug_map: &HashMap<PathBuf, String>,
-    // innote_refable_anchor_id_map: &HashMap<
-    //     PathBuf,
-    //     HashMap<Range<usize>, String>,
-    // >,
-    // tree_provider: &dyn TreeProvider,
     node_render_config: &NodeRenderConfig,
     embed_depth: usize,     // Current embed depth
     max_embed_depth: usize, // Max embed depth
 ) -> Markup {
-    // Outgoing links
-    // build a map of:
-    //   src (this) reference's byte range
-    //   |->
-    //   (
-    //     tgt_slug.html#anchor_id | tgt_slug.html | tgt_slug.png,
-    //     resolved link
-    //   )
-    let src_range_to_link_map: HashMap<Range<usize>, (String, &ResolvedLink)> =
-        resolved_links
-            .iter()
-            .filter(|link| link.src_path_eq(vault_path))
-            .map(|link| {
-                let src_range = &link.from.range;
-                let tgt = &link.to;
-                let tgt_slug = vault_path_to_slug_map
-                    .get(tgt.path())
-                    .expect("link target path not found");
-                let base_slug = vault_path_to_slug_map
-                    .get(vault_path)
-                    .expect("vault path not found");
-                let rel_tgt_slug = get_relative_dest(
-                    Path::new(base_slug),
-                    Path::new(tgt_slug),
-                );
-                let tgt_anchor_id = match tgt {
-                    Referenceable::Block {
-                        path,
-                        range: tgt_range,
-                        ..
-                    }
-                    | Referenceable::Heading {
-                        path,
-                        range: tgt_range,
-                        ..
-                    } => innote_refable_anchor_id_map
-                        .get(path)
-                        .and_then(|anchor_id_map| anchor_id_map.get(tgt_range)),
-                    _ => None,
-                };
-                let dest = if let Some(tgt_anchor_id) = tgt_anchor_id {
-                    format!("{}#{}", rel_tgt_slug, tgt_anchor_id.clone())
-                } else {
-                    format!("{}", rel_tgt_slug)
-                };
-                (src_range.clone(), (dest, link))
-            })
-            .collect();
-
-    // Incoming links
-    // obtain a map of: tgt (this) referable's byte range |-> anchor id
-    let in_note_anchor_id_map: &HashMap<Range<usize>, String> =
-        innote_refable_anchor_id_map
-            .get(vault_path)
-            .expect("vault path not found");
-
     let rendered = render_node(
         &tree.root_node,
         vault_path,
-        &src_range_to_link_map,
-        in_note_anchor_id_map,
+        vault_db,
         node_render_config,
-        tree_provider,
         embed_depth,
         max_embed_depth,
     );
@@ -135,14 +66,12 @@ pub enum EmbededKind {
 }
 
 fn render_embedded_content(
-    tgt_tree: &Tree,
-    tgt_vault_path: &Path,
-    ref_map: &HashMap<Range<usize>, (String, &ResolvedLink)>,
-    refable_anchor_id_map: &HashMap<Range<usize>, String>,
-    node_render_config: &NodeRenderConfig,
-    tree_provider: &dyn TreeProvider,
-    embed_depth: usize,     // Current embed depth
-    max_embed_depth: usize, // Max embed depth
+    _tgt_tree: &Tree,
+    _tgt_vault_path: &Path,
+    _vault_db: &dyn VaultDB,
+    _node_render_config: &NodeRenderConfig,
+    _embed_depth: usize,     // Current embed depth
+    _max_embed_depth: usize, // Max embed depth
 ) -> (Markup, EmbededKind) {
     todo!()
 }
@@ -150,10 +79,8 @@ fn render_embedded_content(
 fn render_nodes(
     nodes: &[Node],
     vault_path: &Path,
-    ref_map: &HashMap<Range<usize>, (String, &ResolvedLink)>,
-    refable_anchor_id_map: &HashMap<Range<usize>, String>,
+    vault_db: &dyn VaultDB,
     node_render_config: &NodeRenderConfig,
-    tree_provider: &dyn TreeProvider,
     embed_depth: usize,     // Current embed depth
     max_embed_depth: usize, // Max embed depth
 ) -> String {
@@ -162,10 +89,8 @@ fn render_nodes(
         let rendered = render_node(
             node,
             vault_path,
-            ref_map,
-            refable_anchor_id_map,
+            vault_db,
             node_render_config,
-            tree_provider,
             embed_depth,
             max_embed_depth,
         );
@@ -180,11 +105,8 @@ const IMAGE_EXTENSIONS: [&str; 3] = ["png", "jpg", "jpeg"];
 fn render_node(
     node: &Node,
     vault_path: &Path,
-    // TODO: maybe we should include original vault path as data-href as well
-    ref_map: &HashMap<Range<usize>, (String, &ResolvedLink)>,
-    refable_anchor_id_map: &HashMap<Range<usize>, String>,
+    vault_db: &dyn VaultDB,
     node_render_config: &NodeRenderConfig,
-    tree_provider: &dyn TreeProvider,
     embed_depth: usize,     // Current embed depth
     max_embed_depth: usize, // Max embed depth
 ) -> Markup {
@@ -195,10 +117,8 @@ fn render_node(
             let children_rendered = render_nodes(
                 &node.children,
                 vault_path,
-                ref_map,
-                refable_anchor_id_map,
+                vault_db,
                 node_render_config,
-                tree_provider,
                 embed_depth,
                 max_embed_depth,
             );
@@ -218,10 +138,8 @@ fn render_node(
             let children = render_nodes(
                 &node.children,
                 vault_path,
-                ref_map,
-                refable_anchor_id_map,
+                vault_db,
                 node_render_config,
-                tree_provider,
                 embed_depth,
                 max_embed_depth,
             );
@@ -232,7 +150,9 @@ fn render_node(
             };
 
             // Find matched reference's resolved destination
-            if let Some((dest, link)) = ref_map.get(&range) {
+            if let Some(dest) =
+                vault_db.get_tgt_slug_from_src(vault_path, &range)
+            {
                 let anchor_markup = html! {
                     a href=(dest) title=[title_opt] {
                         (PreEscaped(children))
@@ -278,10 +198,8 @@ fn render_node(
             let children = render_nodes(
                 &node.children,
                 vault_path,
-                ref_map,
-                refable_anchor_id_map,
+                vault_db,
                 node_render_config,
-                tree_provider,
                 embed_depth,
                 max_embed_depth,
             );
@@ -293,9 +211,10 @@ fn render_node(
             };
 
             // Find matched tgt destination
-            let matched_tgt_slug_path_opt = ref_map.get(&range);
+            let matched_tgt_slug_path_opt =
+                vault_db.get_tgt_slug_from_src(vault_path, &range);
 
-            if let Some((tgt_slug_path, link)) = matched_tgt_slug_path_opt {
+            if let Some(tgt_slug_path) = matched_tgt_slug_path_opt {
                 // Case: matched link
                 let backlink_anchor_id = range_to_anchor_id(&range);
                 let anchor_markup = html! {
@@ -354,15 +273,15 @@ fn render_node(
             let children = render_nodes(
                 &node.children,
                 vault_path,
-                ref_map,
-                refable_anchor_id_map,
+                vault_db,
                 node_render_config,
-                tree_provider,
                 embed_depth,
                 max_embed_depth,
             );
             // Inject anchor id for matched referenceable
-            if let Some(id) = refable_anchor_id_map.get(&range) {
+            if let Some(id) = vault_db
+                .get_innote_refable_anchor_id(&vault_path.to_path_buf(), &range)
+            {
                 html! {
                     p #(id) { (PreEscaped(children)) }
                 }
@@ -381,10 +300,8 @@ fn render_node(
             let children = render_nodes(
                 &node.children,
                 vault_path,
-                ref_map,
-                refable_anchor_id_map,
+                vault_db,
                 node_render_config,
-                tree_provider,
                 embed_depth,
                 max_embed_depth,
             );
@@ -393,8 +310,11 @@ fn render_node(
 
             // id: anchor id from matched referenceable takes precedence
             let id_attr = {
-                let id_from_matched_referable = refable_anchor_id_map
-                    .get(&range)
+                let id_from_matched_referable = vault_db
+                    .get_innote_refable_anchor_id(
+                        &vault_path.to_path_buf(),
+                        &range,
+                    )
                     .expect("Heading should always have anchor id");
                 format!(" id=\"{}\"", id_from_matched_referable)
             };
@@ -429,10 +349,8 @@ fn render_node(
             let children = render_nodes(
                 &node.children,
                 vault_path,
-                ref_map,
-                refable_anchor_id_map,
+                vault_db,
                 node_render_config,
-                tree_provider,
                 embed_depth,
                 max_embed_depth,
             );
@@ -446,7 +364,10 @@ fn render_node(
                 BlockQuoteKind::Caution => "markdown-alert-caution",
             });
 
-            let id_opt = refable_anchor_id_map.get(&range);
+            let id_opt = vault_db.get_innote_refable_anchor_id(
+                &vault_path.to_path_buf(),
+                &range,
+            );
 
             // Inject anchor id for matched referenceable
             if let Some(id) = id_opt {
@@ -481,15 +402,16 @@ fn render_node(
             let children = render_nodes(
                 &node.children,
                 vault_path,
-                ref_map,
-                refable_anchor_id_map,
+                vault_db,
                 node_render_config,
-                tree_provider,
                 embed_depth,
                 max_embed_depth,
             );
 
-            let id_opt = refable_anchor_id_map.get(&range);
+            let id_opt = vault_db.get_innote_refable_anchor_id(
+                &vault_path.to_path_buf(),
+                &range,
+            );
 
             // Extract list type and start attribute determination
             if let Some(id) = id_opt {
@@ -529,15 +451,15 @@ fn render_node(
             let children = render_nodes(
                 &node.children,
                 vault_path,
-                ref_map,
-                refable_anchor_id_map,
+                vault_db,
                 node_render_config,
-                tree_provider,
                 embed_depth,
                 max_embed_depth,
             );
             // Inject anchor id for matched referenceable
-            if let Some(id) = refable_anchor_id_map.get(&range) {
+            if let Some(id) = vault_db
+                .get_innote_refable_anchor_id(&vault_path.to_path_buf(), &range)
+            {
                 html! {
                     li id=(id) { (PreEscaped(children)) }
                 }
@@ -670,10 +592,8 @@ fn render_node(
             let children = render_nodes(
                 &node.children,
                 vault_path,
-                ref_map,
-                refable_anchor_id_map,
+                vault_db,
                 node_render_config,
-                tree_provider,
                 embed_depth,
                 max_embed_depth,
             );
@@ -685,10 +605,8 @@ fn render_node(
             let children = render_nodes(
                 &node.children,
                 vault_path,
-                ref_map,
-                refable_anchor_id_map,
+                vault_db,
                 node_render_config,
-                tree_provider,
                 embed_depth,
                 max_embed_depth,
             );
@@ -700,10 +618,8 @@ fn render_node(
             let children = render_nodes(
                 &node.children,
                 vault_path,
-                ref_map,
-                refable_anchor_id_map,
+                vault_db,
                 node_render_config,
-                tree_provider,
                 embed_depth,
                 max_embed_depth,
             );
@@ -715,10 +631,8 @@ fn render_node(
             let children = render_nodes(
                 &node.children,
                 vault_path,
-                ref_map,
-                refable_anchor_id_map,
+                vault_db,
                 node_render_config,
-                tree_provider,
                 embed_depth,
                 max_embed_depth,
             );
@@ -730,10 +644,8 @@ fn render_node(
             let children = render_nodes(
                 &node.children,
                 vault_path,
-                ref_map,
-                refable_anchor_id_map,
+                vault_db,
                 node_render_config,
-                tree_provider,
                 embed_depth,
                 max_embed_depth,
             );
@@ -745,10 +657,8 @@ fn render_node(
             let children = render_nodes(
                 &node.children,
                 vault_path,
-                ref_map,
-                refable_anchor_id_map,
+                vault_db,
                 node_render_config,
-                tree_provider,
                 embed_depth,
                 max_embed_depth,
             );
@@ -765,10 +675,8 @@ fn render_node(
             let children = render_nodes(
                 &node.children,
                 vault_path,
-                ref_map,
-                refable_anchor_id_map,
+                vault_db,
                 node_render_config,
-                tree_provider,
                 embed_depth,
                 max_embed_depth,
             );
@@ -793,10 +701,8 @@ fn render_node(
             let children = render_nodes(
                 &node.children,
                 vault_path,
-                ref_map,
-                refable_anchor_id_map,
+                vault_db,
                 node_render_config,
-                tree_provider,
                 embed_depth,
                 max_embed_depth,
             );
@@ -821,10 +727,8 @@ fn render_node(
             let alt_text = render_nodes(
                 &node.children,
                 vault_path,
-                ref_map,
-                refable_anchor_id_map,
+                vault_db,
                 node_render_config,
-                tree_provider,
                 embed_depth,
                 max_embed_depth,
             );
@@ -841,10 +745,8 @@ fn render_node(
             let children = render_nodes(
                 &node.children,
                 vault_path,
-                ref_map,
-                refable_anchor_id_map,
+                vault_db,
                 node_render_config,
-                tree_provider,
                 embed_depth,
                 max_embed_depth,
             );
@@ -856,10 +758,8 @@ fn render_node(
             let children = render_nodes(
                 &node.children,
                 vault_path,
-                ref_map,
-                refable_anchor_id_map,
+                vault_db,
                 node_render_config,
-                tree_provider,
                 embed_depth,
                 max_embed_depth,
             );
@@ -871,10 +771,8 @@ fn render_node(
             let children = render_nodes(
                 &node.children,
                 vault_path,
-                ref_map,
-                refable_anchor_id_map,
+                vault_db,
                 node_render_config,
-                tree_provider,
                 embed_depth,
                 max_embed_depth,
             );
@@ -886,10 +784,8 @@ fn render_node(
             let children = render_nodes(
                 &node.children,
                 vault_path,
-                ref_map,
-                refable_anchor_id_map,
+                vault_db,
                 node_render_config,
-                tree_provider,
                 embed_depth,
                 max_embed_depth,
             );
@@ -902,10 +798,8 @@ fn render_node(
             let children = render_nodes(
                 &node.children,
                 vault_path,
-                ref_map,
-                refable_anchor_id_map,
+                vault_db,
                 node_render_config,
-                tree_provider,
                 embed_depth,
                 max_embed_depth,
             );
@@ -917,10 +811,8 @@ fn render_node(
             let children = render_nodes(
                 &node.children,
                 vault_path,
-                ref_map,
-                refable_anchor_id_map,
+                vault_db,
                 node_render_config,
-                tree_provider,
                 embed_depth,
                 max_embed_depth,
             );
@@ -932,10 +824,8 @@ fn render_node(
             let children = render_nodes(
                 &node.children,
                 vault_path,
-                ref_map,
-                refable_anchor_id_map,
+                vault_db,
                 node_render_config,
-                tree_provider,
                 embed_depth,
                 max_embed_depth,
             );
@@ -947,10 +837,8 @@ fn render_node(
             let children = render_nodes(
                 &node.children,
                 vault_path,
-                ref_map,
-                refable_anchor_id_map,
+                vault_db,
                 node_render_config,
-                tree_provider,
                 embed_depth,
                 max_embed_depth,
             );
@@ -973,14 +861,17 @@ fn render_node(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::export::utils::{
-        build_in_note_anchor_id_map, build_vault_paths_to_slug_map,
+    use crate::export::frontmatter;
+    use crate::export::vault_db::{
+        FileLevelInfo, StaticVaultStore, VaultLevelInfo,
     };
-    use crate::link::{build_links, scan_vault};
-    use crate::tree_provider::PreloadedTrees;
+    use crate::link::scan_vault;
     use insta::*;
     use maud::DOCTYPE;
+    use serde_yaml::Value;
+    use std::collections::HashMap;
     use std::fs;
+    use std::path::{Path, PathBuf};
 
     fn format_html_simple(html: &str) -> String {
         html.replace("><", ">\n<")
@@ -1014,24 +905,29 @@ mod tests {
         let vault_root_dir = Path::new("tests/data/vaults/minimal");
 
         // Scan the vault
-        let (_, referenceables, references) =
+        let (fronmatter_vec, referenceables, references) =
             scan_vault(vault_root_dir, vault_root_dir, false);
-        let (links, _unresolved) =
-            build_links(references, referenceables.clone());
 
-        // Build vault file path to slug map
-        let vault_file_paths = referenceables
-            .iter()
-            .filter(|referenceable| !referenceable.is_innote())
-            .map(|referenceable| referenceable.path().as_path())
-            .collect::<Vec<_>>();
-        let vault_path_to_slug_map =
-            build_vault_paths_to_slug_map(&vault_file_paths);
+        let frontmatters: HashMap<PathBuf, Option<Value>> = fronmatter_vec
+            .into_iter()
+            .zip(&references)
+            .map(|(fm, ref_src)| (ref_src.path.clone(), fm))
+            .collect();
 
-        // Build in-note anchor id map
-        let referenceable_refs = referenceables.iter().collect::<Vec<_>>();
-        let innote_refable_anchor_id_map =
-            build_in_note_anchor_id_map(&referenceable_refs);
+        // Build file and vault level info
+        let file_level_info = FileLevelInfo {
+            referenceables,
+            references,
+            fronmatters: frontmatters,
+        };
+        let vault_level_info = VaultLevelInfo::new(
+            &file_level_info.referenceables,
+            &file_level_info.references,
+            &file_level_info.fronmatters,
+        );
+
+        // Create vault DB
+        let vault_db = StaticVaultStore::new(file_level_info, vault_level_info);
 
         // Render note
         let note_path = Path::new("Note 1.md");
@@ -1047,11 +943,8 @@ mod tests {
         let rendered = render_content(
             &tree,
             note_path,
-            &links,
-            &vault_path_to_slug_map,
-            &innote_refable_anchor_id_map,
+            &vault_db,
             &node_render_config,
-            &PreloadedTrees::default(),
             0,
             5,
         );
