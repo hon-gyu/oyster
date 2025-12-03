@@ -1,6 +1,8 @@
 //! Render content
 //!
 //! See `write.rs` for information used
+//!
+//! We don't pass in the referenceable info as it's inside the ASTLink
 use super::codeblock::{
     MermaidRenderMode, QuiverRenderMode, TikzRenderMode, render_mermaid,
     render_quiver, render_tikz,
@@ -55,44 +57,50 @@ pub fn render_content(
     // build a map of:
     //   src (this) reference's byte range
     //   |->
-    //   tgt_slug.html#anchor_id | tgt_slug.html | tgt_slug.png
-    let ref_dest_map: HashMap<Range<usize>, String> = resolved_links
-        .iter()
-        .filter(|link| link.src_path_eq(vault_path))
-        .map(|link| {
-            let src_range = &link.from.range;
-            let tgt = &link.to;
-            let tgt_slug = vault_path_to_slug_map
-                .get(tgt.path())
-                .expect("link target path not found");
-            let base_slug = vault_path_to_slug_map
-                .get(vault_path)
-                .expect("vault path not found");
-            let rel_tgt_slug =
-                get_relative_dest(Path::new(base_slug), Path::new(tgt_slug));
-            let tgt_anchor_id = match tgt {
-                Referenceable::Block {
-                    path,
-                    range: tgt_range,
-                    ..
-                }
-                | Referenceable::Heading {
-                    path,
-                    range: tgt_range,
-                    ..
-                } => innote_refable_anchor_id_map
-                    .get(path)
-                    .and_then(|anchor_id_map| anchor_id_map.get(tgt_range)),
-                _ => None,
-            };
-            let dest = if let Some(tgt_anchor_id) = tgt_anchor_id {
-                format!("{}#{}", rel_tgt_slug, tgt_anchor_id.clone())
-            } else {
-                format!("{}", rel_tgt_slug)
-            };
-            (src_range.clone(), dest)
-        })
-        .collect();
+    //   (
+    //     tgt_slug.html#anchor_id | tgt_slug.html | tgt_slug.png,
+    //     resolved link
+    //   )
+    let src_range_to_link_map: HashMap<Range<usize>, (String, &ResolvedLink)> =
+        resolved_links
+            .iter()
+            .filter(|link| link.src_path_eq(vault_path))
+            .map(|link| {
+                let src_range = &link.from.range;
+                let tgt = &link.to;
+                let tgt_slug = vault_path_to_slug_map
+                    .get(tgt.path())
+                    .expect("link target path not found");
+                let base_slug = vault_path_to_slug_map
+                    .get(vault_path)
+                    .expect("vault path not found");
+                let rel_tgt_slug = get_relative_dest(
+                    Path::new(base_slug),
+                    Path::new(tgt_slug),
+                );
+                let tgt_anchor_id = match tgt {
+                    Referenceable::Block {
+                        path,
+                        range: tgt_range,
+                        ..
+                    }
+                    | Referenceable::Heading {
+                        path,
+                        range: tgt_range,
+                        ..
+                    } => innote_refable_anchor_id_map
+                        .get(path)
+                        .and_then(|anchor_id_map| anchor_id_map.get(tgt_range)),
+                    _ => None,
+                };
+                let dest = if let Some(tgt_anchor_id) = tgt_anchor_id {
+                    format!("{}#{}", rel_tgt_slug, tgt_anchor_id.clone())
+                } else {
+                    format!("{}", rel_tgt_slug)
+                };
+                (src_range.clone(), (dest, link))
+            })
+            .collect();
 
     // Incoming links
     // obtain a map of: tgt (this) referable's byte range |-> anchor id
@@ -104,7 +112,7 @@ pub fn render_content(
     let rendered = render_node(
         &tree.root_node,
         vault_path,
-        &ref_dest_map,
+        &src_range_to_link_map,
         in_note_anchor_id_map,
         node_render_config,
         tree_provider,
@@ -114,10 +122,33 @@ pub fn render_content(
     rendered
 }
 
+pub enum EmbededKind {
+    Image,
+    Video,
+    Audio,
+    PDF,
+    Note,
+    Heading,
+    Block,
+}
+
+fn render_embedded_content(
+    tgt_tree: &Tree,
+    tgt_vault_path: &Path,
+    ref_map: &HashMap<Range<usize>, (String, &ResolvedLink)>,
+    refable_anchor_id_map: &HashMap<Range<usize>, String>,
+    node_render_config: &NodeRenderConfig,
+    tree_provider: &dyn TreeProvider,
+    embed_depth: usize,     // Current embed depth
+    max_embed_depth: usize, // Max embed depth
+) -> (Markup, EmbededKind) {
+    todo!()
+}
+
 fn render_nodes(
     nodes: &[Node],
     vault_path: &Path,
-    ref_map: &HashMap<Range<usize>, String>,
+    ref_map: &HashMap<Range<usize>, (String, &ResolvedLink)>,
     refable_anchor_id_map: &HashMap<Range<usize>, String>,
     node_render_config: &NodeRenderConfig,
     tree_provider: &dyn TreeProvider,
@@ -148,7 +179,7 @@ fn render_node(
     node: &Node,
     vault_path: &Path,
     // TODO: maybe we should include original vault path as data-href as well
-    ref_map: &HashMap<Range<usize>, String>,
+    ref_map: &HashMap<Range<usize>, (String, &ResolvedLink)>,
     refable_anchor_id_map: &HashMap<Range<usize>, String>,
     node_render_config: &NodeRenderConfig,
     tree_provider: &dyn TreeProvider,
@@ -192,28 +223,21 @@ fn render_node(
                 embed_depth,
                 max_embed_depth,
             );
-            let href = dest_url.to_string();
-            // Find matched reference's resolved destination
-            let matched_reference_dest = ref_map.get(&range);
-            let href = if let Some(dest) = matched_reference_dest {
-                dest.clone()
-            } else {
-                href
-            };
-
             let title_opt = if title.is_empty() {
                 None
             } else {
                 Some(title.as_ref())
             };
 
-            // Extra internal-link span and anchor id (byte-range) for resolved links
-            if matched_reference_dest.is_some() {
+            // Find matched reference's resolved destination
+            if let Some((dest, link)) = ref_map.get(&range) {
                 let anchor_markup = html! {
-                    a href=(href) title=[title_opt] {
+                    a href=(dest) title=[title_opt] {
                         (PreEscaped(children))
                     }
                 };
+                // Extra internal-link span and anchor id (byte-range) for resolved links
+                // TODO: add more link info to attributes
                 let id = range_to_anchor_id(&range);
                 html! {
                     span .internal-link #(id) {
@@ -222,6 +246,8 @@ fn render_node(
                 }
             } else {
                 // Reference is unresolved
+                let href = dest_url.to_string();
+
                 let is_abs_url = url::Url::parse(href.as_ref()).is_ok();
                 if is_abs_url {
                     html! {
@@ -267,7 +293,7 @@ fn render_node(
             // Find matched tgt destination
             let matched_tgt_slug_path_opt = ref_map.get(&range);
 
-            if let Some(tgt_slug_path) = matched_tgt_slug_path_opt {
+            if let Some((tgt_slug_path, link)) = matched_tgt_slug_path_opt {
                 // Case: matched link
                 let backlink_anchor_id = range_to_anchor_id(&range);
                 let anchor_markup = html! {
@@ -277,15 +303,15 @@ fn render_node(
                 };
 
                 // Check if this is an image
-                if Path::new(&tgt_slug_path)
+                let is_image = Path::new(&tgt_slug_path)
                     .extension()
                     .and_then(|ext| {
                         IMAGE_EXTENSIONS
                             .iter()
                             .find(|&&e| e == ext.to_str().unwrap_or(""))
                     })
-                    .is_some()
-                {
+                    .is_some();
+                if is_image {
                     // Case: image
                     let resize_spec = &children;
                     let (width, height) = utils::parse_resize_spec(resize_spec);
@@ -297,8 +323,12 @@ fn render_node(
                     html! {
                         img .embed-file.image src=(tgt_slug_path) alt=(alt_text) #(backlink_anchor_id) width=[width] height=[height] {}
                     }
+                } else if embed_depth < max_embed_depth {
+                    // let (embedded, embedeed_class) = render_embedded_content(
+
+                    // )
+                    todo!()
                 } else {
-                    // TODO(feature): handle other embedding types
                     // Fallback to raw url
                     html! {
                         span .embed-file #(backlink_anchor_id) {
