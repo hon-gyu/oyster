@@ -8,6 +8,7 @@ pub mod sidebar;
 pub mod style;
 pub mod toc;
 pub mod utils;
+pub mod vault_db;
 pub mod writer;
 
 pub use codeblock::{MermaidRenderMode, QuiverRenderMode, TikzRenderMode};

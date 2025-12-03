@@ -29,7 +29,7 @@ use super::style;
 use super::toc;
 use super::utils::{
     build_in_note_anchor_id_map, build_vault_paths_to_slug_map,
-    get_relative_dest, range_to_anchor_id,
+    get_relative_dest, range_to_anchor_id, title_from_path,
 };
 use crate::ast::Tree;
 use crate::link::{
@@ -422,14 +422,6 @@ mermaid.initialize({ startOnLoad: true });
         }
     }
     .into_string()
-}
-
-/// Extract title from path
-fn title_from_path(path: &Path) -> String {
-    path.file_stem()
-        .and_then(|stem| stem.to_str())
-        .unwrap()
-        .to_string()
 }
 
 /// Incoming links for a note

@@ -176,6 +176,14 @@ pub fn parse_resize_spec(resize_spec: &str) -> (Option<u32>, Option<u32>) {
     }
 }
 
+/// Extract title from path
+pub fn title_from_path(path: &Path) -> String {
+    path.file_stem()
+        .and_then(|stem| stem.to_str())
+        .unwrap()
+        .to_string()
+}
+
 // ====================
 
 #[cfg(test)]

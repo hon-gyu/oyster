@@ -9,6 +9,7 @@ use super::codeblock::{
 };
 use super::latex::render_latex;
 use super::utils;
+use super::vault_db::VaultDB;
 use crate::ast::{
     Node,
     NodeKind::{self, *},
@@ -42,14 +43,15 @@ pub struct NodeRenderConfig {
 pub fn render_content(
     tree: &Tree,
     vault_path: &Path,
-    resolved_links: &[ResolvedLink],
-    vault_path_to_slug_map: &HashMap<PathBuf, String>,
-    innote_refable_anchor_id_map: &HashMap<
-        PathBuf,
-        HashMap<Range<usize>, String>,
-    >,
+    vault_db: &dyn VaultDB,
+    // resolved_links: &[ResolvedLink],
+    // vault_path_to_slug_map: &HashMap<PathBuf, String>,
+    // innote_refable_anchor_id_map: &HashMap<
+    //     PathBuf,
+    //     HashMap<Range<usize>, String>,
+    // >,
+    // tree_provider: &dyn TreeProvider,
     node_render_config: &NodeRenderConfig,
-    tree_provider: &dyn TreeProvider,
     embed_depth: usize,     // Current embed depth
     max_embed_depth: usize, // Max embed depth
 ) -> Markup {
