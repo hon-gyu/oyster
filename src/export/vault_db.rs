@@ -26,7 +26,7 @@ use super::utils::{
     get_relative_dest, range_to_anchor_id, title_from_path,
 };
 use crate::link::{
-    Link as ResolvedLink, Reference, Referenceable, build_links,
+    Link as ResolvedLink, Reference, Referenceable, build_links, scan_vault,
 };
 use serde_yaml::Value;
 use std::collections::HashMap;
@@ -147,15 +147,25 @@ pub trait VaultDB {
         path: &PathBuf,
         refable_range: &Range<usize>,
     ) -> Option<String>;
-
     fn get_reference_anchor_id(
         &self,
         path: &PathBuf,
         ref_range: &Range<usize>,
     ) -> Option<String>;
+    fn get_frontmatter(&self, path: &PathBuf) -> Option<&Value>;
 
     // Derived
     // ====================
+
+    fn get_note_vault_paths(&self) -> Vec<PathBuf> {
+        self.get_referenceables()
+            .iter()
+            .filter(|referenceable| {
+                matches!(referenceable, Referenceable::Note { .. })
+            })
+            .map(|referenceable| referenceable.path().to_path_buf())
+            .collect()
+    }
 
     /// Not very efficient.
     /// We override this with optimized O(1) lookup using pre-computed map
@@ -231,7 +241,6 @@ impl StaticVaultStore {
         vault_level_info: VaultLevelInfo,
     ) -> Self {
         // Unpack
-        let references = &file_level_info.references;
         let resolved_links = &vault_level_info.links;
         let vault_path_to_slug_map =
             &vault_level_info.file_vault_path_to_slug_map;
@@ -299,6 +308,34 @@ impl StaticVaultStore {
             ref_to_tgt_slug_and_link_map: src_to_tgt_slug_and_link_map,
         }
     }
+
+    pub fn new_from_dir(vault_root_dir: &Path, filter_publish: bool) -> Self {
+        // Scan the vault
+        let (fronmatters_vec, referenceables, references) =
+            scan_vault(vault_root_dir, vault_root_dir, filter_publish);
+
+        // Build frontmatters map
+        let fronmatters = referenceables
+            .iter()
+            .zip(fronmatters_vec)
+            .map(|(referenceable, fm)| (referenceable.path().to_path_buf(), fm))
+            .collect();
+
+        // Build file and vault level info
+        let file_level_info = FileLevelInfo {
+            referenceables,
+            references,
+            fronmatters,
+        };
+        let vault_level_info = VaultLevelInfo::new(
+            &file_level_info.referenceables,
+            &file_level_info.references,
+            &file_level_info.fronmatters,
+        );
+
+        // Create vault DB
+        StaticVaultStore::new(file_level_info, vault_level_info)
+    }
 }
 
 impl VaultDB for StaticVaultStore {
@@ -355,6 +392,13 @@ impl VaultDB for StaticVaultStore {
                     None
                 }
             })
+    }
+
+    fn get_frontmatter(&self, path: &PathBuf) -> Option<&Value> {
+        self.file_level_info
+            .fronmatters
+            .get(path)
+            .and_then(|opt| opt.as_ref())
     }
 
     // Override with optimized O(1) lookup using pre-computed map

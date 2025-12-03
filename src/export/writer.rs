@@ -48,40 +48,11 @@ pub fn render_vault(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let home_name = HOME_NAME.to_string();
 
-    // Scan the vault
-    let (fronmatters_vec, referenceables, references) =
-        scan_vault(vault_root_dir, vault_root_dir, filter_publish);
-
-    // Build frontmatters map
-    let fronmatters = referenceables
-        .iter()
-        .zip(fronmatters_vec)
-        .map(|(referenceable, fm)| (referenceable.path().to_path_buf(), fm))
-        .collect();
-
-    // Extract note paths before moving data
-    let note_vault_paths: Vec<PathBuf> = referenceables
-        .iter()
-        .filter(|referenceable| {
-            matches!(referenceable, Referenceable::Note { .. })
-        })
-        .map(|referenceable| referenceable.path().to_path_buf())
-        .collect();
-
-    // Build file and vault level info
-    let file_level_info = FileLevelInfo {
-        referenceables,
-        references,
-        fronmatters,
-    };
-    let vault_level_info = VaultLevelInfo::new(
-        &file_level_info.referenceables,
-        &file_level_info.references,
-        &file_level_info.fronmatters,
-    );
-
     // Create vault DB
-    let vault_db = StaticVaultStore::new(file_level_info, vault_level_info);
+    let vault_db =
+        StaticVaultStore::new_from_dir(vault_root_dir, filter_publish);
+
+    let note_vault_paths = vault_db.get_note_vault_paths();
 
     fs::create_dir_all(output_dir)?;
 
@@ -129,9 +100,9 @@ pub fn render_vault(
             &Path::new(&home_name),
         );
 
-        // TODO: frontmatter needs to be accessible via vault_db
-        // For now, skip frontmatter rendering
-        let frontmatter_info = None;
+        let frontmatter_info = vault_db
+            .get_frontmatter(note_vault_path)
+            .and_then(|fm| super::frontmatter::render_frontmatter(fm));
 
         let toc = toc::render_toc(
             note_vault_path,
@@ -188,10 +159,12 @@ pub fn render_vault(
         fs::write(&output_path, html)?;
     }
 
-    // TODO: Generate home page needs to be updated to use vault_db
-    // For now, skip home page rendering
-    let home_content = html! { "" };
     let home_slug_path = format!("{}.html", home_name);
+    let home_content = home::render_home_page(
+        vault_db.get_referenceables(),
+        |path| vault_db.get_slug_from_file_vault_path(path),
+        Path::new(&home_slug_path),
+    );
     let home_path = output_dir.join(&home_slug_path);
     let katex_rel_dir = get_relative_dest(
         Path::new(&home_slug_path),
