@@ -191,47 +191,36 @@ pub trait VaultDB {
         src_note_vault_path: &Path,
         range: &Range<usize>,
     ) -> Option<String> {
-        self.get_resolved_links()
-            .iter()
-            .filter(|link| link.src_path_eq(src_note_vault_path))
-            .filter_map(|link| {
-                let src_range = &link.from.range;
-                if src_range != range {
-                    None
-                } else {
-                    let tgt = &link.to;
-                    let tgt_slug = self
-                        .get_slug_from_file_vault_path(tgt.path())
-                        .expect("link target path not found");
-                    let base_slug = self
-                        .get_slug_from_file_vault_path(tgt.path())
-                        .expect("vault path not found");
-                    let rel_tgt_slug = get_relative_dest(
-                        Path::new(&base_slug),
-                        Path::new(&tgt_slug),
-                    );
-                    let tgt_anchor_id = match tgt {
-                        Referenceable::Block {
-                            path,
-                            range: tgt_range,
-                            ..
-                        }
-                        | Referenceable::Heading {
-                            path,
-                            range: tgt_range,
-                            ..
-                        } => self.get_innote_refable_anchor_id(path, tgt_range),
-                        _ => None,
-                    };
-                    let dest = if let Some(tgt_anchor_id) = tgt_anchor_id {
-                        format!("{}#{}", rel_tgt_slug, tgt_anchor_id)
-                    } else {
-                        format!("{}", rel_tgt_slug)
-                    };
-                    Some(dest)
-                }
-            })
-            .next()
+        let tgt = self.get_tgt_from_src(src_note_vault_path, range)?;
+
+        let tgt_slug = self
+            .get_slug_from_file_vault_path(tgt.path())
+            .expect("link target path not found");
+        let base_slug = self
+            .get_slug_from_file_vault_path(tgt.path())
+            .expect("vault path not found");
+        let rel_tgt_slug =
+            get_relative_dest(Path::new(&base_slug), Path::new(&tgt_slug));
+
+        let tgt_anchor_id = match tgt {
+            Referenceable::Block {
+                path,
+                range: tgt_range,
+                ..
+            }
+            | Referenceable::Heading {
+                path,
+                range: tgt_range,
+                ..
+            } => self.get_innote_refable_anchor_id(path, tgt_range),
+            _ => None,
+        };
+        let dest = if let Some(tgt_anchor_id) = tgt_anchor_id {
+            format!("{}#{}", rel_tgt_slug, tgt_anchor_id)
+        } else {
+            format!("{}", rel_tgt_slug)
+        };
+        Some(dest)
     }
 }
 
