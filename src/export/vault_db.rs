@@ -64,9 +64,7 @@ impl VaultLevelInfo {
         references: &Vec<Reference>,
         fronmatters: &HashMap<PathBuf, Option<Value>>,
     ) -> VaultLevelInfo {
-        let (links, unresolved) =
-            // TODO: can we avoid the clone?
-            build_links(references.clone(), referenceables.clone());
+        let (links, unresolved) = build_links(references, referenceables);
 
         // Build map: vault file path |-> slug
         let vault_file_paths = referenceables
@@ -226,7 +224,7 @@ pub trait VaultDB {
                         _ => None,
                     };
                     let dest = if let Some(tgt_anchor_id) = tgt_anchor_id {
-                        format!("{}#{}", rel_tgt_slug, tgt_anchor_id.clone())
+                        format!("{}#{}", rel_tgt_slug, tgt_anchor_id)
                     } else {
                         format!("{}", rel_tgt_slug)
                     };

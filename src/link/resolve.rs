@@ -319,14 +319,14 @@ fn resolve_nested_headings<'a>(
 /// TODO: if there's a dir that has the same name as the note,
 ///       we should prioritize referenceables inside it
 pub fn build_links(
-    references: Vec<Reference>,
-    referenceable: Vec<Referenceable>,
+    references: &[Reference],
+    referenceable: &[Referenceable],
 ) -> (Vec<Link>, Vec<Reference>) {
     let mut links = Vec::<Link>::new();
     let mut unresolved = Vec::<Reference>::new();
 
     // Build path-referenceable map
-    let mut path_referenceable_map = HashMap::<PathBuf, Referenceable>::new();
+    let mut path_referenceable_map = HashMap::<PathBuf, &Referenceable>::new();
     for referenceable in referenceable {
         path_referenceable_map
             .insert(referenceable.path().clone(), referenceable);
@@ -403,7 +403,7 @@ pub fn build_links(
 
                 if let Some(in_note) = matched_in_note_child {
                     let link = Link {
-                        from: reference,
+                        from: reference.clone(),
                         to: in_note.clone(),
                     };
                     links.push(link);
@@ -412,12 +412,12 @@ pub fn build_links(
             }
 
             let link = Link {
-                from: reference,
-                to: file_referenceable.clone(),
+                from: reference.clone(),
+                to: (*file_referenceable).clone(),
             };
             links.push(link);
         } else {
-            unresolved.push(reference);
+            unresolved.push(reference.clone());
         }
     }
 
@@ -1012,7 +1012,7 @@ mod tests {
             .filter(|r| r.path == PathBuf::from("Note 1.md"))
             .collect::<Vec<_>>();
         let (links_built_from_note_1, unresolved_references_in_note_1) =
-            build_links(note_1_references, referenceables);
+            build_links(&note_1_references, &referenceables);
         fn fmt_link(link: &Link) -> String {
             let mut s = String::new();
             s.push_str(link.from.dest.as_str());
@@ -1133,7 +1133,7 @@ mod tests {
         // assert_debug_snapshot!(block_md_referenceables, @r#""#);
 
         let (links_built_from_block_md, unresolved_references_in_block_md) =
-            build_links(block_md_references, referenceables);
+            build_links(&block_md_references, &referenceables);
 
         let ref_contents = links_built_from_block_md
             .iter()
