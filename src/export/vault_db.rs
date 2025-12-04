@@ -132,13 +132,14 @@ impl VaultLevelInfo {
 
 pub trait VaultDB {
     // Getter
-    // ====================
     fn get_referenceables(&self) -> &[Referenceable];
     fn get_resolved_links(&self) -> &[ResolvedLink];
     fn get_unresolved_references(&self) -> &[Reference];
+
     // File referenceables
-    fn get_slug_from_file_vault_path(&self, path: &PathBuf) -> Option<String>;
-    fn get_title_from_note_vault_path(&self, path: &PathBuf) -> Option<String>;
+    fn get_slug_from_file_vault_path(&self, path: &PathBuf) -> Option<&str>;
+    fn get_title_from_note_vault_path(&self, path: &PathBuf) -> Option<&str>;
+
     /// file vault path (parent referenceable)
     /// |-> in-note referenceable range
     /// |-> anchor id
@@ -146,28 +147,45 @@ pub trait VaultDB {
         &self,
         path: &PathBuf,
         refable_range: &Range<usize>,
-    ) -> Option<String>;
+    ) -> Option<&str>;
     fn get_reference_anchor_id(
         &self,
         path: &PathBuf,
         ref_range: &Range<usize>,
-    ) -> Option<String>;
+    ) -> Option<&str>;
     fn get_frontmatter(&self, path: &PathBuf) -> Option<&Value>;
 
     // Derived
-    // ====================
-
-    fn get_note_vault_paths(&self) -> Vec<PathBuf> {
+    fn get_note_vault_paths(&self) -> Vec<&PathBuf> {
         self.get_referenceables()
             .iter()
             .filter(|referenceable| {
                 matches!(referenceable, Referenceable::Note { .. })
             })
-            .map(|referenceable| referenceable.path().to_path_buf())
+            .map(|referenceable| referenceable.path())
             .collect()
     }
 
-    /// Not very efficient.
+    fn get_tgt_from_src(
+        &self,
+        src_note_vault_path: &Path,
+        range: &Range<usize>,
+    ) -> Option<&Referenceable> {
+        self.get_resolved_links()
+            .iter()
+            .filter(|link| link.src_path_eq(src_note_vault_path))
+            .filter_map(|link| {
+                let src_range = &link.from.range;
+                if src_range != range {
+                    None
+                } else {
+                    Some(&link.to)
+                }
+            })
+            .next()
+    }
+
+    /// The default implentation is not very efficient.
     /// We override this with optimized O(1) lookup using pre-computed map
     /// in static store
     fn get_tgt_slug_from_src(
@@ -351,47 +369,48 @@ impl VaultDB for StaticVaultStore {
         &self.vault_level_info.unresolved
     }
 
-    fn get_slug_from_file_vault_path(&self, path: &PathBuf) -> Option<String> {
+    fn get_slug_from_file_vault_path(&self, path: &PathBuf) -> Option<&str> {
         self.vault_level_info
             .file_vault_path_to_slug_map
             .get(path)
-            .cloned()
+            .map(|s| s.as_str())
     }
 
-    fn get_title_from_note_vault_path(&self, path: &PathBuf) -> Option<String> {
+    fn get_title_from_note_vault_path(&self, path: &PathBuf) -> Option<&str> {
         self.vault_level_info
             .note_vault_path_to_title_map
             .get(path)
-            .cloned()
+            .map(|s| s.as_str())
     }
 
     fn get_innote_refable_anchor_id(
         &self,
         path: &PathBuf,
         refable_range: &Range<usize>,
-    ) -> Option<String> {
+    ) -> Option<&str> {
         self.vault_level_info
             .innote_refable_anchor_id_map
             .get(path)
             .and_then(|anchor_id_map| anchor_id_map.get(refable_range))
-            .cloned()
+            .map(|s| s.as_str())
     }
 
     fn get_reference_anchor_id(
         &self,
         path: &PathBuf,
         ref_range: &Range<usize>,
-    ) -> Option<String> {
+    ) -> Option<&str> {
         self.vault_level_info
             .reference_anchor_id_map
             .get(path)
             .and_then(|(range, anchor_id)| {
                 if range == ref_range {
-                    Some(anchor_id.clone())
+                    Some(anchor_id)
                 } else {
                     None
                 }
             })
+            .map(|s| s.as_str())
     }
 
     fn get_frontmatter(&self, path: &PathBuf) -> Option<&Value> {
