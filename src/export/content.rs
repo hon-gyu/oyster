@@ -217,11 +217,6 @@ fn render_node(
             if let Some(tgt_slug_path) = matched_tgt_slug_path_opt {
                 // Case: matched link
                 let backlink_anchor_id = range_to_anchor_id(&range);
-                let anchor_markup = html! {
-                    a href=(tgt_slug_path) title=[title_opt] {
-                        (PreEscaped(&children))
-                    }
-                };
 
                 // Check if this is an image
                 let is_image = Path::new(&tgt_slug_path)
@@ -250,7 +245,12 @@ fn render_node(
                     // )
                     todo!()
                 } else {
-                    // Fallback to raw url
+                    // Terminate recursion and render as anchor
+                    let anchor_markup = html! {
+                        a href=(tgt_slug_path) title=[title_opt] {
+                            (PreEscaped(&children))
+                        }
+                    };
                     html! {
                         span .embed-file #(backlink_anchor_id) {
                             (anchor_markup)
