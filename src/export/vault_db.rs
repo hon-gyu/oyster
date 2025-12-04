@@ -269,15 +269,13 @@ impl StaticVaultStore {
         > = resolved_links
             .iter()
             .map(|link| {
-                let src_note_vault_path = link.from.path.clone();
-                let src_ref_range = link.from.range.clone();
                 let tgt = &link.to;
 
                 let tgt_slug = vault_path_to_slug_map
                     .get(tgt.path())
                     .expect("link target path not found");
                 let base_slug = vault_path_to_slug_map
-                    .get(&src_note_vault_path)
+                    .get(&link.from.path)
                     .expect("vault path not found");
                 let rel_tgt_slug = get_relative_dest(
                     Path::new(base_slug),
@@ -299,11 +297,14 @@ impl StaticVaultStore {
                     _ => None,
                 };
                 let dest = if let Some(tgt_anchor_id) = tgt_anchor_id {
-                    format!("{}#{}", rel_tgt_slug, tgt_anchor_id.clone())
+                    format!("{}#{}", rel_tgt_slug, tgt_anchor_id)
                 } else {
                     format!("{}", rel_tgt_slug)
                 };
-                ((src_note_vault_path, src_ref_range), (dest, link.clone()))
+                (
+                    (link.from.path.clone(), link.from.range.clone()),
+                    (dest, link.clone()),
+                )
             })
             .collect();
 
