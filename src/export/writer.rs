@@ -134,7 +134,11 @@ pub fn render_vault(
         let sidebar = Some(sidebar::render_explorer(
             note_slug_path,
             vault_db.get_referenceables(),
-            |path| vault_db.get_slug_from_file_vault_path(path).map(|s| s.to_string()),
+            |path| {
+                vault_db
+                    .get_slug_from_file_vault_path(path)
+                    .map(|s| s.to_string())
+            },
         ));
 
         let output_path = output_dir.join(note_slug_path);
@@ -163,7 +167,11 @@ pub fn render_vault(
     let home_slug_path = format!("{}.html", home_name);
     let home_content = home::render_home_page(
         vault_db.get_referenceables(),
-        |path| vault_db.get_slug_from_file_vault_path(path).map(|s| s.to_string()),
+        |path| {
+            vault_db
+                .get_slug_from_file_vault_path(path)
+                .map(|s| s.to_string())
+        },
         Path::new(&home_slug_path),
     );
     let home_path = output_dir.join(&home_slug_path);
@@ -300,9 +308,9 @@ fn render_backlinks(
             let src_href = format!("{}#{}", rel_src_slug, src_anchor);
             let tgt = &link.to;
             let tgt_anchor: Option<String> = match tgt {
-                Referenceable::Heading { path, range, .. } => {
-                    vault_db.get_innote_refable_anchor_id(path, range).map(|s| s.to_string())
-                }
+                Referenceable::Heading { path, range, .. } => vault_db
+                    .get_innote_refable_anchor_id(path, range)
+                    .map(|s| s.to_string()),
                 _ => None,
             };
             Some((src_href, src_title, tgt_anchor))
