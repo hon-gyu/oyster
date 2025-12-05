@@ -16,6 +16,7 @@ use crate::ast::{
     Tree,
 };
 use crate::export::utils::range_to_anchor_id;
+use crate::link::Referenceable;
 use maud::{Markup, PreEscaped, html};
 use pulldown_cmark::{BlockQuoteKind, CodeBlockKind, LinkType};
 use std::path::Path;
@@ -210,63 +211,125 @@ fn render_node(
                 Some(title.as_ref())
             };
 
-            // Find matched tgt destination
-            let matched_tgt_slug_path_opt =
-                vault_db.get_tgt_slug_from_src(vault_path, &range);
-
-            if let Some(tgt_slug_path) = matched_tgt_slug_path_opt {
-                // Case: matched link
-                let backlink_anchor_id = range_to_anchor_id(&range);
-
-                // Check if this is an image
-                let is_image = Path::new(&tgt_slug_path)
-                    .extension()
-                    .and_then(|ext| {
-                        IMAGE_EXTENSIONS
-                            .iter()
-                            .find(|&&e| e == ext.to_str().unwrap_or(""))
-                    })
-                    .is_some();
-                if is_image {
-                    // Case: image
-                    let resize_spec = &children;
-                    let (width, height) = utils::parse_resize_spec(resize_spec);
-                    let alt_text = Path::new(&tgt_slug_path)
-                        .file_stem()
-                        .unwrap()
-                        .to_str()
-                        .unwrap_or("");
-                    html! {
-                        img .embed-file.image src=(tgt_slug_path) alt=(alt_text) #(backlink_anchor_id) width=[width] height=[height] {}
-                    }
-                } else if embed_depth < max_embed_depth {
-                    // let (embedded, embedeed_class) = render_embedded_content(
-
-                    // )
-                    todo!()
-                } else {
-                    // Terminate recursion and render as anchor
-                    let anchor_markup = html! {
-                        a href=(tgt_slug_path) title=[title_opt] {
-                            (PreEscaped(&children))
+            if let Some(tgt) = vault_db.get_tgt_from_src(&vault_path, &range) {
+                match tgt {
+                    Referenceable::Asset { path } => {
+                        let tgt_slug_path = vault_db
+                            .get_slug_from_file_vault_path(path)
+                            .expect("Asset should have a slug");
+                        let is_image = Path::new(&tgt_slug_path)
+                            .extension()
+                            .and_then(|ext| {
+                                IMAGE_EXTENSIONS
+                                    .iter()
+                                    .find(|&&e| e == ext.to_str().unwrap_or(""))
+                            })
+                            .is_some();
+                        if is_image {
+                            // Case: image
+                            let resize_spec = &children;
+                            let (width, height) =
+                                utils::parse_resize_spec(resize_spec);
+                            let alt_text = Path::new(&tgt_slug_path)
+                                .file_stem()
+                                .unwrap()
+                                .to_str()
+                                .unwrap_or("");
+                            // src anchor id to be used as href in backlink
+                            let src_anchor_id = vault_db
+                                .get_reference_anchor_id(
+                                    &vault_path.to_path_buf(),
+                                    &range,
+                                )
+                                .expect("Image should have a src anchor id");
+                            html! {
+                                img .embed-file.image src=(tgt_slug_path) alt=(alt_text) #(src_anchor_id) width=[width] height=[height] {}
+                            }
+                        } else {
+                            // Unhandled embeded asset
+                            // TODO: handle audio, video, pdf, etc.
+                            let href = dest_url.to_string();
+                            // Just an anchor
+                            html! {
+                                a .embed-file.unhandled-asset href=(href) title=[title_opt] {
+                                    (PreEscaped(children))
+                                }
+                            }
                         }
-                    };
-                    html! {
-                        span .embed-file #(backlink_anchor_id) {
-                            (anchor_markup)
-                        }
                     }
+                    Referenceable::Note { path, children } => {
+                        todo!()
+                    }
+                    _ => todo!(),
                 }
             } else {
                 // No matched, fallback to raw url
                 let href = dest_url.to_string();
                 // Just an anchor
                 html! {
-                    a href=(href) title=[title_opt] {
+                    a .embed-file.unresolved href=(href) title=[title_opt] {
                         (PreEscaped(children))
                     }
                 }
             }
+
+            // // Find matched tgt destination
+            // let matched_tgt_slug_path_opt =
+            //     vault_db.get_tgt_slug_from_src(vault_path, &range);
+
+            // if let Some(tgt_slug_path) = matched_tgt_slug_path_opt {
+            //     // Case: matched link
+            //     let backlink_anchor_id = range_to_anchor_id(&range);
+
+            //     // Check if this is an image
+            //     let is_image = Path::new(&tgt_slug_path)
+            //         .extension()
+            //         .and_then(|ext| {
+            //             IMAGE_EXTENSIONS
+            //                 .iter()
+            //                 .find(|&&e| e == ext.to_str().unwrap_or(""))
+            //         })
+            //         .is_some();
+            //     if is_image {
+            //         // Case: image
+            //         let resize_spec = &children;
+            //         let (width, height) = utils::parse_resize_spec(resize_spec);
+            //         let alt_text = Path::new(&tgt_slug_path)
+            //             .file_stem()
+            //             .unwrap()
+            //             .to_str()
+            //             .unwrap_or("");
+            //         html! {
+            //             img .embed-file.image src=(tgt_slug_path) alt=(alt_text) #(backlink_anchor_id) width=[width] height=[height] {}
+            //         }
+            //     } else if embed_depth < max_embed_depth {
+            //         // let (embedded, embedeed_class) = render_embedded_content(
+
+            //         // )
+            //         todo!()
+            //     } else {
+            //         // Terminate recursion and render as anchor
+            //         let anchor_markup = html! {
+            //             a href=(tgt_slug_path) title=[title_opt] {
+            //                 (PreEscaped(&children))
+            //             }
+            //         };
+            //         html! {
+            //             span .embed-file #(backlink_anchor_id) {
+            //                 (anchor_markup)
+            //             }
+            //         }
+            //     }
+            // } else {
+            //     // No matched, fallback to raw url
+            //     let href = dest_url.to_string();
+            //     // Just an anchor
+            //     html! {
+            //         a href=(href) title=[title_opt] {
+            //             (PreEscaped(children))
+            //         }
+            //     }
+            // }
         }
         // Referenceable nodes
         Paragraph => {
@@ -928,7 +991,11 @@ mod tests {
         );
 
         // Create vault DB
-        let vault_db = StaticVaultStore::new(file_level_info, vault_level_info);
+        let vault_db = StaticVaultStore::new(
+            vault_root_dir,
+            file_level_info,
+            vault_level_info,
+        );
 
         // Render note
         let note_path = Path::new("Note 1.md");

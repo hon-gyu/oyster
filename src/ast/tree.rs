@@ -38,6 +38,16 @@ impl<'a> Tree<'a> {
         // ) -> impl ExactSizeIterator<Item = TSRange> {
         todo!()
     }
+
+    /// Convert this tree with borrowed data to an owned version with 'static lifetime
+    pub fn into_static(self) -> Tree<'static> {
+        let mut root_node = self.root_node.into_static();
+        setup_parent_pointers(&mut root_node);
+        Tree {
+            root_node,
+            opts: self.opts,
+        }
+    }
 }
 
 /// Index for efficiently converting byte offsets to line/column positions

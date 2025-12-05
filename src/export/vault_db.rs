@@ -25,10 +25,12 @@ use super::utils::{
     build_in_note_anchor_id_map, build_vault_paths_to_slug_map,
     get_relative_dest, range_to_anchor_id, title_from_path,
 };
+use crate::ast::Tree as ASTTree;
 use crate::link::{
     Link as ResolvedLink, Reference, Referenceable, build_links, scan_vault,
 };
 use serde_yaml::Value;
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::ops::Range;
 use std::path::{Path, PathBuf};
@@ -129,7 +131,12 @@ impl VaultLevelInfo {
 }
 
 pub trait VaultDB {
-    // Getter
+    fn get_vault_root_dir(&self) -> &Path;
+    fn get_ast_tree_from_note_vault_path(
+        &self,
+        path: &PathBuf,
+    ) -> Option<ASTTree>;
+    // File-level info getters
     fn get_referenceables(&self) -> &[Referenceable];
     fn get_resolved_links(&self) -> &[ResolvedLink];
     fn get_unresolved_references(&self) -> &[Reference];
@@ -227,6 +234,8 @@ pub trait VaultDB {
 /// Stores file-level information and vault-level information
 /// as well as some helper maps
 pub struct StaticVaultStore {
+    vault_root_dir: PathBuf,
+    ast_tree_cache: RefCell<HashMap<PathBuf, ASTTree<'static>>>,
     file_level_info: FileLevelInfo,
     vault_level_info: VaultLevelInfo,
     /// Derived map of
@@ -242,6 +251,7 @@ pub struct StaticVaultStore {
 
 impl StaticVaultStore {
     pub fn new(
+        vault_root_dir: &Path,
         file_level_info: FileLevelInfo,
         vault_level_info: VaultLevelInfo,
     ) -> Self {
@@ -309,6 +319,8 @@ impl StaticVaultStore {
             .collect();
 
         StaticVaultStore {
+            vault_root_dir: vault_root_dir.to_path_buf(),
+            ast_tree_cache: RefCell::new(HashMap::new()),
             file_level_info,
             vault_level_info,
             ref_to_tgt_slug_and_link_map: src_to_tgt_slug_and_link_map,
@@ -340,11 +352,36 @@ impl StaticVaultStore {
         );
 
         // Create vault DB
-        StaticVaultStore::new(file_level_info, vault_level_info)
+        StaticVaultStore::new(vault_root_dir, file_level_info, vault_level_info)
     }
 }
 
 impl VaultDB for StaticVaultStore {
+    fn get_vault_root_dir(&self) -> &Path {
+        &self.vault_root_dir
+    }
+
+    fn get_ast_tree_from_note_vault_path(
+        &self,
+        path: &PathBuf,
+    ) -> Option<ASTTree> {
+        // Check cache first
+        if let Some(cached_tree) = self.ast_tree_cache.borrow().get(path) {
+            return Some(cached_tree.clone());
+        }
+
+        // Cache miss: read file, parse, and convert to 'static
+        let full_path = self.vault_root_dir.join(path);
+        let md_src = std::fs::read_to_string(full_path).ok()?;
+        let tree = ASTTree::new(&md_src).into_static();
+
+        // Insert into cache and return clone
+        self.ast_tree_cache
+            .borrow_mut()
+            .insert(path.clone(), tree.clone());
+        Some(tree)
+    }
+
     fn get_referenceables(&self) -> &[Referenceable] {
         &self.file_level_info.referenceables
     }

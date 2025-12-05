@@ -391,6 +391,19 @@ impl<'a> Node<'a> {
     fn to_sexp(&self) -> String {
         todo!()
     }
+
+    /// Convert this node with borrowed data to an owned version with 'static lifetime
+    pub fn into_static(self) -> Node<'static> {
+        Node {
+            children: self.children.into_iter().map(|c| c.into_static()).collect(),
+            start_byte: self.start_byte,
+            end_byte: self.end_byte,
+            start_point: self.start_point,
+            end_point: self.end_point,
+            kind: self.kind.into_static(),
+            parent: None, // Parent pointers need to be rebuilt after conversion
+        }
+    }
 }
 
 fn range_contain(range: &Range<usize>, other: &Range<usize>) -> bool {
