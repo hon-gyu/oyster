@@ -27,6 +27,28 @@ pub struct NodeRenderConfig {
     pub quiver_render_mode: QuiverRenderMode,
 }
 
+/// Find a node in the tree by its exact byte range
+fn find_node_by_range<'a>(
+    node: &'a Node,
+    target_range: &std::ops::Range<usize>,
+) -> Option<&'a Node<'a>> {
+    // Check if this node matches the target range
+    if node.start_byte == target_range.start
+        && node.end_byte == target_range.end
+    {
+        return Some(node);
+    }
+
+    // Recursively search children
+    for child in &node.children {
+        if let Some(found) = find_node_by_range(child, target_range) {
+            return Some(found);
+        }
+    }
+
+    None
+}
+
 /// Render content
 ///
 /// Input:
@@ -64,17 +86,6 @@ pub enum EmbededKind {
     Note,
     Heading,
     Block,
-}
-
-fn render_embedded_content(
-    _tgt_tree: &Tree,
-    _tgt_vault_path: &Path,
-    _vault_db: &dyn VaultDB,
-    _node_render_config: &NodeRenderConfig,
-    _embed_depth: usize,     // Current embed depth
-    _max_embed_depth: usize, // Max embed depth
-) -> (Markup, EmbededKind) {
-    todo!()
 }
 
 fn render_nodes(
@@ -212,11 +223,12 @@ fn render_node(
             };
 
             if let Some(tgt) = vault_db.get_tgt_from_src(&vault_path, &range) {
+                let tgt_vault_path = tgt.path();
+                let tgt_slug_path = vault_db
+                    .get_slug_from_file_vault_path(tgt_vault_path)
+                    .expect("Referenceable should have a slug");
                 match tgt {
-                    Referenceable::Asset { path } => {
-                        let tgt_slug_path = vault_db
-                            .get_slug_from_file_vault_path(path)
-                            .expect("Asset should have a slug");
+                    Referenceable::Asset { .. } => {
                         let is_image = Path::new(&tgt_slug_path)
                             .extension()
                             .and_then(|ext| {
@@ -251,16 +263,90 @@ fn render_node(
                             let href = dest_url.to_string();
                             // Just an anchor
                             html! {
-                                a .embed-file.unhandled-asset href=(href) title=[title_opt] {
+                                a
+                                    .embed-file.unhandled-asset
+                                    href=(href)
+                                    title=[title_opt]
+                                    embed-depth=(embed_depth) {
                                     (PreEscaped(children))
                                 }
                             }
                         }
                     }
-                    Referenceable::Note { path, children } => {
-                        todo!()
+                    Referenceable::Note { .. } => {
+                        let tgt_tree = vault_db
+                            .get_ast_tree_from_note_vault_path(tgt_vault_path).expect("Note should have an AST, either from cache or newly built");
+                        let embed_depth = embed_depth + 1;
+                        let embed_content = render_content(
+                            &tgt_tree,
+                            tgt_vault_path,
+                            vault_db,
+                            node_render_config,
+                            embed_depth,
+                            max_embed_depth,
+                        );
+                        html! {
+                            .embed-file.note embed-depth=(embed_depth) {
+                                (embed_content)
+                            }
+                        }
                     }
-                    _ => todo!(),
+                    Referenceable::Heading {
+                        range: tgt_range, ..
+                    } => {
+                        let tgt_tree = vault_db
+                            .get_ast_tree_from_note_vault_path(tgt_vault_path).expect("Note should have an AST, either from cache or newly built");
+                        // Get heading node by finding the node with exact range match
+                        let heading_node =
+                            find_node_by_range(&tgt_tree.root_node, tgt_range)
+                                .expect(
+                                    "Referenceable's range should match the heading node's range",
+                                );
+
+                        // Render the heading and its children
+                        let embed_depth = embed_depth + 1;
+                        let heading_content = render_node(
+                            heading_node,
+                            tgt_vault_path,
+                            vault_db,
+                            node_render_config,
+                            embed_depth,
+                            max_embed_depth,
+                        );
+                        html! {
+                            .embed-file.heading embed-depth=(embed_depth) {
+                                (heading_content)
+                            }
+                        }
+                    }
+                    Referenceable::Block {
+                        range: tgt_range, ..
+                    } => {
+                        let tgt_tree = vault_db
+                            .get_ast_tree_from_note_vault_path(tgt_vault_path).expect("Note should have an AST, either from cache or newly built");
+                        // Get block node by finding the node with exact range match
+                        let block_node =
+                            find_node_by_range(&tgt_tree.root_node, tgt_range)
+                                .expect(
+                                    "Referenceable's range should match the block node's range",
+                                );
+
+                        // Render the block and its children
+                        let embed_depth = embed_depth + 1;
+                        let block_content = render_node(
+                            block_node,
+                            tgt_vault_path,
+                            vault_db,
+                            node_render_config,
+                            embed_depth,
+                            max_embed_depth,
+                        );
+                        html! {
+                            .embed-file.block embed-depth=(embed_depth) {
+                                (block_content)
+                            }
+                        }
+                    }
                 }
             } else {
                 // No matched, fallback to raw url
@@ -272,64 +358,6 @@ fn render_node(
                     }
                 }
             }
-
-            // // Find matched tgt destination
-            // let matched_tgt_slug_path_opt =
-            //     vault_db.get_tgt_slug_from_src(vault_path, &range);
-
-            // if let Some(tgt_slug_path) = matched_tgt_slug_path_opt {
-            //     // Case: matched link
-            //     let backlink_anchor_id = range_to_anchor_id(&range);
-
-            //     // Check if this is an image
-            //     let is_image = Path::new(&tgt_slug_path)
-            //         .extension()
-            //         .and_then(|ext| {
-            //             IMAGE_EXTENSIONS
-            //                 .iter()
-            //                 .find(|&&e| e == ext.to_str().unwrap_or(""))
-            //         })
-            //         .is_some();
-            //     if is_image {
-            //         // Case: image
-            //         let resize_spec = &children;
-            //         let (width, height) = utils::parse_resize_spec(resize_spec);
-            //         let alt_text = Path::new(&tgt_slug_path)
-            //             .file_stem()
-            //             .unwrap()
-            //             .to_str()
-            //             .unwrap_or("");
-            //         html! {
-            //             img .embed-file.image src=(tgt_slug_path) alt=(alt_text) #(backlink_anchor_id) width=[width] height=[height] {}
-            //         }
-            //     } else if embed_depth < max_embed_depth {
-            //         // let (embedded, embedeed_class) = render_embedded_content(
-
-            //         // )
-            //         todo!()
-            //     } else {
-            //         // Terminate recursion and render as anchor
-            //         let anchor_markup = html! {
-            //             a href=(tgt_slug_path) title=[title_opt] {
-            //                 (PreEscaped(&children))
-            //             }
-            //         };
-            //         html! {
-            //             span .embed-file #(backlink_anchor_id) {
-            //                 (anchor_markup)
-            //             }
-            //         }
-            //     }
-            // } else {
-            //     // No matched, fallback to raw url
-            //     let href = dest_url.to_string();
-            //     // Just an anchor
-            //     html! {
-            //         a href=(href) title=[title_opt] {
-            //             (PreEscaped(children))
-            //         }
-            //     }
-            // }
         }
         // Referenceable nodes
         Paragraph => {
