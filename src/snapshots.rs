@@ -11,6 +11,20 @@ mod tests {
     use insta::{assert_debug_snapshot, assert_snapshot};
 
     #[test]
+    fn embed_parse() {
+        let path =
+            std::path::PathBuf::from("tests/data/vaults/embed_file/note_II.md");
+        let md_src = std::fs::read_to_string(&path).unwrap();
+        let tree = Tree::new(&md_src);
+        assert_snapshot!(&tree.root_node, @r#"
+        Document [0..14]
+          Paragraph [0..14]
+            Image { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("note_III"), title: Borrowed(""), id: Borrowed("") } [0..12]
+              Text(Borrowed("note_III")) [3..11]
+        "#);
+    }
+
+    #[test]
     fn mermaid_parse() {
         let path =
             std::path::PathBuf::from("tests/data/vaults/mermaid/note.md");

@@ -67,7 +67,6 @@ pub fn render_content(
     embed_depth: usize,     // Current embed depth
     max_embed_depth: usize, // Max embed depth
 ) -> Markup {
-    
     render_node(
         &tree.root_node,
         vault_path,
@@ -123,7 +122,6 @@ fn render_node(
     max_embed_depth: usize, // Max embed depth
 ) -> Markup {
     let range = node.start_byte..node.end_byte;
-    
 
     match &node.kind {
         // Tree root
@@ -309,7 +307,7 @@ fn render_node(
                                 "Should have relative slug for resolved link",
                             );
                         html! {
-                            .embed-file.max-embed-depth embed-depth=(embed_depth) #internal-link {
+                            .embed-file.max-embed-depth embed-depth=(embed_depth) {
                                 a  href=(tgt_slug) title=[title_opt] {
                                     (note_header_elem)
                                 }
@@ -317,9 +315,6 @@ fn render_node(
                         }
                     } else {
                         match tgt {
-                            Referenceable::Asset { .. } => unreachable!(
-                                "Asset should have been handled earlier"
-                            ),
                             Referenceable::Note { .. } => {
                                 let tgt_tree = vault_db
                                     .get_ast_tree_from_note_vault_path(tgt_vault_path).expect("Note should have an AST, either from cache or newly built");
@@ -334,8 +329,11 @@ fn render_node(
                                 );
                                 html! {
                                     .embed-file.note embed-depth=(embed_depth) {
-                                        (note_header_elem)
-                                        {
+                                        .header {
+                                            (note_header_elem)
+                                        }
+
+                                        .content {
                                             (embed_content)
                                         }
                                     }
@@ -365,8 +363,12 @@ fn render_node(
                                 );
                                 html! {
                                     .embed-file.heading embed-depth=(embed_depth) {
-                                        (note_header_elem)
-                                        (heading_content)
+                                        .header {
+                                            (note_header_elem)
+                                        }
+                                        .content {
+                                            (heading_content)
+                                        }
                                     }
                                 }
                             }
@@ -394,11 +396,18 @@ fn render_node(
                                 );
                                 html! {
                                     .embed-file.block embed-depth=(embed_depth) {
-                                        (note_header_elem)
-                                        (block_content)
+                                        .header {
+                                            (note_header_elem)
+                                        }
+                                        .content {
+                                            (block_content)
+                                        }
                                     }
                                 }
                             }
+                            Referenceable::Asset { .. } => unreachable!(
+                                "Asset should have been handled earlier"
+                            ),
                         }
                     }
                 }
@@ -415,7 +424,10 @@ fn render_node(
         }
         // Referenceable nodes
         Paragraph => {
-            let children = render_nodes(
+            let only_child_is_embeded_file = node.children.len() == 1
+                && matches!(&node.children[0].kind, NodeKind::Image { .. });
+
+            let rendered_children = render_nodes(
                 &node.children,
                 vault_path,
                 vault_db,
@@ -423,16 +435,18 @@ fn render_node(
                 embed_depth,
                 max_embed_depth,
             );
+
             // Inject anchor id for matched referenceable
-            if let Some(id) = vault_db
-                .get_innote_refable_anchor_id(&vault_path.to_path_buf(), &range)
-            {
-                html! {
-                    p #(id) { (PreEscaped(children)) }
-                }
-            } else {
-                html! {
-                    p { (PreEscaped(children)) }
+            let refable_anchor_id = vault_db.get_innote_refable_anchor_id(
+                &vault_path.to_path_buf(),
+                &range,
+            );
+
+            html! {
+                @if only_child_is_embeded_file {
+                    (PreEscaped(rendered_children))
+                } @else {
+                    p id=[refable_anchor_id] { (PreEscaped(rendered_children)) }
                 }
             }
         }
@@ -1004,15 +1018,14 @@ fn render_node(
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     use crate::export::vault_db::{
         FileLevelInfo, StaticVaultStore, VaultLevelInfo,
     };
     use crate::link::scan_vault;
     use insta::*;
     use maud::DOCTYPE;
-    
-    
+
     use std::fs;
     use std::path::{Path, PathBuf};
 

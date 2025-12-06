@@ -385,12 +385,46 @@ hr {
     filter: invert(1) hue-rotate(180deg);
 }
 
-/* Embedded files - stacking cards with bottom edges at same Y position */
+/* Embedded files */
 .embed-file.note,
 .embed-file.heading,
 .embed-file.block,
 .embed-file.max-embed-depth {
     background: var(--bg-secondary);
+    border-radius: 5px;
+    margin: 0rem;
+}
+
+.embed-file.note .header,
+.embed-file.heading .header,
+.embed-file.block .header {
+    padding: 0rem;
+    margin: 0rem;
+}
+
+.embed-file.note .header > *,
+.embed-file.heading .header > *,
+.embed-file.block .header > * {
+    margin: 0;
+}
+
+.embed-file.note .content,
+.embed-file.heading .content,
+.embed-file.block .content {
     border-left: 3px solid var(--accent-secondary);
     padding-left: 1rem;
+    /*
+       Claude Code: This tiny padding prevents margin collapse, which is what's causing the gap.
+       When a child element's margin would normally "escape" its parent container, adding even
+       a tiny bit of padding keeps the margin contained.
+    */
+    padding-top: 0.1px;
+    padding-bottom: 0rem;
+    margin: 0rem;
+}
+
+.embed-file.note .content > *:first-child,
+.embed-file.heading .content > *:first-child,
+.embed-file.block .content > *:first-child {
+    margin-top: 0;
 }
