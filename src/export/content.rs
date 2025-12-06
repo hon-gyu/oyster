@@ -231,7 +231,7 @@ fn render_node(
                     .expect("Note should have a title");
                 html! {
                     p .embed-file.header {
-                        (format!("📄 {}", tgt_title))
+                        (format!("📑 {}", tgt_title))
                     }
                 }
             }
@@ -308,9 +308,8 @@ fn render_node(
                             );
                         html! {
                             .embed-file.max-embed-depth embed-depth=(embed_depth) #internal-link {
-                                (note_header_elem)
                                 a  href=(tgt_slug) title=[title_opt] {
-                                    (PreEscaped(children))
+                                    (note_header_elem)
                                 }
                             }
                         }
