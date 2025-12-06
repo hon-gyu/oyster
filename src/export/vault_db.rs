@@ -32,6 +32,7 @@ use crate::link::{
 use serde_yaml::Value;
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::collections::hash_map::Entry;
 use std::ops::Range;
 use std::path::{Path, PathBuf};
 
@@ -55,8 +56,8 @@ pub struct VaultLevelInfo {
     /// |-> anchor id
     innote_refable_anchor_id_map:
         HashMap<PathBuf, HashMap<Range<usize>, String>>,
-    /// reference path |-> (reference range, anchor id)
-    reference_anchor_id_map: HashMap<PathBuf, (Range<usize>, String)>,
+    /// reference path |-> reference range |-> anchor id
+    reference_anchor_id_map: HashMap<PathBuf, HashMap<Range<usize>, String>>,
 }
 
 impl VaultLevelInfo {
@@ -106,18 +107,41 @@ impl VaultLevelInfo {
 
         // There's an implicit map: reference path |-> reference range |-> anchor id
         // where the anchor id IS the byte range of the reference
-        let reference_to_range_and_anchor_id_map: HashMap<
+        let mut reference_to_range_and_anchor_id_map: HashMap<
             PathBuf,
-            (Range<usize>, String),
-        > = references
-            .iter()
-            .map(|r| {
-                let ref_path = r.path.clone();
-                let ref_range = r.range.clone();
-                let anchor_id = range_to_anchor_id(&ref_range);
-                (ref_path, (ref_range, anchor_id))
-            })
-            .collect();
+            HashMap<Range<usize>, String>,
+        > = HashMap::new();
+        for r in references {
+            let ref_path = r.path.clone();
+            let ref_range = &r.range;
+            match reference_to_range_and_anchor_id_map.entry(ref_path) {
+                Entry::Occupied(mut entry) => {
+                    let range_map = entry.get_mut();
+                    range_map.insert(
+                        ref_range.clone(),
+                        range_to_anchor_id(&ref_range),
+                    );
+                }
+                Entry::Vacant(entry) => {
+                    let mut range_map = HashMap::new();
+                    range_map.insert(
+                        ref_range.clone(),
+                        range_to_anchor_id(&ref_range),
+                    );
+                    entry.insert(range_map);
+                }
+            }
+        }
+
+        // references
+        //     .iter()
+        //     .map(|r| {
+        //         let ref_path = r.path.clone();
+        //         let ref_range = r.range.clone();
+        //         let anchor_id = range_to_anchor_id(&ref_range);
+        //         (ref_path, (ref_range, anchor_id))
+        //     })
+        //     .collect();
 
         VaultLevelInfo {
             links,
@@ -428,12 +452,8 @@ impl VaultDB for StaticVaultStore {
         self.vault_level_info
             .reference_anchor_id_map
             .get(path)
-            .and_then(|(range, anchor_id)| {
-                if range == ref_range {
-                    Some(anchor_id)
-                } else {
-                    None
-                }
+            .and_then(|range_to_anchor_id_map| {
+                range_to_anchor_id_map.get(ref_range)
             })
             .map(|s| s.as_str())
     }
