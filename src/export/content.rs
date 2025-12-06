@@ -542,6 +542,7 @@ fn render_node(
             kind,
             title,
             foldable,
+            content_start_byte: _,
         } => {
             let children = render_nodes(
                 &node.children,
