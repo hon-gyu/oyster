@@ -5,6 +5,7 @@ use pulldown_cmark::{Event, Options, Parser};
 use std::ops::Range;
 use tree_sitter::{InputEdit, Point};
 
+use super::callout_transform::get_callout_metadata;
 use super::node::{Node, NodeKind};
 
 /// A tree that represents the syntactic structure of a source code file.
@@ -171,6 +172,29 @@ fn build_ast<'a>(
                 let (mut completed_node, siblings) =
                     stack.pop().expect("Unbalanced tags");
                 completed_node.children = curr_children;
+
+                // For BlockQuote nodes, detect custom callouts
+                // Detect metadata first (immutable borrow), then update the node (mutable borrow)
+                let detected_metadata = if matches!(
+                    &completed_node.kind,
+                    NodeKind::BlockQuote {
+                        standard_kind: None,
+                        ..
+                    }
+                ) {
+                    get_callout_metadata(&completed_node, text)
+                } else {
+                    None
+                };
+
+                if let Some(metadata) = detected_metadata {
+                    if let NodeKind::BlockQuote {
+                        callout_metadata, ..
+                    } = &mut completed_node.kind
+                    {
+                        *callout_metadata = Some(metadata);
+                    }
+                }
 
                 curr_children = siblings;
                 curr_children.push(completed_node);

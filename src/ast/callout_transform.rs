@@ -181,7 +181,7 @@ fn detect_callout_metadata(
     source_text: &str,
 ) -> Option<CalloutMetadata> {
     // Only process blockquotes without a recognized type
-    if !matches!(&node.kind, NodeKind::BlockQuote(None)) {
+    if !matches!(&node.kind, NodeKind::BlockQuote { standard_kind: None, .. }) {
         return None;
     }
 
@@ -340,17 +340,21 @@ pub fn get_callout_metadata(
     source_text: &str,
 ) -> Option<CalloutMetadata> {
     match &node.kind {
-        NodeKind::BlockQuote(Some(standard_kind)) => {
+        NodeKind::BlockQuote {
+            standard_kind: Some(kind),
+            ..
+        } => {
             // Standard types don't have custom titles or foldable state in pulldown-cmark
             Some(CalloutMetadata {
-                kind: ExtendedBlockQuoteKind::Standard(*standard_kind),
+                kind: ExtendedBlockQuoteKind::Standard(*kind),
                 title: None,
                 foldable: None,
             })
         }
-        NodeKind::BlockQuote(None) => {
-            detect_callout_metadata(node, source_text)
-        }
+        NodeKind::BlockQuote {
+            standard_kind: None,
+            ..
+        } => detect_callout_metadata(node, source_text),
         _ => None,
     }
 }

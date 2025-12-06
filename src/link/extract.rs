@@ -400,7 +400,7 @@ fn extract_reference_and_referenceable(
                             NodeKind::Table(..) => {
                                 Some(BlockReferenceableKind::Table)
                             }
-                            NodeKind::BlockQuote(..) => {
+                            NodeKind::BlockQuote { .. } => {
                                 Some(BlockReferenceableKind::BlockQuote)
                             }
                             _ => None,
@@ -829,7 +829,7 @@ mod tests {
           Paragraph [218..225]
             Text(Borrowed("^")) [218..219]
             Text(Borrowed("table")) [219..224]
-          BlockQuote(None) [226..238]
+          BlockQuote { standard_kind: None, callout_metadata: None } [226..238]
             Paragraph [228..238]
               Text(Borrowed("quotation")) [228..237]
           Paragraph [239..250]
@@ -838,7 +838,7 @@ mod tests {
           Paragraph [251..267]
             Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("#^quotation"), title: Borrowed(""), id: Borrowed("") } [251..265]
               Text(Borrowed("#^quotation")) [253..264]
-          BlockQuote(None) [269..302]
+          BlockQuote { standard_kind: None, callout_metadata: Some(CalloutMetadata { kind: Obsidian(Info), title: Some("this is a info callout"), foldable: None }) } [269..302]
             Paragraph [271..302]
               Text(Borrowed("[")) [271..272]
               Text(Borrowed("!info")) [272..277]

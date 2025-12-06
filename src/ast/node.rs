@@ -11,6 +11,8 @@ use pulldown_cmark::{
     LinkType, MetadataBlockKind, Tag,
 };
 
+use super::callout_transform::CalloutMetadata;
+
 // Node
 // ====================
 
@@ -50,7 +52,12 @@ pub enum NodeKind<'a> {
         classes: Vec<CowStr<'a>>,
         attrs: Vec<(CowStr<'a>, Option<CowStr<'a>>)>,
     },
-    BlockQuote(Option<BlockQuoteKind>),
+    BlockQuote {
+        /// Standard GFM type recognized by pulldown-cmark
+        standard_kind: Option<BlockQuoteKind>,
+        /// Extended callout metadata (Obsidian, custom types, title, foldable)
+        callout_metadata: Option<CalloutMetadata>,
+    },
     CodeBlock(CodeBlockKind<'a>),
     HtmlBlock,
     List(Option<u64>),
@@ -110,7 +117,10 @@ impl<'a> NodeKind<'a> {
                 classes,
                 attrs,
             },
-            Tag::BlockQuote(x) => Self::BlockQuote(x),
+            Tag::BlockQuote(x) => Self::BlockQuote {
+                standard_kind: x,
+                callout_metadata: None, // Will be populated in build_ast
+            },
             Tag::CodeBlock(x) => Self::CodeBlock(x),
             Tag::HtmlBlock => Self::HtmlBlock,
             Tag::List(x) => Self::List(x),
@@ -194,7 +204,13 @@ impl<'a> NodeKind<'a> {
                     .map(|(k, v)| (k.into_static(), v.map(|s| s.into_static())))
                     .collect(),
             },
-            NodeKind::BlockQuote(k) => NodeKind::BlockQuote(k),
+            NodeKind::BlockQuote {
+                standard_kind,
+                callout_metadata,
+            } => NodeKind::BlockQuote {
+                standard_kind,
+                callout_metadata,
+            },
             NodeKind::CodeBlock(kb) => NodeKind::CodeBlock(kb.into_static()),
             NodeKind::HtmlBlock => NodeKind::HtmlBlock,
             NodeKind::List(v) => NodeKind::List(v),

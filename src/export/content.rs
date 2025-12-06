@@ -504,7 +504,10 @@ fn render_node(
                     tag, id_attr, class_attr, other_attrs, children, tag)))
             }
         }
-        BlockQuote(kind) => {
+        BlockQuote {
+            standard_kind,
+            callout_metadata,
+        } => {
             let children = render_nodes(
                 &node.children,
                 vault_path,
@@ -514,14 +517,19 @@ fn render_node(
                 max_embed_depth,
             );
 
-            // Extract class name determination
-            let class_name = kind.as_ref().map(|bq_kind| match bq_kind {
-                BlockQuoteKind::Note => "markdown-alert-note",
-                BlockQuoteKind::Tip => "markdown-alert-tip",
-                BlockQuoteKind::Important => "markdown-alert-important",
-                BlockQuoteKind::Warning => "markdown-alert-warning",
-                BlockQuoteKind::Caution => "markdown-alert-caution",
-            });
+            // Get class name from callout metadata if available
+            let class_name = if let Some(metadata) = callout_metadata {
+                Some(metadata.kind.class_name())
+            } else {
+                // Fallback to standard kind
+                standard_kind.as_ref().map(|bq_kind| match bq_kind {
+                    BlockQuoteKind::Note => "markdown-alert-note",
+                    BlockQuoteKind::Tip => "markdown-alert-tip",
+                    BlockQuoteKind::Important => "markdown-alert-important",
+                    BlockQuoteKind::Warning => "markdown-alert-warning",
+                    BlockQuoteKind::Caution => "markdown-alert-caution",
+                })
+            };
 
             let id_opt = vault_db.get_innote_refable_anchor_id(
                 &vault_path.to_path_buf(),
