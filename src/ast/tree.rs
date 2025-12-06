@@ -5,7 +5,7 @@ use pulldown_cmark::{Event, Options, Parser};
 use std::ops::Range;
 use tree_sitter::{InputEdit, Point};
 
-use super::callout_transform::get_callout_metadata;
+use super::callout::callout_data_of_gfm_blockquote;
 use super::node::{Node, NodeKind};
 
 /// A tree that represents the syntactic structure of a source code file.
@@ -182,7 +182,7 @@ fn build_ast<'a>(
                         ..
                     }
                 ) {
-                    get_callout_metadata(&completed_node, text)
+                    callout_data_of_gfm_blockquote(&completed_node, text)
                 } else {
                     None
                 };

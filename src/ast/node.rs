@@ -6,12 +6,11 @@ use std::fmt::Display;
 use std::ops::Range;
 use tree_sitter::Point;
 
+use super::callout::{CalloutKind, FoldableState};
 use pulldown_cmark::{
     Alignment, BlockQuoteKind, CodeBlockKind, CowStr, Event, HeadingLevel,
     LinkType, MetadataBlockKind, Tag,
 };
-
-use super::callout_transform::CalloutMetadata;
 
 // Node
 // ====================
@@ -52,11 +51,14 @@ pub enum NodeKind<'a> {
         classes: Vec<CowStr<'a>>,
         attrs: Vec<(CowStr<'a>, Option<CowStr<'a>>)>,
     },
-    BlockQuote {
-        /// Standard GFM type recognized by pulldown-cmark
-        standard_kind: Option<BlockQuoteKind>,
-        /// Extended callout metadata (Obsidian, custom types, title, foldable)
-        callout_metadata: Option<CalloutMetadata>,
+    GFMBlockQuote(Option<BlockQuoteKind>),
+    Callout {
+        /// The type of callout
+        kind: CalloutKind,
+        /// Custom title (None means use default)
+        title: Option<String>,
+        /// Whether the callout is foldable and its default state
+        foldable: Option<FoldableState>,
     },
     CodeBlock(CodeBlockKind<'a>),
     HtmlBlock,
@@ -117,10 +119,7 @@ impl<'a> NodeKind<'a> {
                 classes,
                 attrs,
             },
-            Tag::BlockQuote(x) => Self::BlockQuote {
-                standard_kind: x,
-                callout_metadata: None, // Will be populated in build_ast
-            },
+            Tag::BlockQuote(x) => Self::GFMBlockQuote(x),
             Tag::CodeBlock(x) => Self::CodeBlock(x),
             Tag::HtmlBlock => Self::HtmlBlock,
             Tag::List(x) => Self::List(x),
@@ -204,12 +203,15 @@ impl<'a> NodeKind<'a> {
                     .map(|(k, v)| (k.into_static(), v.map(|s| s.into_static())))
                     .collect(),
             },
-            NodeKind::BlockQuote {
-                standard_kind,
-                callout_metadata,
-            } => NodeKind::BlockQuote {
-                standard_kind,
-                callout_metadata,
+            NodeKind::GFMBlockQuote(x) => NodeKind::GFMBlockQuote(x),
+            NodeKind::Callout {
+                kind,
+                title,
+                foldable,
+            } => NodeKind::Callout {
+                kind,
+                title,
+                foldable,
             },
             NodeKind::CodeBlock(kb) => NodeKind::CodeBlock(kb.into_static()),
             NodeKind::HtmlBlock => NodeKind::HtmlBlock,
@@ -411,7 +413,11 @@ impl<'a> Node<'a> {
     /// Convert this node with borrowed data to an owned version with 'static lifetime
     pub fn into_static(self) -> Node<'static> {
         Node {
-            children: self.children.into_iter().map(|c| c.into_static()).collect(),
+            children: self
+                .children
+                .into_iter()
+                .map(|c| c.into_static())
+                .collect(),
             start_byte: self.start_byte,
             end_byte: self.end_byte,
             start_point: self.start_point,

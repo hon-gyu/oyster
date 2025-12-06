@@ -1,6 +1,6 @@
 //! Define the AST for the Markdown
 
-pub mod callout_transform;
+pub mod callout;
 mod node;
 mod tree;
 

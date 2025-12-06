@@ -1,8 +1,3 @@
-//! AST transformation utilities
-//!
-//! This module provides functions to transform the AST after parsing,
-//! such as detecting custom blockquote types that pulldown-cmark doesn't recognize.
-
 use super::node::{Node, NodeKind};
 use pulldown_cmark::BlockQuoteKind;
 
@@ -61,7 +56,7 @@ impl ObsidianCalloutKind {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CustomCalloutKind {
     Llm,
-    // Add more custom types as needed
+    // more
 }
 
 impl CustomCalloutKind {
@@ -83,25 +78,46 @@ impl CustomCalloutKind {
 
 /// Extended blockquote kind that includes standard, Obsidian, and custom types
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ExtendedBlockQuoteKind {
+pub enum CalloutKind {
     /// Standard GFM alert types (recognized by pulldown-cmark)
-    Standard(BlockQuoteKind),
+    GFM(BlockQuoteKind),
     /// Obsidian-specific callout types
     Obsidian(ObsidianCalloutKind),
     /// User-defined custom callout types
     Custom(CustomCalloutKind),
 }
 
-impl ExtendedBlockQuoteKind {
+impl TryFrom<&str> for CalloutKind {
+    type Error = String;
+
+    fn try_from(s: &str) -> Result<Self, Self::Error> {
+        if let Some(gfm_kind) = match s.to_uppercase().as_str() {
+            "NOTE" => Some(BlockQuoteKind::Note),
+            "TIP" => Some(BlockQuoteKind::Tip),
+            "IMPORTANT" => Some(BlockQuoteKind::Important),
+            "WARNING" => Some(BlockQuoteKind::Warning),
+            "CAUTION" => Some(BlockQuoteKind::Caution),
+            _ => None,
+        } {
+            Ok(Self::GFM(gfm_kind))
+        } else if let Some(obsidian_kind) = ObsidianCalloutKind::from_str(s) {
+            Ok(Self::Obsidian(obsidian_kind))
+        } else if let Some(custom_kind) = CustomCalloutKind::from_str(s) {
+            Ok(Self::Custom(custom_kind))
+        } else {
+            Err(format!("Unknown callout type: {}", s))
+        }
+    }
+}
+
+impl CalloutKind {
     pub fn class_name(&self) -> &'static str {
         match self {
-            Self::Standard(BlockQuoteKind::Note) => "markdown-alert-note",
-            Self::Standard(BlockQuoteKind::Tip) => "markdown-alert-tip",
-            Self::Standard(BlockQuoteKind::Important) => {
-                "markdown-alert-important"
-            }
-            Self::Standard(BlockQuoteKind::Warning) => "markdown-alert-warning",
-            Self::Standard(BlockQuoteKind::Caution) => "markdown-alert-caution",
+            Self::GFM(BlockQuoteKind::Note) => "markdown-alert-note",
+            Self::GFM(BlockQuoteKind::Tip) => "markdown-alert-tip",
+            Self::GFM(BlockQuoteKind::Important) => "markdown-alert-important",
+            Self::GFM(BlockQuoteKind::Warning) => "markdown-alert-warning",
+            Self::GFM(BlockQuoteKind::Caution) => "markdown-alert-caution",
             Self::Obsidian(obsidian) => obsidian.class_name(),
             Self::Custom(custom) => custom.class_name(),
         }
@@ -110,11 +126,11 @@ impl ExtendedBlockQuoteKind {
     /// Get default title for this callout type (title case)
     pub fn default_title(&self) -> &'static str {
         match self {
-            Self::Standard(BlockQuoteKind::Note) => "Note",
-            Self::Standard(BlockQuoteKind::Tip) => "Tip",
-            Self::Standard(BlockQuoteKind::Important) => "Important",
-            Self::Standard(BlockQuoteKind::Warning) => "Warning",
-            Self::Standard(BlockQuoteKind::Caution) => "Caution",
+            Self::GFM(BlockQuoteKind::Note) => "Note",
+            Self::GFM(BlockQuoteKind::Tip) => "Tip",
+            Self::GFM(BlockQuoteKind::Important) => "Important",
+            Self::GFM(BlockQuoteKind::Warning) => "Warning",
+            Self::GFM(BlockQuoteKind::Caution) => "Caution",
             Self::Obsidian(ObsidianCalloutKind::Abstract) => "Abstract",
             Self::Obsidian(ObsidianCalloutKind::Info) => "Info",
             Self::Obsidian(ObsidianCalloutKind::Todo) => "Todo",
@@ -141,16 +157,16 @@ pub enum FoldableState {
 
 /// Complete metadata for a callout
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct CalloutMetadata {
+pub struct CalloutData {
     /// The type of callout
-    pub kind: ExtendedBlockQuoteKind,
+    pub kind: CalloutKind,
     /// Custom title (None means use default)
     pub title: Option<String>,
     /// Whether the callout is foldable and its default state
     pub foldable: Option<FoldableState>,
 }
 
-impl CalloutMetadata {
+impl CalloutData {
     /// Get the title to display (custom or default)
     pub fn display_title(&self) -> String {
         self.title
@@ -176,12 +192,12 @@ impl CalloutMetadata {
 /// - Already recognized by pulldown-cmark (Standard types)
 /// - Invalid spacing (2+ spaces)
 /// - Not a valid callout pattern
-fn detect_callout_metadata(
+pub fn callout_data_of_gfm_blockquote(
     node: &Node,
     source_text: &str,
-) -> Option<CalloutMetadata> {
-    // Only process blockquotes without a recognized type
-    if !matches!(&node.kind, NodeKind::BlockQuote { standard_kind: None, .. }) {
+) -> Option<CalloutData> {
+    // Only process blockquote nodes
+    if !matches!(&node.kind, NodeKind::GFMBlockQuote(_)) {
         return None;
     }
 
@@ -245,15 +261,11 @@ fn detect_callout_metadata(
     let type_str = &second[1..]; // Remove the "!"
 
     // Try to resolve the type
-    let kind = if let Some(obsidian_kind) =
-        ObsidianCalloutKind::from_str(type_str)
-    {
-        ExtendedBlockQuoteKind::Obsidian(obsidian_kind)
-    } else if let Some(custom_kind) = CustomCalloutKind::from_str(type_str) {
-        ExtendedBlockQuoteKind::Custom(custom_kind)
+    let kind = if let Ok(kind) = CalloutKind::try_from(type_str) {
+        kind
     } else {
         // Unknown type - default to Note
-        ExtendedBlockQuoteKind::Standard(BlockQuoteKind::Note)
+        CalloutKind::GFM(BlockQuoteKind::Note)
     };
 
     // Extract foldable state and custom title if present
@@ -305,68 +317,11 @@ fn detect_callout_metadata(
         (None, None)
     };
 
-    Some(CalloutMetadata {
+    Some(CalloutData {
         kind,
         title,
         foldable,
     })
-}
-
-/// Transform blockquote nodes to detect and annotate extended types
-///
-/// This walks the AST and detects Obsidian and custom blockquote types.
-/// Note: Currently this is just for detection. To actually store the metadata,
-/// you would need to extend NodeKind or use a separate data structure.
-pub fn transform_custom_blockquotes(node: &mut Node, source_text: &str) {
-    // Detect callout metadata
-    if let Some(metadata) = detect_callout_metadata(node, source_text) {
-        // Store the metadata somehow - we need to extend NodeKind for this
-        // For now, we'll demonstrate the detection logic
-        eprintln!("Detected callout: {:?}", metadata);
-    }
-
-    // Recursively transform children
-    for child in &mut node.children {
-        transform_custom_blockquotes(child, source_text);
-    }
-}
-
-/// Get complete callout metadata (type, title, foldable state)
-///
-/// This is the main function to use when rendering blockquotes.
-/// Returns complete metadata for all three categories: Standard, Obsidian, and Custom.
-pub fn get_callout_metadata(
-    node: &Node,
-    source_text: &str,
-) -> Option<CalloutMetadata> {
-    match &node.kind {
-        NodeKind::BlockQuote {
-            standard_kind: Some(kind),
-            ..
-        } => {
-            // Standard types don't have custom titles or foldable state in pulldown-cmark
-            Some(CalloutMetadata {
-                kind: ExtendedBlockQuoteKind::Standard(*kind),
-                title: None,
-                foldable: None,
-            })
-        }
-        NodeKind::BlockQuote {
-            standard_kind: None,
-            ..
-        } => detect_callout_metadata(node, source_text),
-        _ => None,
-    }
-}
-
-/// Helper to get just the blockquote type (without title/foldable)
-///
-/// This is a convenience function for when you only need the type.
-pub fn get_blockquote_kind(
-    node: &Node,
-    source_text: &str,
-) -> Option<ExtendedBlockQuoteKind> {
-    get_callout_metadata(node, source_text).map(|m| m.kind)
 }
 
 #[cfg(test)]
@@ -382,10 +337,10 @@ mod tests {
         let tree = Tree::new(md);
         let blockquote = &tree.root_node.children[0];
 
-        let metadata = get_callout_metadata(blockquote, md).unwrap();
+        let metadata = callout_data_of_gfm_blockquote(blockquote, md).unwrap();
         assert_eq!(
             metadata.kind,
-            ExtendedBlockQuoteKind::Obsidian(ObsidianCalloutKind::Danger)
+            CalloutKind::Obsidian(ObsidianCalloutKind::Danger)
         );
         assert_eq!(metadata.title, None);
         assert_eq!(metadata.foldable, None);
@@ -399,11 +354,8 @@ mod tests {
         let tree = Tree::new(md);
         let blockquote = &tree.root_node.children[0];
 
-        let metadata = get_callout_metadata(blockquote, md).unwrap();
-        assert_eq!(
-            metadata.kind,
-            ExtendedBlockQuoteKind::Custom(CustomCalloutKind::Llm)
-        );
+        let metadata = callout_data_of_gfm_blockquote(blockquote, md).unwrap();
+        assert_eq!(metadata.kind, CalloutKind::Custom(CustomCalloutKind::Llm));
         assert_eq!(metadata.title, None);
     }
 
@@ -416,10 +368,10 @@ mod tests {
         let tree = Tree::new(md);
         let blockquote = &tree.root_node.children[0];
 
-        let metadata = get_callout_metadata(blockquote, md).unwrap();
+        let metadata = callout_data_of_gfm_blockquote(blockquote, md).unwrap();
         assert_eq!(
             metadata.kind,
-            ExtendedBlockQuoteKind::Obsidian(ObsidianCalloutKind::Info)
+            CalloutKind::Obsidian(ObsidianCalloutKind::Info)
         );
         assert_eq!(
             metadata.title,
@@ -436,10 +388,10 @@ mod tests {
         let tree = Tree::new(md);
         let blockquote = &tree.root_node.children[0];
 
-        let metadata = get_callout_metadata(blockquote, md).unwrap();
+        let metadata = callout_data_of_gfm_blockquote(blockquote, md).unwrap();
         assert_eq!(
             metadata.kind,
-            ExtendedBlockQuoteKind::Obsidian(ObsidianCalloutKind::Question)
+            CalloutKind::Obsidian(ObsidianCalloutKind::Question)
         );
         assert_eq!(metadata.title, Some("Custom Question Title".to_string()));
         assert_eq!(metadata.display_title(), "Custom Question Title");
@@ -452,10 +404,10 @@ mod tests {
         let tree = Tree::new(md);
         let blockquote = &tree.root_node.children[0];
 
-        let metadata = get_callout_metadata(blockquote, md).unwrap();
+        let metadata = callout_data_of_gfm_blockquote(blockquote, md).unwrap();
         assert_eq!(
             metadata.kind,
-            ExtendedBlockQuoteKind::Obsidian(ObsidianCalloutKind::Info)
+            CalloutKind::Obsidian(ObsidianCalloutKind::Info)
         );
         assert_eq!(metadata.title, Some("Title-only callout".to_string()));
     }
@@ -468,10 +420,10 @@ mod tests {
         let tree = Tree::new(md);
         let blockquote = &tree.root_node.children[0];
 
-        let metadata = get_callout_metadata(blockquote, md).unwrap();
+        let metadata = callout_data_of_gfm_blockquote(blockquote, md).unwrap();
         assert_eq!(
             metadata.kind,
-            ExtendedBlockQuoteKind::Obsidian(ObsidianCalloutKind::Question)
+            CalloutKind::Obsidian(ObsidianCalloutKind::Question)
         );
         assert_eq!(metadata.title, Some("Are callouts foldable?".to_string()));
         assert_eq!(metadata.foldable, Some(FoldableState::Expanded));
@@ -485,10 +437,10 @@ mod tests {
         let tree = Tree::new(md);
         let blockquote = &tree.root_node.children[0];
 
-        let metadata = get_callout_metadata(blockquote, md).unwrap();
+        let metadata = callout_data_of_gfm_blockquote(blockquote, md).unwrap();
         assert_eq!(
             metadata.kind,
-            ExtendedBlockQuoteKind::Obsidian(ObsidianCalloutKind::Question)
+            CalloutKind::Obsidian(ObsidianCalloutKind::Question)
         );
         assert_eq!(metadata.title, Some("Are callouts foldable?".to_string()));
         assert_eq!(metadata.foldable, Some(FoldableState::Collapsed));
@@ -503,11 +455,8 @@ mod tests {
         let blockquote = &tree.root_node.children[0];
 
         // Should be recognized as standard
-        let metadata = get_callout_metadata(blockquote, md).unwrap();
-        assert_eq!(
-            metadata.kind,
-            ExtendedBlockQuoteKind::Standard(BlockQuoteKind::Note)
-        );
+        let metadata = callout_data_of_gfm_blockquote(blockquote, md).unwrap();
+        assert_eq!(metadata.kind, CalloutKind::GFM(BlockQuoteKind::Note));
     }
 
     #[test]
@@ -518,7 +467,7 @@ mod tests {
         let tree = Tree::new(md);
         let blockquote = &tree.root_node.children[0];
 
-        let metadata = get_callout_metadata(blockquote, md);
+        let metadata = callout_data_of_gfm_blockquote(blockquote, md);
         assert_eq!(metadata, None);
     }
 
@@ -531,7 +480,7 @@ mod tests {
         let blockquote = &tree.root_node.children[0];
 
         // Should not detect due to 2 spaces
-        let metadata = get_callout_metadata(blockquote, md);
+        let metadata = callout_data_of_gfm_blockquote(blockquote, md);
         assert_eq!(metadata, None);
     }
 
@@ -544,55 +493,10 @@ mod tests {
         let tree = Tree::new(md);
         let blockquote = &tree.root_node.children[0];
 
-        let metadata = get_callout_metadata(blockquote, md).unwrap();
+        let metadata = callout_data_of_gfm_blockquote(blockquote, md).unwrap();
         assert_eq!(
             metadata.kind,
-            ExtendedBlockQuoteKind::Obsidian(ObsidianCalloutKind::Abstract)
-        );
-    }
-
-    #[test]
-    fn test_get_blockquote_kind_standard() {
-        let md = r#"> [!NOTE]
-> This is a standard note"#;
-
-        let tree = Tree::new(md);
-        let blockquote = &tree.root_node.children[0];
-
-        let kind = get_blockquote_kind(blockquote, md);
-        assert_eq!(
-            kind,
-            Some(ExtendedBlockQuoteKind::Standard(BlockQuoteKind::Note))
-        );
-    }
-
-    #[test]
-    fn test_get_blockquote_kind_obsidian() {
-        let md = r#"> [!INFO]
-> This is an info callout"#;
-
-        let tree = Tree::new(md);
-        let blockquote = &tree.root_node.children[0];
-
-        let kind = get_blockquote_kind(blockquote, md);
-        assert_eq!(
-            kind,
-            Some(ExtendedBlockQuoteKind::Obsidian(ObsidianCalloutKind::Info))
-        );
-    }
-
-    #[test]
-    fn test_get_blockquote_kind_custom() {
-        let md = r#"> [!LLM]
-> AI generated"#;
-
-        let tree = Tree::new(md);
-        let blockquote = &tree.root_node.children[0];
-
-        let kind = get_blockquote_kind(blockquote, md);
-        assert_eq!(
-            kind,
-            Some(ExtendedBlockQuoteKind::Custom(CustomCalloutKind::Llm))
+            CalloutKind::Obsidian(ObsidianCalloutKind::Abstract)
         );
     }
 }
