@@ -46,26 +46,99 @@ fn test_render_image_resize() {
     </span>
     </p>
 
-    <p>Embeded Image <img class="embed-file image" id="42-60" src="blue-image.png" alt="blue-image">
+    <p>Embeded Image <img class="embed-file image" id="42-60" embed-depth="0" src="blue-image.png" alt="blue-image">
     </img>
     </p>
 
-    <p>Scale width according to original aspect ratio <img class="embed-file image" id="111-135" src="blue-image.png" alt="blue-image" width="200">
+    <p>Scale width according to original aspect ratio <img class="embed-file image" id="111-135" embed-depth="0" src="blue-image.png" alt="blue-image" width="200">
     </img>
     </p>
 
-    <p>Resize with width and height <img class="embed-file image" id="167-195" src="blue-image.png" alt="blue-image" width="100" height="150">
+    <p>Resize with width and height <img class="embed-file image" id="167-195" embed-depth="0" src="blue-image.png" alt="blue-image" width="100" height="150">
     </img>
     </p>
 
-    <p>Embed note <span class="embed-file" id="210-219">
-    <a href="note2.html">note2</a>
-    </span>
+    <p>Embed note: <code>![[note2]]</code> <div class="embed-file note" embed-depth="1">
+    <div class="header">
+
+    <p class="embed-file header">📑 note2</p>
+    </div>
+    <div class="content">
+    <article>
+
+    <p>Something</p>
+    <ul id="60a916">
+    <li id="60a916">A list ^60a916</li>
+    </ul>
+
+    <p id="7e162c">a paragraph ^7e162c</p>
+
+    <p>A callout</p>
+    <blockquote id="warning" class="markdown-alert-warning">
+
+    <p>some warning</p>
+    </blockquote>
+
+    <p>^warning</p>
+
+    <h2 id="heading-in-note-2">Heading in note 2</h2>
+
+    <p>something?</p>
+
+    </article>
+    </div>
+    </div>
     </p>
 
-    <p>Embed heading <span class="embed-file" id="236-263">
-    <a href="note2.html#heading-in-note-2">note2#Heading in note 2</a>
-    </span>
+    <p>Embed heading: <code>![[note2#Heading in note 2]]</code> <div class="embed-file heading" embed-depth="1">
+    <div class="header">
+
+    <p class="embed-file header">📑 note2</p>
+    </div>
+    <div class="content">
+
+    <h2 id="heading-in-note-2">Heading in note 2</h2>
+    </div>
+    </div>
+    </p>
+
+    <p>Embed block - a list: <code>![[note2#^60a916]]</code> <div class="embed-file block" embed-depth="1">
+    <div class="header">
+
+    <p class="embed-file header">📑 note2</p>
+    </div>
+    <div class="content">
+    <ul id="60a916">
+    <li id="60a916">A list ^60a916</li>
+    </ul>
+    </div>
+    </div>
+    </p>
+
+    <p>Embed block - a paragraph : <code>![[note2#^7e162c]]</code> <div class="embed-file block" embed-depth="1">
+    <div class="header">
+
+    <p class="embed-file header">📑 note2</p>
+    </div>
+    <div class="content">
+
+    <p id="7e162c">a paragraph ^7e162c</p>
+    </div>
+    </div>
+    </p>
+
+    <p>Embed block - callout: <code>![[note2#^warning]]</code> <div class="embed-file block" embed-depth="1">
+    <div class="header">
+
+    <p class="embed-file header">📑 note2</p>
+    </div>
+    <div class="content">
+    <blockquote id="warning" class="markdown-alert-warning">
+
+    <p>some warning</p>
+    </blockquote>
+    </div>
+    </div>
     </p>
 
     </article></body>
