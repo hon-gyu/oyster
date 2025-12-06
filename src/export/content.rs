@@ -19,7 +19,7 @@ use crate::export::utils::range_to_anchor_id;
 use crate::link::Referenceable;
 use maud::{Markup, PreEscaped, html};
 use pulldown_cmark::{BlockQuoteKind, CodeBlockKind, LinkType};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 pub struct NodeRenderConfig {
     pub mermaid_render_mode: MermaidRenderMode,
@@ -222,141 +222,180 @@ fn render_node(
                 Some(title.as_ref())
             };
 
+            fn get_note_header_elem(
+                vault_db: &dyn VaultDB,
+                tgt_vault_path: &PathBuf,
+            ) -> Markup {
+                let tgt_title = vault_db
+                    .get_title_from_note_vault_path(tgt_vault_path)
+                    .expect("Note should have a title");
+                html! {
+                    p .embed-file.header {
+                        (format!("📄 {}", tgt_title))
+                    }
+                }
+            }
+
             if let Some(tgt) = vault_db.get_tgt_from_src(&vault_path, &range) {
                 let tgt_vault_path = tgt.path();
                 let tgt_slug_path = vault_db
                     .get_slug_from_file_vault_path(tgt_vault_path)
                     .expect("Referenceable should have a slug");
-                if embed_depth >= max_embed_depth {
-                    // Reach max embed depth, render as internal link instead
-                    let tgt_slug = vault_db
-                        .get_tgt_slug_from_src(vault_path, &range)
-                        .expect("Should have relative slug for resolved link");
-                    html! {
-                        a .embed-file.max-embed-depth #internal-link href=(tgt_slug) title=[title_opt] {
-                            (PreEscaped(children))
+
+                if matches!(tgt, Referenceable::Asset { .. }) {
+                    let is_image = Path::new(&tgt_slug_path)
+                        .extension()
+                        .and_then(|ext| {
+                            IMAGE_EXTENSIONS
+                                .iter()
+                                .find(|&&e| e == ext.to_str().unwrap_or(""))
+                        })
+                        .is_some();
+                    if is_image {
+                        // Case: image
+                        let resize_spec = &children;
+                        let (width, height) =
+                            utils::parse_resize_spec(resize_spec);
+                        let alt_text = Path::new(&tgt_slug_path)
+                            .file_stem()
+                            .unwrap()
+                            .to_str()
+                            .unwrap_or("");
+                        // src anchor id to be used as href in backlink
+                        let src_anchor_id = vault_db
+                            .get_reference_anchor_id(
+                                &vault_path.to_path_buf(),
+                                &range,
+                            )
+                            .expect("Image should have a src anchor id");
+                        html! {
+                            img
+                                .embed-file.image
+                                #(src_anchor_id)
+                                embed-depth=(embed_depth)
+                                src=(tgt_slug_path)
+                                alt=(alt_text)
+                                width=[width] height=[height]
+                                {}
+                        }
+                    } else {
+                        // Unhandled embeded asset
+                        // TODO: handle audio, video, pdf, etc.
+                        let href = dest_url.to_string();
+                        // Just an anchor
+                        html! {
+                            .embed-file.unhandled-asset
+                            embed-depth=(embed_depth) {
+                                a
+                                    href=(href)
+                                    title=[title_opt]
+                                    {
+                                        (PreEscaped(children))
+                                    }
+                            }
                         }
                     }
                 } else {
-                    match tgt {
-                        Referenceable::Asset { .. } => {
-                            let is_image = Path::new(&tgt_slug_path)
-                                .extension()
-                                .and_then(|ext| {
-                                    IMAGE_EXTENSIONS.iter().find(|&&e| {
-                                        e == ext.to_str().unwrap_or("")
-                                    })
-                                })
-                                .is_some();
-                            if is_image {
-                                // Case: image
-                                let resize_spec = &children;
-                                let (width, height) =
-                                    utils::parse_resize_spec(resize_spec);
-                                let alt_text = Path::new(&tgt_slug_path)
-                                    .file_stem()
-                                    .unwrap()
-                                    .to_str()
-                                    .unwrap_or("");
-                                // src anchor id to be used as href in backlink
-                                let src_anchor_id = vault_db
-                                    .get_reference_anchor_id(
-                                        &vault_path.to_path_buf(),
-                                        &range,
-                                    )
-                                    .expect(
-                                        "Image should have a src anchor id",
-                                    );
-                                html! {
-                                    img .embed-file.image src=(tgt_slug_path) alt=(alt_text) #(src_anchor_id) width=[width] height=[height] {}
+                    // Case: note
+                    let note_header_elem =
+                        get_note_header_elem(vault_db, &tgt_vault_path);
+                    if embed_depth >= max_embed_depth {
+                        // Reach max embed depth, render as internal link instead
+                        let tgt_slug = vault_db
+                            .get_tgt_slug_from_src(vault_path, &range)
+                            .expect(
+                                "Should have relative slug for resolved link",
+                            );
+                        html! {
+                            .embed-file.max-embed-depth embed-depth=(embed_depth) #internal-link {
+                                (note_header_elem)
+                                a  href=(tgt_slug) title=[title_opt] {
+                                    (PreEscaped(children))
                                 }
-                            } else {
-                                // Unhandled embeded asset
-                                // TODO: handle audio, video, pdf, etc.
-                                let href = dest_url.to_string();
-                                // Just an anchor
+                            }
+                        }
+                    } else {
+                        match tgt {
+                            Referenceable::Asset { .. } => unreachable!(
+                                "Asset should have been handled earlier"
+                            ),
+                            Referenceable::Note { .. } => {
+                                let tgt_tree = vault_db
+                                    .get_ast_tree_from_note_vault_path(tgt_vault_path).expect("Note should have an AST, either from cache or newly built");
+                                let embed_depth = embed_depth + 1;
+                                let embed_content = render_content(
+                                    &tgt_tree,
+                                    tgt_vault_path,
+                                    vault_db,
+                                    node_render_config,
+                                    embed_depth,
+                                    max_embed_depth,
+                                );
                                 html! {
-                                    a
-                                        .embed-file.unhandled-asset
-                                        href=(href)
-                                        title=[title_opt]
-                                        embed-depth=(embed_depth) {
-                                        (PreEscaped(children))
+                                    .embed-file.note embed-depth=(embed_depth) {
+                                        (note_header_elem)
+                                        {
+                                            (embed_content)
+                                        }
                                     }
                                 }
                             }
-                        }
-                        Referenceable::Note { .. } => {
-                            let tgt_tree = vault_db
-                                .get_ast_tree_from_note_vault_path(tgt_vault_path).expect("Note should have an AST, either from cache or newly built");
-                            let embed_depth = embed_depth + 1;
-                            let embed_content = render_content(
-                                &tgt_tree,
-                                tgt_vault_path,
-                                vault_db,
-                                node_render_config,
-                                embed_depth,
-                                max_embed_depth,
-                            );
-                            html! {
-                                .embed-file.note embed-depth=(embed_depth) {
-                                    (embed_content)
+                            Referenceable::Heading {
+                                range: tgt_range, ..
+                            } => {
+                                let tgt_tree = vault_db
+                                    .get_ast_tree_from_note_vault_path(tgt_vault_path).expect("Note should have an AST, either from cache or newly built");
+                                // Get heading node by finding the node with exact range match
+                                let heading_node =
+                                    find_node_by_range(&tgt_tree.root_node, tgt_range)
+                                        .expect(
+                                            "Referenceable's range should match the heading node's range",
+                                        );
+
+                                // Render the heading and its children
+                                let embed_depth = embed_depth + 1;
+                                let heading_content = render_node(
+                                    heading_node,
+                                    tgt_vault_path,
+                                    vault_db,
+                                    node_render_config,
+                                    embed_depth,
+                                    max_embed_depth,
+                                );
+                                html! {
+                                    .embed-file.heading embed-depth=(embed_depth) {
+                                        (note_header_elem)
+                                        (heading_content)
+                                    }
                                 }
                             }
-                        }
-                        Referenceable::Heading {
-                            range: tgt_range, ..
-                        } => {
-                            let tgt_tree = vault_db
-                                .get_ast_tree_from_note_vault_path(tgt_vault_path).expect("Note should have an AST, either from cache or newly built");
-                            // Get heading node by finding the node with exact range match
-                            let heading_node =
-                                find_node_by_range(&tgt_tree.root_node, tgt_range)
-                                    .expect(
-                                        "Referenceable's range should match the heading node's range",
-                                    );
+                            Referenceable::Block {
+                                range: tgt_range, ..
+                            } => {
+                                let tgt_tree = vault_db
+                                    .get_ast_tree_from_note_vault_path(tgt_vault_path).expect("Note should have an AST, either from cache or newly built");
+                                // Get block node by finding the node with exact range match
+                                let block_node =
+                                    find_node_by_range(&tgt_tree.root_node, tgt_range)
+                                        .expect(
+                                            "Referenceable's range should match the block node's range",
+                                        );
 
-                            // Render the heading and its children
-                            let embed_depth = embed_depth + 1;
-                            let heading_content = render_node(
-                                heading_node,
-                                tgt_vault_path,
-                                vault_db,
-                                node_render_config,
-                                embed_depth,
-                                max_embed_depth,
-                            );
-                            html! {
-                                .embed-file.heading embed-depth=(embed_depth) {
-                                    (heading_content)
-                                }
-                            }
-                        }
-                        Referenceable::Block {
-                            range: tgt_range, ..
-                        } => {
-                            let tgt_tree = vault_db
-                                .get_ast_tree_from_note_vault_path(tgt_vault_path).expect("Note should have an AST, either from cache or newly built");
-                            // Get block node by finding the node with exact range match
-                            let block_node =
-                                find_node_by_range(&tgt_tree.root_node, tgt_range)
-                                    .expect(
-                                        "Referenceable's range should match the block node's range",
-                                    );
-
-                            // Render the block and its children
-                            let embed_depth = embed_depth + 1;
-                            let block_content = render_node(
-                                block_node,
-                                tgt_vault_path,
-                                vault_db,
-                                node_render_config,
-                                embed_depth,
-                                max_embed_depth,
-                            );
-                            html! {
-                                .embed-file.block embed-depth=(embed_depth) {
-                                    (block_content)
+                                // Render the block and its children
+                                let embed_depth = embed_depth + 1;
+                                let block_content = render_node(
+                                    block_node,
+                                    tgt_vault_path,
+                                    vault_db,
+                                    node_render_config,
+                                    embed_depth,
+                                    max_embed_depth,
+                                );
+                                html! {
+                                    .embed-file.block embed-depth=(embed_depth) {
+                                        (note_header_elem)
+                                        (block_content)
+                                    }
                                 }
                             }
                         }
