@@ -35,19 +35,18 @@ impl ObsidianCalloutKind {
         }
     }
 
-    /// Get CSS class name for this Obsidian callout type
-    pub fn class_name(&self) -> &'static str {
+    pub fn name(&self) -> &'static str {
         match self {
-            Self::Abstract => "callout-abstract",
-            Self::Info => "callout-info",
-            Self::Todo => "callout-todo",
-            Self::Success => "callout-success",
-            Self::Question => "callout-question",
-            Self::Failure => "callout-failure",
-            Self::Danger => "callout-danger",
-            Self::Bug => "callout-bug",
-            Self::Example => "callout-example",
-            Self::Quote => "callout-quote",
+            Self::Abstract => "abstract",
+            Self::Info => "info",
+            Self::Todo => "todo",
+            Self::Success => "success",
+            Self::Question => "question",
+            Self::Failure => "failure",
+            Self::Danger => "danger",
+            Self::Bug => "bug",
+            Self::Example => "example",
+            Self::Quote => "quote",
         }
     }
 }
@@ -68,10 +67,9 @@ impl CustomCalloutKind {
         }
     }
 
-    /// Get CSS class name for this custom type
-    pub fn class_name(&self) -> &'static str {
+    pub fn name(&self) -> &'static str {
         match self {
-            Self::Llm => "custom-callout-llm",
+            Self::Llm => "llm",
         }
     }
 }
@@ -111,15 +109,15 @@ impl TryFrom<&str> for CalloutKind {
 }
 
 impl CalloutKind {
-    pub fn class_name(&self) -> &'static str {
+    pub fn name(&self) -> &'static str {
         match self {
-            Self::GFM(BlockQuoteKind::Note) => "markdown-alert-note",
-            Self::GFM(BlockQuoteKind::Tip) => "markdown-alert-tip",
-            Self::GFM(BlockQuoteKind::Important) => "markdown-alert-important",
-            Self::GFM(BlockQuoteKind::Warning) => "markdown-alert-warning",
-            Self::GFM(BlockQuoteKind::Caution) => "markdown-alert-caution",
-            Self::Obsidian(obsidian) => obsidian.class_name(),
-            Self::Custom(custom) => custom.class_name(),
+            Self::GFM(BlockQuoteKind::Note) => "note",
+            Self::GFM(BlockQuoteKind::Tip) => "tip",
+            Self::GFM(BlockQuoteKind::Important) => "important",
+            Self::GFM(BlockQuoteKind::Warning) => "warning",
+            Self::GFM(BlockQuoteKind::Caution) => "caution",
+            Self::Obsidian(obsidian) => obsidian.name(),
+            Self::Custom(custom) => custom.name(),
         }
     }
 

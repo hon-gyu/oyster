@@ -10,6 +10,7 @@ use super::codeblock::{
 use super::latex::render_latex;
 use super::utils;
 use super::vault_db::VaultDB;
+use crate::ast::callout::FoldableState;
 use crate::ast::{
     Node,
     NodeKind::{self, *},
@@ -551,18 +552,42 @@ fn render_node(
                 max_embed_depth,
             );
 
-            // Get class name from callout metadata if available
-            let class_name = kind.class_name();
-
+            // Inject anchor id for matched referenceable
             let id_opt = vault_db.get_innote_refable_anchor_id(
                 &vault_path.to_path_buf(),
                 &range,
             );
 
-            // Inject anchor id for matched referenceable
+            let callout_name = kind.name();
+
+            let callout_fold_button = match foldable {
+                Some(FoldableState::Expanded) => {
+                    let markup = html! {
+                        callout-fold-button {
+                        }
+                    };
+                    Some(markup)
+                }
+                Some(FoldableState::Collapsed) => {
+                    let markup = html! {
+                        callout-fold-button {
+                        }
+                    };
+                    Some(markup)
+                }
+                None => None,
+            };
             html! {
-                blockquote id=[id_opt] class=(class_name) {
-                    (PreEscaped(children))
+                callout id=[id_opt] {
+                    callout-title {
+                        callout-icon {}
+                        callout-title-text {}
+                        {}
+                    }
+
+                    callout-content {
+                        (PreEscaped(children))
+                    }
                 }
             }
         }
