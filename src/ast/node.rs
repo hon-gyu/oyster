@@ -51,7 +51,8 @@ pub enum NodeKind<'a> {
         classes: Vec<CowStr<'a>>,
         attrs: Vec<(CowStr<'a>, Option<CowStr<'a>>)>,
     },
-    GFMBlockQuote(Option<BlockQuoteKind>),
+    // We don't enable GFM during pulldown-cmark parsing
+    BlockQuote,
     Callout {
         /// The type of callout
         kind: CalloutKind,
@@ -119,7 +120,7 @@ impl<'a> NodeKind<'a> {
                 classes,
                 attrs,
             },
-            Tag::BlockQuote(x) => Self::GFMBlockQuote(x),
+            Tag::BlockQuote(_) => Self::BlockQuote,
             Tag::CodeBlock(x) => Self::CodeBlock(x),
             Tag::HtmlBlock => Self::HtmlBlock,
             Tag::List(x) => Self::List(x),
@@ -203,7 +204,7 @@ impl<'a> NodeKind<'a> {
                     .map(|(k, v)| (k.into_static(), v.map(|s| s.into_static())))
                     .collect(),
             },
-            NodeKind::GFMBlockQuote(x) => NodeKind::GFMBlockQuote(x),
+            NodeKind::BlockQuote => NodeKind::BlockQuote,
             NodeKind::Callout {
                 kind,
                 title,

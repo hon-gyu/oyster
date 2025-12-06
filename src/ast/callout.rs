@@ -197,7 +197,7 @@ pub fn callout_data_of_gfm_blockquote(
     source_text: &str,
 ) -> Option<CalloutData> {
     // Only process blockquote nodes
-    if !matches!(&node.kind, NodeKind::GFMBlockQuote(_)) {
+    if !matches!(&node.kind, NodeKind::BlockQuote) {
         return None;
     }
 

@@ -15,7 +15,8 @@ pub fn default_opts() -> Options {
     // opts.insert(Options::ENABLE_PLUSES_DELIMITED_METADATA_BLOCKS);
     // opts.insert(Options::ENABLE_OLD_FOOTNOTES);
     opts.insert(Options::ENABLE_MATH);
-    opts.insert(Options::ENABLE_GFM);
+    // We parse callout types outself as we have custom types
+    // opts.insert(Options::ENABLE_GFM);
     opts.insert(Options::ENABLE_DEFINITION_LIST);
     opts.insert(Options::ENABLE_SUPERSCRIPT);
     opts.insert(Options::ENABLE_SUBSCRIPT);

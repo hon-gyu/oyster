@@ -173,18 +173,16 @@ fn build_ast<'a>(
                     stack.pop().expect("Unbalanced tags");
                 completed_node.children = curr_children;
 
-                // Special transformation for GFMBlockQuote nodes
-                // Transform GFMBlockQuote from pulldown-cmark to
+                // Special transformation for lockQuote nodes
+                // Try to transform BlockQuote from pulldown-cmark to
                 // our own Callout node
                 // Detect metadata first (immutable borrow), then update the node (mutable borrow)
-                let callout_data = if matches!(
-                    &completed_node.kind,
-                    NodeKind::GFMBlockQuote(_)
-                ) {
-                    callout_data_of_gfm_blockquote(&completed_node, text)
-                } else {
-                    None
-                };
+                let callout_data =
+                    if matches!(&completed_node.kind, NodeKind::BlockQuote) {
+                        callout_data_of_gfm_blockquote(&completed_node, text)
+                    } else {
+                        None
+                    };
 
                 if let Some(callout_data) = callout_data {
                     completed_node.kind = NodeKind::Callout {

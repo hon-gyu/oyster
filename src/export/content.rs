@@ -18,13 +18,24 @@ use crate::ast::{
 use crate::export::utils::range_to_anchor_id;
 use crate::link::Referenceable;
 use maud::{Markup, PreEscaped, html};
-use pulldown_cmark::{BlockQuoteKind, CodeBlockKind, LinkType};
+use pulldown_cmark::{CodeBlockKind, LinkType};
 use std::path::{Path, PathBuf};
 
 pub struct NodeRenderConfig {
     pub mermaid_render_mode: MermaidRenderMode,
     pub tikz_render_mode: TikzRenderMode,
     pub quiver_render_mode: QuiverRenderMode,
+}
+
+impl Default for NodeRenderConfig {
+    fn default() -> Self {
+        Self {
+            mermaid_render_mode: MermaidRenderMode::from_str("client-side")
+                .unwrap(),
+            tikz_render_mode: TikzRenderMode::from_str("client-side").unwrap(),
+            quiver_render_mode: QuiverRenderMode::from_str("raw").unwrap(),
+        }
+    }
 }
 
 /// Find a node in the tree by its exact byte range
@@ -504,9 +515,32 @@ fn render_node(
                     tag, id_attr, class_attr, other_attrs, children, tag)))
             }
         }
-        BlockQuote {
-            standard_kind,
-            callout_metadata,
+        BlockQuote => {
+            let children = render_nodes(
+                &node.children,
+                vault_path,
+                vault_db,
+                node_render_config,
+                embed_depth,
+                max_embed_depth,
+            );
+
+            let id_opt = vault_db.get_innote_refable_anchor_id(
+                &vault_path.to_path_buf(),
+                &range,
+            );
+
+            // Inject anchor id for matched referenceable
+            html! {
+                blockquote id=[id_opt] {
+                    (PreEscaped(children))
+                }
+            }
+        }
+        Callout {
+            kind,
+            title,
+            foldable,
         } => {
             let children = render_nodes(
                 &node.children,
@@ -518,18 +552,7 @@ fn render_node(
             );
 
             // Get class name from callout metadata if available
-            let class_name = if let Some(metadata) = callout_metadata {
-                Some(metadata.kind.class_name())
-            } else {
-                // Fallback to standard kind
-                standard_kind.as_ref().map(|bq_kind| match bq_kind {
-                    BlockQuoteKind::Note => "markdown-alert-note",
-                    BlockQuoteKind::Tip => "markdown-alert-tip",
-                    BlockQuoteKind::Important => "markdown-alert-important",
-                    BlockQuoteKind::Warning => "markdown-alert-warning",
-                    BlockQuoteKind::Caution => "markdown-alert-caution",
-                })
-            };
+            let class_name = kind.class_name();
 
             let id_opt = vault_db.get_innote_refable_anchor_id(
                 &vault_path.to_path_buf(),
@@ -537,31 +560,9 @@ fn render_node(
             );
 
             // Inject anchor id for matched referenceable
-            if let Some(id) = id_opt {
-                match class_name {
-                    Some(class) => html! {
-                        blockquote #(id) class=(class) {
-                            (PreEscaped(children))
-                        }
-                    },
-                    None => html! {
-                        blockquote #(id) {
-                            (PreEscaped(children))
-                        }
-                    },
-                }
-            } else {
-                match class_name {
-                    Some(class) => html! {
-                        blockquote class=(class) {
-                            (PreEscaped(children))
-                        }
-                    },
-                    None => html! {
-                        blockquote {
-                            (PreEscaped(children))
-                        }
-                    },
+            html! {
+                blockquote id=[id_opt] class=(class_name) {
+                    (PreEscaped(children))
                 }
             }
         }
@@ -1052,6 +1053,33 @@ mod tests {
             }
         }
         .into_string()
+    }
+
+    fn render_single_page(note_vault_path: &Path) -> String {
+        use tempfile::tempdir;
+        let temp_dir = tempdir().unwrap();
+        let temp_dir_path = temp_dir.path();
+
+        // Copy note to temp dir
+        let temp_note_path =
+            temp_dir_path.join(note_vault_path.file_name().unwrap());
+        fs::copy(note_vault_path, &temp_note_path).unwrap();
+
+        let vault_db = StaticVaultStore::new_from_dir(temp_dir_path, false);
+        let node_render_config = NodeRenderConfig::default();
+
+        let md_src = fs::read_to_string(&temp_note_path).unwrap();
+        let tree = Tree::new(&md_src);
+        let markup = render_content(
+            &tree,
+            temp_dir_path,
+            &vault_db,
+            &node_render_config,
+            0,
+            1,
+        );
+
+        format_html_simple(&markup.into_string())
     }
 
     /// Helper to write HTML to a file for visual inspection

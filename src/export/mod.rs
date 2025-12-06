@@ -5,6 +5,8 @@ pub mod frontmatter;
 pub mod home;
 pub mod latex;
 pub mod sidebar;
+#[cfg(test)]
+mod snapshots;
 pub mod style;
 pub mod toc;
 pub mod utils;

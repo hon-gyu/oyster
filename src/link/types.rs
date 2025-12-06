@@ -18,6 +18,7 @@ pub enum BlockReferenceableKind {
     Paragraph,
     List,
     BlockQuote,
+    Callout,
     Table,
 }
 
