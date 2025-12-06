@@ -1150,11 +1150,8 @@ mod tests {
         </p>
 
         <h2 id="image-embed">Image Embed</h2>
-
-        <p>
-        <img class="embed-file image" id="423-441" src="blue-image.png" alt="blue-image">
+        <img class="embed-file image" id="423-441" embed-depth="0" src="blue-image.png" alt="blue-image">
         </img>
-        </p>
 
         <h2 id="additional-info">Additional Info</h2>
 
