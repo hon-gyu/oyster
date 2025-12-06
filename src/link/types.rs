@@ -174,14 +174,4 @@ impl Link {
             _ => false,
         }
     }
-    /// The byte range of the target in-note referenceable
-    ///
-    /// Return None if the link is pointing to a file
-    fn tgt_range(&self) -> Option<Range<usize>> {
-        match &self.to {
-            Referenceable::Heading { range, .. } => Some(range.clone()),
-            Referenceable::Block { range, .. } => Some(range.clone()),
-            _ => None,
-        }
-    }
 }
