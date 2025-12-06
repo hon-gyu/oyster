@@ -70,7 +70,7 @@ fn render_yaml(value: &Value) -> Markup {
         Value::Null => html! { (String::from("null")) },
         Value::Sequence(seq) => {
             let seq_html =
-                seq.iter().map(|v| render_yaml(v)).collect::<Vec<Markup>>();
+                seq.iter().map(render_yaml).collect::<Vec<Markup>>();
             html! {
                 ul {
                     @for item in seq_html.iter() {

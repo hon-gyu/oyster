@@ -165,9 +165,9 @@ where
     items.sort_by(|a, b| a.path.cmp(&b.path));
 
     // Build tree using Hierarchical trait
-    let tree = build_tree(items);
+    
 
-    tree
+    build_tree(items)
 }
 
 #[cfg(test)]

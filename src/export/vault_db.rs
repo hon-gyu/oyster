@@ -94,7 +94,7 @@ impl VaultLevelInfo {
                     .get(path)
                     .expect("Did not find maybe frontmatter for note")
                     .as_ref()
-                    .and_then(|fm| frontmatter::get_title(&fm))
+                    .and_then(frontmatter::get_title)
                     .unwrap_or_else(|| title_from_path(path));
                 (path.to_path_buf(), title)
             })
@@ -119,14 +119,14 @@ impl VaultLevelInfo {
                     let range_map = entry.get_mut();
                     range_map.insert(
                         ref_range.clone(),
-                        range_to_anchor_id(&ref_range),
+                        range_to_anchor_id(ref_range),
                     );
                 }
                 Entry::Vacant(entry) => {
                     let mut range_map = HashMap::new();
                     range_map.insert(
                         ref_range.clone(),
-                        range_to_anchor_id(&ref_range),
+                        range_to_anchor_id(ref_range),
                     );
                     entry.insert(range_map);
                 }
@@ -249,7 +249,7 @@ pub trait VaultDB {
         let dest = if let Some(tgt_anchor_id) = tgt_anchor_id {
             format!("{}#{}", rel_tgt_slug, tgt_anchor_id)
         } else {
-            format!("{}", rel_tgt_slug)
+            rel_tgt_slug.to_string()
         };
         Some(dest)
     }
@@ -333,7 +333,7 @@ impl StaticVaultStore {
                 let dest = if let Some(tgt_anchor_id) = tgt_anchor_id {
                     format!("{}#{}", rel_tgt_slug, tgt_anchor_id)
                 } else {
-                    format!("{}", rel_tgt_slug)
+                    rel_tgt_slug.to_string()
                 };
                 (
                     (link.from.path.clone(), link.from.range.clone()),

@@ -160,12 +160,12 @@ pub fn resolve_new_note_path(
     let path = Path::new(name);
 
     // Extract parent directory and file name
-    let parent = path.parent().filter(|p| p.as_os_str().len() > 0);
+    let parent = path.parent().filter(|p| !p.as_os_str().is_empty());
     let mut file_name = if let Some(f) = path.file_name() {
         f.to_string_lossy().to_string()
     } else {
         // No file name (e.g., "dir/"), use the whole name after stripping slashes
-        name.replace('\\', "").replace('/', "")
+        name.replace(['\\', '/'], "")
     };
 
     // Add .md extension if it doesn't already have .md extension
@@ -221,8 +221,8 @@ pub fn resolve_new_note_path(
 /// - ["L2", "L4"] matches the first H4(L4) at index 1
 /// - ["L2", "L3", "L4"] matches H3(L4) at index 5 (skips first invalid L2→L4→L3)
 /// - ["L2", "L4", "L3"] returns None (no valid hierarchy exists)
-fn resolve_nested_headings<'a>(
-    headings: &[&'a Referenceable],
+fn resolve_nested_headings(
+    headings: &[&Referenceable],
     nested_headings: &[&str],
 ) -> Option<Referenceable> {
     if nested_headings.is_empty() {
@@ -239,8 +239,8 @@ fn resolve_nested_headings<'a>(
         .collect();
 
     // Try to find all possible subsequence matches using backtracking
-    fn find_valid_match<'a>(
-        headings: &[&'a Referenceable],
+    fn find_valid_match(
+        headings: &[&Referenceable],
         heading_texts: &[&str],
         nested_headings: &[&str],
         start_idx: usize,
@@ -525,7 +525,7 @@ mod tests {
             "a.joiwduvqneoi.md",
         ]
         .iter()
-        .map(|s| PathBuf::from(s))
+        .map(PathBuf::from)
         .collect::<Vec<_>>();
 
         let assert_match = |input: &str, expected: &str| {
@@ -588,15 +588,15 @@ mod tests {
 
     #[test]
     fn test_parse_nested_heading() {
-        let inputs = vec!["##A###B", "A##B", "A#####C#B", "##", "##C"];
+        let inputs = ["##A###B", "A##B", "A#####C#B", "##", "##C"];
         let outputs = inputs
             .iter()
             .map(|&s| parse_nested_heading(s))
             .map(|v| v.join("#")) // Join with '#'
             .collect::<Vec<_>>();
         let table = print_table(
-            &vec!["Input", "Output"],
-            &vec![inputs.iter().map(|s| s.to_string()).collect(), outputs],
+            &["Input", "Output"],
+            &[inputs.iter().map(|s| s.to_string()).collect(), outputs],
         );
         assert_snapshot!(table, @r"
         +-----+-----------+--------+
@@ -638,8 +638,8 @@ mod tests {
             })
             .collect();
         let table = print_table(
-            &vec!["Destination string", "Note", "Headings"],
-            &vec![dest_strings, note_names, nested_headings_str],
+            &["Destination string", "Note", "Headings"],
+            &[dest_strings, note_names, nested_headings_str],
         );
         assert_snapshot!(table, @r"
         +-----+-----------------------------------------+---------------------------------+----------------------------------+
@@ -1166,7 +1166,7 @@ mod tests {
                     Referenceable::Block { identifier, .. } => {
                         identifier.to_string()
                     }
-                    Referenceable::Note { .. } => return "-".to_string(),
+                    Referenceable::Note { .. } => "-".to_string(),
                     _ => panic!("Expected block referenceable"),
                 }
             })
@@ -1178,15 +1178,15 @@ mod tests {
                 let refable = &l.to;
                 match refable {
                     Referenceable::Block { kind, .. } => format!("{:?}", kind),
-                    Referenceable::Note { .. } => return "-".to_string(),
+                    Referenceable::Note { .. } => "-".to_string(),
                     _ => panic!("Expected block referenceable"),
                 }
             })
             .collect::<Vec<_>>();
 
         let table = print_table(
-            &vec!["Reference", "Referenceable content", "Identifier", "Kind"],
-            &vec![ref_contents, refable_contents, identifiers, kinds],
+            &["Reference", "Referenceable content", "Identifier", "Kind"],
+            &[ref_contents, refable_contents, identifiers, kinds],
         );
 
         assert_snapshot!(table, @r"

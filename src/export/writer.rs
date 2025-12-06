@@ -28,10 +28,10 @@ use super::style;
 use super::toc;
 use super::utils::{get_relative_dest, range_to_anchor_id};
 use super::vault_db::{
-    FileLevelInfo, StaticVaultStore, VaultDB, VaultLevelInfo,
+    StaticVaultStore, VaultDB,
 };
 use crate::ast::Tree;
-use crate::link::{Referenceable, scan_vault};
+use crate::link::Referenceable;
 use maud::{DOCTYPE, Markup, PreEscaped, html};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -96,13 +96,13 @@ pub fn render_vault(
             .expect("Note should have a title");
 
         let home_nav = home::render_simple_home_back_nav(
-            &note_slug_path,
-            &Path::new(&home_name),
+            note_slug_path,
+            Path::new(&home_name),
         );
 
         let frontmatter_info = vault_db
             .get_frontmatter(note_vault_path)
-            .and_then(|fm| super::frontmatter::render_frontmatter(fm));
+            .and_then(super::frontmatter::render_frontmatter);
 
         let toc = toc::render_toc(
             note_vault_path,
@@ -118,7 +118,7 @@ pub fn render_vault(
             &tree,
             note_vault_path,
             &vault_db,
-            &node_render_config,
+            node_render_config,
             0,
             5,
         );
@@ -126,7 +126,7 @@ pub fn render_vault(
         let backlink = render_backlinks(note_vault_path, &vault_db);
 
         let katex_rel_dir = get_relative_dest(
-            &Path::new(note_slug_path),
+            Path::new(note_slug_path),
             Path::new(&KATEX_ASSETS_DIR_IN_OUTPUT),
         );
         let katex_css_path = format!("{}/{}", katex_rel_dir, "katex.min.css");
@@ -145,7 +145,7 @@ pub fn render_vault(
         let css_paths = style::get_style_paths(&output_path, output_dir, theme);
 
         let html = render_page(
-            &title,
+            title,
             &frontmatter_info,
             &toc,
             &Some(content),

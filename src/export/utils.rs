@@ -169,7 +169,7 @@ pub fn parse_resize_spec(resize_spec: &str) -> (Option<u32>, Option<u32>) {
         } else {
             (None, None)
         }
-    } else if let Some(width) = resize_spec.parse::<u32>().ok() {
+    } else if let Ok(width) = resize_spec.parse::<u32>() {
         (Some(width), None)
     } else {
         (None, None)

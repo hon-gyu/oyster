@@ -3,14 +3,10 @@ mod test_utils;
 use insta::*;
 use markdown_tools::ast::Tree;
 use markdown_tools::export::content;
-use markdown_tools::export::utils::{
-    build_in_note_anchor_id_map, build_vault_paths_to_slug_map,
-};
 use markdown_tools::export::vault_db::StaticVaultStore;
 use markdown_tools::export::{
     MermaidRenderMode, NodeRenderConfig, QuiverRenderMode, TikzRenderMode,
 };
-use markdown_tools::link::{build_links, scan_vault};
 use std::fs;
 use std::path::Path;
 use test_utils::{format_html_simple, render_full_html};

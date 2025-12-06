@@ -72,12 +72,9 @@ impl Referenceable {
     pub fn add_in_note_referenceables(
         &mut self,
         referenceables: Vec<Referenceable>,
-    ) -> () {
-        match self {
-            Referenceable::Note { children, .. } => {
-                children.extend(referenceables);
-            }
-            _ => {}
+    ) {
+        if let Referenceable::Note { children, .. } = self {
+            children.extend(referenceables);
         }
     }
 }

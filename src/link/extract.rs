@@ -103,10 +103,10 @@ pub fn scan_note(
     let tree = Tree::new(&text);
 
     // Frontmatter
-    let fm_node = tree.root_node.children.get(0);
+    let fm_node = tree.root_node.children.first();
     let fm_content = if let Some(fm_node) = fm_node {
-        if &fm_node.kind
-            == &NodeKind::MetadataBlock(
+        if fm_node.kind
+            == NodeKind::MetadataBlock(
                 pulldown_cmark::MetadataBlockKind::YamlStyle,
             )
         {
@@ -211,7 +211,7 @@ fn extract_node_reference_referenceable_and_identifier(
                         dest = "()".to_string();
                     }
                     let dest = dest.strip_suffix(".md").unwrap_or(&dest);
-                    let dest = dest.strip_suffix(".markdown").unwrap_or(&dest);
+                    let dest = dest.strip_suffix(".markdown").unwrap_or(dest);
                     // Take out the text from the link's first child
                     let display_text = {
                         match node.children.as_slice() {
@@ -261,7 +261,7 @@ fn extract_node_reference_referenceable_and_identifier(
                 .join("");
             let referenceable = Referenceable::Heading {
                 path: path.clone(),
-                level: level.clone(),
+                level: *level,
                 text,
                 range: node.byte_range().clone(),
             };
@@ -293,9 +293,7 @@ fn extract_node_reference_referenceable_and_identifier(
                     _ => None,
                 };
 
-            if block_identifier.is_none() {
-                return None;
-            }
+            block_identifier.as_ref()?;
 
             if let Some(block_identifer_val) = block_identifier {
                 if node.children.len() == 2 {
@@ -434,9 +432,9 @@ fn extract_reference_and_referenceable(
 const IGNORED: &[&str] = &[".obsidian", ".DS_Store", ".git"];
 
 fn scan_dir_for_assets_and_notes(dir: &Path) -> Vec<Referenceable> {
-    fn aux<'a>(
+    fn aux(
         dir: &Path,
-        referenceables: &'a mut Vec<Referenceable>,
+        referenceables: &mut Vec<Referenceable>,
         ignores: &[&str],
     ) {
         for entry in fs::read_dir(dir)

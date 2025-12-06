@@ -146,7 +146,7 @@ mod tests {
         "#);
 
         let char_len = text.chars().count();
-        let byte_len = text.as_bytes().len();
+        let byte_len = text.len();
         let offset_end = events.last().unwrap().1.end;
         assert_eq!(byte_len, offset_end, "Offsets should be in terms of bytes");
         assert!(offset_end >= char_len);

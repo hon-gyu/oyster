@@ -67,15 +67,15 @@ pub fn render_content(
     embed_depth: usize,     // Current embed depth
     max_embed_depth: usize, // Max embed depth
 ) -> Markup {
-    let rendered = render_node(
+    
+    render_node(
         &tree.root_node,
         vault_path,
         vault_db,
         node_render_config,
         embed_depth,
         max_embed_depth,
-    );
-    rendered
+    )
 }
 
 pub enum EmbededKind {
@@ -123,7 +123,9 @@ fn render_node(
     max_embed_depth: usize, // Max embed depth
 ) -> Markup {
     let range = node.start_byte..node.end_byte;
-    let markup = match &node.kind {
+    
+
+    match &node.kind {
         // Tree root
         Document => {
             let children_rendered = render_nodes(
@@ -236,7 +238,7 @@ fn render_node(
                 }
             }
 
-            if let Some(tgt) = vault_db.get_tgt_from_src(&vault_path, &range) {
+            if let Some(tgt) = vault_db.get_tgt_from_src(vault_path, &range) {
                 let tgt_vault_path = tgt.path();
                 let tgt_slug_path = vault_db
                     .get_slug_from_file_vault_path(tgt_vault_path)
@@ -298,7 +300,7 @@ fn render_node(
                 } else {
                     // Case: note
                     let note_header_elem =
-                        get_note_header_elem(vault_db, &tgt_vault_path);
+                        get_note_header_elem(vault_db, tgt_vault_path);
                     if embed_depth >= max_embed_depth {
                         // Reach max embed depth, render as internal link instead
                         let tgt_slug = vault_db
@@ -695,7 +697,7 @@ fn render_node(
             match lang {
                 Some(lang) if lang == "mermaid" => {
                     let mermaid = render_mermaid(
-                        &code_src,
+                        code_src,
                         node_render_config.mermaid_render_mode,
                     );
                     html! {
@@ -704,7 +706,7 @@ fn render_node(
                 }
                 Some(lang) if lang == "tikz" => {
                     let tikz = render_tikz(
-                        &code_src,
+                        code_src,
                         node_render_config.tikz_render_mode,
                     );
                     html! {
@@ -713,7 +715,7 @@ fn render_node(
                 }
                 Some(lang) if lang == "quiver" => {
                     let quiver = render_quiver(
-                        &code_src,
+                        code_src,
                         node_render_config.quiver_render_mode,
                     );
                     html! {
@@ -996,23 +998,21 @@ fn render_node(
             // Metadata blocks should not be rendered
             html! {}
         }
-    };
-
-    markup
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::export::frontmatter;
+    
     use crate::export::vault_db::{
         FileLevelInfo, StaticVaultStore, VaultLevelInfo,
     };
     use crate::link::scan_vault;
     use insta::*;
     use maud::DOCTYPE;
-    use serde_yaml::Value;
-    use std::collections::HashMap;
+    
+    
     use std::fs;
     use std::path::{Path, PathBuf};
 
