@@ -560,17 +560,25 @@ fn render_node(
 
             let callout_name = kind.name();
 
+            // Use custom title or default title
+            let display_title = title
+                .as_ref()
+                .map(|s| s.as_str())
+                .unwrap_or_else(|| kind.default_title());
+
             let callout_fold_button = match foldable {
                 Some(FoldableState::Expanded) => {
                     let markup = html! {
-                        callout-fold-button {
+                        callout-fold-button is-collapsed="false" {
+                            "▼"
                         }
                     };
                     Some(markup)
                 }
                 Some(FoldableState::Collapsed) => {
                     let markup = html! {
-                        callout-fold-button {
+                        callout-fold-button is-collapsed="true" {
+                            "▶"
                         }
                     };
                     Some(markup)
@@ -578,11 +586,15 @@ fn render_node(
                 None => None,
             };
             html! {
-                callout id=[id_opt] {
+                callout id=[id_opt] data-callout=(callout_name) {
                     callout-title {
                         callout-icon {}
-                        callout-title-text {}
-                        {}
+                        callout-title-text {
+                            (display_title)
+                        }
+                        @if let Some(button) = callout_fold_button {
+                            (button)
+                        }
                     }
 
                     callout-content {

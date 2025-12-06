@@ -4,6 +4,9 @@ use std::path::Path;
 /// Base CSS file (structural, theme-independent)
 const BASE_CSS: &str = include_str!("styles/base.css");
 
+/// Component CSS files
+const CALLOUT_CSS: &str = include_str!("styles/callout.css");
+
 /// Theme CSS files
 const DRACULA_CSS: &str = include_str!("styles/themes/dracula.css");
 const GRUVBOX_CSS: &str = include_str!("styles/themes/gruvbox.css");
@@ -35,6 +38,10 @@ pub fn setup_styles(
     let base_path = styles_dir.join("base.css");
     fs::write(&base_path, BASE_CSS)?;
 
+    // Write component CSS
+    let callout_path = styles_dir.join("callout.css");
+    fs::write(&callout_path, CALLOUT_CSS)?;
+
     // Write theme CSS
     let theme_filename = format!("{}.css", theme);
     let theme_path = themes_dir.join(&theme_filename);
@@ -43,6 +50,7 @@ pub fn setup_styles(
     // Return relative paths
     Ok(vec![
         "styles/base.css".to_string(),
+        "styles/callout.css".to_string(),
         format!("styles/themes/{}", theme_filename),
     ])
 }
@@ -59,10 +67,12 @@ pub fn get_style_paths(
     use crate::export::utils::get_relative_dest;
 
     let base_path = output_dir.join("styles/base.css");
+    let callout_path = output_dir.join("styles/callout.css");
     let theme_path = output_dir.join(format!("styles/themes/{}.css", theme));
 
     vec![
         get_relative_dest(page_path, &base_path),
+        get_relative_dest(page_path, &callout_path),
         get_relative_dest(page_path, &theme_path),
     ]
 }
