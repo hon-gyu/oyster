@@ -73,7 +73,7 @@ fn test_render_image_resize() {
     <p id="7e162c">a paragraph ^7e162c</p>
 
     <p>A callout</p>
-    <div class="callout" id="warning">
+    <div class="callout" id="warning" data-callout="warning">
     <div class="callout-declaration" callout-kind="warning">
     <span class="callout-icon">
     </span>
@@ -147,7 +147,7 @@ fn test_render_image_resize() {
     <p class="embed-file header">📑 note2</p>
     </div>
     <div class="content">
-    <div class="callout" id="warning">
+    <div class="callout" id="warning" data-callout="warning">
     <div class="callout-declaration" callout-kind="warning">
     <span class="callout-icon">
     </span>

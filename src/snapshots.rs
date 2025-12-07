@@ -96,7 +96,7 @@ mod tests {
         let md_src = std::fs::read_to_string(&path).unwrap();
         let tree = Tree::new_with_default_opts(&md_src);
         assert_snapshot!(&tree.root_node, @r#"
-        Document [0..822]
+        Document [0..948]
           BlockQuote [0..17]
             Paragraph [2..17]
               Text(Borrowed("This is a note")) [2..16]
@@ -223,7 +223,7 @@ mod tests {
             CalloutContent [639..722]
               Paragraph [639..722]
                 Text(Borrowed("Yes! In a foldable callout, the contents are hidden when the callout is collapsed.")) [639..721]
-          Callout { kind: Unknown("custom"), foldable: None } [723..822]
+          Callout { kind: Unknown("custom"), foldable: None } [723..823]
             CalloutDeclaraion { kind: Unknown("custom"), title: Some("Custom Callout Type"), foldable: None } [725..755]
               Paragraph [725..755]
                 Text(Borrowed("[")) [725..726]
@@ -231,11 +231,22 @@ mod tests {
                 Text(Borrowed("]")) [733..734]
                 Text(Borrowed(" Custom Callout Type")) [734..754]
                 SoftBreak [754..755]
-            CalloutContent [757..822]
-              Paragraph [757..822]
+            CalloutContent [757..823]
+              Paragraph [757..823]
                 Text(Borrowed("This is a custom callout type that isn")) [757..795]
                 Text(Inlined(InlineStr { inner: [226, 128, 153, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], len: 3 })) [795..796]
                 Text(Borrowed("t defined in the codebase.")) [796..822]
+          Callout { kind: Unknown("undefined"), foldable: None } [824..948]
+            CalloutDeclaraion { kind: Unknown("undefined"), title: Some("Unknown Callout Type"), foldable: None } [826..860]
+              Paragraph [826..860]
+                Text(Borrowed("[")) [826..827]
+                Text(Borrowed("!UNDEFINED")) [827..837]
+                Text(Borrowed("]")) [837..838]
+                Text(Borrowed(" Unknown Callout Type")) [838..859]
+                SoftBreak [859..860]
+            CalloutContent [862..948]
+              Paragraph [862..948]
+                Text(Borrowed("This callout type is not defined anywhere, so it falls back to the default NOTE style.")) [862..948]
         "#);
     }
 

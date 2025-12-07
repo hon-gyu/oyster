@@ -47,3 +47,6 @@
 
 > [!CUSTOM] Custom Callout Type
 > This is a custom callout type that isn't defined in the codebase.
+
+> [!UNDEFINED] Unknown Callout Type
+> This callout type is not defined anywhere, so it falls back to the default NOTE style.
