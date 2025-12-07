@@ -1,5 +1,6 @@
 use super::node::{Node, NodeKind};
 use pulldown_cmark::BlockQuoteKind;
+use regex::Regex;
 
 /// Obsidian-specific callout types (beyond the 5 standard GFM types)
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -348,10 +349,27 @@ pub fn callout_data_of_gfm_blockquote(
     })
 }
 
+fn parse_callout(line: &str) -> Option<(String, Option<bool>, Option<String>)> {
+    let re =
+        Regex::new(r"(?i)^>\s?\[!([A-Za-z]+)\]([+-])?(?:\s+(.+))?$").unwrap();
+
+    re.captures(line).map(|caps| {
+        let type_name = caps.get(1).unwrap().as_str().to_string();
+        let foldable = caps.get(2).map(|m| m.as_str() == "+");
+        let title = caps
+            .get(3)
+            .map(|m| m.as_str().to_string())
+            .filter(|s| !s.trim().is_empty());
+
+        (type_name, foldable, title)
+    })
+}
+
+// Or if you just want the regex pattern:
+const CALLOUT_PATTERN: &str = r"^>\s?\[!([A-Z]+)([+-])?\](?:\s+(.+))?$";
 /// Detect callout metadata by examining the first paragraph
 ///
 /// Pattern: `[!TYPE(+|-)] optional title`
-/// Note: pulldown-cmark splits `[!TYPE]` into separate text nodes: "[", "!TYPE", "]"
 ///
 /// Spacing rules:
 /// - Only 0-1 spaces between `>` and `[` are valid for callouts
@@ -365,7 +383,7 @@ pub fn callout_data_of_gfm_blockquote(
 /// paragraph node
 pub fn callout_node_of_gfm_blockquote<'a>(
     node: &Node<'a>,
-    source_text: &str,
+    md_src: &str,
 ) -> Option<Node<'a>> {
     // Only process blockquote nodes
     if !matches!(&node.kind, NodeKind::BlockQuote) {
@@ -378,9 +396,64 @@ pub fn callout_node_of_gfm_blockquote<'a>(
         return None;
     }
 
+    // The end byte of first line is
+    // - the end byte of the last child before softbreak / hardbreak
+    // - or the end of the last node of the children of paragraph node
+    //
+    // - fst_para_content_children_start_idx
+    //   - the index of the paragraph's children, which is the first child belongs
+    //     to callout content
+    //   - None if first paragraph has no children belonging to callout content
+    //   - Used in later splits of callout declaration and content
+    //
+    // Post: the end-byte is always the end byte of one of the first paragraph's
+    // children
+    let (fst_para_content_children_start_idx, fst_line_end_byte) = {
+        // Find first softbreak or hardbreak
+        let fst_break_node = first_para
+            .children
+            .iter()
+            .filter(|c| {
+                matches!(&c.kind, NodeKind::SoftBreak | NodeKind::HardBreak)
+            })
+            .enumerate()
+            .next();
+
+        let fst_line_end_type = match fst_break_node {
+            Some((break_node_idx, _)) => {
+                debug_assert!(
+                    break_node_idx != 0,
+                    "Softbreak or hardbreak cannot be first child"
+                );
+                // Get the end byte of the last child before the break
+                first_para.child(break_node_idx - 1).unwrap().end_byte
+            }
+            None => {
+                // No softbreak or hardbreak, get the end byte of the last child
+                first_para.children.last().unwrap().end_byte
+            }
+        };
+        let fst_para_content_children_start_idx = {
+            if let Some((break_node_idx, _)) = fst_break_node {
+                if break_node_idx == first_para.child_count() {
+                    None
+                } else {
+                    Some(break_node_idx + 1)
+                }
+            } else {
+                None
+            }
+        };
+        (fst_para_content_children_start_idx, fst_line_end_type)
+    };
+
+    let decl_text = md_src
+        .get(node.start_byte..fst_line_end_byte)
+        .expect("Never");
+
     // Check spacing: extract the blockquote prefix from source
     // The blockquote node includes the `>` markers
-    let blockquote_src = source_text.get(node.start_byte..node.end_byte)?;
+    let blockquote_src = md_src.get(node.start_byte..node.end_byte)?;
     let first_line = blockquote_src.lines().next()?;
 
     // Check if first line has the pattern `> [` or `>[`
@@ -521,6 +594,168 @@ pub fn callout_node_of_gfm_blockquote<'a>(
         content_start_byte,
     });
     todo!()
+}
+
+#[cfg(test)]
+mod p_tests {
+    use super::*;
+    use rstest::rstest;
+
+    #[rstest]
+    #[case("> [!NOTE]", "NOTE", None, None)]
+    #[case("> [!WARNING]", "WARNING", None, None)]
+    #[case(">[!TIP]", "TIP", None, None)]
+    #[case("> [!note]", "note", None, None)]
+    #[case("> [!Note]", "Note", None, None)]
+    #[case("> [!WaRnInG]", "WaRnInG", None, None)]
+    fn test_valid_callouts_no_title(
+        #[case] input: &str,
+        #[case] expected_type: &str,
+        #[case] expected_foldable: Option<bool>,
+        #[case] expected_title: Option<&str>,
+    ) {
+        let result = parse_callout(input);
+        assert_eq!(
+            result,
+            Some((
+                expected_type.to_string(),
+                expected_foldable,
+                expected_title.map(|s| s.to_string())
+            ))
+        );
+    }
+
+    #[rstest]
+    #[case("> [!NOTE] This is a title", "NOTE", None, Some("This is a title"))]
+    #[case("> [!WARNING] Be careful!", "WARNING", None, Some("Be careful!"))]
+    #[case(">[!TIP] Quick tip", "TIP", None, Some("Quick tip"))]
+    #[case(
+        "> [!note] lowercase with title",
+        "note",
+        None,
+        Some("lowercase with title")
+    )]
+    #[case(
+        "> [!INFO]   Multiple   spaces",
+        "INFO",
+        None,
+        Some("Multiple   spaces")
+    )]
+    #[case(
+        "> [!TIP] Title: with-special_chars!",
+        "TIP",
+        None,
+        Some("Title: with-special_chars!")
+    )]
+    fn test_valid_callouts_with_title(
+        #[case] input: &str,
+        #[case] expected_type: &str,
+        #[case] expected_foldable: Option<bool>,
+        #[case] expected_title: Option<&str>,
+    ) {
+        let result = parse_callout(input);
+        assert_eq!(
+            result,
+            Some((
+                expected_type.to_string(),
+                expected_foldable,
+                expected_title.map(|s| s.to_string())
+            ))
+        );
+    }
+
+    #[rstest]
+    #[case(">[!WARNING]+", "WARNING", Some(true), None)]
+    #[case("> [!ERROR]-", "ERROR", Some(false), None)]
+    #[case("> [!info]+", "info", Some(true), None)]
+    #[case(">[!DANGER]-", "DANGER", Some(false), None)]
+    fn test_valid_callouts_foldable_no_title(
+        #[case] input: &str,
+        #[case] expected_type: &str,
+        #[case] expected_foldable: Option<bool>,
+        #[case] expected_title: Option<&str>,
+    ) {
+        let result = parse_callout(input);
+        assert_eq!(
+            result,
+            Some((
+                expected_type.to_string(),
+                expected_foldable,
+                expected_title.map(|s| s.to_string())
+            ))
+        );
+    }
+
+    #[rstest]
+    #[case("> [!INFO]+ Expanded", "INFO", Some(true), Some("Expanded"))]
+    #[case("> [!DANGER]- Collapsed", "DANGER", Some(false), Some("Collapsed"))]
+    #[case(
+        ">[!warning]+ Be careful",
+        "warning",
+        Some(true),
+        Some("Be careful")
+    )]
+    #[case(
+        "> [!TiP]- Collapsed tip",
+        "TiP",
+        Some(false),
+        Some("Collapsed tip")
+    )]
+    fn test_valid_callouts_foldable_with_title(
+        #[case] input: &str,
+        #[case] expected_type: &str,
+        #[case] expected_foldable: Option<bool>,
+        #[case] expected_title: Option<&str>,
+    ) {
+        let result = parse_callout(input);
+        assert_eq!(
+            result,
+            Some((
+                expected_type.to_string(),
+                expected_foldable,
+                expected_title.map(|s| s.to_string())
+            ))
+        );
+    }
+
+    #[rstest]
+    #[case("> [!NOTE]   ", "NOTE", None, None, "whitespace only title")]
+    fn test_whitespace_title_filtered(
+        #[case] input: &str,
+        #[case] expected_type: &str,
+        #[case] expected_foldable: Option<bool>,
+        #[case] expected_title: Option<&str>,
+        #[case] _description: &str,
+    ) {
+        let result = parse_callout(input);
+        assert_eq!(
+            result,
+            Some((
+                expected_type.to_string(),
+                expected_foldable,
+                expected_title.map(|s| s.to_string())
+            ))
+        );
+    }
+
+    #[rstest]
+    #[case(">  [!NOTE]", "two spaces after >")]
+    #[case(">   [!WARNING] Title", "multiple spaces after >")]
+    #[case("> [NOTE]", "missing exclamation")]
+    #[case("> !NOTE", "missing brackets")]
+    #[case("[!NOTE] Title", "no greater than")]
+    #[case("> [!NOTE]* Title", "invalid foldable marker")]
+    #[case("> [!]", "empty type")]
+    #[case("> [!NOTE123]", "numbers in type")]
+    #[case(" > [!NOTE]", "space before greater than")]
+    #[case("> [!NOTE] Title\nMore", "content after newline")]
+    #[case("> [!123]", "type is all numbers")]
+    #[case("> [!NO-TE]", "hyphen in type")]
+    #[case("> [!NO_TE]", "underscore in type")]
+    fn test_invalid_callouts(#[case] input: &str, #[case] _description: &str) {
+        let result = parse_callout(input);
+        assert_eq!(result, None);
+    }
 }
 
 #[cfg(test)]
