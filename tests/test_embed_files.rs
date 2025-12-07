@@ -75,6 +75,8 @@ fn test_render_image_resize() {
     <p>A callout</p>
     <callout id="warning">
     <callout-declaration callout-kind="warning">
+    <span class="callout-icon">
+    </span>
     <span class="callout-title">Warning</span>
     </callout-declaration>
     <callout>
@@ -147,6 +149,8 @@ fn test_render_image_resize() {
     <div class="content">
     <callout id="warning">
     <callout-declaration callout-kind="warning">
+    <span class="callout-icon">
+    </span>
     <span class="callout-title">Warning</span>
     </callout-declaration>
     <callout>

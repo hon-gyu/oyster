@@ -96,7 +96,7 @@ mod tests {
         let md_src = std::fs::read_to_string(&path).unwrap();
         let tree = Tree::new_with_default_opts(&md_src);
         assert_snapshot!(&tree.root_node, @r#"
-        Document [0..477]
+        Document [0..721]
           BlockQuote [0..17]
             Paragraph [2..17]
               Text(Borrowed("This is a note")) [2..16]
@@ -191,7 +191,7 @@ mod tests {
                         Text(Borrowed("!example")) [386..394]
                         Text(Borrowed("]")) [394..395]
                         Text(Borrowed("  You can even use multiple layers of nesting.")) [395..441]
-          Callout [443..477]
+          Callout [443..478]
             CalloutDeclaraion { kind: GFM(Note), title: None, foldable: None } [445..453]
               Paragraph [445..453]
                 Text(Borrowed("[")) [445..446]
@@ -200,6 +200,29 @@ mod tests {
             CalloutContent [455..477]
               CodeBlock(Fenced(Borrowed("python"))) [455..477]
                 Text(Borrowed("code\n")) [467..472]
+          Rule [480..484]
+          Callout [485..603]
+            CalloutDeclaraion { kind: Obsidian(Question), title: Some("Are callouts foldable?"), foldable: Some(Collapsed) } [487..518]
+              Paragraph [487..518]
+                Text(Borrowed("[")) [487..488]
+                Text(Borrowed("!faq")) [488..492]
+                Text(Borrowed("]")) [492..493]
+                Text(Borrowed("- Are callouts foldable?")) [493..517]
+                SoftBreak [517..518]
+            CalloutContent [520..603]
+              Paragraph [520..603]
+                Text(Borrowed("Yes! In a foldable callout, the contents are hidden when the callout is collapsed.")) [520..602]
+          Callout [604..721]
+            CalloutDeclaraion { kind: Obsidian(Question), title: Some("Are callouts foldable?"), foldable: Some(Expanded) } [606..637]
+              Paragraph [606..637]
+                Text(Borrowed("[")) [606..607]
+                Text(Borrowed("!faq")) [607..611]
+                Text(Borrowed("]")) [611..612]
+                Text(Borrowed("+ Are callouts foldable?")) [612..636]
+                SoftBreak [636..637]
+            CalloutContent [639..721]
+              Paragraph [639..721]
+                Text(Borrowed("Yes! In a foldable callout, the contents are hidden when the callout is collapsed.")) [639..721]
         "#);
     }
 

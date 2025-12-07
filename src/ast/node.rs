@@ -53,7 +53,7 @@ pub enum NodeKind<'a> {
     },
     // We don't enable GFM during pulldown-cmark parsing
     BlockQuote,
-    Callout,
+    Callout(Option<FoldableState>),
     /// Container for callout declaration
     CalloutDeclaraion {
         /// The type of callout
@@ -209,7 +209,9 @@ impl<'a> NodeKind<'a> {
                     .collect(),
             },
             NodeKind::BlockQuote => NodeKind::BlockQuote,
-            NodeKind::Callout => NodeKind::Callout,
+            NodeKind::Callout(foldable_state) => {
+                NodeKind::Callout(foldable_state)
+            }
             NodeKind::CalloutDeclaraion {
                 kind,
                 title,

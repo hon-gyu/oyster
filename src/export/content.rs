@@ -541,7 +541,13 @@ fn render_node(
                 }
             }
         }
-        Callout => {
+        Callout(foldable_state) => {
+            // Inject anchor id for matched referenceable
+            let id_opt = vault_db.get_innote_refable_anchor_id(
+                &vault_path.to_path_buf(),
+                &range,
+            );
+
             let children = render_nodes(
                 &node.children,
                 vault_path,
@@ -551,15 +557,27 @@ fn render_node(
                 max_embed_depth,
             );
 
-            // Inject anchor id for matched referenceable
-            let id_opt = vault_db.get_innote_refable_anchor_id(
-                &vault_path.to_path_buf(),
-                &range,
-            );
-
-            html! {
-                callout id=[id_opt] {
-                    (PreEscaped(children))
+            match foldable_state {
+                None => {
+                    html! {
+                        div .callout id=[id_opt] {
+                            (PreEscaped(children))
+                        }
+                    }
+                }
+                Some(FoldableState::Expanded) => {
+                    html! {
+                        details .callout id=[id_opt] open {
+                            (PreEscaped(children))
+                        }
+                    }
+                }
+                Some(FoldableState::Collapsed) => {
+                    html! {
+                        details .callout id=[id_opt] {
+                            (PreEscaped(children))
+                        }
+                    }
                 }
             }
         }
@@ -574,7 +592,7 @@ fn render_node(
             );
 
             html! {
-                callout {
+                div .callout-content {
                     (PreEscaped(children))
                 }
             }
@@ -592,33 +610,22 @@ fn render_node(
                 .map(|s| s.as_str())
                 .unwrap_or_else(|| kind.default_title());
 
-            let callout_fold_button = match foldable {
-                Some(FoldableState::Expanded) => {
-                    let markup = html! {
-                        span .callout-fold-button is-collapsed="false" {
-                            "▼"
+            if foldable.is_some() {
+                html! {
+                    summary .callout-declaration callout-kind=(callout_kind) {
+                        span .callout-icon {}
+                        span .callout-title {
+                            (callout_title)
                         }
-                    };
-                    Some(markup)
-                }
-                Some(FoldableState::Collapsed) => {
-                    let markup = html! {
-                        callout-fold-button is-collapsed="true" {
-                            "▶"
-                        }
-                    };
-                    Some(markup)
-                }
-                None => None,
-            };
-            html! {
-                callout-declaration callout-kind=(callout_kind) {
-                    span .callout-icon {}
-                    span .callout-title {
-                        (callout_title)
                     }
-                    @if let Some(callout_fold_button) = callout_fold_button {
-                        (callout_fold_button)
+                }
+            } else {
+                html! {
+                    div .callout-declaration callout-kind=(callout_kind) {
+                        span .callout-icon {}
+                        span .callout-title {
+                            (callout_title)
+                        }
                     }
                 }
             }

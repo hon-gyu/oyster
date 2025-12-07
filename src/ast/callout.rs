@@ -473,6 +473,8 @@ pub fn callout_node_of_gfm_blockquote<'a>(
         .expect("Never");
 
     if let Some((type_name, foldable, title)) = parse_callout_decl(decl_text) {
+        let foldable: Option<FoldableState> = foldable.map(|b| b.into());
+
         let mut callout_decl_children = Vec::<Node>::new();
         let mut callout_content_children = Vec::<Node>::new();
 
@@ -532,7 +534,7 @@ pub fn callout_node_of_gfm_blockquote<'a>(
             kind: NodeKind::CalloutDeclaraion {
                 kind: CalloutKind::from_str_or_default(&type_name),
                 title,
-                foldable: foldable.map(|b| b.into()),
+                foldable,
             },
             start_byte: fst_para.start_byte,
             start_point: fst_para.start_point,
@@ -562,7 +564,7 @@ pub fn callout_node_of_gfm_blockquote<'a>(
         };
 
         let mut callout = Node {
-            kind: NodeKind::Callout,
+            kind: NodeKind::Callout(foldable),
             start_byte: node.start_byte,
             start_point: node.start_point,
             end_byte: node.end_byte,
