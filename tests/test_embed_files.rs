@@ -2,11 +2,9 @@ mod test_utils;
 
 use insta::*;
 use markdown_tools::ast::Tree;
+use markdown_tools::export::NodeRenderConfig;
 use markdown_tools::export::content;
 use markdown_tools::export::vault_db::StaticVaultStore;
-use markdown_tools::export::{
-    MermaidRenderMode, NodeRenderConfig, QuiverRenderMode, TikzRenderMode,
-};
 use std::fs;
 use std::path::Path;
 use test_utils::{format_html_simple, render_full_html};
@@ -20,12 +18,7 @@ fn test_render_image_resize() {
     let note_path = Path::new("note.md");
     let md_src = fs::read_to_string(vault_root_dir.join(note_path)).unwrap();
     let tree = Tree::new(&md_src);
-    let node_render_config = NodeRenderConfig {
-        mermaid_render_mode: MermaidRenderMode::from_str("client-side")
-            .unwrap(),
-        tikz_render_mode: TikzRenderMode::from_str("client-side").unwrap(),
-        quiver_render_mode: QuiverRenderMode::from_str("raw").unwrap(),
-    };
+    let node_render_config = NodeRenderConfig::default();
     let rendered = content::render_content(
         &tree,
         note_path,
