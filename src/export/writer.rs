@@ -149,7 +149,7 @@ pub fn render_vault(
         );
 
         let html = render_page(
-            title,
+            Some(title),
             &frontmatter_info,
             &toc,
             &Some(content),
@@ -197,7 +197,7 @@ pub fn render_vault(
         }
     };
     let home_html = render_page(
-        &home_name,
+        None,
         &None,
         &None,
         &Some(home_main_content),
@@ -217,7 +217,7 @@ pub fn render_vault(
 }
 
 fn render_page(
-    title: &str,
+    title: Option<&str>,
     frontmatter: &Option<Markup>,
     toc: &Option<Markup>,
     content: &Option<Markup>,
@@ -246,7 +246,9 @@ mermaid.initialize({ startOnLoad: true });
 "#))
                     }
                 }
-                title { (title) }
+                @if let Some(title) = title {
+                    title { (title) }
+                }
             }
             body {
                 .left-sidebar {
@@ -255,13 +257,15 @@ mermaid.initialize({ startOnLoad: true });
                     }
                 }
                 .main-content {
-                    nav class="top-nav" {
-                        @if let Some(home_nav) = home_nav {
+                    @if let Some(home_nav) = home_nav {
+                        nav class="top-nav" {
                             (home_nav)
                         }
                     }
-                    header {
-                        h1 { (title) }
+                    @if let Some(title) = title {
+                        header {
+                            h1 { (title) }
+                        }
                     }
                     @if let Some(frontmatter) = frontmatter {
                         (frontmatter)
