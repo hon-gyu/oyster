@@ -23,6 +23,8 @@ use pulldown_cmark::{CodeBlockKind, LinkType};
 use std::path::{Path, PathBuf};
 
 pub struct NodeRenderConfig {
+    /// Whether to render softbreak as `<br>`
+    pub preserve_softbreak: bool,
     pub mermaid_render_mode: MermaidRenderMode,
     pub tikz_render_mode: TikzRenderMode,
     pub quiver_render_mode: QuiverRenderMode,
@@ -31,6 +33,7 @@ pub struct NodeRenderConfig {
 impl Default for NodeRenderConfig {
     fn default() -> Self {
         Self {
+            preserve_softbreak: true,
             mermaid_render_mode: MermaidRenderMode::from_str("client-side")
                 .unwrap(),
             tikz_render_mode: TikzRenderMode::from_str("client-side").unwrap(),
@@ -542,10 +545,17 @@ fn render_node(
             kind,
             title,
             foldable,
-            content_start_byte: _,
+            content_start_byte,
         } => {
+            let content_children = node
+                .children
+                .iter()
+                .filter(|&child| child.start_byte >= *content_start_byte)
+                .cloned()
+                .collect::<Vec<_>>();
+
             let children = render_nodes(
-                &node.children,
+                &content_children,
                 vault_path,
                 vault_db,
                 node_render_config,
@@ -703,8 +713,14 @@ fn render_node(
             }
         }
         SoftBreak => {
-            html! {
-                " "
+            if node_render_config.preserve_softbreak {
+                html! {
+                    br;
+                }
+            } else {
+                html! {
+                    " "
+                }
             }
         }
         HardBreak => {
@@ -1169,12 +1185,7 @@ mod tests {
         let md_src =
             fs::read_to_string(vault_root_dir.join(note_path)).unwrap();
         let tree = Tree::new(&md_src);
-        let node_render_config = NodeRenderConfig {
-            mermaid_render_mode: MermaidRenderMode::from_str("client-side")
-                .unwrap(),
-            tikz_render_mode: TikzRenderMode::from_str("client-side").unwrap(),
-            quiver_render_mode: QuiverRenderMode::from_str("raw").unwrap(),
-        };
+        let node_render_config = NodeRenderConfig::default();
         let rendered = render_content(
             &tree,
             note_path,
