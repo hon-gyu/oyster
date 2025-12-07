@@ -32,7 +32,7 @@ fn test_latex_error_handling() {
 fn test_parse_latex_vault_basic() {
     let path = "tests/data/vaults/latex/basic-math.md";
     let text = fs::read_to_string(path).unwrap();
-    let tree = Tree::new(&text);
+    let tree = Tree::new_with_default_opts(&text);
 
     // Check that math nodes are parsed
     let content = format!("{:?}", tree.root_node);
@@ -44,7 +44,7 @@ fn test_parse_latex_vault_basic() {
 fn test_parse_latex_vault_advanced() {
     let path = "tests/data/vaults/latex/advanced-math.md";
     let text = fs::read_to_string(path).unwrap();
-    let tree = Tree::new(&text);
+    let tree = Tree::new_with_default_opts(&text);
 
     // Check that complex math is parsed
     let content = format!("{:?}", tree.root_node);

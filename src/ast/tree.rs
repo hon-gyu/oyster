@@ -1,11 +1,11 @@
 //! Tree structure and parsing logic for the Markdown AST
 
+use crate::ast::callout::callout_node_of_gfm_blockquote;
 use crate::parse::default_opts;
 use pulldown_cmark::{Event, Options, Parser};
 use std::ops::Range;
 use tree_sitter::{InputEdit, Point};
 
-use super::callout::callout_data_of_gfm_blockquote;
 use super::node::{Node, NodeKind};
 
 /// A tree that represents the syntactic structure of a source code file.
@@ -13,15 +13,31 @@ use super::node::{Node, NodeKind};
 pub struct Tree<'a> {
     pub root_node: Node<'a>,
     /// the options that were used to parse the syntax tree.
-    pub opts: Options,
+    pub pulldown_cmark_opts: Options,
+    pub transform_callout: bool,
 }
 
 impl<'a> Tree<'a> {
-    pub fn new(text: &'a str) -> Self {
-        let opts = default_opts();
-        let parser = Parser::new_ext(text, opts);
+    pub fn new(text: &'a str, transform_callout: bool) -> Self {
+        let pulldown_cmark_opts = default_opts();
+        let parser = Parser::new_ext(text, pulldown_cmark_opts);
         let events_with_offsets = parser.into_offset_iter().collect::<Vec<_>>();
-        let mut tree = build_ast(text, events_with_offsets, opts);
+        let mut tree = build_ast(
+            text,
+            events_with_offsets,
+            pulldown_cmark_opts,
+            transform_callout,
+        );
+        setup_parent_pointers(&mut tree.root_node);
+        tree
+    }
+
+    pub fn new_with_default_opts(text: &'a str) -> Self {
+        let pulldown_cmark_opts = default_opts();
+        let parser = Parser::new_ext(text, pulldown_cmark_opts);
+        let events_with_offsets = parser.into_offset_iter().collect::<Vec<_>>();
+        let mut tree =
+            build_ast(text, events_with_offsets, pulldown_cmark_opts, true);
         setup_parent_pointers(&mut tree.root_node);
         tree
     }
@@ -46,7 +62,8 @@ impl<'a> Tree<'a> {
         setup_parent_pointers(&mut root_node);
         Tree {
             root_node,
-            opts: self.opts,
+            pulldown_cmark_opts: self.pulldown_cmark_opts,
+            transform_callout: self.transform_callout,
         }
     }
 }
@@ -111,7 +128,8 @@ pub(crate) fn setup_parent_pointers<'a>(node: &mut Node<'a>) {
 fn build_ast<'a>(
     text: &str,
     events_with_offset: Vec<(Event<'a>, Range<usize>)>,
-    opts: Options,
+    pulldown_cmark_opts: Options,
+    transform_callout: bool,
 ) -> Tree<'a> {
     // Build line index for efficient byte-to-point conversion
     let line_index = LineIndex::new(text);
@@ -134,7 +152,11 @@ fn build_ast<'a>(
             end_point: Point { row: 0, column: 0 },
             parent: None,
         };
-        return Tree { root_node, opts };
+        return Tree {
+            root_node,
+            pulldown_cmark_opts,
+            transform_callout,
+        };
     }
 
     let doc_start = events_with_offset
@@ -173,23 +195,24 @@ fn build_ast<'a>(
                     stack.pop().expect("Unbalanced tags");
                 completed_node.children = curr_children;
 
-                // Special transformation for lockQuote nodes
-                // Try to transform BlockQuote from pulldown-cmark to
-                // our own Callout node
-                // Detect metadata first (immutable borrow), then update the node (mutable borrow)
-                let callout_data =
-                    if matches!(&completed_node.kind, NodeKind::BlockQuote) {
-                        callout_data_of_gfm_blockquote(&completed_node, text)
-                    } else {
-                        None
-                    };
-
-                if let Some(callout_data) = callout_data {
-                    completed_node.kind = NodeKind::Callout {
-                        kind: callout_data.kind,
-                        title: callout_data.title,
-                        foldable: callout_data.foldable,
-                    };
+                if transform_callout {
+                    // Special transformation for BlockQuote nodes
+                    // Try to transform BlockQuote from pulldown-cmark to
+                    // our own Callout node
+                    // Detect metadata first (immutable borrow), then update the node (mutable borrow)
+                    let callout_node =
+                        if matches!(&completed_node.kind, NodeKind::BlockQuote)
+                        {
+                            callout_node_of_gfm_blockquote(
+                                &completed_node,
+                                text,
+                            )
+                        } else {
+                            None
+                        };
+                    if let Some(callout_node) = callout_node {
+                        completed_node = callout_node;
+                    }
                 }
 
                 curr_children = siblings;
@@ -220,5 +243,9 @@ fn build_ast<'a>(
         parent: None,
     };
 
-    Tree { root_node, opts }
+    Tree {
+        root_node,
+        pulldown_cmark_opts,
+        transform_callout,
+    }
 }

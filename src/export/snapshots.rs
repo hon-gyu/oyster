@@ -79,7 +79,7 @@ fn render_single_page(note_vault_path: &Path) -> String {
     let node_render_config = NodeRenderConfig::default();
 
     let md_src = fs::read_to_string(&temp_note_path).unwrap();
-    let tree = Tree::new(&md_src);
+    let tree = Tree::new_with_default_opts(&md_src);
     let markup = render_content(
         &tree,
         temp_dir_path,
@@ -96,7 +96,7 @@ fn render_single_page(note_vault_path: &Path) -> String {
 fn parse_softbreak() {
     let path = std::path::PathBuf::from("tests/data/notes/softbreak.md");
     let md_src = std::fs::read_to_string(&path).unwrap();
-    let tree = Tree::new(&md_src);
+    let tree = Tree::new_with_default_opts(&md_src);
     assert_snapshot!(&tree.root_node, @r#"
     Document [0..76]
       Paragraph [0..15]
@@ -124,7 +124,7 @@ fn parse_softbreak() {
 fn parse_callout() {
     let path = std::path::PathBuf::from("tests/data/notes/callout.md");
     let md_src = std::fs::read_to_string(&path).unwrap();
-    let tree = Tree::new(&md_src);
+    let tree = Tree::new_with_default_opts(&md_src);
     assert_snapshot!(&tree.root_node, @r#"
     Document [0..477]
       BlockQuote [0..17]

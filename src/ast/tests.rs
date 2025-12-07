@@ -3,7 +3,6 @@ use insta::assert_snapshot;
 use std::fs;
 
 fn data() -> String {
-    
     fs::read_to_string("tests/data/notes/basic.md").unwrap()
 }
 
@@ -15,7 +14,7 @@ fn test_positions_match_editor() {
     let text = r#"First line
 Second line
 Third line"#;
-    let tree = Tree::new(text);
+    let tree = Tree::new_with_default_opts(text);
 
     // Root should span from (0,0) to (2,10)
     assert_eq!(tree.root_node.start_point.row, 0);
@@ -26,7 +25,7 @@ Third line"#;
     // Test with escaped newline - it should still count as a new line
     let text = r#"line 1\
 line 2"#;
-    let tree = Tree::new(text);
+    let tree = Tree::new_with_default_opts(text);
 
     // The \n creates a new line in the source, so positions should reflect that
     // Line 0: "line 1\"
@@ -38,7 +37,7 @@ line 2"#;
 #[test]
 fn test_build_ast() {
     let md = data();
-    let ast = Tree::new(&md);
+    let ast = Tree::new_with_default_opts(&md);
     assert_snapshot!(ast.root_node, @r#"
     Document [0..535]
       MetadataBlock(YamlStyle) [0..52]

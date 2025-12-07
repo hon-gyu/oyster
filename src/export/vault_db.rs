@@ -397,7 +397,7 @@ impl VaultDB for StaticVaultStore {
         // Cache miss: read file, parse, and convert to 'static
         let full_path = self.vault_root_dir.join(path);
         let md_src = std::fs::read_to_string(full_path).ok()?;
-        let tree = ASTTree::new(&md_src).into_static();
+        let tree = ASTTree::new(&md_src, true).into_static();
 
         // Insert into cache and return clone
         self.ast_tree_cache

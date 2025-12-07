@@ -27,9 +27,7 @@ use super::sidebar;
 use super::style;
 use super::toc;
 use super::utils::{get_relative_dest, range_to_anchor_id};
-use super::vault_db::{
-    StaticVaultStore, VaultDB,
-};
+use super::vault_db::{StaticVaultStore, VaultDB};
 use crate::ast::Tree;
 use crate::link::Referenceable;
 use maud::{DOCTYPE, Markup, PreEscaped, html};
@@ -85,7 +83,7 @@ pub fn render_vault(
     // Render each page
     for note_vault_path in &note_vault_paths {
         let md_src = fs::read_to_string(vault_root_dir.join(note_vault_path))?;
-        let tree = Tree::new(&md_src);
+        let tree = Tree::new_with_default_opts(&md_src);
         let note_slug = vault_db
             .get_slug_from_file_vault_path(note_vault_path)
             .expect("Note path should be slugified and stored in vault_db");

@@ -1118,7 +1118,7 @@ mod tests {
         let node_render_config = NodeRenderConfig::default();
 
         let md_src = fs::read_to_string(&temp_note_path).unwrap();
-        let tree = Tree::new(&md_src);
+        let tree = Tree::new_with_default_opts(&md_src);
         let markup = render_content(
             &tree,
             temp_dir_path,
@@ -1179,7 +1179,7 @@ mod tests {
         let note_path = Path::new("Note 1.md");
         let md_src =
             fs::read_to_string(vault_root_dir.join(note_path)).unwrap();
-        let tree = Tree::new(&md_src);
+        let tree = Tree::new_with_default_opts(&md_src);
         let node_render_config = NodeRenderConfig::default();
         let rendered = render_content(
             &tree,

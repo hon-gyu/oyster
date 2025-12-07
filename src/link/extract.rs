@@ -100,7 +100,7 @@ pub fn scan_note(
         return (None, Vec::new(), Vec::new());
     }
 
-    let tree = Tree::new(&text);
+    let tree = Tree::new_with_default_opts(&text);
 
     // Frontmatter
     let fm_node = tree.root_node.children.first();
@@ -689,7 +689,7 @@ mod tests {
             Block {
                 path: "tests/data/vaults/tt/block.md",
                 identifier: "callout",
-                kind: Callout,
+                kind: BlockQuote,
                 range: 269..302,
             },
             Block {
@@ -784,7 +784,7 @@ mod tests {
     fn test_parse_ast_with_links() {
         let path = "tests/data/vaults/tt/block.md";
         let text = fs::read_to_string(path).unwrap();
-        let tree = Tree::new(&text);
+        let tree = Tree::new_with_default_opts(&text);
         assert_snapshot!(tree.root_node, @r##"
         Document [0..2166]
           Paragraph [0..23]
@@ -841,7 +841,7 @@ mod tests {
           Paragraph [251..267]
             Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("#^quotation"), title: Borrowed(""), id: Borrowed("") } [251..265]
               Text(Borrowed("#^quotation")) [253..264]
-          Callout { kind: Obsidian(Info), title: Some("this is a info callout"), foldable: None, content_start_byte: 302 } [269..302]
+          BlockQuote [269..302]
             Paragraph [271..302]
               Text(Borrowed("[")) [271..272]
               Text(Borrowed("!info")) [272..277]

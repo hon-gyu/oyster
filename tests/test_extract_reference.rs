@@ -1383,7 +1383,7 @@ fn test_exract_references_and_referenceables() {
 fn test_parse_ast_with_links() {
     let path = "tests/data/vaults/tt/Note 1.md";
     let text = fs::read_to_string(path).unwrap();
-    let tree = Tree::new(&text);
+    let tree = Tree::new_with_default_opts(&text);
     assert_snapshot!(tree.root_node, @r########"
             Document [0..6003]
               List(None) [0..55]

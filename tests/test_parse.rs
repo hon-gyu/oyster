@@ -6,7 +6,7 @@ use std::fs;
 fn test_parse_note_1() {
     let path = "tests/data/vaults/tt/Note 1.md";
     let text = fs::read_to_string(path).unwrap();
-    let tree = Tree::new(&text);
+    let tree = Tree::new_with_default_opts(&text);
     assert_snapshot!(tree.root_node, @r########"
     Document [0..6003]
       List(None) [0..55]
