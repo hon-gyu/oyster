@@ -584,7 +584,7 @@ fn render_node(
             title,
             foldable,
         } => {
-            let callout_name = kind.name();
+            let callout_kind = kind.name();
 
             // Use custom title or default title
             let callout_title = title
@@ -612,11 +612,8 @@ fn render_node(
                 None => None,
             };
             html! {
-                callout-declaration {
-                    // TODO: icon
-                    span .callout-type {
-                        (callout_name)
-                    }
+                callout-declaration callout-kind=(callout_kind) {
+                    span .callout-icon {}
                     span .callout-title {
                         (callout_title)
                     }

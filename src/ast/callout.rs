@@ -753,6 +753,7 @@ mod tests {
     use super::*;
     use crate::ast::Tree;
 
+    #[allow(dead_code)]
     fn assert_range_match(blockquote: &Node, callout_node: &Node) -> () {
         if blockquote.start_byte != callout_node.start_byte {
             panic!(
