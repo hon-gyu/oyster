@@ -30,15 +30,19 @@ enum Commands {
         #[arg(short, long, default_value = "false")]
         no_filter_publish: bool,
 
+        /// Whether to render softbreaks as line breaks
         #[arg(short, long, default_value = "true")]
         preserve_softbreak: bool,
 
+        /// Render mermaid diagrams using `mmdc` (build-time) or using mermaid.js (client-side)
         #[arg(short, long, default_value = "build-time")]
         mermaid_render_mode: String,
 
+        /// Render tikz diagrams using `latex2pdf` and `pdf2svg` (build-time) or TikZTeX (client-side)
         #[arg(long, default_value = "build-time")]
         tikz_render_mode: String,
 
+        /// Render tikz diagrams using `latex2pdf` and `pdf2svg` (build-time) or keeping raw LaTeX
         #[arg(long, default_value = "build-time")]
         quiver_render_mode: String,
 
