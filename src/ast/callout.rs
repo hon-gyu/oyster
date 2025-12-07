@@ -1,3 +1,5 @@
+use crate::ast::tree::setup_parent_pointers;
+
 use super::node::{Node, NodeKind};
 use pulldown_cmark::BlockQuoteKind;
 use regex::Regex;
@@ -143,6 +145,14 @@ impl CalloutKind {
             Self::Custom(CustomCalloutKind::Llm) => "LLM",
         }
     }
+
+    fn from_str_or_default(s: &str) -> Self {
+        if let Ok(kind) = CalloutKind::try_from(s) {
+            kind
+        } else {
+            CalloutKind::GFM(BlockQuoteKind::Note)
+        }
+    }
 }
 
 /// Foldable state for callouts
@@ -152,6 +162,16 @@ pub enum FoldableState {
     Expanded,
     /// Collapsed by default (using -)
     Collapsed,
+}
+
+impl From<bool> for FoldableState {
+    fn from(b: bool) -> Self {
+        if b {
+            FoldableState::Expanded
+        } else {
+            FoldableState::Collapsed
+        }
+    }
 }
 
 /// Complete metadata for a callout
@@ -349,7 +369,9 @@ pub fn callout_data_of_gfm_blockquote(
     })
 }
 
-fn parse_callout(line: &str) -> Option<(String, Option<bool>, Option<String>)> {
+fn parse_callout_decl(
+    line: &str,
+) -> Option<(String, Option<bool>, Option<String>)> {
     let re =
         Regex::new(r"(?i)^>\s?\[!([A-Za-z]+)\]([+-])?(?:\s+(.+))?$").unwrap();
 
@@ -365,8 +387,6 @@ fn parse_callout(line: &str) -> Option<(String, Option<bool>, Option<String>)> {
     })
 }
 
-// Or if you just want the regex pattern:
-const CALLOUT_PATTERN: &str = r"^>\s?\[!([A-Z]+)([+-])?\](?:\s+(.+))?$";
 /// Detect callout metadata by examining the first paragraph
 ///
 /// Pattern: `[!TYPE(+|-)] optional title`
@@ -451,149 +471,100 @@ pub fn callout_node_of_gfm_blockquote<'a>(
         .get(node.start_byte..fst_line_end_byte)
         .expect("Never");
 
-    // Check spacing: extract the blockquote prefix from source
-    // The blockquote node includes the `>` markers
-    let blockquote_src = md_src.get(node.start_byte..node.end_byte)?;
-    let first_line = blockquote_src.lines().next()?;
+    if let Some((type_name, foldable, title)) = parse_callout_decl(decl_text) {
+        let mut callout_decl_children = Vec::<Node>::new();
+        let mut callout_content_children = Vec::<Node>::new();
 
-    // Check if first line has the pattern `> [` or `>[`
-    // If it's `>  [` (2+ spaces), it's not a valid callout
-    if let Some(after_gt) = first_line.strip_prefix('>') {
-        // Count leading spaces
-        let spaces = after_gt.chars().take_while(|c| *c == ' ').count();
-        if spaces >= 2 {
-            // Invalid spacing for callout
-            return None;
-        }
-        // Valid spacing (0 or 1 space), continue
-    } else {
-        // Doesn't start with '>', shouldn't happen
-        return None;
-    }
-
-    // Check if we have at least 3 children: "[", "!TYPE", "]"
-    if first_para.children.len() < 3 {
-        return None;
-    }
-
-    // Get the first three nodes
-    let first = match &first_para.children[0].kind {
-        NodeKind::Text(s) => s.as_ref(),
-        _ => return None,
-    };
-
-    let second = match &first_para.children[1].kind {
-        NodeKind::Text(s) => s.as_ref(),
-        _ => return None,
-    };
-
-    let third = match &first_para.children[2].kind {
-        NodeKind::Text(s) => s.as_ref(),
-        _ => return None,
-    };
-
-    // Check pattern: first="[", second="!TYPE", third="]"
-    if first.trim() != "[" || third.trim() != "]" {
-        return None;
-    }
-
-    // Extract type from second node (should be "!TYPE")
-    if !second.starts_with('!') {
-        return None;
-    }
-
-    let type_str = &second[1..]; // Remove the "!"
-
-    // Try to resolve the type
-    let kind = if let Ok(kind) = CalloutKind::try_from(type_str) {
-        kind
-    } else {
-        // Unknown type - default to Note
-        CalloutKind::GFM(BlockQuoteKind::Note)
-    };
-
-    // Extract foldable state and custom title if present
-    // Both come in the 4th child (after "]")
-    let (foldable, title, content_start_byte) = if first_para.children.len() > 3
-    {
-        // Get the first text node after "]"
-        let first_after_bracket = &first_para.children[3];
-
-        if let NodeKind::Text(s) = &first_after_bracket.kind {
-            let text = s.as_ref();
-
-            // Check for foldable markers at the start
-            let (foldable_state, remaining_text) =
-                if let Some(rest) = text.strip_prefix('+') {
-                    (Some(FoldableState::Expanded), rest.trim())
-                } else if let Some(rest) = text.strip_prefix('-') {
-                    (Some(FoldableState::Collapsed), rest.trim())
-                } else {
-                    (None, text.trim())
+        match fst_para_content_children_start_idx {
+            Some(fst_para_content_children_start_idx) => {
+                // Decl
+                let decl_para_children = first_para.children
+                    [0..fst_para_content_children_start_idx]
+                    .to_vec();
+                let decl_para_last_child = decl_para_children.last().unwrap();
+                let decl_para = Node {
+                    kind: NodeKind::Paragraph,
+                    start_byte: first_para.start_byte,
+                    end_byte: decl_para_last_child.end_byte,
+                    start_point: first_para.start_point,
+                    end_point: decl_para_last_child.end_point,
+                    children: decl_para_children,
+                    parent: None, // Set later
                 };
+                callout_decl_children.push(decl_para);
 
-            // Collect title text (remaining text in this node + any following text nodes)
-            let mut title_parts = Vec::new();
-            if !remaining_text.is_empty() {
-                title_parts.push(remaining_text);
-            }
-
-            // Track the last node index used for title, to find content start
-            let mut last_title_node_idx = 3;
-
-            // Add any subsequent text nodes before line break
-            for (idx, child) in first_para.children[4..].iter().enumerate() {
-                match &child.kind {
-                    NodeKind::Text(s) => {
-                        title_parts.push(s.as_ref());
-                        last_title_node_idx = 4 + idx;
-                    }
-                    NodeKind::SoftBreak | NodeKind::HardBreak => {
-                        // Content starts after this line break
-                        last_title_node_idx = 4 + idx;
-                        break;
-                    }
-                    _ => {}
+                // Content
+                let content_para_children = first_para.children
+                    [fst_para_content_children_start_idx
+                        ..first_para.children.len()]
+                    .to_vec();
+                let content_para_first_child =
+                    content_para_children.first().unwrap();
+                let content_para = Node {
+                    kind: NodeKind::Paragraph,
+                    start_byte: content_para_first_child.start_byte,
+                    end_byte: first_para.end_byte,
+                    start_point: content_para_first_child.start_point,
+                    end_point: first_para.end_point,
+                    children: content_para_children,
+                    parent: None, // Set later
+                };
+                callout_content_children.push(content_para);
+                // The rest of blockquote's children
+                if node.child_count() > 1 {
+                    callout_content_children
+                        .extend(node.children[1..node.child_count()].to_vec())
                 }
             }
-
-            let title_str = title_parts.join("").trim().to_string();
-            let title_opt = if title_str.is_empty() {
-                None
-            } else {
-                Some(title_str)
-            };
-
-            // Calculate content start byte
-            // Content starts after the last node used for title/break
-            let content_byte =
-                if last_title_node_idx + 1 < first_para.children.len() {
-                    // There are more children after the title line, content starts at next node
-                    first_para.children[last_title_node_idx + 1].start_byte
-                } else {
-                    // No more children in first paragraph, content starts after it
-                    first_para.end_byte
-                };
-
-            (foldable_state, title_opt, content_byte)
-        } else {
-            // No text after bracket, content starts after this node
-            let content_byte = first_after_bracket.end_byte;
-            (None, None, content_byte)
+            None => {
+                // The first paragraph is the decl
+                callout_decl_children.push(first_para.clone());
+                if node.child_count() > 1 {
+                    // The rest of blockquote's children are the content
+                    callout_content_children
+                        .extend(node.children[1..node.child_count()].to_vec())
+                }
+            }
         }
-    } else {
-        // Only the [!TYPE] marker, content starts after the "]" node (index 2)
-        let content_byte = first_para.children[2].end_byte;
-        (None, None, content_byte)
-    };
 
-    let _ = Some(CalloutData {
-        kind,
-        title,
-        foldable,
-        content_start_byte,
-    });
-    todo!()
+        let callout_decl = Node {
+            kind: NodeKind::CalloutDeclaraion,
+            start_byte: first_para.start_byte,
+            start_point: first_para.start_point,
+            end_byte: callout_decl_children.last().unwrap().end_byte,
+            end_point: callout_decl_children.last().unwrap().end_point,
+            children: callout_decl_children,
+            parent: None, // Set later
+        };
+        let callout_content = Node {
+            kind: NodeKind::CalloutContent,
+            start_byte: callout_content_children.first().unwrap().start_byte,
+            start_point: callout_content_children.first().unwrap().start_point,
+            end_byte: node.children.last().unwrap().end_byte,
+            end_point: node.children.last().unwrap().end_point,
+            children: callout_content_children,
+            parent: None, // Set later
+        };
+
+        let mut callout = Node {
+            kind: NodeKind::Callout {
+                kind: CalloutKind::from_str_or_default(&type_name),
+                title,
+                foldable: foldable.map(|b| b.into()),
+            },
+            start_byte: node.start_byte,
+            start_point: node.start_point,
+            end_byte: node.end_byte,
+            end_point: node.end_point,
+            children: vec![callout_decl, callout_content],
+            parent: None, // Set later
+        };
+
+        setup_parent_pointers(&mut callout);
+        Some(callout)
+    } else {
+        return None;
+    }
 }
 
 #[cfg(test)]
@@ -614,7 +585,7 @@ mod p_tests {
         #[case] expected_foldable: Option<bool>,
         #[case] expected_title: Option<&str>,
     ) {
-        let result = parse_callout(input);
+        let result = parse_callout_decl(input);
         assert_eq!(
             result,
             Some((
@@ -653,7 +624,7 @@ mod p_tests {
         #[case] expected_foldable: Option<bool>,
         #[case] expected_title: Option<&str>,
     ) {
-        let result = parse_callout(input);
+        let result = parse_callout_decl(input);
         assert_eq!(
             result,
             Some((
@@ -675,7 +646,7 @@ mod p_tests {
         #[case] expected_foldable: Option<bool>,
         #[case] expected_title: Option<&str>,
     ) {
-        let result = parse_callout(input);
+        let result = parse_callout_decl(input);
         assert_eq!(
             result,
             Some((
@@ -707,7 +678,7 @@ mod p_tests {
         #[case] expected_foldable: Option<bool>,
         #[case] expected_title: Option<&str>,
     ) {
-        let result = parse_callout(input);
+        let result = parse_callout_decl(input);
         assert_eq!(
             result,
             Some((
@@ -727,7 +698,7 @@ mod p_tests {
         #[case] expected_title: Option<&str>,
         #[case] _description: &str,
     ) {
-        let result = parse_callout(input);
+        let result = parse_callout_decl(input);
         assert_eq!(
             result,
             Some((
@@ -753,7 +724,7 @@ mod p_tests {
     #[case("> [!NO-TE]", "hyphen in type")]
     #[case("> [!NO_TE]", "underscore in type")]
     fn test_invalid_callouts(#[case] input: &str, #[case] _description: &str) {
-        let result = parse_callout(input);
+        let result = parse_callout_decl(input);
         assert_eq!(result, None);
     }
 }
