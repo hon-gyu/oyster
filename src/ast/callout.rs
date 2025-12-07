@@ -411,8 +411,8 @@ pub fn callout_node_of_gfm_blockquote<'a>(
     }
 
     // Find first paragraph child
-    let first_para = node.children.first()?;
-    if !matches!(&first_para.kind, NodeKind::Paragraph) {
+    let fst_para = node.children.first()?;
+    if !matches!(&fst_para.kind, NodeKind::Paragraph) {
         return None;
     }
 
@@ -430,32 +430,33 @@ pub fn callout_node_of_gfm_blockquote<'a>(
     // children
     let (fst_para_content_children_start_idx, fst_line_end_byte) = {
         // Find first softbreak or hardbreak
-        let fst_break_node = first_para
+        let fst_break_idx_and_node = fst_para
             .children
             .iter()
-            .filter(|c| {
+            .enumerate()
+            .filter(|(_, c)| {
                 matches!(&c.kind, NodeKind::SoftBreak | NodeKind::HardBreak)
             })
-            .enumerate()
             .next();
 
-        let fst_line_end_type = match fst_break_node {
+        let fst_line_end_type = match fst_break_idx_and_node {
             Some((break_node_idx, _)) => {
                 debug_assert!(
                     break_node_idx != 0,
-                    "Softbreak or hardbreak cannot be first child"
+                    "Softbreak or hardbreak cannot be first child, idx: {}",
+                    break_node_idx
                 );
                 // Get the end byte of the last child before the break
-                first_para.child(break_node_idx - 1).unwrap().end_byte
+                fst_para.child(break_node_idx - 1).unwrap().end_byte
             }
             None => {
                 // No softbreak or hardbreak, get the end byte of the last child
-                first_para.children.last().unwrap().end_byte
+                fst_para.children.last().unwrap().end_byte
             }
         };
         let fst_para_content_children_start_idx = {
-            if let Some((break_node_idx, _)) = fst_break_node {
-                if break_node_idx == first_para.child_count() {
+            if let Some((break_node_idx, _)) = fst_break_idx_and_node {
+                if break_node_idx == fst_para.child_count() {
                     None
                 } else {
                     Some(break_node_idx + 1)
@@ -478,15 +479,15 @@ pub fn callout_node_of_gfm_blockquote<'a>(
         match fst_para_content_children_start_idx {
             Some(fst_para_content_children_start_idx) => {
                 // Decl
-                let decl_para_children = first_para.children
+                let decl_para_children = fst_para.children
                     [0..fst_para_content_children_start_idx]
                     .to_vec();
                 let decl_para_last_child = decl_para_children.last().unwrap();
                 let decl_para = Node {
                     kind: NodeKind::Paragraph,
-                    start_byte: first_para.start_byte,
+                    start_byte: fst_para.start_byte,
                     end_byte: decl_para_last_child.end_byte,
-                    start_point: first_para.start_point,
+                    start_point: fst_para.start_point,
                     end_point: decl_para_last_child.end_point,
                     children: decl_para_children,
                     parent: None, // Set later
@@ -494,18 +495,18 @@ pub fn callout_node_of_gfm_blockquote<'a>(
                 callout_decl_children.push(decl_para);
 
                 // Content
-                let content_para_children = first_para.children
+                let content_para_children = fst_para.children
                     [fst_para_content_children_start_idx
-                        ..first_para.children.len()]
+                        ..fst_para.children.len()]
                     .to_vec();
                 let content_para_first_child =
                     content_para_children.first().unwrap();
                 let content_para = Node {
                     kind: NodeKind::Paragraph,
                     start_byte: content_para_first_child.start_byte,
-                    end_byte: first_para.end_byte,
+                    end_byte: fst_para.end_byte,
                     start_point: content_para_first_child.start_point,
-                    end_point: first_para.end_point,
+                    end_point: fst_para.end_point,
                     children: content_para_children,
                     parent: None, // Set later
                 };
@@ -518,7 +519,7 @@ pub fn callout_node_of_gfm_blockquote<'a>(
             }
             None => {
                 // The first paragraph is the decl
-                callout_decl_children.push(first_para.clone());
+                callout_decl_children.push(fst_para.clone());
                 if node.child_count() > 1 {
                     // The rest of blockquote's children are the content
                     callout_content_children
@@ -529,21 +530,31 @@ pub fn callout_node_of_gfm_blockquote<'a>(
 
         let callout_decl = Node {
             kind: NodeKind::CalloutDeclaraion,
-            start_byte: first_para.start_byte,
-            start_point: first_para.start_point,
+            start_byte: fst_para.start_byte,
+            start_point: fst_para.start_point,
             end_byte: callout_decl_children.last().unwrap().end_byte,
             end_point: callout_decl_children.last().unwrap().end_point,
             children: callout_decl_children,
             parent: None, // Set later
         };
-        let callout_content = Node {
-            kind: NodeKind::CalloutContent,
-            start_byte: callout_content_children.first().unwrap().start_byte,
-            start_point: callout_content_children.first().unwrap().start_point,
-            end_byte: node.children.last().unwrap().end_byte,
-            end_point: node.children.last().unwrap().end_point,
-            children: callout_content_children,
-            parent: None, // Set later
+        let callout_content = if callout_content_children.is_empty() {
+            None
+        } else {
+            Some(Node {
+                kind: NodeKind::CalloutContent,
+                start_byte: callout_content_children
+                    .first()
+                    .unwrap()
+                    .start_byte,
+                start_point: callout_content_children
+                    .first()
+                    .unwrap()
+                    .start_point,
+                end_byte: node.children.last().unwrap().end_byte,
+                end_point: node.children.last().unwrap().end_point,
+                children: callout_content_children,
+                parent: None, // Set later
+            })
         };
 
         let mut callout = Node {
@@ -556,7 +567,13 @@ pub fn callout_node_of_gfm_blockquote<'a>(
             start_point: node.start_point,
             end_byte: node.end_byte,
             end_point: node.end_point,
-            children: vec![callout_decl, callout_content],
+            children: {
+                if let Some(callout_content) = callout_content {
+                    vec![callout_decl, callout_content]
+                } else {
+                    vec![callout_decl]
+                }
+            },
             parent: None, // Set later
         };
 
@@ -568,7 +585,7 @@ pub fn callout_node_of_gfm_blockquote<'a>(
 }
 
 #[cfg(test)]
-mod p_tests {
+mod decl_parse_tests {
     use super::*;
     use rstest::rstest;
 
@@ -736,16 +753,42 @@ mod tests {
     use super::*;
     use crate::ast::Tree;
 
+    fn assert_range_match(blockquote: &Node, callout_node: &Node) -> () {
+        if blockquote.start_byte != callout_node.start_byte {
+            panic!(
+                "Expected start_byte of blockquote to match start_byte of callout node, but they differ: {} != {}",
+                blockquote.start_byte, callout_node.start_byte
+            );
+        }
+        if blockquote.end_byte != callout_node.end_byte {
+            panic!(
+                "Expected end_byte of blockquote to match end_byte of callout node, but they differ: {} != {}",
+                blockquote.end_byte, callout_node.end_byte
+            );
+        }
+        if blockquote.start_point != callout_node.start_point {
+            panic!(
+                "Expected start_point of blockquote to match start_point of callout node, but they differ: {:?} != {:?}",
+                blockquote.start_point, callout_node.start_point
+            );
+        }
+        if blockquote.end_point != callout_node.end_point {
+            panic!(
+                "Expected end_point of blockquote to match end_point of callout node, but they differ: {:?} != {:?}",
+                blockquote.end_point, callout_node.end_point
+            );
+        }
+    }
+
     #[test]
     fn test_detect_obsidian_danger_blockquote() {
         let md = r#"> [!ERROR]
 > This is an error message"#;
 
         let tree = Tree::new(md);
-        let callout_node = &tree.root_node.children[0];
-
-        assert_snapshot!(callout_node, @r#"
-        Callout { kind: Obsidian(Danger), title: None, foldable: None, content_start_byte: 11 } [0..37]
+        let blockquote = &tree.root_node.children[0];
+        assert_snapshot!(&blockquote, @r#"
+        BlockQuote [0..37]
           Paragraph [2..37]
             Text(Borrowed("[")) [2..3]
             Text(Borrowed("!ERROR")) [3..9]
@@ -753,18 +796,33 @@ mod tests {
             SoftBreak [10..11]
             Text(Borrowed("This is an error message")) [13..37]
         "#);
+
+        let callout_node =
+            callout_node_of_gfm_blockquote(blockquote, md).unwrap();
+
+        assert_snapshot!(callout_node, @r#"
+        Callout { kind: Obsidian(Danger), title: None, foldable: None } [0..37]
+          CalloutDeclaraion [2..11]
+            Paragraph [2..11]
+              Text(Borrowed("[")) [2..3]
+              Text(Borrowed("!ERROR")) [3..9]
+              Text(Borrowed("]")) [9..10]
+              SoftBreak [10..11]
+          CalloutContent [13..37]
+            Paragraph [13..37]
+              Text(Borrowed("This is an error message")) [13..37]
+        "#);
     }
 
     #[test]
     fn test_detect_custom_llm_blockquote() {
         let md = r#"> [!LLM]
 > This content was generated by an LLM"#;
-
         let tree = Tree::new(md);
-        let callout_node = &tree.root_node.children[0];
 
-        assert_snapshot!(callout_node, @r#"
-        Callout { kind: Custom(Llm), title: None, foldable: None, content_start_byte: 9 } [0..47]
+        let blockquote = &tree.root_node.children[0];
+        assert_snapshot!(&blockquote, @r#"
+        BlockQuote [0..47]
           Paragraph [2..47]
             Text(Borrowed("[")) [2..3]
             Text(Borrowed("!LLM")) [3..7]
@@ -772,18 +830,32 @@ mod tests {
             SoftBreak [8..9]
             Text(Borrowed("This content was generated by an LLM")) [11..47]
         "#);
+
+        let callout_node =
+            callout_node_of_gfm_blockquote(blockquote, md).unwrap();
+        assert_snapshot!(callout_node, @r#"
+        Callout { kind: Custom(Llm), title: None, foldable: None } [0..47]
+          CalloutDeclaraion [2..9]
+            Paragraph [2..9]
+              Text(Borrowed("[")) [2..3]
+              Text(Borrowed("!LLM")) [3..7]
+              Text(Borrowed("]")) [7..8]
+              SoftBreak [8..9]
+          CalloutContent [11..47]
+            Paragraph [11..47]
+              Text(Borrowed("This content was generated by an LLM")) [11..47]
+        "#);
     }
 
     #[test]
     fn test_custom_title() {
-        // Use an extended type so we can extract custom titles
         let md = r#"> [!INFO] Callouts can have custom titles
 > Like this one."#;
-
         let tree = Tree::new(md);
-        let callout_node = &tree.root_node.children[0];
-        assert_snapshot!(callout_node, @r#"
-        Callout { kind: Obsidian(Info), title: Some("Callouts can have custom titles"), foldable: None, content_start_byte: 44 } [0..58]
+
+        let blockquote = &tree.root_node.children[0];
+        assert_snapshot!(&blockquote, @r#"
+        BlockQuote [0..58]
           Paragraph [2..58]
             Text(Borrowed("[")) [2..3]
             Text(Borrowed("!INFO")) [3..8]
@@ -792,17 +864,33 @@ mod tests {
             SoftBreak [41..42]
             Text(Borrowed("Like this one.")) [44..58]
         "#);
+
+        let callout_node =
+            callout_node_of_gfm_blockquote(blockquote, md).unwrap();
+        assert_snapshot!(callout_node, @r#"
+        Callout { kind: Obsidian(Info), title: Some("Callouts can have custom titles"), foldable: None } [0..58]
+          CalloutDeclaraion [2..42]
+            Paragraph [2..42]
+              Text(Borrowed("[")) [2..3]
+              Text(Borrowed("!INFO")) [3..8]
+              Text(Borrowed("]")) [8..9]
+              Text(Borrowed(" Callouts can have custom titles")) [9..41]
+              SoftBreak [41..42]
+          CalloutContent [44..58]
+            Paragraph [44..58]
+              Text(Borrowed("Like this one.")) [44..58]
+        "#);
     }
 
     #[test]
     fn test_extended_custom_title() {
         let md = r#"> [!QUESTION] Custom Question Title
 > Content here"#;
-
         let tree = Tree::new(md);
-        let callout_node = &tree.root_node.children[0];
-        assert_snapshot!(callout_node, @r#"
-        Callout { kind: Obsidian(Question), title: Some("Custom Question Title"), foldable: None, content_start_byte: 38 } [0..50]
+
+        let blockquote = &tree.root_node.children[0];
+        assert_snapshot!(&blockquote, @r#"
+        BlockQuote [0..50]
           Paragraph [2..50]
             Text(Borrowed("[")) [2..3]
             Text(Borrowed("!QUESTION")) [3..12]
@@ -811,21 +899,49 @@ mod tests {
             SoftBreak [35..36]
             Text(Borrowed("Content here")) [38..50]
         "#);
+
+        let callout_node =
+            callout_node_of_gfm_blockquote(blockquote, md).unwrap();
+        assert_snapshot!(callout_node, @r#"
+        Callout { kind: Obsidian(Question), title: Some("Custom Question Title"), foldable: None } [0..50]
+          CalloutDeclaraion [2..36]
+            Paragraph [2..36]
+              Text(Borrowed("[")) [2..3]
+              Text(Borrowed("!QUESTION")) [3..12]
+              Text(Borrowed("]")) [12..13]
+              Text(Borrowed(" Custom Question Title")) [13..35]
+              SoftBreak [35..36]
+          CalloutContent [38..50]
+            Paragraph [38..50]
+              Text(Borrowed("Content here")) [38..50]
+        "#);
     }
 
     #[test]
     fn test_title_only_callout() {
         let md = r#"> [!INFO] Title-only callout"#;
-
         let tree = Tree::new(md);
-        let callout_node = &tree.root_node.children[0];
-        assert_snapshot!(callout_node, @r#"
-        Callout { kind: Obsidian(Info), title: Some("Title-only callout"), foldable: None, content_start_byte: 28 } [0..28]
+
+        let blockquote = &tree.root_node.children[0];
+        assert_snapshot!(&blockquote, @r#"
+        BlockQuote [0..28]
           Paragraph [2..28]
             Text(Borrowed("[")) [2..3]
             Text(Borrowed("!INFO")) [3..8]
             Text(Borrowed("]")) [8..9]
             Text(Borrowed(" Title-only callout")) [9..28]
+        "#);
+
+        let callout_node =
+            callout_node_of_gfm_blockquote(blockquote, md).unwrap();
+        assert_snapshot!(callout_node, @r#"
+        Callout { kind: Obsidian(Info), title: Some("Title-only callout"), foldable: None } [0..28]
+          CalloutDeclaraion [2..28]
+            Paragraph [2..28]
+              Text(Borrowed("[")) [2..3]
+              Text(Borrowed("!INFO")) [3..8]
+              Text(Borrowed("]")) [8..9]
+              Text(Borrowed(" Title-only callout")) [9..28]
         "#);
     }
 
@@ -833,11 +949,11 @@ mod tests {
     fn test_foldable_expanded() {
         let md = r#"> [!FAQ]+ Are callouts foldable?
 > Yes! They are."#;
-
         let tree = Tree::new(md);
-        let callout_node = &tree.root_node.children[0];
-        assert_snapshot!(callout_node, @r#"
-        Callout { kind: Obsidian(Question), title: Some("Are callouts foldable?"), foldable: Some(Expanded), content_start_byte: 35 } [0..49]
+
+        let blockquote = &tree.root_node.children[0];
+        assert_snapshot!(&blockquote, @r#"
+        BlockQuote [0..49]
           Paragraph [2..49]
             Text(Borrowed("[")) [2..3]
             Text(Borrowed("!FAQ")) [3..7]
@@ -846,17 +962,33 @@ mod tests {
             SoftBreak [32..33]
             Text(Borrowed("Yes! They are.")) [35..49]
         "#);
+
+        let callout_node =
+            callout_node_of_gfm_blockquote(blockquote, md).unwrap();
+        assert_snapshot!(callout_node, @r#"
+        Callout { kind: Obsidian(Question), title: Some("Are callouts foldable?"), foldable: Some(Expanded) } [0..49]
+          CalloutDeclaraion [2..33]
+            Paragraph [2..33]
+              Text(Borrowed("[")) [2..3]
+              Text(Borrowed("!FAQ")) [3..7]
+              Text(Borrowed("]")) [7..8]
+              Text(Borrowed("+ Are callouts foldable?")) [8..32]
+              SoftBreak [32..33]
+          CalloutContent [35..49]
+            Paragraph [35..49]
+              Text(Borrowed("Yes! They are.")) [35..49]
+        "#);
     }
 
     #[test]
     fn test_foldable_collapsed() {
         let md = r#"> [!FAQ]- Are callouts foldable?
 > Yes! In a foldable callout, the contents are hidden when the callout is collapsed."#;
-
         let tree = Tree::new(md);
-        let callout_node = &tree.root_node.children[0];
-        assert_snapshot!(callout_node, @r#"
-        Callout { kind: Obsidian(Question), title: Some("Are callouts foldable?"), foldable: Some(Collapsed), content_start_byte: 35 } [0..117]
+
+        let blockquote = &tree.root_node.children[0];
+        assert_snapshot!(&blockquote, @r#"
+        BlockQuote [0..117]
           Paragraph [2..117]
             Text(Borrowed("[")) [2..3]
             Text(Borrowed("!FAQ")) [3..7]
@@ -865,17 +997,33 @@ mod tests {
             SoftBreak [32..33]
             Text(Borrowed("Yes! In a foldable callout, the contents are hidden when the callout is collapsed.")) [35..117]
         "#);
+
+        let callout_node =
+            callout_node_of_gfm_blockquote(blockquote, md).unwrap();
+        assert_snapshot!(callout_node, @r#"
+        Callout { kind: Obsidian(Question), title: Some("Are callouts foldable?"), foldable: Some(Collapsed) } [0..117]
+          CalloutDeclaraion [2..33]
+            Paragraph [2..33]
+              Text(Borrowed("[")) [2..3]
+              Text(Borrowed("!FAQ")) [3..7]
+              Text(Borrowed("]")) [7..8]
+              Text(Borrowed("- Are callouts foldable?")) [8..32]
+              SoftBreak [32..33]
+          CalloutContent [35..117]
+            Paragraph [35..117]
+              Text(Borrowed("Yes! In a foldable callout, the contents are hidden when the callout is collapsed.")) [35..117]
+        "#);
     }
 
     #[test]
-    fn test_standard_blockquote_not_detected() {
+    fn test_standard_blockquote() {
         let md = r#"> [!NOTE]
 > This is a standard note"#;
-
         let tree = Tree::new(md);
-        let callout_node = &tree.root_node.children[0];
-        assert_snapshot!(callout_node, @r#"
-        Callout { kind: GFM(Note), title: None, foldable: None, content_start_byte: 10 } [0..35]
+
+        let blockquote = &tree.root_node.children[0];
+        assert_snapshot!(&blockquote, @r#"
+        BlockQuote [0..35]
           Paragraph [2..35]
             Text(Borrowed("[")) [2..3]
             Text(Borrowed("!NOTE")) [3..8]
@@ -883,18 +1031,40 @@ mod tests {
             SoftBreak [9..10]
             Text(Borrowed("This is a standard note")) [12..35]
         "#);
+
+        let callout_node =
+            callout_node_of_gfm_blockquote(blockquote, md).unwrap();
+        assert_snapshot!(callout_node, @r#"
+        Callout { kind: GFM(Note), title: None, foldable: None } [0..35]
+          CalloutDeclaraion [2..10]
+            Paragraph [2..10]
+              Text(Borrowed("[")) [2..3]
+              Text(Borrowed("!NOTE")) [3..8]
+              Text(Borrowed("]")) [8..9]
+              SoftBreak [9..10]
+          CalloutContent [12..35]
+            Paragraph [12..35]
+              Text(Borrowed("This is a standard note")) [12..35]
+        "#);
     }
 
     #[test]
     fn test_regular_blockquote_not_detected() {
         let md = r#"> This is a regular blockquote
 > without any callout marker"#;
-
         let tree = Tree::new(md);
-        let blockquote = &tree.root_node.children[0];
 
-        let metadata = callout_data_of_gfm_blockquote(blockquote, md);
-        assert_eq!(metadata, None);
+        let blockquote = &tree.root_node.children[0];
+        assert_snapshot!(&blockquote, @r#"
+        BlockQuote [0..59]
+          Paragraph [2..59]
+            Text(Borrowed("This is a regular blockquote")) [2..30]
+            SoftBreak [30..31]
+            Text(Borrowed("without any callout marker")) [33..59]
+        "#);
+
+        let callout_node = callout_node_of_gfm_blockquote(blockquote, md);
+        assert_eq!(callout_node, None);
     }
 
     #[test]
@@ -906,8 +1076,8 @@ mod tests {
         let blockquote = &tree.root_node.children[0];
 
         // Should not detect due to 2 spaces
-        let metadata = callout_data_of_gfm_blockquote(blockquote, md);
-        assert_eq!(metadata, None);
+        let callout_node = callout_node_of_gfm_blockquote(blockquote, md);
+        assert_eq!(callout_node, None);
     }
 
     #[test]
@@ -917,16 +1087,30 @@ mod tests {
 > This is a summary"#;
 
         let tree = Tree::new(md);
-        let callout_node = &tree.root_node.children[0];
-
-        assert_snapshot!(callout_node, @r#"
-        Callout { kind: Obsidian(Abstract), title: None, foldable: None, content_start_byte: 13 } [0..32]
+        let blockquote = &tree.root_node.children[0];
+        assert_snapshot!(&blockquote, @r#"
+        BlockQuote [0..32]
           Paragraph [2..32]
             Text(Borrowed("[")) [2..3]
             Text(Borrowed("!SUMMARY")) [3..11]
             Text(Borrowed("]")) [11..12]
             SoftBreak [12..13]
             Text(Borrowed("This is a summary")) [15..32]
+        "#);
+
+        let callout_node =
+            callout_node_of_gfm_blockquote(blockquote, md).unwrap();
+        assert_snapshot!(callout_node, @r#"
+        Callout { kind: Obsidian(Abstract), title: None, foldable: None } [0..32]
+          CalloutDeclaraion [2..13]
+            Paragraph [2..13]
+              Text(Borrowed("[")) [2..3]
+              Text(Borrowed("!SUMMARY")) [3..11]
+              Text(Borrowed("]")) [11..12]
+              SoftBreak [12..13]
+          CalloutContent [15..32]
+            Paragraph [15..32]
+              Text(Borrowed("This is a summary")) [15..32]
         "#);
     }
 }
