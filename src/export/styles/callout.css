@@ -6,8 +6,7 @@ details.callout {
     display: block;
     margin: 1rem 0;
     padding: 1rem;
-    border-radius: 8px;
-    border-left: 4px solid;
+    border-radius: 6px;
     /* Default fallback color (same as NOTE) for unknown callout types */
     --callout-color: 59, 130, 246;
     --callout-icon-id: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z'/%3E%3Cpath d='m15 5 4 4'/%3E%3C/svg%3E");
@@ -16,7 +15,6 @@ details.callout {
     --callout-border: rgb(var(--callout-color));
     --callout-title-color: rgb(var(--callout-color));
     background: var(--callout-bg);
-    border-color: var(--callout-border);
 }
 
 /* Callout declaration - contains icon and title */
