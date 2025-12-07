@@ -2,7 +2,7 @@
 
 Open-source [Obsidian.md](https://obsidian.md/)
 
-## Progress
+## Progress (⬜ | 🚧 | ✅)
 - ✅ Parse markdown using [pulldown-cmark](https://github.com/pulldown-cmark/pulldown-cmark/) and build a syntax tree
 - ✅ [File / Note reference](https://help.obsidian.md/links#Link%20to%20a%20file)
 - ✅ [Heading reference](https://help.obsidian.md/links#Link%20to%20a%20heading%20in%20a%20note)
@@ -11,25 +11,30 @@ Open-source [Obsidian.md](https://obsidian.md/)
 - SSG
   - ✅ v0: minijina + pulldown-cmarks's html writer; backlinks component; correct links
   - ✅ v1: type-safe ast-based html writer; backlinks component;
-  - 🚧 more components
+  - ✅ more components
     - ✅ TOC
     - ✅ Explorer
     - ✅ Homepage
     - ✅ Sidebar explorer
-    - Graphview
+  - and more components
+    - ⬜ Graphview
   - ✅ filter by frontmatter
   - ⬜ Tag page
 - Embed image
   - ✅ basic embed
   - ✅ resize embed
-- ⬜ Embed files: note, block, pdf, video, audio
+- ✅ Embed files: 
+  - ✅ note, heading, and block 
+  - pdf, video, audio
+  - ✅ HTML
+  - ✅ HTML selector (extension)
 - LaTeX support
   - ✅ basic support (KaTeX)
-  - ⬜ TikZ; Quiver
-- ⬜ Mermaid diagram
-
+  - ✅ TikZ; Quiver (extension)
+- ✅ Mermaid diagram
 - ⬜ Bases
-- 🚧 Custom callout
+- ✅ Callout
+- ✅ Custom callout
 - ⬜ CodeGen
 - ⬜ Markdown to structured data (YAML / JSON)
   - ⬜ CHANGELOG validation
