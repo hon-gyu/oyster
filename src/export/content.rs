@@ -92,14 +92,13 @@ pub fn render_content(
     )
 }
 
-pub enum EmbededKind {
+pub enum EmbededAssetKind {
     Image,
     Video,
     Audio,
     PDF,
-    Note,
-    Heading,
-    Block,
+    HTML,
+    Unknown,
 }
 
 fn render_nodes(
@@ -258,55 +257,82 @@ fn render_node(
                     .expect("Referenceable should have a slug");
 
                 if matches!(tgt, Referenceable::Asset { .. }) {
-                    let is_image = Path::new(&tgt_slug_path)
-                        .extension()
-                        .and_then(|ext| {
-                            IMAGE_EXTENSIONS
-                                .iter()
-                                .find(|&&e| e == ext.to_str().unwrap_or(""))
-                        })
-                        .is_some();
-                    if is_image {
-                        // Case: image
-                        let resize_spec = &children;
-                        let (width, height) =
-                            utils::parse_resize_spec(resize_spec);
-                        let alt_text = Path::new(&tgt_slug_path)
-                            .file_stem()
-                            .unwrap()
-                            .to_str()
-                            .unwrap_or("");
-                        // src anchor id to be used as href in backlink
-                        let src_anchor_id = vault_db
-                            .get_reference_anchor_id(
-                                &vault_path.to_path_buf(),
-                                &range,
-                            )
-                            .expect("Image should have a src anchor id");
-                        html! {
-                            img
-                                .embed-file.image
+                    let embeded_asset_kind = {
+                        if {
+                            Path::new(&tgt_slug_path)
+                                .extension()
+                                .and_then(|ext| {
+                                    IMAGE_EXTENSIONS.iter().find(|&&e| {
+                                        e == ext.to_str().unwrap_or("")
+                                    })
+                                })
+                                .is_some()
+                        } {
+                            EmbededAssetKind::Image
+                        } else if {
+                            Path::new(&tgt_slug_path)
+                                .extension()
+                                .map(|ext| ext == "html")
+                                .is_some()
+                        } {
+                            EmbededAssetKind::HTML
+                        } else {
+                            EmbededAssetKind::Unknown
+                        }
+                    };
+                    match embeded_asset_kind {
+                        EmbededAssetKind::Image => {
+                            let resize_spec = &children;
+                            let (width, height) =
+                                utils::parse_resize_spec(resize_spec);
+                            let alt_text = Path::new(&tgt_slug_path)
+                                .file_stem()
+                                .unwrap()
+                                .to_str()
+                                .unwrap_or("");
+                            // src anchor id to be used as href in backlink
+                            let src_anchor_id = vault_db
+                                .get_reference_anchor_id(
+                                    &vault_path.to_path_buf(),
+                                    &range,
+                                )
+                                .expect("Image should have a src anchor id");
+                            html! {
+                                img
+                                    .embed-file.image
+                                    #(src_anchor_id)
+                                    embed-depth=(embed_depth)
+                                    src=(tgt_slug_path)
+                                    alt=(alt_text)
+                                    width=[width] height=[height]
+                                    {}
+                            }
+                        }
+                        EmbededAssetKind::HTML => {
+                            html! {
+                                .embed-file.html
                                 #(src_anchor_id)
                                 embed-depth=(embed_depth)
-                                src=(tgt_slug_path)
-                                alt=(alt_text)
-                                width=[width] height=[height]
-                                {}
+                                {
+                                    (include_str!(""))
+                                }
+                            }
                         }
-                    } else {
-                        // Unhandled embeded asset
-                        // TODO: handle audio, video, pdf, etc.
-                        let href = dest_url.to_string();
-                        // Just an anchor
-                        html! {
-                            .embed-file.unhandled-asset
-                            embed-depth=(embed_depth) {
-                                a
-                                    href=(href)
-                                    title=[title_opt]
-                                    {
-                                        (PreEscaped(children))
-                                    }
+                        _ => {
+                            // Unhandled embeded asset
+                            // TODO: handle audio, video, pdf, etc.
+                            let href = dest_url.to_string();
+                            // Just an anchor
+                            html! {
+                                .embed-file.unhandled-asset
+                                embed-depth=(embed_depth) {
+                                    a
+                                        href=(href)
+                                        title=[title_opt]
+                                        {
+                                            (PreEscaped(children))
+                                        }
+                                }
                             }
                         }
                     }
