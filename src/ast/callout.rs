@@ -78,20 +78,20 @@ impl CustomCalloutKind {
 }
 
 /// Extended blockquote kind that includes standard, Obsidian, and custom types
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CalloutKind {
     /// Standard GFM alert types (recognized by pulldown-cmark)
     GFM(BlockQuoteKind),
     /// Obsidian-specific callout types
     Obsidian(ObsidianCalloutKind),
-    /// User-defined custom callout types
+    /// User-defined custom callout types (hardcoded in this codebase)
     Custom(CustomCalloutKind),
+    /// Unknown callout type - preserves the original type string for CSS styling
+    Unknown(String),
 }
 
-impl TryFrom<&str> for CalloutKind {
-    type Error = String;
-
-    fn try_from(s: &str) -> Result<Self, Self::Error> {
+impl From<&str> for CalloutKind {
+    fn from(s: &str) -> Self {
         if let Some(gfm_kind) = match s.to_uppercase().as_str() {
             "NOTE" => Some(BlockQuoteKind::Note),
             "TIP" => Some(BlockQuoteKind::Tip),
@@ -100,58 +100,64 @@ impl TryFrom<&str> for CalloutKind {
             "CAUTION" => Some(BlockQuoteKind::Caution),
             _ => None,
         } {
-            Ok(Self::GFM(gfm_kind))
+            Self::GFM(gfm_kind)
         } else if let Some(obsidian_kind) = ObsidianCalloutKind::from_str(s) {
-            Ok(Self::Obsidian(obsidian_kind))
+            Self::Obsidian(obsidian_kind)
         } else if let Some(custom_kind) = CustomCalloutKind::from_str(s) {
-            Ok(Self::Custom(custom_kind))
+            Self::Custom(custom_kind)
         } else {
-            Err(format!("Unknown callout type: {}", s))
+            // Unknown type - preserve the original string for CSS styling
+            Self::Unknown(s.to_lowercase())
         }
     }
 }
 
 impl CalloutKind {
-    pub fn name(&self) -> &'static str {
+    pub fn name(&self) -> String {
         match self {
-            Self::GFM(BlockQuoteKind::Note) => "note",
-            Self::GFM(BlockQuoteKind::Tip) => "tip",
-            Self::GFM(BlockQuoteKind::Important) => "important",
-            Self::GFM(BlockQuoteKind::Warning) => "warning",
-            Self::GFM(BlockQuoteKind::Caution) => "caution",
-            Self::Obsidian(obsidian) => obsidian.name(),
-            Self::Custom(custom) => custom.name(),
+            Self::GFM(BlockQuoteKind::Note) => "note".to_string(),
+            Self::GFM(BlockQuoteKind::Tip) => "tip".to_string(),
+            Self::GFM(BlockQuoteKind::Important) => "important".to_string(),
+            Self::GFM(BlockQuoteKind::Warning) => "warning".to_string(),
+            Self::GFM(BlockQuoteKind::Caution) => "caution".to_string(),
+            Self::Obsidian(obsidian) => obsidian.name().to_string(),
+            Self::Custom(custom) => custom.name().to_string(),
+            Self::Unknown(s) => s.clone(),
         }
     }
 
     /// Get default title for this callout type (title case)
-    pub fn default_title(&self) -> &'static str {
+    pub fn default_title(&self) -> String {
         match self {
-            Self::GFM(BlockQuoteKind::Note) => "Note",
-            Self::GFM(BlockQuoteKind::Tip) => "Tip",
-            Self::GFM(BlockQuoteKind::Important) => "Important",
-            Self::GFM(BlockQuoteKind::Warning) => "Warning",
-            Self::GFM(BlockQuoteKind::Caution) => "Caution",
-            Self::Obsidian(ObsidianCalloutKind::Abstract) => "Abstract",
-            Self::Obsidian(ObsidianCalloutKind::Info) => "Info",
-            Self::Obsidian(ObsidianCalloutKind::Todo) => "Todo",
-            Self::Obsidian(ObsidianCalloutKind::Success) => "Success",
-            Self::Obsidian(ObsidianCalloutKind::Question) => "Question",
-            Self::Obsidian(ObsidianCalloutKind::Failure) => "Failure",
-            Self::Obsidian(ObsidianCalloutKind::Danger) => "Danger",
-            Self::Obsidian(ObsidianCalloutKind::Bug) => "Bug",
-            Self::Obsidian(ObsidianCalloutKind::Example) => "Example",
-            Self::Obsidian(ObsidianCalloutKind::Quote) => "Quote",
-            Self::Custom(CustomCalloutKind::Llm) => "LLM",
+            Self::GFM(BlockQuoteKind::Note) => "Note".to_string(),
+            Self::GFM(BlockQuoteKind::Tip) => "Tip".to_string(),
+            Self::GFM(BlockQuoteKind::Important) => "Important".to_string(),
+            Self::GFM(BlockQuoteKind::Warning) => "Warning".to_string(),
+            Self::GFM(BlockQuoteKind::Caution) => "Caution".to_string(),
+            Self::Obsidian(ObsidianCalloutKind::Abstract) => "Abstract".to_string(),
+            Self::Obsidian(ObsidianCalloutKind::Info) => "Info".to_string(),
+            Self::Obsidian(ObsidianCalloutKind::Todo) => "Todo".to_string(),
+            Self::Obsidian(ObsidianCalloutKind::Success) => "Success".to_string(),
+            Self::Obsidian(ObsidianCalloutKind::Question) => "Question".to_string(),
+            Self::Obsidian(ObsidianCalloutKind::Failure) => "Failure".to_string(),
+            Self::Obsidian(ObsidianCalloutKind::Danger) => "Danger".to_string(),
+            Self::Obsidian(ObsidianCalloutKind::Bug) => "Bug".to_string(),
+            Self::Obsidian(ObsidianCalloutKind::Example) => "Example".to_string(),
+            Self::Obsidian(ObsidianCalloutKind::Quote) => "Quote".to_string(),
+            Self::Custom(CustomCalloutKind::Llm) => "LLM".to_string(),
+            Self::Unknown(s) => {
+                // Capitalize first letter for title
+                let mut chars = s.chars();
+                match chars.next() {
+                    None => String::new(),
+                    Some(first) => first.to_uppercase().collect::<String>() + chars.as_str(),
+                }
+            }
         }
     }
 
     fn from_str_or_default(s: &str) -> Self {
-        if let Ok(kind) = CalloutKind::try_from(s) {
-            kind
-        } else {
-            CalloutKind::GFM(BlockQuoteKind::Note)
-        }
+        CalloutKind::from(s)
     }
 }
 
@@ -278,13 +284,8 @@ pub fn callout_data_of_gfm_blockquote(
 
     let type_str = &second[1..]; // Remove the "!"
 
-    // Try to resolve the type
-    let kind = if let Ok(kind) = CalloutKind::try_from(type_str) {
-        kind
-    } else {
-        // Unknown type - default to Note
-        CalloutKind::GFM(BlockQuoteKind::Note)
-    };
+    // Resolve the type (will use Unknown variant for unrecognized types)
+    let kind = CalloutKind::from(type_str);
 
     // Extract foldable state and custom title if present
     // Both come in the 4th child (after "]")
@@ -530,9 +531,11 @@ pub fn callout_node_of_gfm_blockquote<'a>(
             }
         }
 
+        let callout_kind = CalloutKind::from_str_or_default(&type_name);
+
         let callout_decl = Node {
             kind: NodeKind::CalloutDeclaraion {
-                kind: CalloutKind::from_str_or_default(&type_name),
+                kind: callout_kind.clone(),
                 title,
                 foldable,
             },
@@ -564,7 +567,10 @@ pub fn callout_node_of_gfm_blockquote<'a>(
         };
 
         let mut callout = Node {
-            kind: NodeKind::Callout(foldable),
+            kind: NodeKind::Callout {
+                kind: callout_kind,
+                foldable,
+            },
             start_byte: node.start_byte,
             start_point: node.start_point,
             end_byte: node.end_byte,
@@ -824,7 +830,7 @@ mod tests {
             callout_node_of_gfm_blockquote(blockquote, md).unwrap();
 
         assert_snapshot!(callout_node, @r#"
-        Callout [0..37]
+        Callout { kind: Obsidian(Danger), foldable: None } [0..37]
           CalloutDeclaraion { kind: Obsidian(Danger), title: None, foldable: None } [2..11]
             Paragraph [2..11]
               Text(Borrowed("[")) [2..3]
@@ -866,7 +872,7 @@ mod tests {
         let callout_node =
             callout_node_of_gfm_blockquote(blockquote, md).unwrap();
         assert_snapshot!(callout_node, @r#"
-        Callout [0..47]
+        Callout { kind: Custom(Llm), foldable: None } [0..47]
           CalloutDeclaraion { kind: Custom(Llm), title: None, foldable: None } [2..9]
             Paragraph [2..9]
               Text(Borrowed("[")) [2..3]
@@ -909,7 +915,7 @@ mod tests {
         let callout_node =
             callout_node_of_gfm_blockquote(blockquote, md).unwrap();
         assert_snapshot!(callout_node, @r#"
-        Callout [0..58]
+        Callout { kind: Obsidian(Info), foldable: None } [0..58]
           CalloutDeclaraion { kind: Obsidian(Info), title: Some("Callouts can have custom titles"), foldable: None } [2..42]
             Paragraph [2..42]
               Text(Borrowed("[")) [2..3]
@@ -953,7 +959,7 @@ mod tests {
         let callout_node =
             callout_node_of_gfm_blockquote(blockquote, md).unwrap();
         assert_snapshot!(callout_node, @r#"
-        Callout [0..50]
+        Callout { kind: Obsidian(Question), foldable: None } [0..50]
           CalloutDeclaraion { kind: Obsidian(Question), title: Some("Custom Question Title"), foldable: None } [2..36]
             Paragraph [2..36]
               Text(Borrowed("[")) [2..3]
@@ -994,7 +1000,7 @@ mod tests {
         let callout_node =
             callout_node_of_gfm_blockquote(blockquote, md).unwrap();
         assert_snapshot!(callout_node, @r#"
-        Callout [0..28]
+        Callout { kind: Obsidian(Info), foldable: None } [0..28]
           CalloutDeclaraion { kind: Obsidian(Info), title: Some("Title-only callout"), foldable: None } [2..28]
             Paragraph [2..28]
               Text(Borrowed("[")) [2..3]
@@ -1034,7 +1040,7 @@ mod tests {
         let callout_node =
             callout_node_of_gfm_blockquote(blockquote, md).unwrap();
         assert_snapshot!(callout_node, @r#"
-        Callout [0..49]
+        Callout { kind: Obsidian(Question), foldable: Some(Expanded) } [0..49]
           CalloutDeclaraion { kind: Obsidian(Question), title: Some("Are callouts foldable?"), foldable: Some(Expanded) } [2..33]
             Paragraph [2..33]
               Text(Borrowed("[")) [2..3]
@@ -1078,7 +1084,7 @@ mod tests {
         let callout_node =
             callout_node_of_gfm_blockquote(blockquote, md).unwrap();
         assert_snapshot!(callout_node, @r#"
-        Callout [0..117]
+        Callout { kind: Obsidian(Question), foldable: Some(Collapsed) } [0..117]
           CalloutDeclaraion { kind: Obsidian(Question), title: Some("Are callouts foldable?"), foldable: Some(Collapsed) } [2..33]
             Paragraph [2..33]
               Text(Borrowed("[")) [2..3]
@@ -1121,7 +1127,7 @@ mod tests {
         let callout_node =
             callout_node_of_gfm_blockquote(blockquote, md).unwrap();
         assert_snapshot!(callout_node, @r#"
-        Callout [0..35]
+        Callout { kind: GFM(Note), foldable: None } [0..35]
           CalloutDeclaraion { kind: GFM(Note), title: None, foldable: None } [2..10]
             Paragraph [2..10]
               Text(Borrowed("[")) [2..3]
@@ -1196,7 +1202,7 @@ mod tests {
         let callout_node =
             callout_node_of_gfm_blockquote(blockquote, md).unwrap();
         assert_snapshot!(callout_node, @r#"
-        Callout [0..32]
+        Callout { kind: Obsidian(Abstract), foldable: None } [0..32]
           CalloutDeclaraion { kind: Obsidian(Abstract), title: None, foldable: None } [2..13]
             Paragraph [2..13]
               Text(Borrowed("[")) [2..3]

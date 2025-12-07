@@ -841,7 +841,7 @@ mod tests {
           Paragraph [251..267]
             Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("#^quotation"), title: Borrowed(""), id: Borrowed("") } [251..265]
               Text(Borrowed("#^quotation")) [253..264]
-          Callout [269..302]
+          Callout { kind: Obsidian(Info), foldable: None } [269..302]
             CalloutDeclaraion { kind: Obsidian(Info), title: Some("this is a info callout"), foldable: None } [271..302]
               Paragraph [271..302]
                 Text(Borrowed("[")) [271..272]

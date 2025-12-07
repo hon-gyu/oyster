@@ -43,6 +43,7 @@ pub fn render_vault(
     theme: &str,
     filter_publish: bool,
     node_render_config: &NodeRenderConfig,
+    custom_callout_css: Option<&Path>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let home_name = HOME_NAME.to_string();
 
@@ -55,7 +56,7 @@ pub fn render_vault(
     fs::create_dir_all(output_dir)?;
 
     // Setup CSS files
-    style::setup_styles(output_dir, theme)?;
+    style::setup_styles(output_dir, theme, custom_callout_css)?;
 
     // Copy matched static assets to output dir
     let matched_asset_vault_paths: Vec<PathBuf> = vault_db
@@ -140,7 +141,12 @@ pub fn render_vault(
         ));
 
         let output_path = output_dir.join(note_slug_path);
-        let css_paths = style::get_style_paths(&output_path, output_dir, theme);
+        let css_paths = style::get_style_paths(
+            &output_path,
+            output_dir,
+            theme,
+            custom_callout_css.is_some(),
+        );
 
         let html = render_page(
             title,
@@ -178,7 +184,12 @@ pub fn render_vault(
         Path::new(&KATEX_ASSETS_DIR_IN_OUTPUT),
     );
     let katex_css_path = format!("{}/{}", katex_rel_dir, "katex.min.css");
-    let home_css_paths = style::get_style_paths(&home_path, output_dir, theme);
+    let home_css_paths = style::get_style_paths(
+        &home_path,
+        output_dir,
+        theme,
+        custom_callout_css.is_some(),
+    );
     let home_main_content = html! {
         article {
             h1 { "Home" }

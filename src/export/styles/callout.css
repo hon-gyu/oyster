@@ -322,3 +322,24 @@ summary.callout-declaration[callout-kind="llm"] .callout-icon::before {
     mask-image: var(--callout-icon-id);
     -webkit-mask-image: var(--callout-icon-id);
 }
+
+/*
+ * Customizing unknown callout types
+ *
+ * When you use a callout type that isn't defined above (e.g., [!CUSTOM]),
+ * it will automatically use the default callout styles shown at the top of this file.
+ *
+ * To customize unknown callout types, create a CSS file and use the --custom-callout-css option:
+ *
+ * .callout[data-callout="custom-type"] {
+ *     --callout-color: 0, 0, 0;
+ *     --callout-icon: lucide-alert-circle;
+ * }
+ *
+ * The --callout-color uses RGB values (0-255) separated by commas.
+ * The --callout-icon can be:
+ *   - A Lucide icon ID (e.g., "lucide-alert-circle")
+ *   - An SVG element (e.g., '<svg>...custom svg...</svg>')
+ *
+ * For Lucide icons, see https://lucide.dev (version 0.446.0 or earlier).
+ */

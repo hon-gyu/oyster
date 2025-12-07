@@ -541,12 +541,14 @@ fn render_node(
                 }
             }
         }
-        Callout(foldable_state) => {
+        Callout { kind, foldable } => {
             // Inject anchor id for matched referenceable
             let id_opt = vault_db.get_innote_refable_anchor_id(
                 &vault_path.to_path_buf(),
                 &range,
             );
+
+            let callout_type = kind.name();
 
             let children = render_nodes(
                 &node.children,
@@ -557,24 +559,24 @@ fn render_node(
                 max_embed_depth,
             );
 
-            match foldable_state {
+            match foldable {
                 None => {
                     html! {
-                        div .callout id=[id_opt] {
+                        div .callout id=[id_opt] data-callout=(callout_type) {
                             (PreEscaped(children))
                         }
                     }
                 }
                 Some(FoldableState::Expanded) => {
                     html! {
-                        details .callout id=[id_opt] open {
+                        details .callout id=[id_opt] data-callout=(callout_type) open {
                             (PreEscaped(children))
                         }
                     }
                 }
                 Some(FoldableState::Collapsed) => {
                     html! {
-                        details .callout id=[id_opt] {
+                        details .callout id=[id_opt] data-callout=(callout_type) {
                             (PreEscaped(children))
                         }
                     }
@@ -607,7 +609,7 @@ fn render_node(
             // Use custom title or default title
             let callout_title = title
                 .as_ref()
-                .map(|s| s.as_str())
+                .cloned()
                 .unwrap_or_else(|| kind.default_title());
 
             if foldable.is_some() {

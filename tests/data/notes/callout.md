@@ -44,3 +44,6 @@
 
 > [!faq]+ Are callouts foldable?
 > Yes! In a foldable callout, the contents are hidden when the callout is collapsed.
+
+> [!CUSTOM] Custom Callout Type
+> This is a custom callout type that isn't defined in the codebase.

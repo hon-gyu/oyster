@@ -1,0 +1,21 @@
+/* Example custom callout CSS file
+ *
+ * This file demonstrates how to define custom callout types.
+ * Use it with: --custom-callout-css path/to/this/file.css
+ *
+ * Format follows Obsidian's custom callout syntax:
+ *   --callout-color: R, G, B
+ *   --callout-icon: lucide-icon-name or SVG
+ */
+
+/* Custom callout type */
+.callout[data-callout="custom"] {
+    --callout-color: 255, 105, 180;
+    --callout-icon: lucide-plus;
+}
+
+/* Research callout type */
+.callout[data-callout="research"] {
+    --callout-color: 123, 63, 228;
+    --callout-icon: lucide-search;
+}

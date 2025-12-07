@@ -41,6 +41,10 @@ enum Commands {
 
         #[arg(long, default_value = "build-time")]
         quiver_render_mode: String,
+
+        /// Path to custom CSS file for callout customization
+        #[arg(long)]
+        custom_callout_css: Option<PathBuf>,
     },
 }
 
@@ -57,6 +61,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             mermaid_render_mode,
             tikz_render_mode,
             quiver_render_mode,
+            custom_callout_css,
         } => {
             println!(
                 "Generating site from vault: {}",
@@ -84,6 +89,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 &theme,
                 !no_filter_publish,
                 &node_render_config,
+                custom_callout_css.as_deref(),
             )?;
 
             println!("Site generated to: {}", output_dir.display());
