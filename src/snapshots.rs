@@ -95,7 +95,7 @@ mod tests {
         let md_src = std::fs::read_to_string(&path).unwrap();
         let tree = Tree::new(&md_src);
         assert_snapshot!(&tree.root_node, @r#"
-        Document [0..442]
+        Document [0..477]
           BlockQuote [0..17]
             Paragraph [2..17]
               Text(Borrowed("This is a note")) [2..16]
@@ -169,6 +169,13 @@ mod tests {
                   Text(Borrowed("!example")) [386..394]
                   Text(Borrowed("]")) [394..395]
                   Text(Borrowed("  You can even use multiple layers of nesting.")) [395..441]
+          Callout { kind: GFM(Note), title: None, foldable: None, content_start_byte: 452 } [443..477]
+            Paragraph [445..453]
+              Text(Borrowed("[")) [445..446]
+              Text(Borrowed("!NOTE")) [446..451]
+              Text(Borrowed("]")) [451..452]
+            CodeBlock(Fenced(Borrowed("python"))) [455..477]
+              Text(Borrowed("code\n")) [467..472]
         "#);
     }
 

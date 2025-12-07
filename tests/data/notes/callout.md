@@ -30,3 +30,8 @@
 > [!question] Can callouts be nested?
 > > [!todo] Yes!, they can.
 > > > [!example]  You can even use multiple layers of nesting.
+
+> [!NOTE]
+> ```python
+> code
+> ```

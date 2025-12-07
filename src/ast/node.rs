@@ -8,8 +8,8 @@ use tree_sitter::Point;
 
 use super::callout::{CalloutKind, FoldableState};
 use pulldown_cmark::{
-    Alignment, BlockQuoteKind, CodeBlockKind, CowStr, Event, HeadingLevel,
-    LinkType, MetadataBlockKind, Tag,
+    Alignment, CodeBlockKind, CowStr, Event, HeadingLevel, LinkType,
+    MetadataBlockKind, Tag,
 };
 
 // Node

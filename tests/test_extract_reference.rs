@@ -701,7 +701,7 @@ fn test_scan_vault() {
                 Block {
                     path: "block.md",
                     identifier: "callout",
-                    kind: BlockQuote,
+                    kind: Callout,
                     range: 269..302,
                 },
                 Block {
