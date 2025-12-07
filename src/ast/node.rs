@@ -53,7 +53,9 @@ pub enum NodeKind<'a> {
     },
     // We don't enable GFM during pulldown-cmark parsing
     BlockQuote,
-    Callout {
+    Callout,
+    /// Container for callout declaration
+    CalloutDeclaraion {
         /// The type of callout
         kind: CalloutKind,
         /// Custom title (None means use default)
@@ -61,8 +63,6 @@ pub enum NodeKind<'a> {
         /// Whether the callout is foldable and its default state
         foldable: Option<FoldableState>,
     },
-    /// Container for callout declaration
-    CalloutDeclaraion,
     /// Container for callout content
     CalloutContent,
     CodeBlock(CodeBlockKind<'a>),
@@ -209,16 +209,16 @@ impl<'a> NodeKind<'a> {
                     .collect(),
             },
             NodeKind::BlockQuote => NodeKind::BlockQuote,
-            NodeKind::Callout {
+            NodeKind::Callout => NodeKind::Callout,
+            NodeKind::CalloutDeclaraion {
                 kind,
                 title,
                 foldable,
-            } => NodeKind::Callout {
+            } => NodeKind::CalloutDeclaraion {
                 kind,
                 title,
                 foldable,
             },
-            NodeKind::CalloutDeclaraion => NodeKind::CalloutDeclaraion,
             NodeKind::CalloutContent => NodeKind::CalloutContent,
             NodeKind::CodeBlock(kb) => NodeKind::CodeBlock(kb.into_static()),
             NodeKind::HtmlBlock => NodeKind::HtmlBlock,

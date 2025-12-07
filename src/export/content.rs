@@ -541,11 +541,7 @@ fn render_node(
                 }
             }
         }
-        Callout {
-            kind,
-            title,
-            foldable,
-        } => {
+        Callout => {
             let children = render_nodes(
                 &node.children,
                 vault_path,
@@ -561,10 +557,37 @@ fn render_node(
                 &range,
             );
 
+            html! {
+                callout id=[id_opt] {
+                    (PreEscaped(children))
+                }
+            }
+        }
+        CalloutContent => {
+            let children = render_nodes(
+                &node.children,
+                vault_path,
+                vault_db,
+                node_render_config,
+                embed_depth,
+                max_embed_depth,
+            );
+
+            html! {
+                callout {
+                    (PreEscaped(children))
+                }
+            }
+        }
+        CalloutDeclaraion {
+            kind,
+            title,
+            foldable,
+        } => {
             let callout_name = kind.name();
 
             // Use custom title or default title
-            let display_title = title
+            let callout_title = title
                 .as_ref()
                 .map(|s| s.as_str())
                 .unwrap_or_else(|| kind.default_title());
@@ -572,7 +595,7 @@ fn render_node(
             let callout_fold_button = match foldable {
                 Some(FoldableState::Expanded) => {
                     let markup = html! {
-                        callout-fold-button is-collapsed="false" {
+                        span .callout-fold-button is-collapsed="false" {
                             "▼"
                         }
                     };
@@ -589,19 +612,16 @@ fn render_node(
                 None => None,
             };
             html! {
-                callout id=[id_opt] data-callout=(callout_name) {
-                    callout-title {
-                        callout-icon {}
-                        callout-title-text {
-                            (display_title)
-                        }
-                        @if let Some(button) = callout_fold_button {
-                            (button)
-                        }
+                callout-declaration {
+                    // TODO: icon
+                    span .callout-type {
+                        (callout_name)
                     }
-
-                    callout-content {
-                        (PreEscaped(children))
+                    span .callout-title {
+                        (callout_title)
+                    }
+                    @if let Some(callout_fold_button) = callout_fold_button {
+                        (callout_fold_button)
                     }
                 }
             }
@@ -1066,9 +1086,6 @@ fn render_node(
         MetadataBlock(_) => {
             // Metadata blocks should not be rendered
             html! {}
-        }
-        _ => {
-            todo!()
         }
     }
 }

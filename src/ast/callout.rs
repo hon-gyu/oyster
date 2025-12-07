@@ -529,7 +529,11 @@ pub fn callout_node_of_gfm_blockquote<'a>(
         }
 
         let callout_decl = Node {
-            kind: NodeKind::CalloutDeclaraion,
+            kind: NodeKind::CalloutDeclaraion {
+                kind: CalloutKind::from_str_or_default(&type_name),
+                title,
+                foldable: foldable.map(|b| b.into()),
+            },
             start_byte: fst_para.start_byte,
             start_point: fst_para.start_point,
             end_byte: callout_decl_children.last().unwrap().end_byte,
@@ -558,11 +562,7 @@ pub fn callout_node_of_gfm_blockquote<'a>(
         };
 
         let mut callout = Node {
-            kind: NodeKind::Callout {
-                kind: CalloutKind::from_str_or_default(&type_name),
-                title,
-                foldable: foldable.map(|b| b.into()),
-            },
+            kind: NodeKind::Callout,
             start_byte: node.start_byte,
             start_point: node.start_point,
             end_byte: node.end_byte,
@@ -780,6 +780,26 @@ mod tests {
         }
     }
 
+    fn assert_callout_decl_data(
+        decl: &Node,
+        expected_kind: CalloutKind,
+        expected_title: Option<&str>,
+        expected_foldable: Option<FoldableState>,
+    ) {
+        match &decl.kind {
+            NodeKind::CalloutDeclaraion {
+                kind,
+                title,
+                foldable,
+            } => {
+                assert_eq!(*kind, expected_kind);
+                assert_eq!(*title, expected_title.map(|s| s.to_string()));
+                assert_eq!(*foldable, expected_foldable);
+            }
+            _ => panic!("Expected CalloutDeclaraion node"),
+        }
+    }
+
     #[test]
     fn test_detect_obsidian_danger_blockquote() {
         let md = r#"> [!ERROR]
@@ -801,8 +821,8 @@ mod tests {
             callout_node_of_gfm_blockquote(blockquote, md).unwrap();
 
         assert_snapshot!(callout_node, @r#"
-        Callout { kind: Obsidian(Danger), title: None, foldable: None } [0..37]
-          CalloutDeclaraion [2..11]
+        Callout [0..37]
+          CalloutDeclaraion { kind: Obsidian(Danger), title: None, foldable: None } [2..11]
             Paragraph [2..11]
               Text(Borrowed("[")) [2..3]
               Text(Borrowed("!ERROR")) [3..9]
@@ -814,21 +834,13 @@ mod tests {
         "#);
 
         // Assert metadata
-        match &callout_node.kind {
-            NodeKind::Callout {
-                kind,
-                title,
-                foldable,
-            } => {
-                assert_eq!(
-                    *kind,
-                    CalloutKind::Obsidian(ObsidianCalloutKind::Danger)
-                );
-                assert_eq!(*title, None);
-                assert_eq!(*foldable, None);
-            }
-            _ => panic!("Expected Callout node"),
-        }
+        let decl = &callout_node.children[0];
+        assert_callout_decl_data(
+            decl,
+            CalloutKind::Obsidian(ObsidianCalloutKind::Danger),
+            None,
+            None,
+        );
     }
 
     #[test]
@@ -851,8 +863,8 @@ mod tests {
         let callout_node =
             callout_node_of_gfm_blockquote(blockquote, md).unwrap();
         assert_snapshot!(callout_node, @r#"
-        Callout { kind: Custom(Llm), title: None, foldable: None } [0..47]
-          CalloutDeclaraion [2..9]
+        Callout [0..47]
+          CalloutDeclaraion { kind: Custom(Llm), title: None, foldable: None } [2..9]
             Paragraph [2..9]
               Text(Borrowed("[")) [2..3]
               Text(Borrowed("!LLM")) [3..7]
@@ -864,18 +876,13 @@ mod tests {
         "#);
 
         // Assert metadata
-        match &callout_node.kind {
-            NodeKind::Callout {
-                kind,
-                title,
-                foldable,
-            } => {
-                assert_eq!(*kind, CalloutKind::Custom(CustomCalloutKind::Llm));
-                assert_eq!(*title, None);
-                assert_eq!(*foldable, None);
-            }
-            _ => panic!("Expected Callout node"),
-        }
+        let decl = &callout_node.children[0];
+        assert_callout_decl_data(
+            decl,
+            CalloutKind::Custom(CustomCalloutKind::Llm),
+            None,
+            None,
+        );
     }
 
     #[test]
@@ -899,8 +906,8 @@ mod tests {
         let callout_node =
             callout_node_of_gfm_blockquote(blockquote, md).unwrap();
         assert_snapshot!(callout_node, @r#"
-        Callout { kind: Obsidian(Info), title: Some("Callouts can have custom titles"), foldable: None } [0..58]
-          CalloutDeclaraion [2..42]
+        Callout [0..58]
+          CalloutDeclaraion { kind: Obsidian(Info), title: Some("Callouts can have custom titles"), foldable: None } [2..42]
             Paragraph [2..42]
               Text(Borrowed("[")) [2..3]
               Text(Borrowed("!INFO")) [3..8]
@@ -913,24 +920,13 @@ mod tests {
         "#);
 
         // Assert metadata
-        match &callout_node.kind {
-            NodeKind::Callout {
-                kind,
-                title,
-                foldable,
-            } => {
-                assert_eq!(
-                    *kind,
-                    CalloutKind::Obsidian(ObsidianCalloutKind::Info)
-                );
-                assert_eq!(
-                    *title,
-                    Some("Callouts can have custom titles".to_string())
-                );
-                assert_eq!(*foldable, None);
-            }
-            _ => panic!("Expected Callout node"),
-        }
+        let decl = &callout_node.children[0];
+        assert_callout_decl_data(
+            decl,
+            CalloutKind::Obsidian(ObsidianCalloutKind::Info),
+            Some("Callouts can have custom titles"),
+            None,
+        );
     }
 
     #[test]
@@ -954,8 +950,8 @@ mod tests {
         let callout_node =
             callout_node_of_gfm_blockquote(blockquote, md).unwrap();
         assert_snapshot!(callout_node, @r#"
-        Callout { kind: Obsidian(Question), title: Some("Custom Question Title"), foldable: None } [0..50]
-          CalloutDeclaraion [2..36]
+        Callout [0..50]
+          CalloutDeclaraion { kind: Obsidian(Question), title: Some("Custom Question Title"), foldable: None } [2..36]
             Paragraph [2..36]
               Text(Borrowed("[")) [2..3]
               Text(Borrowed("!QUESTION")) [3..12]
@@ -968,21 +964,13 @@ mod tests {
         "#);
 
         // Assert metadata
-        match &callout_node.kind {
-            NodeKind::Callout {
-                kind,
-                title,
-                foldable,
-            } => {
-                assert_eq!(
-                    *kind,
-                    CalloutKind::Obsidian(ObsidianCalloutKind::Question)
-                );
-                assert_eq!(*title, Some("Custom Question Title".to_string()));
-                assert_eq!(*foldable, None);
-            }
-            _ => panic!("Expected Callout node"),
-        }
+        let decl = &callout_node.children[0];
+        assert_callout_decl_data(
+            decl,
+            CalloutKind::Obsidian(ObsidianCalloutKind::Question),
+            Some("Custom Question Title"),
+            None,
+        );
     }
 
     #[test]
@@ -1003,8 +991,8 @@ mod tests {
         let callout_node =
             callout_node_of_gfm_blockquote(blockquote, md).unwrap();
         assert_snapshot!(callout_node, @r#"
-        Callout { kind: Obsidian(Info), title: Some("Title-only callout"), foldable: None } [0..28]
-          CalloutDeclaraion [2..28]
+        Callout [0..28]
+          CalloutDeclaraion { kind: Obsidian(Info), title: Some("Title-only callout"), foldable: None } [2..28]
             Paragraph [2..28]
               Text(Borrowed("[")) [2..3]
               Text(Borrowed("!INFO")) [3..8]
@@ -1013,21 +1001,13 @@ mod tests {
         "#);
 
         // Assert metadata
-        match &callout_node.kind {
-            NodeKind::Callout {
-                kind,
-                title,
-                foldable,
-            } => {
-                assert_eq!(
-                    *kind,
-                    CalloutKind::Obsidian(ObsidianCalloutKind::Info)
-                );
-                assert_eq!(*title, Some("Title-only callout".to_string()));
-                assert_eq!(*foldable, None);
-            }
-            _ => panic!("Expected Callout node"),
-        }
+        let decl = &callout_node.children[0];
+        assert_callout_decl_data(
+            decl,
+            CalloutKind::Obsidian(ObsidianCalloutKind::Info),
+            Some("Title-only callout"),
+            None,
+        );
     }
 
     #[test]
@@ -1051,8 +1031,8 @@ mod tests {
         let callout_node =
             callout_node_of_gfm_blockquote(blockquote, md).unwrap();
         assert_snapshot!(callout_node, @r#"
-        Callout { kind: Obsidian(Question), title: Some("Are callouts foldable?"), foldable: Some(Expanded) } [0..49]
-          CalloutDeclaraion [2..33]
+        Callout [0..49]
+          CalloutDeclaraion { kind: Obsidian(Question), title: Some("Are callouts foldable?"), foldable: Some(Expanded) } [2..33]
             Paragraph [2..33]
               Text(Borrowed("[")) [2..3]
               Text(Borrowed("!FAQ")) [3..7]
@@ -1065,21 +1045,13 @@ mod tests {
         "#);
 
         // Assert metadata
-        match &callout_node.kind {
-            NodeKind::Callout {
-                kind,
-                title,
-                foldable,
-            } => {
-                assert_eq!(
-                    *kind,
-                    CalloutKind::Obsidian(ObsidianCalloutKind::Question)
-                );
-                assert_eq!(*title, Some("Are callouts foldable?".to_string()));
-                assert_eq!(*foldable, Some(FoldableState::Expanded));
-            }
-            _ => panic!("Expected Callout node"),
-        }
+        let decl = &callout_node.children[0];
+        assert_callout_decl_data(
+            decl,
+            CalloutKind::Obsidian(ObsidianCalloutKind::Question),
+            Some("Are callouts foldable?"),
+            Some(FoldableState::Expanded),
+        );
     }
 
     #[test]
@@ -1103,8 +1075,8 @@ mod tests {
         let callout_node =
             callout_node_of_gfm_blockquote(blockquote, md).unwrap();
         assert_snapshot!(callout_node, @r#"
-        Callout { kind: Obsidian(Question), title: Some("Are callouts foldable?"), foldable: Some(Collapsed) } [0..117]
-          CalloutDeclaraion [2..33]
+        Callout [0..117]
+          CalloutDeclaraion { kind: Obsidian(Question), title: Some("Are callouts foldable?"), foldable: Some(Collapsed) } [2..33]
             Paragraph [2..33]
               Text(Borrowed("[")) [2..3]
               Text(Borrowed("!FAQ")) [3..7]
@@ -1117,21 +1089,13 @@ mod tests {
         "#);
 
         // Assert metadata
-        match &callout_node.kind {
-            NodeKind::Callout {
-                kind,
-                title,
-                foldable,
-            } => {
-                assert_eq!(
-                    *kind,
-                    CalloutKind::Obsidian(ObsidianCalloutKind::Question)
-                );
-                assert_eq!(*title, Some("Are callouts foldable?".to_string()));
-                assert_eq!(*foldable, Some(FoldableState::Collapsed));
-            }
-            _ => panic!("Expected Callout node"),
-        }
+        let decl = &callout_node.children[0];
+        assert_callout_decl_data(
+            decl,
+            CalloutKind::Obsidian(ObsidianCalloutKind::Question),
+            Some("Are callouts foldable?"),
+            Some(FoldableState::Collapsed),
+        );
     }
 
     #[test]
@@ -1154,8 +1118,8 @@ mod tests {
         let callout_node =
             callout_node_of_gfm_blockquote(blockquote, md).unwrap();
         assert_snapshot!(callout_node, @r#"
-        Callout { kind: GFM(Note), title: None, foldable: None } [0..35]
-          CalloutDeclaraion [2..10]
+        Callout [0..35]
+          CalloutDeclaraion { kind: GFM(Note), title: None, foldable: None } [2..10]
             Paragraph [2..10]
               Text(Borrowed("[")) [2..3]
               Text(Borrowed("!NOTE")) [3..8]
@@ -1167,18 +1131,13 @@ mod tests {
         "#);
 
         // Assert metadata
-        match &callout_node.kind {
-            NodeKind::Callout {
-                kind,
-                title,
-                foldable,
-            } => {
-                assert_eq!(*kind, CalloutKind::GFM(BlockQuoteKind::Note));
-                assert_eq!(*title, None);
-                assert_eq!(*foldable, None);
-            }
-            _ => panic!("Expected Callout node"),
-        }
+        let decl = &callout_node.children[0];
+        assert_callout_decl_data(
+            decl,
+            CalloutKind::GFM(BlockQuoteKind::Note),
+            None,
+            None,
+        );
     }
 
     #[test]
@@ -1234,8 +1193,8 @@ mod tests {
         let callout_node =
             callout_node_of_gfm_blockquote(blockquote, md).unwrap();
         assert_snapshot!(callout_node, @r#"
-        Callout { kind: Obsidian(Abstract), title: None, foldable: None } [0..32]
-          CalloutDeclaraion [2..13]
+        Callout [0..32]
+          CalloutDeclaraion { kind: Obsidian(Abstract), title: None, foldable: None } [2..13]
             Paragraph [2..13]
               Text(Borrowed("[")) [2..3]
               Text(Borrowed("!SUMMARY")) [3..11]
@@ -1247,20 +1206,12 @@ mod tests {
         "#);
 
         // Assert metadata
-        match &callout_node.kind {
-            NodeKind::Callout {
-                kind,
-                title,
-                foldable,
-            } => {
-                assert_eq!(
-                    *kind,
-                    CalloutKind::Obsidian(ObsidianCalloutKind::Abstract)
-                );
-                assert_eq!(*title, None);
-                assert_eq!(*foldable, None);
-            }
-            _ => panic!("Expected Callout node"),
-        }
+        let decl = &callout_node.children[0];
+        assert_callout_decl_data(
+            decl,
+            CalloutKind::Obsidian(ObsidianCalloutKind::Abstract),
+            None,
+            None,
+        );
     }
 }

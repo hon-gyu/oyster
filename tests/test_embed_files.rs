@@ -73,10 +73,16 @@ fn test_render_image_resize() {
     <p id="7e162c">a paragraph ^7e162c</p>
 
     <p>A callout</p>
-    <blockquote id="warning">
+    <callout id="warning">
+    <callout-declaration>
+    <span class="callout-type">warning</span>
+    <span class="callout-title">Warning</span>
+    </callout-declaration>
+    <callout>
 
-    <p>[!Warning]<br>some warning</p>
-    </blockquote>
+    <p>some warning</p>
+    </callout>
+    </callout>
 
     <p>^warning</p>
 
@@ -140,10 +146,16 @@ fn test_render_image_resize() {
     <p class="embed-file header">📑 note2</p>
     </div>
     <div class="content">
-    <blockquote id="warning">
+    <callout id="warning">
+    <callout-declaration>
+    <span class="callout-type">warning</span>
+    <span class="callout-title">Warning</span>
+    </callout-declaration>
+    <callout>
 
-    <p>[!Warning]<br>some warning</p>
-    </blockquote>
+    <p>some warning</p>
+    </callout>
+    </callout>
     </div>
     </div>
     </p>

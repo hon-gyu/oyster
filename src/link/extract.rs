@@ -689,7 +689,7 @@ mod tests {
             Block {
                 path: "tests/data/vaults/tt/block.md",
                 identifier: "callout",
-                kind: BlockQuote,
+                kind: Callout,
                 range: 269..302,
             },
             Block {
@@ -841,12 +841,13 @@ mod tests {
           Paragraph [251..267]
             Link { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("#^quotation"), title: Borrowed(""), id: Borrowed("") } [251..265]
               Text(Borrowed("#^quotation")) [253..264]
-          BlockQuote [269..302]
-            Paragraph [271..302]
-              Text(Borrowed("[")) [271..272]
-              Text(Borrowed("!info")) [272..277]
-              Text(Borrowed("]")) [277..278]
-              Text(Borrowed(" this is a info callout")) [278..301]
+          Callout [269..302]
+            CalloutDeclaraion { kind: Obsidian(Info), title: Some("this is a info callout"), foldable: None } [271..302]
+              Paragraph [271..302]
+                Text(Borrowed("[")) [271..272]
+                Text(Borrowed("!info")) [272..277]
+                Text(Borrowed("]")) [277..278]
+                Text(Borrowed(" this is a info callout")) [278..301]
           Paragraph [303..312]
             Text(Borrowed("^")) [303..304]
             Text(Borrowed("callout")) [304..311]

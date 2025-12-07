@@ -1194,7 +1194,7 @@ mod tests {
         | Idx |    Reference     | Referenceable content | Identifier  |      Kind       |
         +-----+------------------+-----------------------+-------------+-----------------+
         |   0 | [[#^quotation]   | > quotatio            | quotation   | BlockQuote      |
-        |   1 | [[#^callout]     | > [!info]             | callout     | BlockQuote      |
+        |   1 | [[#^callout]     | > [!info]             | callout     | Callout         |
         |   2 | [[#^paragraph]   | paragraph             | paragraph   | InlineParagraph |
         |   3 | [[#^p-with-code] | paragraph             | p-with-code | InlineParagraph |
         |   4 | [[#^paragraph2]  | paragraph             | paragraph2  | Paragraph       |
