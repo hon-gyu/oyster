@@ -187,10 +187,8 @@ impl CalloutData {
 /// - `[!TYPE]+` - foldable, expanded by default
 /// - `[!TYPE]-` - foldable, collapsed by default
 ///
-/// Returns the complete callout metadata, or None if:
-/// - Already recognized by pulldown-cmark (Standard types)
-/// - Invalid spacing (2+ spaces)
-/// - Not a valid callout pattern
+/// Title is text after `[!TYPE(+|-)]` and until the softbreak, hardbreak, or end of
+/// paragraph node
 pub fn callout_data_of_gfm_blockquote(
     node: &Node,
     source_text: &str,
@@ -348,6 +346,181 @@ pub fn callout_data_of_gfm_blockquote(
         foldable,
         content_start_byte,
     })
+}
+
+/// Detect callout metadata by examining the first paragraph
+///
+/// Pattern: `[!TYPE(+|-)] optional title`
+/// Note: pulldown-cmark splits `[!TYPE]` into separate text nodes: "[", "!TYPE", "]"
+///
+/// Spacing rules:
+/// - Only 0-1 spaces between `>` and `[` are valid for callouts
+/// - 2+ spaces make it a regular blockquote
+///
+/// Foldable markers:
+/// - `[!TYPE]+` - foldable, expanded by default
+/// - `[!TYPE]-` - foldable, collapsed by default
+///
+/// Title is text after `[!TYPE(+|-)]` and until the softbreak, hardbreak, or end of
+/// paragraph node
+pub fn callout_node_of_gfm_blockquote<'a>(
+    node: &Node<'a>,
+    source_text: &str,
+) -> Option<Node<'a>> {
+    // Only process blockquote nodes
+    if !matches!(&node.kind, NodeKind::BlockQuote) {
+        return None;
+    }
+
+    // Find first paragraph child
+    let first_para = node.children.first()?;
+    if !matches!(&first_para.kind, NodeKind::Paragraph) {
+        return None;
+    }
+
+    // Check spacing: extract the blockquote prefix from source
+    // The blockquote node includes the `>` markers
+    let blockquote_src = source_text.get(node.start_byte..node.end_byte)?;
+    let first_line = blockquote_src.lines().next()?;
+
+    // Check if first line has the pattern `> [` or `>[`
+    // If it's `>  [` (2+ spaces), it's not a valid callout
+    if let Some(after_gt) = first_line.strip_prefix('>') {
+        // Count leading spaces
+        let spaces = after_gt.chars().take_while(|c| *c == ' ').count();
+        if spaces >= 2 {
+            // Invalid spacing for callout
+            return None;
+        }
+        // Valid spacing (0 or 1 space), continue
+    } else {
+        // Doesn't start with '>', shouldn't happen
+        return None;
+    }
+
+    // Check if we have at least 3 children: "[", "!TYPE", "]"
+    if first_para.children.len() < 3 {
+        return None;
+    }
+
+    // Get the first three nodes
+    let first = match &first_para.children[0].kind {
+        NodeKind::Text(s) => s.as_ref(),
+        _ => return None,
+    };
+
+    let second = match &first_para.children[1].kind {
+        NodeKind::Text(s) => s.as_ref(),
+        _ => return None,
+    };
+
+    let third = match &first_para.children[2].kind {
+        NodeKind::Text(s) => s.as_ref(),
+        _ => return None,
+    };
+
+    // Check pattern: first="[", second="!TYPE", third="]"
+    if first.trim() != "[" || third.trim() != "]" {
+        return None;
+    }
+
+    // Extract type from second node (should be "!TYPE")
+    if !second.starts_with('!') {
+        return None;
+    }
+
+    let type_str = &second[1..]; // Remove the "!"
+
+    // Try to resolve the type
+    let kind = if let Ok(kind) = CalloutKind::try_from(type_str) {
+        kind
+    } else {
+        // Unknown type - default to Note
+        CalloutKind::GFM(BlockQuoteKind::Note)
+    };
+
+    // Extract foldable state and custom title if present
+    // Both come in the 4th child (after "]")
+    let (foldable, title, content_start_byte) = if first_para.children.len() > 3
+    {
+        // Get the first text node after "]"
+        let first_after_bracket = &first_para.children[3];
+
+        if let NodeKind::Text(s) = &first_after_bracket.kind {
+            let text = s.as_ref();
+
+            // Check for foldable markers at the start
+            let (foldable_state, remaining_text) =
+                if let Some(rest) = text.strip_prefix('+') {
+                    (Some(FoldableState::Expanded), rest.trim())
+                } else if let Some(rest) = text.strip_prefix('-') {
+                    (Some(FoldableState::Collapsed), rest.trim())
+                } else {
+                    (None, text.trim())
+                };
+
+            // Collect title text (remaining text in this node + any following text nodes)
+            let mut title_parts = Vec::new();
+            if !remaining_text.is_empty() {
+                title_parts.push(remaining_text);
+            }
+
+            // Track the last node index used for title, to find content start
+            let mut last_title_node_idx = 3;
+
+            // Add any subsequent text nodes before line break
+            for (idx, child) in first_para.children[4..].iter().enumerate() {
+                match &child.kind {
+                    NodeKind::Text(s) => {
+                        title_parts.push(s.as_ref());
+                        last_title_node_idx = 4 + idx;
+                    }
+                    NodeKind::SoftBreak | NodeKind::HardBreak => {
+                        // Content starts after this line break
+                        last_title_node_idx = 4 + idx;
+                        break;
+                    }
+                    _ => {}
+                }
+            }
+
+            let title_str = title_parts.join("").trim().to_string();
+            let title_opt = if title_str.is_empty() {
+                None
+            } else {
+                Some(title_str)
+            };
+
+            // Calculate content start byte
+            // Content starts after the last node used for title/break
+            let content_byte =
+                if last_title_node_idx + 1 < first_para.children.len() {
+                    // There are more children after the title line, content starts at next node
+                    first_para.children[last_title_node_idx + 1].start_byte
+                } else {
+                    // No more children in first paragraph, content starts after it
+                    first_para.end_byte
+                };
+
+            (foldable_state, title_opt, content_byte)
+        } else {
+            // No text after bracket, content starts after this node
+            let content_byte = first_after_bracket.end_byte;
+            (None, None, content_byte)
+        }
+    } else {
+        // Only the [!TYPE] marker, content starts after the "]" node (index 2)
+        let content_byte = first_para.children[2].end_byte;
+        (None, None, content_byte)
+    };
+
+    let _ = Some(CalloutData {
+        kind,
+        title,
+        foldable,
+        content_start_byte,
+    });
+    todo!()
 }
 
 #[cfg(test)]

@@ -545,17 +545,9 @@ fn render_node(
             kind,
             title,
             foldable,
-            content_start_byte,
         } => {
-            let content_children = node
-                .children
-                .iter()
-                .filter(|&child| child.start_byte >= *content_start_byte)
-                .cloned()
-                .collect::<Vec<_>>();
-
             let children = render_nodes(
-                &content_children,
+                &node.children,
                 vault_path,
                 vault_db,
                 node_render_config,
@@ -1074,6 +1066,9 @@ fn render_node(
         MetadataBlock(_) => {
             // Metadata blocks should not be rendered
             html! {}
+        }
+        _ => {
+            todo!()
         }
     }
 }

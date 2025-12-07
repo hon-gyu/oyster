@@ -30,6 +30,9 @@ enum Commands {
         #[arg(short, long, default_value = "false")]
         no_filter_publish: bool,
 
+        #[arg(short, long, default_value = "true")]
+        preserve_softbreak: bool,
+
         #[arg(short, long, default_value = "build-time")]
         mermaid_render_mode: String,
 
@@ -50,6 +53,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             output: output_dir,
             theme,
             no_filter_publish,
+            preserve_softbreak,
             mermaid_render_mode,
             tikz_render_mode,
             quiver_render_mode,
@@ -68,6 +72,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 QuiverRenderMode::from_str(&quiver_render_mode)
                     .unwrap_or(QuiverRenderMode::Raw);
             let node_render_config = NodeRenderConfig {
+                preserve_softbreak,
                 mermaid_render_mode,
                 tikz_render_mode,
                 quiver_render_mode,

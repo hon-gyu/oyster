@@ -189,7 +189,6 @@ fn build_ast<'a>(
                         kind: callout_data.kind,
                         title: callout_data.title,
                         foldable: callout_data.foldable,
-                        content_start_byte: callout_data.content_start_byte,
                     };
                 }
 

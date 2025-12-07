@@ -60,9 +60,11 @@ pub enum NodeKind<'a> {
         title: Option<String>,
         /// Whether the callout is foldable and its default state
         foldable: Option<FoldableState>,
-        /// Byte offset where the callout content starts (after type declaration and title)
-        content_start_byte: usize,
     },
+    /// Container for callout title
+    CalloutTitle,
+    /// Container for callout content
+    CalloutContent,
     CodeBlock(CodeBlockKind<'a>),
     HtmlBlock,
     List(Option<u64>),
@@ -211,13 +213,13 @@ impl<'a> NodeKind<'a> {
                 kind,
                 title,
                 foldable,
-                content_start_byte,
             } => NodeKind::Callout {
                 kind,
                 title,
                 foldable,
-                content_start_byte,
             },
+            NodeKind::CalloutTitle => NodeKind::CalloutTitle,
+            NodeKind::CalloutContent => NodeKind::CalloutContent,
             NodeKind::CodeBlock(kb) => NodeKind::CodeBlock(kb.into_static()),
             NodeKind::HtmlBlock => NodeKind::HtmlBlock,
             NodeKind::List(v) => NodeKind::List(v),
