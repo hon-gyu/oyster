@@ -282,6 +282,15 @@ fn render_node(
                     .expect("Referenceable should have a slug");
 
                 if matches!(tgt, Referenceable::Asset { .. }) {
+                    // Calculate relative path for assets
+                    let base_slug = vault_db
+                        .get_slug_from_file_vault_path(&vault_path.to_path_buf())
+                        .expect("Current file should have a slug");
+                    let rel_tgt_slug = utils::get_relative_dest(
+                        Path::new(base_slug),
+                        Path::new(tgt_slug_path),
+                    );
+
                     // Detect embed asset type
                     let embeded_asset_kind = {
                         if {
@@ -322,7 +331,7 @@ fn render_node(
                                 img
                                     .embed-file.image
                                     embed-depth=(embed_depth)
-                                    src=(tgt_slug_path)
+                                    src=(rel_tgt_slug)
                                     alt=(alt_text)
                                     width=[width] height=[height]
                                     {}
