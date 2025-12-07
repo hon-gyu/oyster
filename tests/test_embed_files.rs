@@ -41,17 +41,17 @@ fn test_render_image_resize() {
     </p>
 
     <p>Embeded Image<br>
-    <img class="embed-file image" id="42-60" embed-depth="0" src="blue-image.png" alt="blue-image">
+    <img class="embed-file image" embed-depth="0" src="blue-image.png" alt="blue-image">
     </img>
     </p>
 
     <p>Scale width according to original aspect ratio<br>
-    <img class="embed-file image" id="111-135" embed-depth="0" src="blue-image.png" alt="blue-image" width="200">
+    <img class="embed-file image" embed-depth="0" src="blue-image.png" alt="blue-image" width="200">
     </img>
     </p>
 
     <p>Resize with width and height<br>
-    <img class="embed-file image" id="167-195" embed-depth="0" src="blue-image.png" alt="blue-image" width="100" height="150">
+    <img class="embed-file image" embed-depth="0" src="blue-image.png" alt="blue-image" width="100" height="150">
     </img>
     </p>
 

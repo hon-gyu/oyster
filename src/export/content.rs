@@ -42,6 +42,17 @@ impl Default for NodeRenderConfig {
     }
 }
 
+/// Extract content from HTML body tag, or strip structural tags if no body found
+fn extract_html_body(html: &str) -> Option<String> {
+    use scraper::{Html, Selector};
+    let document = Html::parse_document(html);
+    let body_selector = Selector::parse("body").unwrap();
+
+    let body = document.select(&body_selector).next()?;
+
+    Some(body.inner_html())
+}
+
 /// Find a node in the tree by its exact byte range
 fn find_node_by_range<'a>(
     node: &'a Node,
@@ -230,6 +241,20 @@ fn render_node(
                 max_embed_depth,
             );
 
+            // Extract query ```![[dest | query]]```
+            let query: Option<String> = if matches!(
+                &node.kind,
+                Image {
+                    link_type: LinkType::WikiLink { has_pothole: true },
+                    ..
+                }
+            ) {
+                let query = children.trim();
+                Some(query.to_string())
+            } else {
+                None
+            };
+
             let title_opt = if title.is_empty() {
                 None
             } else {
@@ -257,6 +282,7 @@ fn render_node(
                     .expect("Referenceable should have a slug");
 
                 if matches!(tgt, Referenceable::Asset { .. }) {
+                    // Detect embed asset type
                     let embeded_asset_kind = {
                         if {
                             Path::new(&tgt_slug_path)
@@ -280,27 +306,21 @@ fn render_node(
                             EmbededAssetKind::Unknown
                         }
                     };
+
+                    // Render embed asset
                     match embeded_asset_kind {
                         EmbededAssetKind::Image => {
-                            let resize_spec = &children;
+                            let resize = query.as_deref().unwrap_or("");
                             let (width, height) =
-                                utils::parse_resize_spec(resize_spec);
+                                utils::parse_resize_spec(resize);
                             let alt_text = Path::new(&tgt_slug_path)
                                 .file_stem()
                                 .unwrap()
                                 .to_str()
                                 .unwrap_or("");
-                            // src anchor id to be used as href in backlink
-                            let src_anchor_id = vault_db
-                                .get_reference_anchor_id(
-                                    &vault_path.to_path_buf(),
-                                    &range,
-                                )
-                                .expect("Image should have a src anchor id");
                             html! {
                                 img
                                     .embed-file.image
-                                    #(src_anchor_id)
                                     embed-depth=(embed_depth)
                                     src=(tgt_slug_path)
                                     alt=(alt_text)
@@ -309,12 +329,54 @@ fn render_node(
                             }
                         }
                         EmbededAssetKind::HTML => {
-                            html! {
-                                .embed-file.html
-                                #(src_anchor_id)
-                                embed-depth=(embed_depth)
-                                {
-                                    (include_str!(""))
+                            // Specify how html should be rendered
+                            let tgt_full_path = vault_db
+                                .get_vault_root_dir()
+                                .join(tgt_vault_path);
+                            let content = std::fs::read_to_string(
+                                &tgt_full_path,
+                            )
+                            .expect("Failed to read embedded HTML file");
+
+                            if let Some(query) = query {
+                                let fallback_content = html! {
+                                    .embed-file.html
+                                    embed-query=(query)
+                                    embed-query-parsing-error
+                                    embed-depth=(embed_depth)
+                                    {
+                                        (PreEscaped(&content))
+                                    }
+                                };
+                                match query.as_ref() {
+                                    "body" => {
+                                        let embed_content =
+                                            extract_html_body(&content);
+                                        if let Some(embed_content) =
+                                            embed_content
+                                        {
+                                            html! {
+                                                .embed-file.html
+                                                embed-query=(query)
+                                                embed-depth=(embed_depth)
+                                                {
+                                                    (PreEscaped(embed_content))
+                                                }
+                                            }
+                                        } else {
+                                            fallback_content
+                                        }
+                                    }
+                                    _ => fallback_content,
+                                }
+                            } else {
+                                // No query specified, render full content
+                                html! {
+                                    .embed-file.html
+                                    embed-depth=(embed_depth)
+                                    {
+                                        (PreEscaped(content))
+                                    }
                                 }
                             }
                         }
@@ -1153,33 +1215,6 @@ mod tests {
         .into_string()
     }
 
-    fn render_single_page(note_vault_path: &Path) -> String {
-        use tempfile::tempdir;
-        let temp_dir = tempdir().unwrap();
-        let temp_dir_path = temp_dir.path();
-
-        // Copy note to temp dir
-        let temp_note_path =
-            temp_dir_path.join(note_vault_path.file_name().unwrap());
-        fs::copy(note_vault_path, &temp_note_path).unwrap();
-
-        let vault_db = StaticVaultStore::new_from_dir(temp_dir_path, false);
-        let node_render_config = NodeRenderConfig::default();
-
-        let md_src = fs::read_to_string(&temp_note_path).unwrap();
-        let tree = Tree::new_with_default_opts(&md_src);
-        let markup = render_content(
-            &tree,
-            temp_dir_path,
-            &vault_db,
-            &node_render_config,
-            0,
-            1,
-        );
-
-        format_html_simple(&markup.into_string())
-    }
-
     /// Helper to write HTML to a file for visual inspection
     fn write_html_preview(html: &str, filename: &str) {
         let output_dir = PathBuf::from("target/test_output");
@@ -1279,7 +1314,7 @@ mod tests {
         </p>
 
         <h2 id="image-embed">Image Embed</h2>
-        <img class="embed-file image" id="423-441" embed-depth="0" src="blue-image.png" alt="blue-image">
+        <img class="embed-file image" embed-depth="0" src="blue-image.png" alt="blue-image">
         </img>
 
         <h2 id="additional-info">Additional Info</h2>

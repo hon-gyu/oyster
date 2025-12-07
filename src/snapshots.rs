@@ -12,6 +12,27 @@ mod tests {
     use insta::{assert_debug_snapshot, assert_snapshot};
 
     #[test]
+    fn embed_html_parse() {
+        let path = std::path::PathBuf::from(
+            "tests/data/vaults/embed_file/note_embed_html.md",
+        );
+        let md_src = std::fs::read_to_string(&path).unwrap();
+        let tree = Tree::new_with_default_opts(&md_src);
+        assert_snapshot!(&tree.root_node, @r#"
+        Document [1..58]
+          Paragraph [1..23]
+            Image { link_type: WikiLink { has_pothole: true }, dest_url: Borrowed("test.html "), title: Borrowed(""), id: Borrowed("") } [1..21]
+              Text(Borrowed(" body")) [15..20]
+          Rule [24..28]
+          Paragraph [29..44]
+            Image { link_type: WikiLink { has_pothole: false }, dest_url: Borrowed("test.html"), title: Borrowed(""), id: Borrowed("") } [29..42]
+              Text(Borrowed("test.html")) [32..41]
+          Paragraph [45..58]
+            Text(Borrowed("End of test.")) [45..57]
+        "#);
+    }
+
+    #[test]
     fn embed_parse() {
         let path =
             std::path::PathBuf::from("tests/data/vaults/embed_file/note_II.md");
