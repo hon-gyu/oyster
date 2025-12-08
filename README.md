@@ -2,6 +2,59 @@
 
 Open-source [Obsidian.md](https://obsidian.md/)
 
+## Usage
+
+### Installation
+
+Build from source:
+```bash
+cargo build --release
+```
+
+The binary will be available at `./target/release/markdown-tools`.
+
+### Generate Static Site
+
+Generate a static website from your Obsidian vault:
+
+```bash
+markdown-tools generate --output <OUTPUT_DIR> <VAULT_ROOT_DIR>
+```
+
+**Available options:**
+- `-o, --output <OUTPUT>` - Output directory for the generated site (required)
+- `-t, --theme <THEME>` - Theme to use (available themes: `dracula`, `tokyonight`, and `gruvbox`; default: `tokyonight`)
+- `-f, --filter-publish` - Whether to only export notes with the publish flag set in the frontmatter
+- `-p, --preserve-softbreak` - Render softbreaks as line breaks
+- `-m, --mermaid-render-mode <MODE>` - Render mermaid diagrams:
+  - `build-time`: Use `mmdc` to render at build time (default)
+  - `client-side`: Use mermaid.js in the browser
+- `--tikz-render-mode <MODE>` - Render TikZ diagrams:
+  - `build-time`: Use `latex2pdf` and `pdf2svg` (default)
+  - `client-side`: Use TikZTeX in browser
+- `--quiver-render-mode <MODE>` - Render Quiver diagrams:
+  - `build-time`: Use `latex2pdf` and `pdf2svg` (default)
+  - `raw-latex`: Keep raw LaTeX
+- `--custom-callout-css <FILE>` - Path to custom CSS file for callout customization
+
+**Example with options:**
+```bash
+markdown-tools generate \
+  --output ./dist \
+  --theme default \
+  --mermaid-render-mode client-side \
+  ./my-vault
+```
+
+### Local Development
+
+Test your generated site locally with:
+```bash
+python3 -m http.server 8000 --directory ./output/site
+```
+
+Then  open http://localhost:8000 in your browser.
+
 ## Progress (⬜ | 🚧 | ✅)
 - ✅ Parse markdown using [pulldown-cmark](https://github.com/pulldown-cmark/pulldown-cmark/) and build a syntax tree
 - ✅ [File / Note reference](https://help.obsidian.md/links#Link%20to%20a%20file)
