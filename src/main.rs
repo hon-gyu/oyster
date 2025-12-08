@@ -24,26 +24,28 @@ enum Commands {
         #[arg(short, long)]
         output: PathBuf,
 
+        /// CSS theme to use. Available themes: dracula, tokyonight, and gruvbox
         #[arg(short, long, default_value = "default")]
         theme: String,
 
-        #[arg(short, long, default_value = "false")]
-        no_filter_publish: bool,
+        /// Whether to only export notes with the publish flag set in the frontmatter
+        #[arg(short, long, default_value = "true")]
+        filter_publish: bool,
 
         /// Whether to render softbreaks as line breaks
         #[arg(short, long, default_value = "true")]
         preserve_softbreak: bool,
 
         /// Render mermaid diagrams using `mmdc` (build-time) or using mermaid.js (client-side)
-        #[arg(short, long, default_value = "build-time")]
+        #[arg(short, long, default_value = "client-side")]
         mermaid_render_mode: String,
 
         /// Render tikz diagrams using `latex2pdf` and `pdf2svg` (build-time) or TikZTeX (client-side)
-        #[arg(long, default_value = "build-time")]
+        #[arg(long, default_value = "client-side")]
         tikz_render_mode: String,
 
         /// Render tikz diagrams using `latex2pdf` and `pdf2svg` (build-time) or keeping raw LaTeX
-        #[arg(long, default_value = "build-time")]
+        #[arg(long, default_value = "raw")]
         quiver_render_mode: String,
 
         /// Path to custom CSS file for callout customization
@@ -60,7 +62,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             vault_root_dir,
             output: output_dir,
             theme,
-            no_filter_publish,
+            filter_publish,
             preserve_softbreak,
             mermaid_render_mode,
             tikz_render_mode,
@@ -91,7 +93,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 &vault_root_dir,
                 &output_dir,
                 &theme,
-                !no_filter_publish,
+                filter_publish,
                 &node_render_config,
                 custom_callout_css.as_deref(),
             )?;

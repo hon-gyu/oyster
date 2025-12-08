@@ -18,7 +18,7 @@ fn get_theme_css(name: &str) -> &'static str {
         "dracula" => DRACULA_CSS,
         "gruvbox" => GRUVBOX_CSS,
         "tokyonight" => TOKYONIGHT_CSS,
-        _ => GRUVBOX_CSS,
+        _ => TOKYONIGHT_CSS,
     }
 }
 
