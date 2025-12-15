@@ -51,12 +51,21 @@ pub fn render_vault(
     let vault_db =
         StaticVaultStore::new_from_dir(vault_root_dir, filter_publish);
 
+    // If home note path is not a markdown file, add .md
+    let home_note_path = home_note_path.map(|p| {
+        if p.extension() == Some("md".as_ref()) {
+            p.to_path_buf()
+        } else {
+            p.with_extension("md")
+        }
+    });
     let home_name = if let Some(home_name) = home_name {
         home_name
     } else {
-        if let Some(home_note_path) = home_note_path {
+        if let Some(home_note_path) = &home_note_path {
+            // Add
             vault_db
-                .get_title_from_note_vault_path(&home_note_path.to_path_buf())
+                .get_title_from_note_vault_path(&home_note_path)
                 .expect("Home note path provided but cannot find the note")
         } else {
             DEFAULT_HOME_NAME
@@ -113,8 +122,8 @@ pub fn render_vault(
         );
 
         // Home note only needs content
-        if let Some(home_note_path) = home_note_path {
-            if **note_vault_path == home_note_path.to_path_buf() {
+        if let Some(home_note_path) = &home_note_path {
+            if *note_vault_path == home_note_path {
                 home_note_content = Some(content);
                 continue;
             }
@@ -216,6 +225,7 @@ pub fn render_vault(
             h1 { "Home" }
             @if let Some(home_note_content) = home_note_content {
                 (home_note_content)
+                br;
             }
             (home_file_tree)
         }
