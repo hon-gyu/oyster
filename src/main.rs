@@ -32,6 +32,14 @@ enum Commands {
         #[arg(short, long, default_value = "true")]
         filter_publish: bool,
 
+        /// Path of note to use as the home page
+        #[arg(long)]
+        home_note_path: Option<PathBuf>,
+
+        /// Home page name
+        #[arg(long)]
+        home_name: Option<String>,
+
         /// Whether to render softbreaks as line breaks
         #[arg(short, long, default_value = "true")]
         preserve_softbreak: bool,
@@ -63,6 +71,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             output: output_dir,
             theme,
             filter_publish,
+            home_note_path,
+            home_name,
             preserve_softbreak,
             mermaid_render_mode,
             tikz_render_mode,
@@ -94,6 +104,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 &output_dir,
                 &theme,
                 filter_publish,
+                home_note_path.as_deref(),
+                home_name.as_deref(),
                 &node_render_config,
                 custom_callout_css.as_deref(),
             )?;

@@ -34,7 +34,7 @@ use maud::{DOCTYPE, Markup, PreEscaped, html};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-const HOME_NAME: &str = "home";
+const DEFAULT_HOME_NAME: &str = "home";
 const KATEX_ASSETS_DIR_IN_OUTPUT: &str = "katex";
 
 pub fn render_vault(
@@ -42,14 +42,26 @@ pub fn render_vault(
     output_dir: &Path,
     theme: &str,
     filter_publish: bool,
+    home_note_path: Option<&Path>,
+    home_name: Option<&str>,
     node_render_config: &NodeRenderConfig,
     custom_callout_css: Option<&Path>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let home_name = HOME_NAME.to_string();
-
     // Create vault DB
     let vault_db =
         StaticVaultStore::new_from_dir(vault_root_dir, filter_publish);
+
+    let home_name = if let Some(home_name) = home_name {
+        home_name
+    } else {
+        if let Some(home_note_path) = home_note_path {
+            vault_db
+                .get_title_from_note_vault_path(&home_note_path.to_path_buf())
+                .expect("Home note path provided but cannot find the note")
+        } else {
+            DEFAULT_HOME_NAME
+        }
+    };
 
     let note_vault_paths = vault_db.get_note_vault_paths();
 
@@ -82,6 +94,7 @@ pub fn render_vault(
     });
 
     // Render each page
+    let mut home_note_content: Option<Markup> = None;
     for note_vault_path in &note_vault_paths {
         let md_src = fs::read_to_string(vault_root_dir.join(note_vault_path))?;
         let tree = Tree::new_with_default_opts(&md_src);
@@ -89,6 +102,23 @@ pub fn render_vault(
             .get_slug_from_file_vault_path(note_vault_path)
             .expect("Note path should be slugified and stored in vault_db");
         let note_slug_path = Path::new(&note_slug);
+
+        let content = render_content(
+            &tree,
+            note_vault_path,
+            &vault_db,
+            node_render_config,
+            0,
+            5,
+        );
+
+        // Home note only needs content
+        if let Some(home_note_path) = home_note_path {
+            if **note_vault_path == home_note_path.to_path_buf() {
+                home_note_content = Some(content);
+                continue;
+            }
+        }
 
         let title = vault_db
             .get_title_from_note_vault_path(note_vault_path)
@@ -111,15 +141,6 @@ pub fn render_vault(
                     .get_innote_refable_anchor_id(&path.to_path_buf(), &range)
                     .map(|s| s.to_string())
             },
-        );
-
-        let content = render_content(
-            &tree,
-            note_vault_path,
-            &vault_db,
-            node_render_config,
-            0,
-            5,
         );
 
         let backlink = render_backlinks(note_vault_path, &vault_db);
@@ -169,7 +190,7 @@ pub fn render_vault(
     }
 
     let home_slug_path = format!("{}.html", home_name);
-    let home_content = home::render_home_page(
+    let home_file_tree = home::render_home_page_file_tree(
         vault_db.get_referenceables(),
         |path| {
             vault_db
@@ -193,7 +214,10 @@ pub fn render_vault(
     let home_main_content = html! {
         article {
             h1 { "Home" }
-            (home_content)
+            @if let Some(home_note_content) = home_note_content {
+                (home_note_content)
+            }
+            (home_file_tree)
         }
     };
     let home_html = render_page(

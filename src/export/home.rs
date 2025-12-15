@@ -80,7 +80,7 @@ fn render_file_tree_node(node: &TreeNode<FileTreeItem>) -> Markup {
     }
 }
 
-pub fn render_home_page<F>(
+pub fn render_home_page_file_tree<F>(
     referenceables: &[Referenceable],
     vault_path_to_slug: F,
     home_slug_path: &Path,
