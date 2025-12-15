@@ -102,6 +102,7 @@ Then open http://localhost:8000/home.html in your browser.
   - ⬜ query CLI
     - ⬜ filter by frontmatter 
     - ⬜ table to csv
+- ⬜ SSG hot reload
 - ⬜ LSP (inspired by [markdown-oxide](https://github.com/Feel-ix-343/markdown-oxide))
 
 ### Long-term
