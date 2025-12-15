@@ -1,6 +1,13 @@
-# markdown-tools (WIP name)
+# OysterMD
 
-Open-source [Obsidian.md](https://obsidian.md/)
+OysterMD is open-source alternative to [Obsidian.md](https://obsidian.md/), a local-first knowledge management system based on plain markdown files with bidirectional linking to build an interconnected knowledge graph. 
+
+- AST generation for CommonMark specification, Github-flavored Markdown, and Obsidian-specific extensions[^1].
+- Static site generator: publish vault to HTML (alternative to [Obsidian Publish](https://obsidian.md/publish))
+- Optional extensions: Mermaid diagrams, TikZ, Quiver, HTML embeds
+- More to come: markdown transclusion, jq-like query language for markdown, UI, LSP...
+
+[^1]: wikilinks, embeded notes, callouts
 
 ## Usage
 
@@ -11,14 +18,14 @@ Build from source:
 cargo build --release
 ```
 
-The binary will be available at `./target/release/markdown-tools`.
+The binary will be available at `./target/release/oyster`.
 
 ### Generate Static Site
 
 Generate a static website from your Obsidian vault:
 
 ```bash
-markdown-tools generate --output <OUTPUT_DIR> <VAULT_ROOT_DIR>
+oyster generate --output <OUTPUT_DIR> <VAULT_ROOT_DIR>
 ```
 
 **Available options:**
@@ -39,7 +46,7 @@ markdown-tools generate --output <OUTPUT_DIR> <VAULT_ROOT_DIR>
 
 **Example with options:**
 ```bash
-markdown-tools generate \
+oyster generate \
   --output ./dist \
   --theme default \
   --mermaid-render-mode client-side \
@@ -63,7 +70,7 @@ Then open http://localhost:8000 in your browser.
 - ✅ [Block reference](https://help.obsidian.md/links#Link%20to%20a%20block%20in%20a%20note)
 - SSG
   - ✅ v0: minijina + pulldown-cmarks's html writer; backlinks component; correct links
-  - ✅ v1: type-safe ast-based html writer; backlinks component;
+  - ✅ v1: type-safe ast-based html writer ([maud](https://maud.lambda.xyz/)); backlinks component;
   - ✅ more components
     - ✅ TOC
     - ✅ Explorer
@@ -106,3 +113,4 @@ Then open http://localhost:8000 in your browser.
 
 ## Ideas & Explorations 
 - Vault as some sort of database
+- CRDT
