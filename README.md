@@ -1,7 +1,8 @@
 # OysterMD
 
-OysterMD is open-source alternative to [Obsidian.md](https://obsidian.md/), a local-first knowledge management system based on plain markdown files with bidirectional linking to build an interconnected knowledge graph. 
+OysterMD is an open-source alternative to [Obsidian.md](https://obsidian.md/), a local-first knowledge management system based on plain markdown files with bidirectional linking to build an interconnected knowledge graph. OysterMD aims to fully implement Obsidian's features while extending them with new capabilities.
 
+Features:
 - AST generation for CommonMark specification, Github-flavored Markdown, and Obsidian-specific extensions[^1].
 - Static site generator: publish vault to HTML (alternative to [Obsidian Publish](https://obsidian.md/publish))
 - Optional extensions: Mermaid diagrams, TikZ, Quiver, HTML embeds
