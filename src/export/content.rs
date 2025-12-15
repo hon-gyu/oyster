@@ -284,7 +284,9 @@ fn render_node(
                 if matches!(tgt, Referenceable::Asset { .. }) {
                     // Calculate relative path for assets
                     let base_slug = vault_db
-                        .get_slug_from_file_vault_path(&vault_path.to_path_buf())
+                        .get_slug_from_file_vault_path(
+                            &vault_path.to_path_buf(),
+                        )
                         .expect("Current file should have a slug");
                     let rel_tgt_slug = utils::get_relative_dest(
                         Path::new(base_slug),
@@ -1239,13 +1241,13 @@ mod tests {
         let vault_root_dir = Path::new("tests/data/vaults/minimal");
 
         // Scan the vault
-        let (fronmatters_vec, referenceables, references) =
+        let (frontmatters_vec, referenceables, references) =
             scan_vault(vault_root_dir, vault_root_dir, false);
 
         // Build frontmatters map
-        let fronmatters = referenceables
+        let frontmatters = referenceables
             .iter()
-            .zip(fronmatters_vec)
+            .zip(frontmatters_vec)
             .map(|(referenceable, fm)| (referenceable.path().to_path_buf(), fm))
             .collect();
 
@@ -1253,12 +1255,12 @@ mod tests {
         let file_level_info = FileLevelInfo {
             referenceables,
             references,
-            fronmatters,
+            frontmatters,
         };
         let vault_level_info = VaultLevelInfo::new(
             &file_level_info.referenceables,
             &file_level_info.references,
-            &file_level_info.fronmatters,
+            &file_level_info.frontmatters,
         );
 
         // Create vault DB

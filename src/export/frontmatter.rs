@@ -3,7 +3,7 @@ use serde_yaml::Value;
 
 const FRONTMATTER_IGNORE_KEYS: [&str; 3] = ["title", "publish", "draft"];
 
-// Render fronmatter
+// Render frontmatter
 //
 // It differs from render_yaml in:
 // - value must be a mapping
@@ -69,8 +69,7 @@ fn render_yaml(value: &Value) -> Markup {
         }
         Value::Null => html! { (String::from("null")) },
         Value::Sequence(seq) => {
-            let seq_html =
-                seq.iter().map(render_yaml).collect::<Vec<Markup>>();
+            let seq_html = seq.iter().map(render_yaml).collect::<Vec<Markup>>();
             html! {
                 ul {
                     @for item in seq_html.iter() {

@@ -42,7 +42,7 @@ pub struct FileLevelInfo {
     pub referenceables: Vec<Referenceable>,
     pub references: Vec<Reference>,
     /// Map: file vault path |-> frontmatter
-    pub fronmatters: HashMap<PathBuf, Option<Value>>,
+    pub frontmatters: HashMap<PathBuf, Option<Value>>,
 }
 
 pub struct VaultLevelInfo {
@@ -65,7 +65,7 @@ impl VaultLevelInfo {
     pub fn new(
         referenceables: &Vec<Referenceable>,
         references: &Vec<Reference>,
-        fronmatters: &HashMap<PathBuf, Option<Value>>,
+        frontmatters: &HashMap<PathBuf, Option<Value>>,
     ) -> VaultLevelInfo {
         let (links, unresolved) = build_links(references, referenceables);
 
@@ -90,7 +90,7 @@ impl VaultLevelInfo {
         let note_vault_path_to_title_map = note_vault_paths
             .iter()
             .map(|&path| {
-                let title = fronmatters
+                let title = frontmatters
                     .get(path)
                     .expect("Did not find maybe frontmatter for note")
                     .as_ref()
@@ -353,13 +353,13 @@ impl StaticVaultStore {
 
     pub fn new_from_dir(vault_root_dir: &Path, filter_publish: bool) -> Self {
         // Scan the vault
-        let (fronmatters_vec, referenceables, references) =
+        let (frontmatters_vec, referenceables, references) =
             scan_vault(vault_root_dir, vault_root_dir, filter_publish);
 
         // Build frontmatters map
-        let fronmatters = referenceables
+        let frontmatters = referenceables
             .iter()
-            .zip(fronmatters_vec)
+            .zip(frontmatters_vec)
             .map(|(referenceable, fm)| (referenceable.path().to_path_buf(), fm))
             .collect();
 
@@ -367,12 +367,12 @@ impl StaticVaultStore {
         let file_level_info = FileLevelInfo {
             referenceables,
             references,
-            fronmatters,
+            frontmatters,
         };
         let vault_level_info = VaultLevelInfo::new(
             &file_level_info.referenceables,
             &file_level_info.references,
-            &file_level_info.fronmatters,
+            &file_level_info.frontmatters,
         );
 
         // Create vault DB
@@ -460,7 +460,7 @@ impl VaultDB for StaticVaultStore {
 
     fn get_frontmatter(&self, path: &PathBuf) -> Option<&Value> {
         self.file_level_info
-            .fronmatters
+            .frontmatters
             .get(path)
             .and_then(|opt| opt.as_ref())
     }
