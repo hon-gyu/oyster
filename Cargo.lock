@@ -672,33 +672,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c41e0c4fef86961ac6d6f8a82609f55f31b05e4fce149ac5710e439df7619ba4"
 
 [[package]]
-name = "markdown-tools"
-version = "0.1.0"
-dependencies = [
- "clap",
- "ego-tree",
- "insta",
- "itertools 0.14.0",
- "katex",
- "maud",
- "minijinja",
- "nonempty",
- "pathdiff",
- "percent-encoding",
- "pulldown-cmark",
- "pulldown-cmark-escape",
- "regex",
- "rstest",
- "scraper",
- "serde",
- "serde_yaml",
- "similar",
- "tempfile",
- "tree-sitter",
- "url",
-]
-
-[[package]]
 name = "markup5ever"
 version = "0.36.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -769,6 +742,33 @@ name = "once_cell_polyfill"
 version = "1.70.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a4895175b425cb1f87721b59f0f286c2092bd4af812243672510e1ac53e2e0ad"
+
+[[package]]
+name = "oyster"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "ego-tree",
+ "insta",
+ "itertools 0.14.0",
+ "katex",
+ "maud",
+ "minijinja",
+ "nonempty",
+ "pathdiff",
+ "percent-encoding",
+ "pulldown-cmark",
+ "pulldown-cmark-escape",
+ "regex",
+ "rstest",
+ "scraper",
+ "serde",
+ "serde_yaml",
+ "similar",
+ "tempfile",
+ "tree-sitter",
+ "url",
+]
 
 [[package]]
 name = "parking_lot"

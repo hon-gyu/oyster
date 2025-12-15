@@ -1,10 +1,10 @@
 mod test_utils;
 
 use insta::*;
-use markdown_tools::ast::Tree;
-use markdown_tools::export::NodeRenderConfig;
-use markdown_tools::export::content;
-use markdown_tools::export::vault_db::StaticVaultStore;
+use oyster::ast::Tree;
+use oyster::export::NodeRenderConfig;
+use oyster::export::content;
+use oyster::export::vault_db::StaticVaultStore;
 use std::fs;
 use std::path::Path;
 use test_utils::{format_html_simple, render_full_html};

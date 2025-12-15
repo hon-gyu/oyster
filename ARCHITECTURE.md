@@ -1,8 +1,8 @@
-# Markdown-Tools Architecture Document
+# OysterMD Architecture Document
 
 ## Project Overview
 
-**markdown-tools** is a Rust-based static site generator (SSG) for Obsidian.md vaults. It transforms markdown files with Obsidian-specific features (wikilinks, block references, embeds, etc.) into a fully-featured static HTML website with inter-note linking, table of contents, file explorer, and LaTeX support.
+**oyster** is a Rust-based static site generator (SSG) for Obsidian.md vaults. It transforms markdown files with Obsidian-specific features (wikilinks, block references, embeds, etc.) into a fully-featured static HTML website with inter-note linking, table of contents, file explorer, and LaTeX support.
 
 ## High-Level Architecture
 
@@ -56,7 +56,7 @@ The CLI interface using `clap` for argument parsing.
 
 **Command:**
 ```bash
-markdown-tools generate <vault_root_dir> --output <output_dir> [--theme default|dracula|gruvbox|tokyonight] [--no-filter-publish]
+oyster generate <vault_root_dir> --output <output_dir> [--theme default|dracula|gruvbox|tokyonight] [--no-filter-publish]
 ```
 
 **Key Responsibilities:**
@@ -740,7 +740,7 @@ output/
 ## Key Design Decisions
 
 ### 1. **Byte-Range-Based Linking**
-Instead of regenerating heading/block anchors, markdown-tools uses the exact byte ranges from the parser. This ensures:
+Instead of regenerating heading/block anchors, oyster uses the exact byte ranges from the parser. This ensures:
 - Unique, deterministic anchor IDs
 - Direct correlation between reference byte range and target anchor range
 - Robustness against changes in heading text
@@ -877,4 +877,4 @@ From `README.md`:
 
 ## Conclusion
 
-markdown-tools uses a modular, multi-phase architecture to transform Obsidian vaults into linked HTML sites. The separation of scanning, link resolution, and rendering enables global optimization and accurate cross-note linking. The use of type-safe templating (maud) and proper string handling (CowStr) ensures correctness and efficiency.
+oyster uses a modular, multi-phase architecture to transform Obsidian vaults into linked HTML sites. The separation of scanning, link resolution, and rendering enables global optimization and accurate cross-note linking. The use of type-safe templating (maud) and proper string handling (CowStr) ensures correctness and efficiency.

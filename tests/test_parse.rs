@@ -1,5 +1,5 @@
 use insta::assert_snapshot;
-use markdown_tools::ast::Tree;
+use oyster::ast::Tree;
 use std::fs;
 
 #[test]

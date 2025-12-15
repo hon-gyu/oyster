@@ -60,7 +60,7 @@ Test your generated site locally with:
 python3 -m http.server 8000 --directory ./output/site
 ```
 
-Then open http://localhost:8000 in your browser.
+Then open http://localhost:8000/home.html in your browser.
 
 ## Progress (⬜ | 🚧 | ✅)
 - ✅ Parse markdown using [pulldown-cmark](https://github.com/pulldown-cmark/pulldown-cmark/) and build a syntax tree

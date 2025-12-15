@@ -32,7 +32,7 @@ fn split_dest_string(s: &str) -> (&str, Option<Vec<&str>>, Option<&str>) {
 
 /// Parse a string into a vector of nested headings.
 /// ```
-/// use markdown_tools::link::resolve::parse_nested_heading;
+/// use oyster::link::resolve::parse_nested_heading;
 /// assert_eq!(parse_nested_heading("##A###B"), vec!["A", "B"]);
 /// assert_eq!(parse_nested_heading("A##B"), vec!["A", "B"]);
 /// assert_eq!(parse_nested_heading("A#####C#B"), vec!["A", "C", "B"]);
@@ -56,7 +56,7 @@ pub fn parse_nested_heading(s: &str) -> Vec<&str> {
 ///
 /// Examples
 /// ```
-/// use markdown_tools::link::resolve::match_subsequence;
+/// use oyster::link::resolve::match_subsequence;
 /// assert_eq!(match_subsequence(&[1, 2, 3, 4], &[1, 3]), Some(2));
 /// assert_eq!(match_subsequence(&[1, 2, 3, 4], &[2, 4]), Some(3));
 /// assert_eq!(match_subsequence(&[1, 2, 3, 4], &[1, 2, 3, 4]), Some(3));

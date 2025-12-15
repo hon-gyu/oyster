@@ -1,12 +1,12 @@
 use clap::{Parser, Subcommand};
-use markdown_tools::export::{
+use oyster::export::{
     MermaidRenderMode, NodeRenderConfig, QuiverRenderMode, TikzRenderMode,
     render_vault,
 };
 use std::path::PathBuf;
 
 #[derive(Parser)]
-#[command(name = "markdown-tools")]
+#[command(name = "oyster")]
 #[command(about = "Tools for working with Markdown(s)", long_about = None)]
 struct Cli {
     #[command(subcommand)]
