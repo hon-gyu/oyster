@@ -3,6 +3,6 @@
 docs/dev
 .obsidian/
 *.pending-snap
-
+.issues/
 # Local Netlify folder
 .netlify

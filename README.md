@@ -30,18 +30,18 @@ oyster generate --output <OUTPUT_DIR> <VAULT_ROOT_DIR>
 ```
 
 **Available options:**
-- `-o, --output <OUTPUT>` - Output directory for the generated site (required)
+- `-o, --output <OUTPUT>` - Output directory for the generated site
 - `-t, --theme <THEME>` - Theme to use (available themes: `dracula`, `tokyonight`, and `gruvbox`; default: `tokyonight`)
 - `-f, --filter-publish` - Whether to only export notes with the publish flag set in the frontmatter
 - `-p, --preserve-softbreak` - Render softbreaks as line breaks
 - `-m, --mermaid-render-mode <MODE>` - Options for rendering [mermaid](https://mermaid.js.org/) diagrams:
-  - `build-time`: Use `mmdc` to render at build time (default)
+  - `build-time`: Use `mmdc` to render at build time
   - `client-side`: Use mermaid.js in the browser
 - `--tikz-render-mode <MODE>` - Options for rendering TikZ diagrams:
-  - `build-time`: Use `latex2pdf` and `pdf2svg` (default)
+  - `build-time`: Use `latex2pdf` and `pdf2svg`
   - `client-side`: Use TikZTeX in browser
 - `--quiver-render-mode <MODE>` - Options for rendering [Quiver](https://github.com/varkor/quiver) diagrams:
-  - `build-time`: Use `latex2pdf` and `pdf2svg` (default)
+  - `build-time`: Use `latex2pdf` and `pdf2svg`
   - `raw-latex`: Keep raw LaTeX
 - `--custom-callout-css <FILE>` - Path to custom CSS file for callout customization
 
