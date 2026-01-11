@@ -3,6 +3,7 @@ pub mod export;
 pub mod hierarchy;
 pub mod link;
 pub mod parse;
+pub mod serve;
 pub mod snapshots;
 pub mod validate;
 pub mod value;
