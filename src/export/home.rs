@@ -1,5 +1,5 @@
 use super::utils::get_relative_dest;
-use crate::hierarchy::{FileTreeItem, TreeNode, build_file_tree};
+use crate::hierarchy::{FileTreeItem, HierarchyNode, build_file_tree};
 use crate::link::Referenceable;
 use maud::{Markup, html};
 use std::path::{Path, PathBuf};
@@ -52,7 +52,7 @@ pub fn render_breadcrumb(
 }
 
 /// Render a file tree node recursively
-fn render_file_tree_node(node: &TreeNode<FileTreeItem>) -> Markup {
+fn render_file_tree_node(node: &HierarchyNode<FileTreeItem>) -> Markup {
     if node.value.is_directory() {
         // Directory with children
         html! {
