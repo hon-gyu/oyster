@@ -25,6 +25,14 @@ tempfile = "3.23.0"
 tree-sitter = "0.25.9"
 url = "2.5.7"
 
+# Serve and watch
+tokio = { version = "1", features = ["full"] }
+axum = "0.8"
+tower-livereload = "0.9"
+notify-debouncer-mini = "0.5"
+tower = "0.5"
+tower-http = { version = "0.6", features = ["fs"] }
+
 [dev-dependencies]
 insta = { version = "1.43.1", features = ["yaml"] }
 rstest = "0.26.1"
