@@ -37,16 +37,17 @@ use std::path::{Path, PathBuf};
 const DEFAULT_HOME_NAME: &str = "home";
 const KATEX_ASSETS_DIR_IN_OUTPUT: &str = "katex";
 
+/// Returns the home page slug path
 pub fn render_vault(
     vault_root_dir: &Path,
     output_dir: &Path,
     theme: &str,
     filter_publish: bool,
-    home_note_path: Option<&Path>,
-    home_name: Option<&str>,
+    home_note_path: Option<&Path>, // If not provided, the home page will still be present but with no content
+    home_name: Option<&str>,       // If not provided, default to "home"
     node_render_config: &NodeRenderConfig,
     custom_callout_css: Option<&Path>,
-) -> Result<(), Box<dyn std::error::Error>> {
+) -> Result<String, Box<dyn std::error::Error>> {
     // Create vault DB
     let vault_db =
         StaticVaultStore::new_from_dir(vault_root_dir, filter_publish);
@@ -247,7 +248,7 @@ pub fn render_vault(
     // Copy katex assets
     cp_katex_assets(output_dir)?;
 
-    Ok(())
+    Ok(home_slug_path)
 }
 
 fn render_page(
