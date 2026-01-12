@@ -11,12 +11,12 @@ pub trait Hierarchical {
 
 /// A tree node that can hold hierarchical children
 #[derive(Debug)]
-pub struct TreeNode<T> {
+pub struct HierarchyNode<T> {
     pub value: T,
-    pub children: Vec<TreeNode<T>>,
+    pub children: Vec<HierarchyNode<T>>,
 }
 
-impl<T> TreeNode<T> {
+impl<T> HierarchyNode<T> {
     pub fn new(value: T) -> Self {
         Self {
             value,
@@ -31,16 +31,18 @@ impl<T> TreeNode<T> {
 /// and builds a tree structure based on their levels. Items with higher levels
 /// become children of items with lower levels.
 ///
+/// The absolute value of level doesn't matter, only the relative order.
+///
 /// # Example
 /// Given headings: H1, H2, H3, H2
 /// The tree will be: H1 -> [H2 -> [H3], H2]
-pub fn build_tree<T: Hierarchical>(items: Vec<T>) -> Vec<TreeNode<T>> {
+pub fn build_tree<T: Hierarchical>(items: Vec<T>) -> Vec<HierarchyNode<T>> {
     let mut roots = Vec::new();
-    let mut stack: Vec<TreeNode<T>> = Vec::new();
+    let mut stack: Vec<HierarchyNode<T>> = Vec::new();
 
     for item in items {
         let curr_level = item.level();
-        let node = TreeNode::new(item);
+        let node = HierarchyNode::new(item);
 
         // Pop nodes from stack that are at the same or deeper level
         while let Some(top) = stack.last() {
@@ -101,7 +103,7 @@ pub fn build_file_tree<F>(
     vault_slug: &Path,
     referenceables: &[Referenceable],
     vault_path_to_slug: &F,
-) -> Vec<TreeNode<FileTreeItem>>
+) -> Vec<HierarchyNode<FileTreeItem>>
 where
     F: Fn(&PathBuf) -> Option<String>,
 {
@@ -165,8 +167,6 @@ where
     items.sort_by(|a, b| a.path.cmp(&b.path));
 
     // Build tree using Hierarchical trait
-    
-
     build_tree(items)
 }
 

@@ -3,6 +3,7 @@ pub mod export;
 pub mod hierarchy;
 pub mod link;
 pub mod parse;
+#[cfg(feature = "serve")]
 pub mod serve;
 pub mod snapshots;
 pub mod validate;

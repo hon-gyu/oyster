@@ -1,3 +1,5 @@
+#![cfg(feature = "serve")]
+
 use std::fs;
 use std::io::Write;
 use std::process::{Child, Command, Stdio};
