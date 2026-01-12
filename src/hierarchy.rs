@@ -24,6 +24,11 @@ impl<T> HierarchyItem<T> {
             children: Vec::new(),
         }
     }
+
+    /// Chained indexing
+    pub fn query_by_index(&self, index: &[usize]) -> Option<&HierarchyItem<T>> {
+        todo!()
+    }
 }
 
 /// Build a tree from a flat list of hierarchical items
@@ -79,11 +84,33 @@ pub fn build_compact_tree<T: Hierarchical>(
 
 /// Build a tree from a flat list of hierarchical items
 ///
+/// Example:
+/// - eg: 1
+///   input: A(1), B(3), C(2)
+///   output:
+///     - A (1)
+///       - default as H2 (1.0)
+///         - B (1.0.1)
+///       - C (1.1)
+/// - eg: 2
+///   input: A(2), B(4), B1(3), C(2), D(3), E(3), F(4)
+///   output: |
+///     | number  | title |
+///     | ------- | :---: |
+///     | 0.1     |   A   |
+///     | 0.1.0.1 |   B   |
+///     | 0.1.1   |  B1   |
+///     | 0.2     |   C   |
+///     | 0.2.1   |   D   |
+///     | 0.2.2   |   E   |
+///     | 0.2.2.1 |   F   |
+///
 /// Contract:
 /// - the return items covers all levels from the minimum to the maximum of
 ///     the input items. We create new items for empty levels.
 /// - len(return items) >= len(input items)
-pub fn build_loose_tree<T: Hierarchical>(
+/// - raise if minimum level is non-positive
+pub fn build_loose_tree<T: Hierarchical + Default>(
     items: Vec<T>,
 ) -> Vec<HierarchyItem<T>> {
     todo!()
