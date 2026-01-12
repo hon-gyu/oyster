@@ -1,4 +1,5 @@
 //! Generic trait and utilities for building hierarchical tree structures
+//! The absolute value of level doesn't matter, only the relative order.
 use crate::export::utils::get_relative_dest;
 use crate::link::Referenceable;
 use std::collections::BTreeSet;
