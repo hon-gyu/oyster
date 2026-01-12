@@ -1,4 +1,4 @@
-use crate::hierarchy::{Hierarchical, HierarchyNode, build_tree};
+use crate::hierarchy::{Hierarchical, HierarchyItem, build_tree};
 use crate::link::Referenceable;
 use maud::{Markup, html};
 use std::ops::Range;
@@ -115,7 +115,7 @@ where
 }
 
 /// Recursively render a TOC tree node and its children as markup
-fn render_toc_node(node: &HierarchyNode<TocItem>) -> Markup {
+fn render_toc_node(node: &HierarchyItem<TocItem>) -> Markup {
     html! {
         li {
             a href=(format!("#{}", node.value.anchor_id)) { (node.value.text) }

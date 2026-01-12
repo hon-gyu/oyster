@@ -9,14 +9,14 @@ pub trait Hierarchical {
     fn level(&self) -> usize;
 }
 
-/// A tree node that can hold hierarchical children
+/// A sub-tree in a hierarchy that contains the node itself and its children
 #[derive(Debug)]
-pub struct HierarchyNode<T> {
+pub struct HierarchyItem<T> {
     pub value: T,
-    pub children: Vec<HierarchyNode<T>>,
+    pub children: Vec<HierarchyItem<T>>,
 }
 
-impl<T> HierarchyNode<T> {
+impl<T> HierarchyItem<T> {
     pub fn new(value: T) -> Self {
         Self {
             value,
@@ -36,13 +36,13 @@ impl<T> HierarchyNode<T> {
 /// # Example
 /// Given headings: H1, H2, H3, H2
 /// The tree will be: H1 -> [H2 -> [H3], H2]
-pub fn build_tree<T: Hierarchical>(items: Vec<T>) -> Vec<HierarchyNode<T>> {
+pub fn build_tree<T: Hierarchical>(items: Vec<T>) -> Vec<HierarchyItem<T>> {
     let mut roots = Vec::new();
-    let mut stack: Vec<HierarchyNode<T>> = Vec::new();
+    let mut stack: Vec<HierarchyItem<T>> = Vec::new();
 
     for item in items {
         let curr_level = item.level();
-        let node = HierarchyNode::new(item);
+        let node = HierarchyItem::new(item);
 
         // Pop nodes from stack that are at the same or deeper level
         while let Some(top) = stack.last() {
@@ -103,7 +103,7 @@ pub fn build_file_tree<F>(
     vault_slug: &Path,
     referenceables: &[Referenceable],
     vault_path_to_slug: &F,
-) -> Vec<HierarchyNode<FileTreeItem>>
+) -> Vec<HierarchyItem<FileTreeItem>>
 where
     F: Fn(&PathBuf) -> Option<String>,
 {

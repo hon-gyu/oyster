@@ -1,4 +1,4 @@
-use crate::hierarchy::{FileTreeItem, HierarchyNode, build_file_tree};
+use crate::hierarchy::{FileTreeItem, HierarchyItem, build_file_tree};
 use crate::link::Referenceable;
 use maud::{Markup, html};
 use std::path::{Path, PathBuf};
@@ -30,7 +30,7 @@ where
 
 /// Render a file tree node recursively with Unicode tree characters
 fn render_file_tree_node(
-    node: &HierarchyNode<FileTreeItem>,
+    node: &HierarchyItem<FileTreeItem>,
     is_last: bool,
     prefix: &str,
 ) -> Markup {
