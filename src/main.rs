@@ -2,8 +2,10 @@ use clap::{Args, Parser, Subcommand};
 use oyster::export::{
     MermaidRenderMode, NodeRenderConfig, QuiverRenderMode, TikzRenderMode, render_vault,
 };
+#[cfg(feature = "serve")]
 use oyster::serve::{ServeConfig, serve_site};
 use std::path::PathBuf;
+#[cfg(feature = "serve")]
 use tempfile;
 
 #[derive(Parser)]
@@ -109,6 +111,7 @@ enum Commands {
     },
 
     /// Serve the generated site with optional live reload
+    #[cfg(feature = "serve")]
     Serve {
         #[command(flatten)]
         args: GenerateArgs,
@@ -131,6 +134,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             args.generate(&output)?;
         }
 
+        #[cfg(feature = "serve")]
         Commands::Serve { args, port, watch } => {
             // Use temp directory for output
             let temp_dir = tempfile::tempdir()?;
