@@ -21,6 +21,11 @@ cargo build --release
 
 The binary will be available at `./target/release/oyster`.
 
+To build with the `serve` command (adds ~95 dependencies for local dev server with live reload):
+```bash
+cargo build --release --features serve
+```
+
 ### Generate Static Site
 
 Generate a static website from your Obsidian vault:
