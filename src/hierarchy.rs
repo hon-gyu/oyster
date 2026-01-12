@@ -77,6 +77,18 @@ pub fn build_compact_tree<T: Hierarchical>(
     roots
 }
 
+/// Build a tree from a flat list of hierarchical items
+///
+/// Contract:
+/// - the return items covers all levels from the minimum to the maximum of
+///     the input items. We create new items for empty levels.
+/// - len(return items) >= len(input items)
+pub fn build_loose_tree<T: Hierarchical>(
+    items: Vec<T>,
+) -> Vec<HierarchyItem<T>> {
+    todo!()
+}
+
 // File tree
 // ====================
 
@@ -172,6 +184,9 @@ where
     // Build tree using Hierarchical trait
     build_compact_tree(items)
 }
+
+// Test
+// ====================
 
 #[cfg(test)]
 mod tests {
