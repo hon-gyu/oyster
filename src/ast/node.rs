@@ -53,6 +53,7 @@ pub enum NodeKind<'a> {
     },
     // We don't enable GFM during pulldown-cmark parsing
     BlockQuote,
+    /// This is not pulldown-cmark's built-in node kind
     Callout {
         kind: CalloutKind,
         foldable: Option<FoldableState>,

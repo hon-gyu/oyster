@@ -32,12 +32,15 @@ impl<T> HierarchyItem<T> {
 /// and builds a tree structure based on their levels. Items with higher levels
 /// become children of items with lower levels.
 ///
-/// The absolute value of level doesn't matter, only the relative order.
+/// Explanation of "compact"
+/// - the absolute value of level doesn't matter, only the relative order.
 ///
 /// # Example
 /// Given headings: H1, H2, H3, H2
 /// The tree will be: H1 -> [H2 -> [H3], H2]
-pub fn build_tree<T: Hierarchical>(items: Vec<T>) -> Vec<HierarchyItem<T>> {
+pub fn build_compact_tree<T: Hierarchical>(
+    items: Vec<T>,
+) -> Vec<HierarchyItem<T>> {
     let mut roots = Vec::new();
     let mut stack: Vec<HierarchyItem<T>> = Vec::new();
 
@@ -74,7 +77,6 @@ pub fn build_tree<T: Hierarchical>(items: Vec<T>) -> Vec<HierarchyItem<T>> {
     roots
 }
 
-// ====================
 // File tree
 // ====================
 
@@ -168,7 +170,7 @@ where
     items.sort_by(|a, b| a.path.cmp(&b.path));
 
     // Build tree using Hierarchical trait
-    build_tree(items)
+    build_compact_tree(items)
 }
 
 #[cfg(test)]
@@ -204,7 +206,7 @@ mod tests {
             },
         ];
 
-        let tree = build_tree(items);
+        let tree = build_compact_tree(items);
         assert_eq!(tree.len(), 1);
         assert_eq!(tree[0].value.name, "H1");
         assert_eq!(tree[0].children.len(), 1);
@@ -230,7 +232,7 @@ mod tests {
             },
         ];
 
-        let tree = build_tree(items);
+        let tree = build_compact_tree(items);
         assert_eq!(tree.len(), 1);
         assert_eq!(tree[0].children.len(), 2);
         assert_eq!(tree[0].children[0].value.name, "H3");
@@ -254,7 +256,7 @@ mod tests {
             },
         ];
 
-        let tree = build_tree(items);
+        let tree = build_compact_tree(items);
         assert_eq!(tree.len(), 2);
         assert_eq!(tree[0].value.name, "H1a");
         assert_eq!(tree[1].value.name, "H1b");
