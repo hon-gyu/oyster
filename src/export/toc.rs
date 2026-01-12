@@ -46,6 +46,7 @@ where
         .filter(|refable| refable.path() == vault_path)
         .collect::<Vec<_>>();
 
+    /// - rec
     fn get_heading<M>(
         vault_path: &Path,
         referenceable: &Referenceable,
