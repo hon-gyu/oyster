@@ -135,6 +135,9 @@ pub fn build_compact_tree<T: Hierarchical>(
 
 /// Build a tree from a flat list of hierarchical items
 ///
+/// Empty level gets index 0
+/// Real items get indices starting from 1 based on their order among siblings at each level
+///
 /// Example:
 /// - eg: 1
 ///   input: A(1), B(3), C(2)
@@ -163,9 +166,9 @@ pub fn build_compact_tree<T: Hierarchical>(
 /// - raise if minimum level is non-positive
 pub fn build_loose_tree<T: HierarchicalWithDefaults>(
     items: Vec<T>,
-) -> Result<Vec<HierarchyItem<T>>, String> {
+) -> Result<(Vec<HierarchyItem<T>>, Vec<Vec<usize>>), String> {
     if items.is_empty() {
-        return Ok(Vec::new());
+        return Ok((Vec::new(), Vec::new()));
     }
 
     // Find min level
@@ -177,25 +180,33 @@ pub fn build_loose_tree<T: HierarchicalWithDefaults>(
     }
 
     let mut roots = Vec::new();
-    let mut stack: Vec<(usize, HierarchyItem<T>)> = Vec::new();
+    let mut stack: Vec<(usize, HierarchyItem<T>, bool)> = Vec::new(); // (level, node, is_default)
+    let mut section_numbers = Vec::new(); // Store section number for each input item
+
+    // Track the number of real children at each level in the current path
+    let mut real_child_counts: Vec<usize> = vec![0; 10]; // Assuming max 10 levels
 
     // Ensure level 1 exists - insert defaults from 1 to min_level - 1
     for level in 1..min_level {
         let default_node = HierarchyItem::new(T::default_at_level(level));
-        stack.push((level, default_node));
+        stack.push((level, default_node, true));
     }
 
     for item in items {
         let curr_level = item.level();
 
         // Pop items at same or deeper level
-        while let Some((top_level, _)) = stack.last() {
+        while let Some((top_level, _, _)) = stack.last() {
             if *top_level >= curr_level {
-                let (_, popped) = stack.pop().unwrap();
-                if let Some((_, parent)) = stack.last_mut() {
+                let (_, popped, _) = stack.pop().unwrap();
+                if let Some((_, parent, _)) = stack.last_mut() {
                     parent.children.push(popped);
                 } else {
                     roots.push(popped);
+                }
+                // Reset count for this level
+                if stack.len() < real_child_counts.len() {
+                    real_child_counts[stack.len()] = 0;
                 }
             } else {
                 break;
@@ -203,35 +214,50 @@ pub fn build_loose_tree<T: HierarchicalWithDefaults>(
         }
 
         // Insert default items for level gaps between stack top and current
-        if let Some((top_level, _)) = stack.last() {
+        if let Some((top_level, _, _)) = stack.last() {
             for level in (top_level + 1)..curr_level {
                 let default_node =
                     HierarchyItem::new(T::default_at_level(level));
-                stack.push((level, default_node));
+                stack.push((level, default_node, true));
             }
         } else if curr_level > 1 {
             // Stack is empty but current item is not at level 1
             for level in 1..curr_level {
                 let default_node =
                     HierarchyItem::new(T::default_at_level(level));
-                stack.push((level, default_node));
+                stack.push((level, default_node, true));
             }
         }
 
+        // Calculate section number for this real item
+        let mut section = Vec::new();
+        for (i, (_, _, is_default)) in stack.iter().enumerate() {
+            if *is_default {
+                section.push(0);
+            } else {
+                // This is a real item in the path
+                section.push(real_child_counts[i]);
+            }
+        }
+        // Add the current item's index
+        real_child_counts[stack.len()] += 1;
+        section.push(real_child_counts[stack.len()]);
+        section_numbers.push(section);
+
         let node = HierarchyItem::new(item);
-        stack.push((curr_level, node));
+        stack.push((curr_level, node, false));
     }
 
     // Pop remaining items from stack
-    while let Some((_, node)) = stack.pop() {
-        if let Some((_, parent)) = stack.last_mut() {
+    while let Some((_, node, _)) = stack.pop() {
+        if let Some((_, parent, _)) = stack.last_mut() {
             parent.children.push(node);
         } else {
             roots.push(node);
         }
     }
 
-    Ok(roots)
+    Ok((roots, section_numbers))
 }
 
 // File tree
@@ -450,7 +476,7 @@ mod tests {
     #[test]
     fn test_build_loose_tree_example1() {
         // Example 1: A(1), B(3), C(2)
-        let roots =
+        let (roots, section_numbers) =
             build_loose_tree(items(&[(1, "A"), (3, "B"), (2, "C")])).unwrap();
         assert_eq!(roots.len(), 1);
         let output = format!("{}", roots[0]);
@@ -460,12 +486,16 @@ mod tests {
         │   └── ### B
         └── ## C
         ");
+
+        // Verify section numbers
+        let section_output = format!("{:?}", section_numbers);
+        assert_snapshot!(section_output, @"[[1], [1, 0, 1], [1, 1]]");
     }
 
     #[test]
     fn test_build_loose_tree_example2() {
         // Example 2: A(2), B(4), B1(3), C(2), D(3), E(3), F(4)
-        let roots = build_loose_tree(items(&[
+        let (roots, section_numbers) = build_loose_tree(items(&[
             (2, "A"),
             (4, "B"),
             (3, "B1"),
@@ -488,6 +518,10 @@ mod tests {
             └── ### E
                 └── #### F
         ");
+
+        // Verify section numbers
+        let section_output = format!("{:?}", section_numbers);
+        assert_snapshot!(section_output, @"[[0, 1], [0, 1, 0, 1], [0, 1, 1], [0, 1], [0, 1, 1], [0, 1, 1], [0, 1, 1, 1]]");
     }
 
     #[test]
@@ -500,7 +534,8 @@ mod tests {
     #[test]
     fn test_build_loose_tree_empty() {
         let items: Vec<TestItem> = vec![];
-        let roots = build_loose_tree(items).unwrap();
+        let (roots, section_numbers) = build_loose_tree(items).unwrap();
         assert_eq!(roots.len(), 0);
+        assert_eq!(section_numbers.len(), 0);
     }
 }
