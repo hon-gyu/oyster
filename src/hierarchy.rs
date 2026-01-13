@@ -3,11 +3,19 @@
 use crate::export::utils::get_relative_dest;
 use crate::link::Referenceable;
 use std::collections::BTreeSet;
+use std::fmt;
 use std::path::{Path, PathBuf};
 
 /// Trait for types that have a hierarchical level
 pub trait Hierarchical {
     fn level(&self) -> usize;
+}
+
+/// Trait for hierarchical types that can create default items at specific levels
+/// This is used for gap-filling in loose tree construction
+pub trait HierarchicalWithDefaults: Hierarchical {
+    /// Create a default item at a specific level for gap filling
+    fn default_at_level(level: usize) -> Self;
 }
 
 /// A sub-tree in a hierarchy that contains the node itself and its children
@@ -28,6 +36,49 @@ impl<T> HierarchyItem<T> {
     /// Chained indexing
     pub fn query_by_index(&self, index: &[usize]) -> Option<&HierarchyItem<T>> {
         todo!()
+    }
+
+    /// Helper function to format the tree with a prefix
+    fn fmt_with_prefix(
+        &self,
+        f: &mut fmt::Formatter<'_>,
+        prefix: &str,
+    ) -> fmt::Result
+    where
+        T: fmt::Display,
+    {
+        // Print current node
+        writeln!(f, "{}", self.value)?;
+
+        // Print children
+        let child_count = self.children.len();
+        for (i, child) in self.children.iter().enumerate() {
+            let is_last_child = i == child_count - 1;
+
+            // Print the branch character
+            if is_last_child {
+                write!(f, "{}└── ", prefix)?;
+            } else {
+                write!(f, "{}├── ", prefix)?;
+            }
+
+            // Determine the prefix for the child's children
+            let child_prefix = if is_last_child {
+                format!("{}    ", prefix)
+            } else {
+                format!("{}│   ", prefix)
+            };
+
+            child.fmt_with_prefix(f, &child_prefix)?;
+        }
+
+        Ok(())
+    }
+}
+
+impl<T: fmt::Display> fmt::Display for HierarchyItem<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.fmt_with_prefix(f, "")
     }
 }
 
@@ -110,10 +161,77 @@ pub fn build_compact_tree<T: Hierarchical>(
 ///     the input items. We create new items for empty levels.
 /// - len(return items) >= len(input items)
 /// - raise if minimum level is non-positive
-pub fn build_loose_tree<T: Hierarchical + Default>(
+pub fn build_loose_tree<T: HierarchicalWithDefaults>(
     items: Vec<T>,
-) -> Vec<HierarchyItem<T>> {
-    todo!()
+) -> Result<Vec<HierarchyItem<T>>, String> {
+    if items.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    // Find min level
+    let min_level = items.iter().map(|item| item.level()).min().unwrap();
+
+    // Check if minimum level is non-positive
+    if min_level <= 0 {
+        return Err("Minimum level must be positive (> 0)".to_string());
+    }
+
+    let mut roots = Vec::new();
+    let mut stack: Vec<(usize, HierarchyItem<T>)> = Vec::new();
+
+    // Ensure level 1 exists - insert defaults from 1 to min_level - 1
+    for level in 1..min_level {
+        let default_node = HierarchyItem::new(T::default_at_level(level));
+        stack.push((level, default_node));
+    }
+
+    for item in items {
+        let curr_level = item.level();
+
+        // Pop items at same or deeper level
+        while let Some((top_level, _)) = stack.last() {
+            if *top_level >= curr_level {
+                let (_, popped) = stack.pop().unwrap();
+                if let Some((_, parent)) = stack.last_mut() {
+                    parent.children.push(popped);
+                } else {
+                    roots.push(popped);
+                }
+            } else {
+                break;
+            }
+        }
+
+        // Insert default items for level gaps between stack top and current
+        if let Some((top_level, _)) = stack.last() {
+            for level in (top_level + 1)..curr_level {
+                let default_node =
+                    HierarchyItem::new(T::default_at_level(level));
+                stack.push((level, default_node));
+            }
+        } else if curr_level > 1 {
+            // Stack is empty but current item is not at level 1
+            for level in 1..curr_level {
+                let default_node =
+                    HierarchyItem::new(T::default_at_level(level));
+                stack.push((level, default_node));
+            }
+        }
+
+        let node = HierarchyItem::new(item);
+        stack.push((curr_level, node));
+    }
+
+    // Pop remaining items from stack
+    while let Some((_, node)) = stack.pop() {
+        if let Some((_, parent)) = stack.last_mut() {
+            parent.children.push(node);
+        } else {
+            roots.push(node);
+        }
+    }
+
+    Ok(roots)
 }
 
 // File tree
@@ -137,6 +255,17 @@ impl FileTreeItem {
 impl Hierarchical for FileTreeItem {
     fn level(&self) -> usize {
         self.depth
+    }
+}
+
+impl HierarchicalWithDefaults for FileTreeItem {
+    fn default_at_level(level: usize) -> Self {
+        Self {
+            name: String::new(),
+            path: PathBuf::new(),
+            slug: None,
+            depth: level,
+        }
     }
 }
 
@@ -218,6 +347,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use insta::assert_snapshot;
 
     #[derive(Debug, PartialEq)]
     struct TestItem {
@@ -231,78 +361,146 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_build_tree_simple() {
-        let items = vec![
-            TestItem {
-                level: 1,
-                name: "H1".to_string(),
-            },
-            TestItem {
-                level: 2,
-                name: "H2".to_string(),
-            },
-            TestItem {
-                level: 3,
-                name: "H3".to_string(),
-            },
-        ];
+    impl HierarchicalWithDefaults for TestItem {
+        fn default_at_level(level: usize) -> Self {
+            Self {
+                level,
+                name: "<default>".to_string(),
+            }
+        }
+    }
 
-        let tree = build_compact_tree(items);
-        assert_eq!(tree.len(), 1);
-        assert_eq!(tree[0].value.name, "H1");
-        assert_eq!(tree[0].children.len(), 1);
-        assert_eq!(tree[0].children[0].value.name, "H2");
-        assert_eq!(tree[0].children[0].children.len(), 1);
-        assert_eq!(tree[0].children[0].children[0].value.name, "H3");
+    impl std::fmt::Display for TestItem {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            let level_prefix: String =
+                vec!['#'.to_string(); self.level].join("");
+            write!(f, "{} {}", level_prefix, self.name)
+        }
+    }
+
+    /// Helper function to create test items from (level, name) tuples
+    fn items(specs: &[(usize, &str)]) -> Vec<TestItem> {
+        specs
+            .iter()
+            .map(|(level, name)| TestItem {
+                level: *level,
+                name: name.to_string(),
+            })
+            .collect()
     }
 
     #[test]
-    fn test_build_tree_with_level_jump() {
-        let items = vec![
-            TestItem {
-                level: 1,
-                name: "H1".to_string(),
-            },
-            TestItem {
-                level: 3,
-                name: "H3".to_string(),
-            },
-            TestItem {
-                level: 2,
-                name: "H2".to_string(),
-            },
-        ];
-
-        let tree = build_compact_tree(items);
+    fn test_build_compact_tree_simple() {
+        let tree =
+            build_compact_tree(items(&[(1, "H1"), (2, "H2"), (3, "H3")]));
         assert_eq!(tree.len(), 1);
-        assert_eq!(tree[0].children.len(), 2);
-        assert_eq!(tree[0].children[0].value.name, "H3");
-        assert_eq!(tree[0].children[1].value.name, "H2");
+        let output = format!("{}", tree[0]);
+        assert_snapshot!(output, @r"
+        # H1
+        └── ## H2
+            └── ### H3
+        ");
     }
 
     #[test]
-    fn test_build_tree_multiple_roots() {
-        let items = vec![
-            TestItem {
-                level: 1,
-                name: "H1a".to_string(),
-            },
-            TestItem {
-                level: 2,
-                name: "H2".to_string(),
-            },
-            TestItem {
-                level: 1,
-                name: "H1b".to_string(),
-            },
-        ];
+    fn test_build_compact_tree_with_level_jump() {
+        let tree =
+            build_compact_tree(items(&[(1, "H1"), (3, "H3"), (2, "H2")]));
+        assert_eq!(tree.len(), 1);
+        let output = format!("{}", tree[0]);
+        assert_snapshot!(output, @r"
+        # H1
+        ├── ### H3
+        └── ## H2
+        ");
+    }
 
-        let tree = build_compact_tree(items);
+    #[test]
+    fn test_build_compact_tree_multiple_roots() {
+        let tree =
+            build_compact_tree(items(&[(1, "H1a"), (2, "H2"), (1, "H1b")]));
         assert_eq!(tree.len(), 2);
-        assert_eq!(tree[0].value.name, "H1a");
-        assert_eq!(tree[1].value.name, "H1b");
-        assert_eq!(tree[0].children.len(), 1);
-        assert_eq!(tree[0].children[0].value.name, "H2");
+        let output = format!("{}\n\n{}", tree[0], tree[1]);
+        assert_snapshot!(output, @r"
+        # H1a
+        └── ## H2
+
+
+        # H1b
+        ");
+    }
+
+    #[test]
+    fn test_display_hierarchy() {
+        let tree = build_compact_tree(items(&[
+            (1, "H1"),
+            (2, "H2"),
+            (3, "H3"),
+            (2, "H2b"),
+        ]));
+        let output = format!("{}", tree[0]);
+        assert_snapshot!(output, @r"
+        # H1
+        ├── ## H2
+        │   └── ### H3
+        └── ## H2b
+        ");
+    }
+
+    #[test]
+    fn test_build_loose_tree_example1() {
+        // Example 1: A(1), B(3), C(2)
+        let roots =
+            build_loose_tree(items(&[(1, "A"), (3, "B"), (2, "C")])).unwrap();
+        assert_eq!(roots.len(), 1);
+        let output = format!("{}", roots[0]);
+        assert_snapshot!(output, @r"
+        # A
+        ├── ## <default>
+        │   └── ### B
+        └── ## C
+        ");
+    }
+
+    #[test]
+    fn test_build_loose_tree_example2() {
+        // Example 2: A(2), B(4), B1(3), C(2), D(3), E(3), F(4)
+        let roots = build_loose_tree(items(&[
+            (2, "A"),
+            (4, "B"),
+            (3, "B1"),
+            (2, "C"),
+            (3, "D"),
+            (3, "E"),
+            (4, "F"),
+        ]))
+        .unwrap();
+        assert_eq!(roots.len(), 1);
+        let output = format!("{}", roots[0]);
+        assert_snapshot!(output, @r"
+        # <default>
+        ├── ## A
+        │   ├── ### <default>
+        │   │   └── #### B
+        │   └── ### B1
+        └── ## C
+            ├── ### D
+            └── ### E
+                └── #### F
+        ");
+    }
+
+    #[test]
+    fn test_build_loose_tree_non_positive_level() {
+        let result = build_loose_tree(items(&[(0, "Invalid")]));
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("positive"));
+    }
+
+    #[test]
+    fn test_build_loose_tree_empty() {
+        let items: Vec<TestItem> = vec![];
+        let roots = build_loose_tree(items).unwrap();
+        assert_eq!(roots.len(), 0);
     }
 }
