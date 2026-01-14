@@ -195,22 +195,34 @@ pub fn build_relative_tree<T: Hierarchical>(
 ///
 /// Contract:
 /// - returns a single tree rooted at level 1
-/// - the tree covers all levels from 1 to the maximum level of the input items
+/// - the tree covers all levels from 1 (or specified min level) to the
+///   maximum level of the input items
 /// - we create default items for empty levels (gap-filling)
 /// - returns Err if input is empty or minimum level is non-positive
 pub fn build_padded_tree<T: HierarchicalWithDefaults>(
     items: Vec<T>,
+    // The minimum level of the tree to build. If not specified, the minimum
+    // level will be the minimum level of the input items.
+    // The specified minimum level must be less than or equal to the maximum
+    min_level: Option<usize>,
 ) -> Result<HierarchyItem<T>, String> {
     if items.is_empty() {
         return Err("Cannot build tree from empty input".to_string());
     }
 
     // Find min level
-    let min_level = items.iter().map(|item| item.level()).min().unwrap();
+    let existing_min_level =
+        items.iter().map(|item| item.level()).min().unwrap();
+    // Root level: where the tree should start
+    // - If min_level is specified, use it (allows level 0 for document root)
+    // - If not specified, default to 1 (ensures single root)
+    let root_level = min_level.unwrap_or(1);
 
-    // Check if minimum level is non-positive
-    if min_level <= 0 {
-        return Err("Minimum level must be positive (> 0)".to_string());
+    if existing_min_level < root_level {
+        return Err(format!(
+            "Cannot build tree with root level {} as items start at level {}",
+            root_level, existing_min_level
+        ));
     }
 
     let mut roots = Vec::new();
@@ -219,10 +231,10 @@ pub fn build_padded_tree<T: HierarchicalWithDefaults>(
     // Track the number of real children at each level in the current path
     let mut real_child_counts: Vec<usize> = vec![0; 10]; // Assuming max 10 levels
 
-    // Ensure level 1 exists - insert defaults from 1 to min_level - 1
-    for level in 1..min_level {
-        // Index for initial defaults: [0], [0, 0], [0, 0, 0], etc.
-        let index: Vec<usize> = vec![0; level];
+    // Insert defaults from root_level to existing_min_level - 1
+    for level in root_level..existing_min_level {
+        // Index length is depth + 1, where depth = level - root_level
+        let index: Vec<usize> = vec![0; level - root_level + 1];
         let mut default_node =
             HierarchyItem::new(T::default_at_level(level, Some(index.clone())));
         default_node.index = Some(index);
@@ -270,11 +282,11 @@ pub fn build_padded_tree<T: HierarchicalWithDefaults>(
                 default_node.index = Some(index);
                 stack.push((level, default_node, true));
             }
-        } else if curr_level > 1 {
-            // Stack is empty but current item is not at level 1
-            for level in 1..curr_level {
-                // Index for initial defaults: [0], [0, 0], etc.
-                let index: Vec<usize> = vec![0; level];
+        } else if curr_level > root_level {
+            // Stack is empty but current item is not at root_level
+            for level in root_level..curr_level {
+                // Index length is depth + 1, where depth = level - root_level
+                let index: Vec<usize> = vec![0; level - root_level + 1];
                 let mut default_node = HierarchyItem::new(T::default_at_level(
                     level,
                     Some(index.clone()),
@@ -536,7 +548,8 @@ mod tests {
     fn test_build_loose_tree_example1() {
         // Example 1: A(1), B(3), C(2)
         let root =
-            build_padded_tree(items(&[(1, "A"), (3, "B"), (2, "C")])).unwrap();
+            build_padded_tree(items(&[(1, "A"), (3, "B"), (2, "C")]), None)
+                .unwrap();
         let output = format!("{}", root);
         assert_snapshot!(output, @r"
         # A (1)
@@ -549,15 +562,18 @@ mod tests {
     #[test]
     fn test_build_loose_tree_example2() {
         // Example 2: A(2), B(4), B1(3), C(2), D(3), E(3), F(4)
-        let root = build_padded_tree(items(&[
-            (2, "A"),
-            (4, "B"),
-            (3, "B1"),
-            (2, "C"),
-            (3, "D"),
-            (3, "E"),
-            (4, "F"),
-        ]))
+        let root = build_padded_tree(
+            items(&[
+                (2, "A"),
+                (4, "B"),
+                (3, "B1"),
+                (2, "C"),
+                (3, "D"),
+                (3, "E"),
+                (4, "F"),
+            ]),
+            None,
+        )
         .unwrap();
         let output = format!("{}", root);
         assert_snapshot!(output, @r"
@@ -574,16 +590,37 @@ mod tests {
     }
 
     #[test]
-    fn test_build_loose_tree_non_positive_level() {
-        let result = build_padded_tree(items(&[(0, "Invalid")]));
+    fn test_build_padded_tree_with_root_level_zero() {
+        let root = build_padded_tree(
+            items(&[(3, "H1"), (6, "H2"), (4, "H1b")]),
+            Some(0),
+        )
+        .unwrap();
+        let output = format!("{}", root);
+        assert_snapshot!(output, @r"
+         <implicit> (0)
+        └── # <implicit> (0.0)
+            └── ## <implicit> (0.0.0)
+                └── ### H1 (0.0.0.1)
+                    ├── #### <implicit> (0.0.0.1.0)
+                    │   └── ##### <implicit> (0.0.0.1.0.0)
+                    │       └── ###### H2 (0.0.0.1.0.0.1)
+                    └── #### H1b (0.0.0.1.1)
+        ");
+    }
+
+    #[test]
+    fn test_build_padded_tree_root_level_error() {
+        // Items start at level 0, but we specify root_level=1 - should error
+        let result = build_padded_tree(items(&[(0, "Invalid")]), Some(1));
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("positive"));
+        assert!(result.unwrap_err().contains("Cannot build"));
     }
 
     #[test]
     fn test_build_loose_tree_empty() {
         let items: Vec<TestItem> = vec![];
-        let result = build_padded_tree(items);
+        let result = build_padded_tree(items, None);
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("empty"));
     }
