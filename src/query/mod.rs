@@ -1,4 +1,4 @@
-//! ...
+//! Query module for extracting structured data from Markdown documents.
 //!
 //! We build AST first, then trim the AST to the things of our interest.
 //! - Frontmatter
@@ -11,9 +11,33 @@ use crate::hierarchy::{
 };
 use pulldown_cmark::HeadingLevel;
 use serde::{Deserialize, Serialize};
+use serde_yaml::Value as YamlValue;
 
+use crate::ast::Tree;
+use crate::link::extract_frontmatter;
 mod heading;
-use heading::Heading;
+pub use heading::Heading;
+
+/// Result of querying a markdown document
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Markdown {
+    /// YAML frontmatter (if present)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub frontmatter: Option<Frontmatter>,
+    /// Hierarchical section tree
+    pub sections: Section,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Frontmatter {
+    pub content: YamlValue,
+    pub start_byte: usize,
+    pub end_byte: usize,
+    /// column and row
+    pub start_point: (usize, usize),
+    /// column and row
+    pub end_point: (usize, usize),
+}
 
 // Wrapper type for tree building that supports level 0 (document root)
 #[derive(Debug, Clone)]
@@ -120,7 +144,14 @@ impl Section {
 }
 
 /// Build hierarchical sections from document AST
-pub fn build_sections(root: &Node, source: &str) -> Result<Section, String> {
+///
+/// `doc_start` is the byte offset where content starts (after frontmatter).
+/// Pass 0 if there's no frontmatter.
+pub fn build_sections(
+    root: &Node,
+    source: &str,
+    doc_start: usize,
+) -> Result<Section, String> {
     // 1. Extract headings from AST
     let headings = extract_headings(root, source);
 
@@ -129,7 +160,52 @@ pub fn build_sections(root: &Node, source: &str) -> Result<Section, String> {
 
     // 3. Convert to Section with content extraction
     let doc_end = source.len();
-    Ok(hierarchy_to_section(&tree, source, doc_end))
+    Ok(hierarchy_to_section(&tree, source, doc_start, doc_end))
+}
+
+/// Query a markdown file and return structured data
+pub fn query_file(path: &std::path::Path) -> Result<Markdown, String> {
+    let source = std::fs::read_to_string(path)
+        .map_err(|e| format!("Failed to read file: {}", e))?;
+
+    if source.is_empty() {
+        return Err("File is empty".to_string());
+    }
+
+    let tree = Tree::new_with_default_opts(&source);
+
+    // Extract frontmatter from the first child if it's a metadata block
+    let first_child = tree.root_node.children.first();
+    let (frontmatter, doc_start) = match first_child {
+        Some(node) => {
+            let fm_content = extract_frontmatter(node);
+            match fm_content {
+                Some(content) => {
+                    let fm = Frontmatter {
+                        content,
+                        start_byte: node.start_byte,
+                        end_byte: node.end_byte,
+                        start_point: (
+                            node.start_point.row,
+                            node.start_point.column,
+                        ),
+                        end_point: (node.end_point.row, node.end_point.column),
+                    };
+                    (Some(fm), node.end_byte)
+                }
+                None => (None, 0),
+            }
+        }
+        None => (None, 0),
+    };
+
+    // Build section tree, starting content after frontmatter
+    let sections = build_sections(&tree.root_node, &source, doc_start)?;
+
+    Ok(Markdown {
+        frontmatter,
+        sections,
+    })
 }
 
 /// Extract all headings from the AST in document order
@@ -177,9 +253,12 @@ fn extract_headings_recursive(
 }
 
 /// Convert HierarchyItem<SectionHeading> to Section
+///
+/// `doc_start` is passed through for the root section's content start.
 fn hierarchy_to_section(
     item: &crate::hierarchy::HierarchyItem<SectionHeading>,
     source: &str,
+    doc_start: usize,
     next_boundary: usize,
 ) -> Section {
     // Convert index to string (e.g., [0, 1, 2] -> "0.1.2")
@@ -195,8 +274,9 @@ fn hierarchy_to_section(
         .unwrap_or_default();
 
     // Get heading and section start byte
+    // For root, content starts at doc_start (after frontmatter)
     let (heading, section_start, content_start) = match &item.value {
-        SectionHeading::Root => (None, 0, 0),
+        SectionHeading::Root => (None, doc_start, doc_start),
         SectionHeading::Heading(h) => {
             (Some(h.clone()), h.start_byte, h.end_byte)
         }
@@ -219,6 +299,7 @@ fn hierarchy_to_section(
     };
 
     // Convert children, calculating their next boundaries
+    // doc_start is not used for children (only root uses it)
     let children: Vec<Section> = item
         .children
         .iter()
@@ -232,7 +313,7 @@ fn hierarchy_to_section(
             } else {
                 next_boundary
             };
-            hierarchy_to_section(child, source, child_next)
+            hierarchy_to_section(child, source, 0, child_next)
         })
         .collect();
 
@@ -274,7 +355,7 @@ Details here.
 Final thoughts.
 "#;
         let tree = Tree::new(source, false);
-        let sections = build_sections(&tree.root_node, source).unwrap();
+        let sections = build_sections(&tree.root_node, source, 0).unwrap();
         assert_snapshot!(sections.to_string(), @r#"
         [0] (root) [0..132]
           [0.1] # Title [0..132]
@@ -297,7 +378,7 @@ Final thoughts.
 Some content.
 "#;
         let tree = Tree::new(source, false);
-        let sections = build_sections(&tree.root_node, source).unwrap();
+        let sections = build_sections(&tree.root_node, source, 0).unwrap();
         assert_snapshot!(sections.to_string(), @r#"
         [0] (root) [0..68]
           content: "This is content before any heading."
@@ -319,7 +400,7 @@ Some preamble.
 Intro content.
 "#;
         let tree = Tree::new(source, false);
-        let sections = build_sections(&tree.root_node, source).unwrap();
+        let sections = build_sections(&tree.root_node, source, 0).unwrap();
         assert_snapshot!(sections.to_string(), @r#"
         [0] (root) [0..78]
           [0.0] (implicit) [0..78]
@@ -338,7 +419,7 @@ Intro content.
 Content.
 "#;
         let tree = Tree::new(source, false);
-        let sections = build_sections(&tree.root_node, source).unwrap();
+        let sections = build_sections(&tree.root_node, source, 0).unwrap();
         assert_snapshot!(sections.to_string(), @r##"
         [0] (root) [0..36]
           [0.1] # Title [0..36]
@@ -347,5 +428,109 @@ Content.
               [0.1.0.1] ### Deep Section [9..36]
                 content: "Content."
         "##);
+    }
+
+    #[test]
+    fn test_query_file() {
+        use std::io::Write;
+        use tempfile::NamedTempFile;
+
+        let source = r#"---
+title: Test Document
+tags:
+  - rust
+  - markdown
+---
+
+Some preamble.
+
+# Introduction
+
+Intro content here.
+
+## Details
+
+More details.
+"#;
+        let mut file = NamedTempFile::new().unwrap();
+        file.write_all(source.as_bytes()).unwrap();
+
+        let result = query_file(file.path()).unwrap();
+        let json = serde_json::to_string_pretty(&result).unwrap();
+        assert_snapshot!(json, @r###"
+        {
+          "frontmatter": {
+            "content": {
+              "title": "Test Document",
+              "tags": [
+                "rust",
+                "markdown"
+              ]
+            },
+            "start_byte": 0,
+            "end_byte": 56,
+            "start_point": [
+              0,
+              0
+            ],
+            "end_point": [
+              5,
+              3
+            ]
+          },
+          "sections": {
+            "heading": null,
+            "index": "0",
+            "content": "Some preamble.",
+            "start_byte": 56,
+            "end_byte": 137,
+            "children": [
+              {
+                "heading": {
+                  "level": "H1",
+                  "text": "# Introduction\n",
+                  "start_byte": 74,
+                  "end_byte": 89,
+                  "start_point": [
+                    9,
+                    0
+                  ],
+                  "end_point": [
+                    10,
+                    0
+                  ]
+                },
+                "index": "0.1",
+                "content": "Intro content here.",
+                "start_byte": 74,
+                "end_byte": 137,
+                "children": [
+                  {
+                    "heading": {
+                      "level": "H2",
+                      "text": "## Details\n",
+                      "start_byte": 111,
+                      "end_byte": 122,
+                      "start_point": [
+                        13,
+                        0
+                      ],
+                      "end_point": [
+                        14,
+                        0
+                      ]
+                    },
+                    "index": "0.1.1",
+                    "content": "More details.",
+                    "start_byte": 111,
+                    "end_byte": 137,
+                    "children": []
+                  }
+                ]
+              }
+            ]
+          }
+        }
+        "###);
     }
 }
