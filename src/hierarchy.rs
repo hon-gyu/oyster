@@ -1,5 +1,6 @@
 //! Generic trait and utilities for building hierarchical tree structures
 //! The absolute value of level doesn't matter, only the relative order.
+// TODO: is build_loose_tree a good name?
 use crate::export::utils::get_relative_dest;
 use crate::link::Referenceable;
 use std::collections::BTreeSet;
@@ -15,7 +16,7 @@ pub trait Hierarchical {
 /// This is used for gap-filling in loose tree construction
 pub trait HierarchicalWithDefaults: Hierarchical {
     /// Create a default item at a specific level for gap filling
-    fn default_at_level(level: usize) -> Self;
+    fn default_at_level(level: usize, index: Option<Vec<usize>>) -> Self;
 }
 
 /// A sub-tree in a hierarchy that contains the node itself and its children
@@ -23,6 +24,7 @@ pub trait HierarchicalWithDefaults: Hierarchical {
 pub struct HierarchyItem<T> {
     pub value: T,
     pub children: Vec<HierarchyItem<T>>,
+    pub index: Option<Vec<usize>>, // Index of this item in the tree
 }
 
 impl<T> HierarchyItem<T> {
@@ -30,12 +32,26 @@ impl<T> HierarchyItem<T> {
         Self {
             value,
             children: Vec::new(),
+            index: None,
         }
     }
 
-    /// Chained indexing
-    pub fn query_by_index(&self, index: &[usize]) -> Option<&HierarchyItem<T>> {
-        todo!()
+    /// Chained indexing - navigate through the tree using a path of child indices
+    /// Example: query_by_index(&[0, 1]) returns the second child (index 1) of the first child (index 0)
+    pub fn query_by_index(
+        &self,
+        indices: &[usize],
+    ) -> Option<&HierarchyItem<T>> {
+        if indices.is_empty() {
+            return Some(self);
+        }
+
+        let first = indices[0];
+        if first >= self.children.len() {
+            return None;
+        }
+
+        self.children[first].query_by_index(&indices[1..])
     }
 
     /// Helper function to format the tree with a prefix
@@ -47,8 +63,17 @@ impl<T> HierarchyItem<T> {
     where
         T: fmt::Display,
     {
-        // Print current node
-        writeln!(f, "{}", self.value)?;
+        // Print current node with optional index
+        if let Some(ref idx) = self.index {
+            let idx_str = idx
+                .iter()
+                .map(|n| n.to_string())
+                .collect::<Vec<_>>()
+                .join(".");
+            writeln!(f, "{} ({})", self.value, idx_str)?;
+        } else {
+            writeln!(f, "{}", self.value)?;
+        }
 
         // Print children
         let child_count = self.children.len();
@@ -160,15 +185,15 @@ pub fn build_compact_tree<T: Hierarchical>(
 ///     | 0.2.2.1 |   F   |
 ///
 /// Contract:
-/// - the return items covers all levels from the minimum to the maximum of
-///     the input items. We create new items for empty levels.
-/// - len(return items) >= len(input items)
-/// - raise if minimum level is non-positive
+/// - returns a single tree rooted at level 1
+/// - the tree covers all levels from 1 to the maximum level of the input items
+/// - we create default items for empty levels (gap-filling)
+/// - returns Err if input is empty or minimum level is non-positive
 pub fn build_loose_tree<T: HierarchicalWithDefaults>(
     items: Vec<T>,
-) -> Result<(Vec<HierarchyItem<T>>, Vec<Vec<usize>>), String> {
+) -> Result<HierarchyItem<T>, String> {
     if items.is_empty() {
-        return Ok((Vec::new(), Vec::new()));
+        return Err("Cannot build tree from empty input".to_string());
     }
 
     // Find min level
@@ -181,14 +206,16 @@ pub fn build_loose_tree<T: HierarchicalWithDefaults>(
 
     let mut roots = Vec::new();
     let mut stack: Vec<(usize, HierarchyItem<T>, bool)> = Vec::new(); // (level, node, is_default)
-    let mut section_numbers = Vec::new(); // Store section number for each input item
 
     // Track the number of real children at each level in the current path
     let mut real_child_counts: Vec<usize> = vec![0; 10]; // Assuming max 10 levels
 
     // Ensure level 1 exists - insert defaults from 1 to min_level - 1
     for level in 1..min_level {
-        let default_node = HierarchyItem::new(T::default_at_level(level));
+        // Index for initial defaults: [0], [0, 0], [0, 0, 0], etc.
+        let index: Vec<usize> = vec![0; level];
+        let mut default_node = HierarchyItem::new(T::default_at_level(level, Some(index.clone())));
+        default_node.index = Some(index);
         stack.push((level, default_node, true));
     }
 
@@ -198,14 +225,14 @@ pub fn build_loose_tree<T: HierarchicalWithDefaults>(
         // Pop items at same or deeper level
         while let Some((top_level, _, _)) = stack.last() {
             if *top_level >= curr_level {
-                let (_, popped, _) = stack.pop().unwrap();
+                let (level, popped, _) = stack.pop().unwrap();
                 if let Some((_, parent, _)) = stack.last_mut() {
                     parent.children.push(popped);
                 } else {
                     roots.push(popped);
                 }
-                // Reset count for this level
-                if stack.len() < real_child_counts.len() {
+                // Reset count only for levels strictly deeper than current
+                if level > curr_level && stack.len() < real_child_counts.len() {
                     real_child_counts[stack.len()] = 0;
                 }
             } else {
@@ -216,15 +243,29 @@ pub fn build_loose_tree<T: HierarchicalWithDefaults>(
         // Insert default items for level gaps between stack top and current
         if let Some((top_level, _, _)) = stack.last() {
             for level in (top_level + 1)..curr_level {
-                let default_node =
-                    HierarchyItem::new(T::default_at_level(level));
+                // Calculate index based on current stack path + 0
+                let mut index = Vec::new();
+                for (i, (_, _, is_default)) in stack.iter().enumerate() {
+                    if *is_default {
+                        index.push(0);
+                    } else {
+                        index.push(real_child_counts[i]);
+                    }
+                }
+                index.push(0);
+                let mut default_node =
+                    HierarchyItem::new(T::default_at_level(level, Some(index.clone())));
+                default_node.index = Some(index);
                 stack.push((level, default_node, true));
             }
         } else if curr_level > 1 {
             // Stack is empty but current item is not at level 1
             for level in 1..curr_level {
-                let default_node =
-                    HierarchyItem::new(T::default_at_level(level));
+                // Index for initial defaults: [0], [0, 0], etc.
+                let index: Vec<usize> = vec![0; level];
+                let mut default_node =
+                    HierarchyItem::new(T::default_at_level(level, Some(index.clone())));
+                default_node.index = Some(index);
                 stack.push((level, default_node, true));
             }
         }
@@ -242,9 +283,9 @@ pub fn build_loose_tree<T: HierarchicalWithDefaults>(
         // Add the current item's index
         real_child_counts[stack.len()] += 1;
         section.push(real_child_counts[stack.len()]);
-        section_numbers.push(section);
 
-        let node = HierarchyItem::new(item);
+        let mut node = HierarchyItem::new(item);
+        node.index = Some(section);
         stack.push((curr_level, node, false));
     }
 
@@ -257,7 +298,8 @@ pub fn build_loose_tree<T: HierarchicalWithDefaults>(
         }
     }
 
-    Ok((roots, section_numbers))
+    // By construction, there's always exactly one root
+    Ok(roots.into_iter().next().unwrap())
 }
 
 // File tree
@@ -285,7 +327,7 @@ impl Hierarchical for FileTreeItem {
 }
 
 impl HierarchicalWithDefaults for FileTreeItem {
-    fn default_at_level(level: usize) -> Self {
+    fn default_at_level(level: usize, _index: Option<Vec<usize>>) -> Self {
         Self {
             name: String::new(),
             path: PathBuf::new(),
@@ -388,10 +430,10 @@ mod tests {
     }
 
     impl HierarchicalWithDefaults for TestItem {
-        fn default_at_level(level: usize) -> Self {
+        fn default_at_level(level: usize, _index: Option<Vec<usize>>) -> Self {
             Self {
                 level,
-                name: "<default>".to_string(),
+                name: "<implicit>".to_string(),
             }
         }
     }
@@ -473,29 +515,27 @@ mod tests {
         ");
     }
 
+    // Build loose tree
+    // --------------------
+
     #[test]
     fn test_build_loose_tree_example1() {
         // Example 1: A(1), B(3), C(2)
-        let (roots, section_numbers) =
+        let root =
             build_loose_tree(items(&[(1, "A"), (3, "B"), (2, "C")])).unwrap();
-        assert_eq!(roots.len(), 1);
-        let output = format!("{}", roots[0]);
+        let output = format!("{}", root);
         assert_snapshot!(output, @r"
-        # A
-        ├── ## <default>
-        │   └── ### B
-        └── ## C
+        # A (1)
+        ├── ## <implicit> (1.0)
+        │   └── ### B (1.0.1)
+        └── ## C (1.1)
         ");
-
-        // Verify section numbers
-        let section_output = format!("{:?}", section_numbers);
-        assert_snapshot!(section_output, @"[[1], [1, 0, 1], [1, 1]]");
     }
 
     #[test]
     fn test_build_loose_tree_example2() {
         // Example 2: A(2), B(4), B1(3), C(2), D(3), E(3), F(4)
-        let (roots, section_numbers) = build_loose_tree(items(&[
+        let root = build_loose_tree(items(&[
             (2, "A"),
             (4, "B"),
             (3, "B1"),
@@ -505,23 +545,18 @@ mod tests {
             (4, "F"),
         ]))
         .unwrap();
-        assert_eq!(roots.len(), 1);
-        let output = format!("{}", roots[0]);
+        let output = format!("{}", root);
         assert_snapshot!(output, @r"
-        # <default>
-        ├── ## A
-        │   ├── ### <default>
-        │   │   └── #### B
-        │   └── ### B1
-        └── ## C
-            ├── ### D
-            └── ### E
-                └── #### F
+        # <implicit> (0)
+        ├── ## A (0.1)
+        │   ├── ### <implicit> (0.1.0)
+        │   │   └── #### B (0.1.0.1)
+        │   └── ### B1 (0.1.1)
+        └── ## C (0.2)
+            ├── ### D (0.2.1)
+            └── ### E (0.2.2)
+                └── #### F (0.2.2.1)
         ");
-
-        // Verify section numbers
-        let section_output = format!("{:?}", section_numbers);
-        assert_snapshot!(section_output, @"[[0, 1], [0, 1, 0, 1], [0, 1, 1], [0, 1], [0, 1, 1], [0, 1, 1], [0, 1, 1, 1]]");
     }
 
     #[test]
@@ -534,8 +569,8 @@ mod tests {
     #[test]
     fn test_build_loose_tree_empty() {
         let items: Vec<TestItem> = vec![];
-        let (roots, section_numbers) = build_loose_tree(items).unwrap();
-        assert_eq!(roots.len(), 0);
-        assert_eq!(section_numbers.len(), 0);
+        let result = build_loose_tree(items);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("empty"));
     }
 }
