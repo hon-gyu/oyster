@@ -134,15 +134,25 @@ impl CalloutKind {
             Self::GFM(BlockQuoteKind::Important) => "Important".to_string(),
             Self::GFM(BlockQuoteKind::Warning) => "Warning".to_string(),
             Self::GFM(BlockQuoteKind::Caution) => "Caution".to_string(),
-            Self::Obsidian(ObsidianCalloutKind::Abstract) => "Abstract".to_string(),
+            Self::Obsidian(ObsidianCalloutKind::Abstract) => {
+                "Abstract".to_string()
+            }
             Self::Obsidian(ObsidianCalloutKind::Info) => "Info".to_string(),
             Self::Obsidian(ObsidianCalloutKind::Todo) => "Todo".to_string(),
-            Self::Obsidian(ObsidianCalloutKind::Success) => "Success".to_string(),
-            Self::Obsidian(ObsidianCalloutKind::Question) => "Question".to_string(),
-            Self::Obsidian(ObsidianCalloutKind::Failure) => "Failure".to_string(),
+            Self::Obsidian(ObsidianCalloutKind::Success) => {
+                "Success".to_string()
+            }
+            Self::Obsidian(ObsidianCalloutKind::Question) => {
+                "Question".to_string()
+            }
+            Self::Obsidian(ObsidianCalloutKind::Failure) => {
+                "Failure".to_string()
+            }
             Self::Obsidian(ObsidianCalloutKind::Danger) => "Danger".to_string(),
             Self::Obsidian(ObsidianCalloutKind::Bug) => "Bug".to_string(),
-            Self::Obsidian(ObsidianCalloutKind::Example) => "Example".to_string(),
+            Self::Obsidian(ObsidianCalloutKind::Example) => {
+                "Example".to_string()
+            }
             Self::Obsidian(ObsidianCalloutKind::Quote) => "Quote".to_string(),
             Self::Custom(CustomCalloutKind::Llm) => "LLM".to_string(),
             Self::Unknown(s) => {
@@ -150,7 +160,10 @@ impl CalloutKind {
                 let mut chars = s.chars();
                 match chars.next() {
                     None => String::new(),
-                    Some(first) => first.to_uppercase().collect::<String>() + chars.as_str(),
+                    Some(first) => {
+                        first.to_uppercase().collect::<String>()
+                            + chars.as_str()
+                    }
                 }
             }
         }

@@ -1,50 +1,80 @@
 //! Query module for extracting structured data from Markdown documents.
 //!
-//! We build AST first, then trim the AST to the things of our interest.
-//! - Frontmatter
-//! - Headings -> Sections
+//! # Overview
 //!
-//! All the query logic are handled by `jq`
-use crate::ast::{Node, NodeKind};
+//! This module parses Markdown files and extracts:
+//! - **Frontmatter**: YAML metadata at the start of the document
+//! - **Sections**: Hierarchical tree of headings with their content
+//!
+//! # Output Format
+//!
+//! The output is a [`Markdown`] struct that can be serialized to JSON:
+//! - Frontmatter is extracted as structured YAML with source location
+//! - Sections form a tree rooted at level 0 (document root)
+//! - Each section contains its heading, content, byte range, and children
+//!
+//! # Example
+//!
+//! ```ignore
+//! let result = query_file(Path::new("doc.md"))?;
+//! let json = serde_json::to_string_pretty(&result)?;
+//! ```
+
+use crate::ast::{Node, NodeKind, Tree};
 use crate::hierarchy::{
     Hierarchical, HierarchicalWithDefaults, build_padded_tree,
 };
+use crate::link::extract_frontmatter;
 use pulldown_cmark::HeadingLevel;
 use serde::{Deserialize, Serialize};
 use serde_yaml::Value as YamlValue;
 
-use crate::ast::Tree;
-use crate::link::extract_frontmatter;
 mod heading;
 pub use heading::Heading;
 
-/// Result of querying a markdown document
+/// Structured representation of a Markdown document.
+///
+/// Contains:
+/// - `frontmatter`: Optional YAML metadata block with source location
+/// - `sections`: Hierarchical tree of document sections
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Markdown {
-    /// YAML frontmatter (if present)
+    /// YAML frontmatter (if present at the start of the document)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub frontmatter: Option<Frontmatter>,
-    /// Hierarchical section tree
+    /// Hierarchical section tree rooted at level 0
     pub sections: Section,
 }
 
+/// YAML frontmatter with source location information.
+///
+/// Fields:
+/// - `content`: Parsed YAML value (can be any valid YAML structure)
+/// - `start_byte`, `end_byte`: Byte range in the source file
+/// - `start_point`, `end_point`: (row, column) positions
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Frontmatter {
+    /// Parsed YAML content
     pub content: YamlValue,
+    /// Starting byte offset in source
     pub start_byte: usize,
+    /// Ending byte offset in source
     pub end_byte: usize,
-    /// column and row
+    /// Starting position as (row, column)
     pub start_point: (usize, usize),
-    /// column and row
+    /// Ending position as (row, column)
     pub end_point: (usize, usize),
 }
 
-// Wrapper type for tree building that supports level 0 (document root)
+/// Internal wrapper for tree building that supports level 0 (document root).
+///
+/// This allows us to use `build_padded_tree` with a virtual root at level 0,
+/// which captures content before the first heading.
 #[derive(Debug, Clone)]
 enum SectionHeading {
-    /// Document root (level 0) - content before the first heading
+    /// Document root (level 0) - captures content before the first heading
     Root,
-    /// A real heading (levels 1-6)
+    /// A real Markdown heading (levels 1-6, i.e., # to ######)
     Heading(Heading),
 }
 
@@ -78,17 +108,44 @@ impl HierarchicalWithDefaults for SectionHeading {
     }
 }
 
-/// A section of content under a heading
+/// A section of a Markdown document, representing a heading and its content.
+///
+/// # Structure
+///
+/// Sections form a tree structure:
+/// - Root section (level 0): `heading` is `None`, contains preamble content
+/// - Heading sections (levels 1-6): `heading` contains the [`Heading`] data
+/// - Implicit sections: Created for level gaps (e.g., H1 → H3 creates implicit H2)
+///
+/// # Fields
+///
+/// - `heading`: The heading that starts this section (`None` for root)
+/// - `index`: Hierarchical position (e.g., "0.1.2" means first H1's second H2's third H3)
+/// - `content`: Text content between this heading and the next heading/child
+/// - `start_byte`, `end_byte`: Byte range spanning the entire section
+/// - `children`: Nested sections at deeper heading levels
+///
+/// # Index Format
+///
+/// The index uses dot notation where:
+/// - "0" = document root
+/// - "0.1" = first H1 under root
+/// - "0.1.2" = second H2 under that H1
+/// - "0.1.0" = implicit heading (index component is 0)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Section {
-    /// The heading that starts this section (None for document root)
+    /// The heading that starts this section.
+    /// - `None` for the document root (level 0)
+    /// - `Some(Heading)` for actual or implicit headings
     pub heading: Option<Heading>,
-    /// Hierarchy index (e.g., "0", "0.1", "0.1.1")
+    /// Hierarchical index in dot notation (e.g., "0", "0.1", "0.1.2")
     pub index: String,
-    /// Content of this section excluding child sections
+    /// Text content of this section, excluding child sections.
+    /// Trimmed of leading/trailing whitespace.
     pub content: String,
-    /// Byte range of the entire section (heading + content + children)
+    /// Starting byte offset of this section in the source
     pub start_byte: usize,
+    /// Ending byte offset of this section in the source
     pub end_byte: usize,
     /// Child sections (headings at deeper levels)
     pub children: Vec<Section>,
@@ -143,10 +200,26 @@ impl Section {
     }
 }
 
-/// Build hierarchical sections from document AST
+/// Build a hierarchical section tree from a document AST.
 ///
-/// `doc_start` is the byte offset where content starts (after frontmatter).
-/// Pass 0 if there's no frontmatter.
+/// # Arguments
+///
+/// - `root`: The root node of the parsed Markdown AST
+/// - `source`: The original source text (used for content extraction)
+/// - `doc_start`: Byte offset where document content starts
+///   - Pass `0` if there's no frontmatter
+///   - Pass the frontmatter's `end_byte` to exclude it from root content
+///
+/// # Returns
+///
+/// A [`Section`] tree rooted at level 0, containing:
+/// - Preamble content (text before the first heading)
+/// - All headings organized hierarchically
+/// - Implicit headings for level gaps (e.g., H1 → H3 creates implicit H2)
+///
+/// # Errors
+///
+/// Returns an error if heading extraction fails (e.g., invalid heading levels).
 pub fn build_sections(
     root: &Node,
     source: &str,
@@ -163,7 +236,35 @@ pub fn build_sections(
     Ok(hierarchy_to_section(&tree, source, doc_start, doc_end))
 }
 
-/// Query a markdown file and return structured data
+/// Query a Markdown file and extract its structured content.
+///
+/// This is the main entry point for parsing a Markdown file into
+/// a [`Markdown`] struct containing frontmatter and sections.
+///
+/// # Arguments
+///
+/// - `path`: Path to the Markdown file to parse
+///
+/// # Returns
+///
+/// A [`Markdown`] struct containing:
+/// - `frontmatter`: Parsed YAML metadata (if present) with source location
+/// - `sections`: Hierarchical tree of document sections
+///
+/// # Errors
+///
+/// Returns an error if:
+/// - The file cannot be read
+/// - The file is empty
+/// - Section building fails
+///
+/// # Example
+///
+/// ```ignore
+/// let result = query_file(Path::new("README.md"))?;
+/// println!("Title: {:?}", result.frontmatter);
+/// println!("Sections: {}", result.sections);
+/// ```
 pub fn query_file(path: &std::path::Path) -> Result<Markdown, String> {
     let source = std::fs::read_to_string(path)
         .map_err(|e| format!("Failed to read file: {}", e))?;

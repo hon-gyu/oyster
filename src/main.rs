@@ -1,10 +1,11 @@
 use clap::{Args, Parser, Subcommand};
 use oyster::export::{
-    render_vault, MermaidRenderMode, NodeRenderConfig, QuiverRenderMode, TikzRenderMode,
+    MermaidRenderMode, NodeRenderConfig, QuiverRenderMode, TikzRenderMode,
+    render_vault,
 };
 use oyster::query::query_file;
 #[cfg(feature = "serve")]
-use oyster::serve::{serve_site, ServeConfig};
+use oyster::serve::{ServeConfig, serve_site};
 use std::path::PathBuf;
 #[cfg(feature = "serve")]
 use tempfile;
@@ -108,7 +109,6 @@ impl GenerateArgs {
 enum Commands {
     Query {
         /// The path of the file to query
-        #[arg(short, long)]
         file: PathBuf,
         /// Output file to write the query result to
         #[arg(short, long)]

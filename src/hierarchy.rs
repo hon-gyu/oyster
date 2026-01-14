@@ -1,14 +1,38 @@
-//! Generic trait and utilities for building hierarchical tree structures
-//! The absolute value of level doesn't matter, only the relative order.
-//! build_compact_tree:
-//! - Relative level ordering (absolute values don't matter)
-//! - No gap-filling (H1 → H3 makes H3 a direct child of H1)
-//! - Can produce multiple roots (a forest)
-//! build_loose_tree:
-//! - Absolute levels matter (always rooted at level 1)
-//! - Gap-filling with implicit nodes
-//! - Always produces single root
-//! - Assigns indices
+//! Generic utilities for building hierarchical tree structures from flat lists.
+//!
+//! # Overview
+//!
+//! This module provides two tree-building strategies for hierarchical items:
+//!
+//! ## `build_compact_tree`
+//!
+//! - **Relative ordering**: Only the relative level order matters, not absolute values
+//! - **No gap-filling**: H1 → H3 makes H3 a direct child of H1 (no implicit H2)
+//! - **Multiple roots**: Can produce a forest if multiple top-level items exist
+//! - **Use case**: Table of contents where you want direct parent-child relationships
+//!
+//! ## `build_padded_tree`
+//!
+//! - **Absolute levels**: Respects actual level values (1-6 for headings)
+//! - **Gap-filling**: Creates implicit nodes for level gaps (H1 → H3 inserts implicit H2)
+//! - **Single root**: Always produces exactly one root at the specified minimum level
+//! - **Indexed**: Assigns hierarchical indices (e.g., "0.1.2") to each node
+//! - **Use case**: Document sections where structural gaps should be preserved
+//!
+//! # Example
+//!
+//! ```ignore
+//! // Items: H1, H3, H2 (note the gap from H1 to H3)
+//! let items = vec![Item::new(1), Item::new(3), Item::new(2)];
+//!
+//! // Compact: H3 becomes direct child of H1
+//! // H1 ─┬─ H3
+//! //     └─ H2
+//!
+//! // Padded: Implicit H2 inserted
+//! // H1 ─┬─ H2 (implicit) ── H3
+//! //     └─ H2
+//! ```
 
 use crate::export::utils::get_relative_dest;
 use crate::link::Referenceable;
@@ -16,24 +40,52 @@ use std::collections::BTreeSet;
 use std::fmt;
 use std::path::{Path, PathBuf};
 
-/// Trait for types that have a hierarchical level
+/// Trait for types that have a hierarchical level.
+///
+/// Implementors must provide a `level()` method returning the item's level
+/// in the hierarchy (e.g., 1-6 for Markdown headings).
 pub trait Hierarchical {
+    /// Returns the hierarchical level of this item.
     fn level(&self) -> usize;
 }
 
-/// Trait for hierarchical types that can create default items at specific levels
-/// This is used for gap-filling in loose tree construction
+/// Trait for hierarchical types that can create placeholder items.
+///
+/// Used by `build_padded_tree` to fill gaps in the hierarchy.
+/// For example, if H1 is followed directly by H3, an implicit H2 is created
+/// using `default_at_level(2, ...)`.
 pub trait HierarchicalWithDefaults: Hierarchical {
-    /// Create a default item at a specific level for gap filling
+    /// Create a default/implicit item at the specified level.
+    ///
+    /// # Arguments
+    ///
+    /// - `level`: The hierarchical level for the new item
+    /// - `index`: Optional hierarchical index (e.g., `[0, 1, 2]` for "0.1.2")
     fn default_at_level(level: usize, index: Option<Vec<usize>>) -> Self;
 }
 
-/// A sub-tree in a hierarchy that contains the node itself and its children
+/// A node in a hierarchical tree structure.
+///
+/// # Fields
+///
+/// - `value`: The wrapped item of type `T`
+/// - `children`: Child nodes at deeper levels
+/// - `index`: Hierarchical position as a path (e.g., `[0, 1, 2]` = "0.1.2")
+///
+/// # Index Format
+///
+/// The index is a vector representing the path from root:
+/// - `[0]` = root node
+/// - `[0, 1]` = second child of root (1-indexed for real items)
+/// - `[0, 1, 0]` = implicit child (0 indicates gap-filled node)
 #[derive(Debug)]
 pub struct HierarchyItem<T> {
+    /// The wrapped value
     pub value: T,
+    /// Child nodes (items at deeper hierarchical levels)
     pub children: Vec<HierarchyItem<T>>,
-    pub index: Option<Vec<usize>>, // Index of this item in the tree
+    /// Hierarchical index path (e.g., `[0, 1, 2]` represents "0.1.2")
+    pub index: Option<Vec<usize>>,
 }
 
 impl<T> HierarchyItem<T> {
@@ -167,43 +219,60 @@ pub fn build_relative_tree<T: Hierarchical>(
     roots
 }
 
-/// Build a tree from a flat list of hierarchical items
+/// Build a single-rooted tree from a flat list of hierarchical items.
 ///
-/// Empty level gets index 0
-/// Real items get indices starting from 1 based on their order among siblings at each level
+/// This function creates a tree with gap-filling: if items skip levels
+/// (e.g., H1 → H3), implicit nodes are inserted at the skipped levels.
 ///
-/// Example:
-/// - eg: 1
-///   input: A(1), B(3), C(2)
-///   output:
-///     - A (1)
-///       - default as H2 (1.0)
-///         - B (1.0.1)
-///       - C (1.1)
-/// - eg: 2
-///   input: A(2), B(4), B1(3), C(2), D(3), E(3), F(4)
-///   output: |
-///     | number  | title |
-///     | ------- | :---: |
-///     | 0.1     |   A   |
-///     | 0.1.0.1 |   B   |
-///     | 0.1.1   |  B1   |
-///     | 0.2     |   C   |
-///     | 0.2.1   |   D   |
-///     | 0.2.2   |   E   |
-///     | 0.2.2.1 |   F   |
+/// # Arguments
 ///
-/// Contract:
-/// - returns a single tree rooted at level 1
-/// - the tree covers all levels from 1 (or specified min level) to the
-///   maximum level of the input items
-/// - we create default items for empty levels (gap-filling)
-/// - returns Err if input is empty or minimum level is non-positive
+/// - `items`: Flat list of hierarchical items in document order
+/// - `min_level`: Optional root level for the tree
+///   - `None`: Root at level 1 (default)
+///   - `Some(0)`: Root at level 0 (useful for document root before headings)
+///   - `Some(n)`: Root at level n
+///
+/// # Returns
+///
+/// A single [`HierarchyItem<T>`] representing the root of the tree.
+///
+/// # Index Assignment
+///
+/// Each node receives a hierarchical index:
+/// - **Real items**: Indices start at 1 (e.g., first H1 = "0.1", second H1 = "0.2")
+/// - **Implicit items**: Index is 0 (e.g., gap-filled H2 = "0.1.0")
+///
+/// # Examples
+///
+/// ```text
+/// Input: A(1), B(3), C(2)
+///
+/// Output tree:
+///   [0] Root
+///   └── [0.1] A (level 1)
+///       ├── [0.1.0] implicit (level 2)
+///       │   └── [0.1.0.1] B (level 3)
+///       └── [0.1.1] C (level 2)
+/// ```
+///
+/// ```text
+/// Input: A(2), B(4), C(2) with min_level=Some(0)
+///
+/// Output tree:
+///   [0] Root (level 0, implicit)
+///   └── [0.0] implicit (level 1)
+///       └── [0.0.1] A (level 2)
+///           └── [0.0.1.0] implicit (level 3)
+///               └── [0.0.1.0.1] B (level 4)
+/// ```
+///
+/// # Errors
+///
+/// Returns an error if:
+/// - Input is empty
+/// - Any item has a level less than the specified `min_level`
 pub fn build_padded_tree<T: HierarchicalWithDefaults>(
     items: Vec<T>,
-    // The minimum level of the tree to build. If not specified, the minimum
-    // level will be the minimum level of the input items.
-    // The specified minimum level must be less than or equal to the maximum
     min_level: Option<usize>,
 ) -> Result<HierarchyItem<T>, String> {
     if items.is_empty() {

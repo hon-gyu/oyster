@@ -43,8 +43,10 @@ fn wait_for_server(port: u16, timeout_ms: u64) -> bool {
     let timeout = Duration::from_millis(timeout_ms);
 
     while start.elapsed() < timeout {
-        if let Ok(response) = reqwest::blocking::get(format!("http://localhost:{}/home.html", port))
-        {
+        if let Ok(response) = reqwest::blocking::get(format!(
+            "http://localhost:{}/home.html",
+            port
+        )) {
             if response.status().is_success() {
                 return true;
             }
@@ -67,7 +69,8 @@ fn test_serve_basic() {
 
     // Verify we can fetch the home page
     let response =
-        reqwest::blocking::get(format!("http://localhost:{}/home.html", port)).unwrap();
+        reqwest::blocking::get(format!("http://localhost:{}/home.html", port))
+            .unwrap();
     assert!(response.status().is_success());
 
     let body = response.text().unwrap();
@@ -86,8 +89,11 @@ fn test_serve_static_files() {
     );
 
     // Verify CSS is served
-    let response =
-        reqwest::blocking::get(format!("http://localhost:{}/styles/base.css", port)).unwrap();
+    let response = reqwest::blocking::get(format!(
+        "http://localhost:{}/styles/base.css",
+        port
+    ))
+    .unwrap();
     assert!(response.status().is_success());
 }
 
@@ -104,7 +110,8 @@ fn test_serve_with_watch_flag() {
 
     // Verify server is running with livereload (the page should contain livereload script)
     let response =
-        reqwest::blocking::get(format!("http://localhost:{}/home.html", port)).unwrap();
+        reqwest::blocking::get(format!("http://localhost:{}/home.html", port))
+            .unwrap();
     assert!(response.status().is_success());
 
     let body = response.text().unwrap();
@@ -117,7 +124,8 @@ fn test_serve_with_watch_flag() {
 
 #[test]
 fn test_serve_watch_regenerates_on_change() {
-    let vault_dir = tempfile::tempdir().expect("Failed to create vault temp dir");
+    let vault_dir =
+        tempfile::tempdir().expect("Failed to create vault temp dir");
     let port = 13004;
 
     // Create initial note
@@ -133,7 +141,8 @@ fn test_serve_watch_regenerates_on_change() {
 
     // Fetch initial content
     let response =
-        reqwest::blocking::get(format!("http://localhost:{}/home.html", port)).unwrap();
+        reqwest::blocking::get(format!("http://localhost:{}/home.html", port))
+            .unwrap();
     assert!(response.status().is_success());
 
     // Modify the note
@@ -153,7 +162,8 @@ fn test_serve_watch_regenerates_on_change() {
 
     // Verify server is still running after rebuild
     let response =
-        reqwest::blocking::get(format!("http://localhost:{}/home.html", port)).unwrap();
+        reqwest::blocking::get(format!("http://localhost:{}/home.html", port))
+            .unwrap();
     assert!(
         response.status().is_success(),
         "Server should still be running after rebuild"
@@ -172,7 +182,10 @@ fn test_serve_404_for_missing_files() {
     );
 
     // Request a non-existent file
-    let response =
-        reqwest::blocking::get(format!("http://localhost:{}/nonexistent.html", port)).unwrap();
+    let response = reqwest::blocking::get(format!(
+        "http://localhost:{}/nonexistent.html",
+        port
+    ))
+    .unwrap();
     assert_eq!(response.status().as_u16(), 404);
 }
