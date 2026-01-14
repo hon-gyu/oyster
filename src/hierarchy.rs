@@ -1,6 +1,15 @@
 //! Generic trait and utilities for building hierarchical tree structures
 //! The absolute value of level doesn't matter, only the relative order.
-// TODO: is build_loose_tree a good name?
+//! build_compact_tree:
+//! - Relative level ordering (absolute values don't matter)
+//! - No gap-filling (H1 → H3 makes H3 a direct child of H1)
+//! - Can produce multiple roots (a forest)
+//! build_loose_tree:
+//! - Absolute levels matter (always rooted at level 1)
+//! - Gap-filling with implicit nodes
+//! - Always produces single root
+//! - Assigns indices
+
 use crate::export::utils::get_relative_dest;
 use crate::link::Referenceable;
 use std::collections::BTreeSet;
@@ -119,7 +128,7 @@ impl<T: fmt::Display> fmt::Display for HierarchyItem<T> {
 /// # Example
 /// Given headings: H1, H2, H3, H2
 /// The tree will be: H1 -> [H2 -> [H3], H2]
-pub fn build_compact_tree<T: Hierarchical>(
+pub fn build_relative_tree<T: Hierarchical>(
     items: Vec<T>,
 ) -> Vec<HierarchyItem<T>> {
     let mut roots = Vec::new();
@@ -189,7 +198,7 @@ pub fn build_compact_tree<T: Hierarchical>(
 /// - the tree covers all levels from 1 to the maximum level of the input items
 /// - we create default items for empty levels (gap-filling)
 /// - returns Err if input is empty or minimum level is non-positive
-pub fn build_loose_tree<T: HierarchicalWithDefaults>(
+pub fn build_padded_tree<T: HierarchicalWithDefaults>(
     items: Vec<T>,
 ) -> Result<HierarchyItem<T>, String> {
     if items.is_empty() {
@@ -214,7 +223,8 @@ pub fn build_loose_tree<T: HierarchicalWithDefaults>(
     for level in 1..min_level {
         // Index for initial defaults: [0], [0, 0], [0, 0, 0], etc.
         let index: Vec<usize> = vec![0; level];
-        let mut default_node = HierarchyItem::new(T::default_at_level(level, Some(index.clone())));
+        let mut default_node =
+            HierarchyItem::new(T::default_at_level(level, Some(index.clone())));
         default_node.index = Some(index);
         stack.push((level, default_node, true));
     }
@@ -253,8 +263,10 @@ pub fn build_loose_tree<T: HierarchicalWithDefaults>(
                     }
                 }
                 index.push(0);
-                let mut default_node =
-                    HierarchyItem::new(T::default_at_level(level, Some(index.clone())));
+                let mut default_node = HierarchyItem::new(T::default_at_level(
+                    level,
+                    Some(index.clone()),
+                ));
                 default_node.index = Some(index);
                 stack.push((level, default_node, true));
             }
@@ -263,8 +275,10 @@ pub fn build_loose_tree<T: HierarchicalWithDefaults>(
             for level in 1..curr_level {
                 // Index for initial defaults: [0], [0, 0], etc.
                 let index: Vec<usize> = vec![0; level];
-                let mut default_node =
-                    HierarchyItem::new(T::default_at_level(level, Some(index.clone())));
+                let mut default_node = HierarchyItem::new(T::default_at_level(
+                    level,
+                    Some(index.clone()),
+                ));
                 default_node.index = Some(index);
                 stack.push((level, default_node, true));
             }
@@ -406,7 +420,7 @@ where
     items.sort_by(|a, b| a.path.cmp(&b.path));
 
     // Build tree using Hierarchical trait
-    build_compact_tree(items)
+    build_relative_tree(items)
 }
 
 // Test
@@ -460,7 +474,7 @@ mod tests {
     #[test]
     fn test_build_compact_tree_simple() {
         let tree =
-            build_compact_tree(items(&[(1, "H1"), (2, "H2"), (3, "H3")]));
+            build_relative_tree(items(&[(1, "H1"), (2, "H2"), (3, "H3")]));
         assert_eq!(tree.len(), 1);
         let output = format!("{}", tree[0]);
         assert_snapshot!(output, @r"
@@ -473,7 +487,7 @@ mod tests {
     #[test]
     fn test_build_compact_tree_with_level_jump() {
         let tree =
-            build_compact_tree(items(&[(1, "H1"), (3, "H3"), (2, "H2")]));
+            build_relative_tree(items(&[(1, "H1"), (3, "H3"), (2, "H2")]));
         assert_eq!(tree.len(), 1);
         let output = format!("{}", tree[0]);
         assert_snapshot!(output, @r"
@@ -486,7 +500,7 @@ mod tests {
     #[test]
     fn test_build_compact_tree_multiple_roots() {
         let tree =
-            build_compact_tree(items(&[(1, "H1a"), (2, "H2"), (1, "H1b")]));
+            build_relative_tree(items(&[(1, "H1a"), (2, "H2"), (1, "H1b")]));
         assert_eq!(tree.len(), 2);
         let output = format!("{}\n\n{}", tree[0], tree[1]);
         assert_snapshot!(output, @r"
@@ -500,7 +514,7 @@ mod tests {
 
     #[test]
     fn test_display_hierarchy() {
-        let tree = build_compact_tree(items(&[
+        let tree = build_relative_tree(items(&[
             (1, "H1"),
             (2, "H2"),
             (3, "H3"),
@@ -522,7 +536,7 @@ mod tests {
     fn test_build_loose_tree_example1() {
         // Example 1: A(1), B(3), C(2)
         let root =
-            build_loose_tree(items(&[(1, "A"), (3, "B"), (2, "C")])).unwrap();
+            build_padded_tree(items(&[(1, "A"), (3, "B"), (2, "C")])).unwrap();
         let output = format!("{}", root);
         assert_snapshot!(output, @r"
         # A (1)
@@ -535,7 +549,7 @@ mod tests {
     #[test]
     fn test_build_loose_tree_example2() {
         // Example 2: A(2), B(4), B1(3), C(2), D(3), E(3), F(4)
-        let root = build_loose_tree(items(&[
+        let root = build_padded_tree(items(&[
             (2, "A"),
             (4, "B"),
             (3, "B1"),
@@ -561,7 +575,7 @@ mod tests {
 
     #[test]
     fn test_build_loose_tree_non_positive_level() {
-        let result = build_loose_tree(items(&[(0, "Invalid")]));
+        let result = build_padded_tree(items(&[(0, "Invalid")]));
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("positive"));
     }
@@ -569,7 +583,7 @@ mod tests {
     #[test]
     fn test_build_loose_tree_empty() {
         let items: Vec<TestItem> = vec![];
-        let result = build_loose_tree(items);
+        let result = build_padded_tree(items);
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("empty"));
     }

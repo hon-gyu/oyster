@@ -1,4 +1,4 @@
-use crate::hierarchy::{Hierarchical, HierarchyItem, build_compact_tree};
+use crate::hierarchy::{Hierarchical, HierarchyItem, build_relative_tree};
 use crate::link::Referenceable;
 use maud::{Markup, html};
 use std::ops::Range;
@@ -99,7 +99,7 @@ where
         return None;
     }
 
-    let tree = build_compact_tree(toc_items);
+    let tree = build_relative_tree(toc_items);
 
     Some(html! {
         nav class="toc" {
