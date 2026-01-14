@@ -5,6 +5,18 @@
 //! - Headings -> Sections
 //!
 //! All the query logic are handled by `jq`
+//!
+//!
+//! ## Build hierarchy numbers for headings
+//!
+//! The numbering scheme works as follows:
+//! - Start with "0" as the implicit document root
+//! - Each heading level gets a counter
+//! - When a heading appears, increment the counter for its level
+//! - Reset all deeper level counters
+//!
+//! Example: ## A, #### B, ### B1, ## C, ### D, ### E, #### F
+//! Results: 0.1, 0.1.0.1, 0.1.1, 0.2, 0.2.1, 0.2.2, 0.2.2.1
 use crate::ast::{Node, NodeKind, Tree};
 use crate::link::extract::scan_note;
 use pulldown_cmark::HeadingLevel;
@@ -12,8 +24,26 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 use serde_yaml::Value as YamlValue;
 mod heading;
+use crate::hierarchy::{HierarchicalWithDefaults, HierarchyItem};
 
 use heading::Heading;
+
+impl HierarchicalWithDefaults for Heading {
+    fn default_at_level(level: usize) -> Self {
+        Self {
+            level: HeadingLevel::try_from(level)
+                .expect("Invalid arg: level /isin 1..6"),
+            text: "placeholder".to_string(),
+            start_byte: 0,
+            end_byte: 0,
+            start_point: (0, 0),
+            end_point: (0, 0),
+            id: None,
+            classes: Vec::new(),
+            attrs: Vec::new(),
+        }
+    }
+}
 
 /// A section of content under a heading
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -22,52 +52,10 @@ pub struct Section {
     pub heading: Heading,
     /// Hierarchy number (e.g., "0.1", "0.1.0.1")
     pub number: String,
-    /// Raw content of this section (excluding child sections)
+    /// Content of this section excluding child sections
     pub content: String,
     /// Child sections (headings at deeper levels)
     pub children: Vec<Section>,
-}
-
-/// Build hierarchy numbers for headings
-///
-/// The numbering scheme works as follows:
-/// - Start with "0" as the implicit document root
-/// - Each heading level gets a counter
-/// - When a heading appears, increment the counter for its level
-/// - Reset all deeper level counters
-///
-/// Example: ## A, #### B, ### B1, ## C, ### D, ### E, #### F
-/// Results: 0.1, 0.1.0.1, 0.1.1, 0.2, 0.2.1, 0.2.2, 0.2.2.1
-fn build_heading_numbers(headings: &[Heading]) -> Vec<String> {
-    if headings.is_empty() {
-        return Vec::new();
-    }
-
-    // Track counters for each level (0-6, where 0 is document root)
-    let mut counters: [usize; 7] = [0; 7];
-    let mut numbers = Vec::new();
-
-    for heading in headings {
-        let level = heading.level as usize;
-
-        // Increment counter for this level
-        counters[level] += 1;
-
-        // Reset deeper level counters
-        for i in (level + 1)..7 {
-            counters[i] = 0;
-        }
-
-        // Build the number string from level 0 to current level
-        let number: String = (0..=level)
-            .map(|l| counters[l].to_string())
-            .collect::<Vec<_>>()
-            .join(".");
-
-        numbers.push(number);
-    }
-
-    numbers
 }
 
 /// Build hierarchical sections from headings
