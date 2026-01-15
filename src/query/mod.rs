@@ -103,12 +103,10 @@ impl<'de> Deserialize<'de> for Range {
             return Err(serde::de::Error::custom("invalid loc format"));
         }
 
-        let start_row: usize = start_parts[0]
-            .parse()
-            .map_err(serde::de::Error::custom)?;
-        let start_col: usize = start_parts[1]
-            .parse()
-            .map_err(serde::de::Error::custom)?;
+        let start_row: usize =
+            start_parts[0].parse().map_err(serde::de::Error::custom)?;
+        let start_col: usize =
+            start_parts[1].parse().map_err(serde::de::Error::custom)?;
         let end_row: usize =
             end_parts[0].parse().map_err(serde::de::Error::custom)?;
         let end_col: usize =
@@ -255,18 +253,18 @@ impl HierarchicalWithDefaults for SectionHeading {
 /// # Fields
 ///
 /// - `heading`: The heading that starts this section (`null` for root)
-/// - `index`: Hierarchical position (e.g., "0.1.2" means first H1's second H2's third H3)
+/// - `path`: Hierarchical path (e.g., "1.2.3" means first H1's second H2's third H3)
 /// - `content`: Text content between this heading and the next heading/child
 /// - `range`: Source location (byte range and line numbers)
 /// - `children`: Nested sections at deeper heading levels
 ///
-/// # Index Format
+/// # Path Format
 ///
-/// The index uses dot notation where:
+/// The path uses dot notation where:
 /// - "root" = document root
 /// - "1" = first H1 under root
 /// - "1.2" = second H2 under that H1
-/// - "1.0" = implicit heading (index component is 0)
+/// - "1.0" = implicit heading (path component is 0)
 ///
 /// # Contract
 /// - implicit section's information will be the same as its first child except Root
@@ -274,8 +272,8 @@ impl HierarchicalWithDefaults for SectionHeading {
 pub struct Section {
     /// The heading that starts this section (null for root)
     pub heading: SectionHeading,
-    /// Hierarchical index in dot notation (e.g., "root", "1", "1.2")
-    pub index: String,
+    /// Hierarchical path in dot notation (e.g., "root", "1", "1.2")
+    pub path: String,
     /// Text content of this section, excluding child sections.
     /// Trimmed of leading/trailing whitespace.
     pub content: String,
@@ -312,11 +310,11 @@ impl Section {
             }
         };
 
-        // Print section header with index and byte range
+        // Print section header with path and byte range
         writeln!(
             f,
             "{}[{}] {} [{}..{}]",
-            prefix, self.index, title, self.range.bytes[0], self.range.bytes[1]
+            prefix, self.path, title, self.range.bytes[0], self.range.bytes[1]
         )?;
 
         // Print content preview if non-empty
@@ -340,14 +338,13 @@ impl Section {
     }
 
     fn is_implicit(&self) -> bool {
-        let indices = self.index.split('.').collect::<Vec<_>>();
-        if indices.len() == 1 && indices[0] == "root" {
+        let parts = self.path.split('.').collect::<Vec<_>>();
+        if parts.len() == 1 && parts[0] == "root" {
             true
         } else {
-            let last_index_number = indices.last().expect("Never: cannot be 0");
-            last_index_number
-                .parse::<usize>()
-                .expect("Never: index is constructed from ints")
+            let last = parts.last().expect("Never: path cannot be empty");
+            last.parse::<usize>()
+                .expect("Never: path is constructed from ints")
                 == 0
         }
     }
@@ -548,8 +545,8 @@ fn hierarchy_to_section(
     doc_start: Boundary,
     next_boundary: Boundary,
 ) -> Section {
-    // Convert index to string (e.g., [0, 1, 2] -> "0.1.2")
-    let index = item
+    // Convert index to path string (e.g., [0, 1, 2] -> "1.2")
+    let path = item
         .index
         .as_ref()
         .map(|idx| {
@@ -565,7 +562,7 @@ fn hierarchy_to_section(
         })
         .unwrap_or_default();
 
-    // Check if this is an implicit section (last index component is 0, but not root)
+    // Check if this is an implicit section (last path component is 0, but not root)
     let is_implicit = if let Some(idx) = &item.index {
         idx.len() > 1 && idx.last() == Some(&0)
     } else {
@@ -580,9 +577,11 @@ fn hierarchy_to_section(
         if is_implicit && !item.children.is_empty() {
             // Implicit section: use first child's location
             match &item.children[0].value {
-                SectionHeading::Root => {
-                    (doc_start.byte, doc_start.byte, (doc_start.row, doc_start.col))
-                }
+                SectionHeading::Root => (
+                    doc_start.byte,
+                    doc_start.byte,
+                    (doc_start.row, doc_start.col),
+                ),
                 SectionHeading::Heading(h) => {
                     (h.range.bytes[0], h.range.bytes[0], h.range.start)
                 }
@@ -590,9 +589,11 @@ fn hierarchy_to_section(
         } else {
             // Normal section
             match &heading {
-                SectionHeading::Root => {
-                    (doc_start.byte, doc_start.byte, (doc_start.row, doc_start.col))
-                }
+                SectionHeading::Root => (
+                    doc_start.byte,
+                    doc_start.byte,
+                    (doc_start.row, doc_start.col),
+                ),
                 SectionHeading::Heading(h) => {
                     (h.range.bytes[0], h.range.bytes[1], h.range.start)
                 }
@@ -643,7 +644,7 @@ fn hierarchy_to_section(
 
     Section {
         heading,
-        index,
+        path,
         content,
         range: Range::new(
             section_start_byte,
@@ -682,7 +683,8 @@ Details here.
 Final thoughts.
 "#;
         let tree = Tree::new(source, false);
-        let sections = build_sections(&tree.root_node, source, Boundary::zero()).unwrap();
+        let sections =
+            build_sections(&tree.root_node, source, Boundary::zero()).unwrap();
         assert_snapshot!(sections.to_string(), @r#"
         [root] (root) [0..132]
           [1] # Title [0..132]
@@ -705,7 +707,8 @@ Final thoughts.
 Some content.
 "#;
         let tree = Tree::new(source, false);
-        let sections = build_sections(&tree.root_node, source, Boundary::zero()).unwrap();
+        let sections =
+            build_sections(&tree.root_node, source, Boundary::zero()).unwrap();
         assert_snapshot!(sections.to_string(), @r#"
         [root] (root) [0..68]
           content: "This is content before any heading."
@@ -727,7 +730,8 @@ Some preamble.
 Intro content.
 "#;
         let tree = Tree::new(source, false);
-        let sections = build_sections(&tree.root_node, source, Boundary::zero()).unwrap();
+        let sections =
+            build_sections(&tree.root_node, source, Boundary::zero()).unwrap();
         assert_snapshot!(sections.to_string(), @r#"
         [root] (root) [0..78]
           [0] (implicit) [46..78]
@@ -745,7 +749,8 @@ Intro content.
 Content.
 "#;
         let tree = Tree::new(source, false);
-        let sections = build_sections(&tree.root_node, source, Boundary::zero()).unwrap();
+        let sections =
+            build_sections(&tree.root_node, source, Boundary::zero()).unwrap();
         assert_snapshot!(sections.to_string(), @r#"
         [root] (root) [0..36]
           [1] # Title [0..36]
@@ -802,7 +807,7 @@ More details.
           },
           "sections": {
             "heading": null,
-            "index": "root",
+            "path": "root",
             "content": "Some preamble.",
             "range": {
               "loc": "6:4-17:1",
@@ -814,7 +819,7 @@ More details.
             "children": [
               {
                 "heading": {
-                  "level": "H1",
+                  "level": 1,
                   "text": "# Introduction\n",
                   "range": {
                     "loc": "10:1-11:1",
@@ -824,7 +829,7 @@ More details.
                     ]
                   }
                 },
-                "index": "1",
+                "path": "1",
                 "content": "Intro content here.",
                 "range": {
                   "loc": "10:1-17:1",
@@ -836,7 +841,7 @@ More details.
                 "children": [
                   {
                     "heading": {
-                      "level": "H2",
+                      "level": 2,
                       "text": "## Details\n",
                       "range": {
                         "loc": "14:1-15:1",
@@ -846,7 +851,7 @@ More details.
                         ]
                       }
                     },
-                    "index": "1.1",
+                    "path": "1.1",
                     "content": "More details.",
                     "range": {
                       "loc": "14:1-17:1",
@@ -921,7 +926,7 @@ More content.
           },
           "sections": {
             "heading": null,
-            "index": "root",
+            "path": "root",
             "content": "Some preamble.",
             "range": {
               "loc": "6:4-25:1",
@@ -933,7 +938,7 @@ More content.
             "children": [
               {
                 "heading": {
-                  "level": "H1",
+                  "level": 1,
                   "text": "# Introduction\n",
                   "range": {
                     "loc": "10:1-11:1",
@@ -943,7 +948,7 @@ More content.
                     ]
                   }
                 },
-                "index": "1",
+                "path": "1",
                 "content": "",
                 "range": {
                   "loc": "10:1-18:1",
@@ -955,7 +960,7 @@ More content.
                 "children": [
                   {
                     "heading": {
-                      "level": "H2",
+                      "level": 2,
                       "text": "",
                       "range": {
                         "loc": "1:1-1:1",
@@ -965,7 +970,7 @@ More content.
                         ]
                       }
                     },
-                    "index": "1.0",
+                    "path": "1.0",
                     "content": "",
                     "range": {
                       "loc": "14:1-18:1",
@@ -977,7 +982,7 @@ More content.
                     "children": [
                       {
                         "heading": {
-                          "level": "H3",
+                          "level": 3,
                           "text": "### Details\n",
                           "range": {
                             "loc": "14:1-15:1",
@@ -987,7 +992,7 @@ More content.
                             ]
                           }
                         },
-                        "index": "1.0.1",
+                        "path": "1.0.1",
                         "content": "More details.",
                         "range": {
                           "loc": "14:1-18:1",
@@ -1004,7 +1009,7 @@ More content.
               },
               {
                 "heading": {
-                  "level": "H1",
+                  "level": 1,
                   "text": "# Another L1 Heading\n",
                   "range": {
                     "loc": "18:1-19:1",
@@ -1014,7 +1019,7 @@ More content.
                     ]
                   }
                 },
-                "index": "2",
+                "path": "2",
                 "content": "",
                 "range": {
                   "loc": "18:1-25:1",
@@ -1026,7 +1031,7 @@ More content.
                 "children": [
                   {
                     "heading": {
-                      "level": "H2",
+                      "level": 2,
                       "text": "",
                       "range": {
                         "loc": "1:1-1:1",
@@ -1036,7 +1041,7 @@ More content.
                         ]
                       }
                     },
-                    "index": "2.0",
+                    "path": "2.0",
                     "content": "",
                     "range": {
                       "loc": "1:1-25:1",
@@ -1048,7 +1053,7 @@ More content.
                     "children": [
                       {
                         "heading": {
-                          "level": "H3",
+                          "level": 3,
                           "text": "",
                           "range": {
                             "loc": "1:1-1:1",
@@ -1058,7 +1063,7 @@ More content.
                             ]
                           }
                         },
-                        "index": "2.0.0",
+                        "path": "2.0.0",
                         "content": "",
                         "range": {
                           "loc": "22:1-25:1",
@@ -1070,7 +1075,7 @@ More content.
                         "children": [
                           {
                             "heading": {
-                              "level": "H4",
+                              "level": 4,
                               "text": "#### Another Level 4\n",
                               "range": {
                                 "loc": "22:1-23:1",
@@ -1080,7 +1085,7 @@ More content.
                                 ]
                               }
                             },
-                            "index": "2.0.0.1",
+                            "path": "2.0.0.1",
                             "content": "More content.",
                             "range": {
                               "loc": "22:1-25:1",
