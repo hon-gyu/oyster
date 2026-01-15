@@ -1,5 +1,6 @@
 //! Heading representation for Markdown documents.
 
+use super::Range;
 use crate::hierarchy::Hierarchical;
 use pulldown_cmark::HeadingLevel;
 use serde::{Deserialize, Serialize};
@@ -11,10 +12,7 @@ use serde::{Deserialize, Serialize};
 /// Core fields:
 /// - `level`: Heading level (H1-H6, corresponding to # through ######)
 /// - `text`: Raw text content including the heading markers (e.g., "# Title\n")
-///
-/// Source location:
-/// - `start_byte`, `end_byte`: Byte range in the source file
-/// - `start_point`, `end_point`: (row, column) positions (0-indexed)
+/// - `range`: Source location (byte range and line numbers)
 ///
 /// Optional attributes (from extended Markdown syntax like `{#id .class attr=value}`):
 /// - `id`: Heading ID for linking (e.g., `{#my-heading}`)
@@ -30,14 +28,8 @@ pub struct Heading {
     pub level: HeadingLevel,
     /// Raw heading text including markers (e.g., "## Section\n")
     pub text: String,
-    /// Starting byte offset in source
-    pub start_byte: usize,
-    /// Ending byte offset in source
-    pub end_byte: usize,
-    /// Starting position as (row, column), 0-indexed
-    pub start_point: (usize, usize),
-    /// Ending position as (row, column), 0-indexed
-    pub end_point: (usize, usize),
+    /// Source location range
+    pub range: Range,
     /// Optional heading ID for anchor links (e.g., `{#introduction}`)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub id: Option<String>,
