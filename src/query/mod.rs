@@ -139,7 +139,7 @@ impl HierarchicalWithDefaults for SectionHeading {
 /// - "0.1.0" = implicit heading (index component is 0)
 ///
 /// # Contract
-/// - implicit section's information will be the same as its first child
+/// - implicit section's information will be the same as its first child except Root
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Section {
     /// The heading that starts this section or root
@@ -404,13 +404,31 @@ fn hierarchy_to_section(
         })
         .unwrap_or_default();
 
+    // Check if this is an implicit section (last index component is 0, but not root)
+    let is_implicit = if let Some(idx) = &item.index {
+        idx.len() > 1 && idx.last() == Some(&0)
+    } else {
+        false
+    };
+
     // Get heading and section start byte
     // For root, content starts at doc_start (after frontmatter)
+    // For implicit sections with children, inherit from first child
     let heading = item.value.clone();
-    let (section_start, content_start) = match &heading {
-        SectionHeading::Root => (doc_start, doc_start),
-        SectionHeading::Heading(h) => (h.start_byte, h.end_byte),
-    };
+    let (section_start, content_start) =
+        if is_implicit && !item.children.is_empty() {
+            // Implicit section: use first child's location
+            match &item.children[0].value {
+                SectionHeading::Root => (doc_start, doc_start),
+                SectionHeading::Heading(h) => (h.start_byte, h.start_byte),
+            }
+        } else {
+            // Normal section
+            match &heading {
+                SectionHeading::Root => (doc_start, doc_start),
+                SectionHeading::Heading(h) => (h.start_byte, h.end_byte),
+            }
+        };
 
     // Calculate content end: first child's start, or next_boundary
     let content_end = if item.children.is_empty() {
@@ -533,8 +551,7 @@ Intro content.
         let sections = build_sections(&tree.root_node, source, 0).unwrap();
         assert_snapshot!(sections.to_string(), @r#"
         [root] (root) [0..78]
-          [0] (implicit) [0..78]
-            content: "--- title: Test Document ---  Some preamble."
+          [0] (implicit) [46..78]
             [0.1] ## Introduction [46..78]
               content: "Intro content."
         "#);
@@ -550,14 +567,13 @@ Content.
 "#;
         let tree = Tree::new(source, false);
         let sections = build_sections(&tree.root_node, source, 0).unwrap();
-        assert_snapshot!(sections.to_string(), @r##"
+        assert_snapshot!(sections.to_string(), @r#"
         [root] (root) [0..36]
           [1] # Title [0..36]
-            [1.0] (implicit) [0..36]
-              content: "# Title"
+            [1.0] (implicit) [9..36]
               [1.0.1] ### Deep Section [9..36]
                 content: "Content."
-        "##);
+        "#);
     }
 
     #[test]
