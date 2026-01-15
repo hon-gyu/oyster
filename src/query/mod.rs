@@ -1102,4 +1102,44 @@ More content.
         }
         "#####);
     }
+
+    #[test]
+    fn test_json_roundtrip() {
+        use std::io::Write;
+        use tempfile::NamedTempFile;
+
+        let source = r#"---
+title: Roundtrip Test
+---
+
+Preamble content.
+
+# Introduction
+
+Some intro.
+
+## Details
+
+More details.
+"#;
+        let mut file = NamedTempFile::new().unwrap();
+        file.write_all(source.as_bytes()).unwrap();
+
+        // Parse markdown to struct
+        let original = query_file(file.path()).unwrap();
+
+        // Serialize to JSON
+        let json = serde_json::to_string_pretty(&original).unwrap();
+
+        // Deserialize back
+        let roundtripped: Markdown = serde_json::from_str(&json).unwrap();
+
+        // Re-serialize and compare
+        let json2 = serde_json::to_string_pretty(&roundtripped).unwrap();
+
+        assert_eq!(
+            json, json2,
+            "JSON roundtrip should produce identical output"
+        );
+    }
 }
