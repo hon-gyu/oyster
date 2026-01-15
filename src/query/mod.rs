@@ -60,7 +60,7 @@ pub struct Markdown {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Frontmatter {
     /// Parsed YAML content
-    pub content: YamlValue,
+    pub value: YamlValue,
     /// Starting byte offset in source
     pub start_byte: usize,
     /// Ending byte offset in source
@@ -306,9 +306,9 @@ pub fn query_file(path: &std::path::Path) -> Result<Markdown, String> {
         Some(node) => {
             let fm_content = extract_frontmatter(node);
             match fm_content {
-                Some(content) => {
+                Some(value) => {
                     let fm = Frontmatter {
-                        content,
+                        value,
                         start_byte: node.start_byte,
                         end_byte: node.end_byte,
                         start_point: (
@@ -606,7 +606,7 @@ More details.
         assert_snapshot!(json, @r###"
         {
           "frontmatter": {
-            "content": {
+            "value": {
               "title": "Test Document",
               "tags": [
                 "rust",
@@ -682,5 +682,241 @@ More details.
           }
         }
         "###);
+    }
+
+    #[test]
+    fn test_query_file_sparse() {
+        use std::io::Write;
+        use tempfile::NamedTempFile;
+
+        let source = r#"---
+title: Test Document
+tags:
+  - rust
+  - markdown
+---
+
+Some preamble.
+
+# Introduction
+
+Intro content here.
+
+### Details
+
+More details.
+
+# Another L1 Heading
+
+vdiqoj
+
+#### Another Level 4
+
+More content.
+
+"#;
+        let mut file = NamedTempFile::new().unwrap();
+        file.write_all(source.as_bytes()).unwrap();
+
+        let result = query_file(file.path()).unwrap();
+        let json = serde_json::to_string_pretty(&result).unwrap();
+        assert_snapshot!(json, @r#####"
+        {
+          "frontmatter": {
+            "value": {
+              "title": "Test Document",
+              "tags": [
+                "rust",
+                "markdown"
+              ]
+            },
+            "start_byte": 0,
+            "end_byte": 56,
+            "start_point": [
+              0,
+              0
+            ],
+            "end_point": [
+              5,
+              3
+            ]
+          },
+          "sections": {
+            "heading": "Root",
+            "index": "root",
+            "content": "Some preamble.",
+            "start_byte": 56,
+            "end_byte": 206,
+            "children": [
+              {
+                "heading": {
+                  "Heading": {
+                    "level": "H1",
+                    "text": "# Introduction\n",
+                    "start_byte": 74,
+                    "end_byte": 89,
+                    "start_point": [
+                      9,
+                      0
+                    ],
+                    "end_point": [
+                      10,
+                      0
+                    ]
+                  }
+                },
+                "index": "1",
+                "content": "",
+                "start_byte": 74,
+                "end_byte": 139,
+                "children": [
+                  {
+                    "heading": {
+                      "Heading": {
+                        "level": "H2",
+                        "text": "",
+                        "start_byte": 0,
+                        "end_byte": 0,
+                        "start_point": [
+                          0,
+                          0
+                        ],
+                        "end_point": [
+                          0,
+                          0
+                        ]
+                      }
+                    },
+                    "index": "1.0",
+                    "content": "",
+                    "start_byte": 111,
+                    "end_byte": 139,
+                    "children": [
+                      {
+                        "heading": {
+                          "Heading": {
+                            "level": "H3",
+                            "text": "### Details\n",
+                            "start_byte": 111,
+                            "end_byte": 123,
+                            "start_point": [
+                              13,
+                              0
+                            ],
+                            "end_point": [
+                              14,
+                              0
+                            ]
+                          }
+                        },
+                        "index": "1.0.1",
+                        "content": "More details.",
+                        "start_byte": 111,
+                        "end_byte": 139,
+                        "children": []
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "heading": {
+                  "Heading": {
+                    "level": "H1",
+                    "text": "# Another L1 Heading\n",
+                    "start_byte": 139,
+                    "end_byte": 160,
+                    "start_point": [
+                      17,
+                      0
+                    ],
+                    "end_point": [
+                      18,
+                      0
+                    ]
+                  }
+                },
+                "index": "2",
+                "content": "",
+                "start_byte": 139,
+                "end_byte": 206,
+                "children": [
+                  {
+                    "heading": {
+                      "Heading": {
+                        "level": "H2",
+                        "text": "",
+                        "start_byte": 0,
+                        "end_byte": 0,
+                        "start_point": [
+                          0,
+                          0
+                        ],
+                        "end_point": [
+                          0,
+                          0
+                        ]
+                      }
+                    },
+                    "index": "2.0",
+                    "content": "",
+                    "start_byte": 0,
+                    "end_byte": 206,
+                    "children": [
+                      {
+                        "heading": {
+                          "Heading": {
+                            "level": "H3",
+                            "text": "",
+                            "start_byte": 0,
+                            "end_byte": 0,
+                            "start_point": [
+                              0,
+                              0
+                            ],
+                            "end_point": [
+                              0,
+                              0
+                            ]
+                          }
+                        },
+                        "index": "2.0.0",
+                        "content": "",
+                        "start_byte": 169,
+                        "end_byte": 206,
+                        "children": [
+                          {
+                            "heading": {
+                              "Heading": {
+                                "level": "H4",
+                                "text": "#### Another Level 4\n",
+                                "start_byte": 169,
+                                "end_byte": 190,
+                                "start_point": [
+                                  21,
+                                  0
+                                ],
+                                "end_point": [
+                                  22,
+                                  0
+                                ]
+                              }
+                            },
+                            "index": "2.0.0.1",
+                            "content": "More content.",
+                            "start_byte": 169,
+                            "end_byte": 206,
+                            "children": []
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        }
+        "#####);
     }
 }
