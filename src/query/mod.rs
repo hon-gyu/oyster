@@ -19,6 +19,11 @@
 //! let result = query_file(Path::new("doc.md"))?;
 //! let json = serde_json::to_string_pretty(&result)?;
 //! ```
+//!
+//! # Non-goal
+//! - Lossless conversion from Markdown to JSON
+//!   - headinng contains extra information (e.g., id, classes, attrs), which might
+//!     be dropped during serialization
 
 use crate::ast::{Node, NodeKind, Tree};
 use crate::hierarchy::{
@@ -70,8 +75,8 @@ pub struct Frontmatter {
 ///
 /// This allows us to use `build_padded_tree` with a virtual root at level 0,
 /// which captures content before the first heading.
-#[derive(Debug, Clone)]
-enum SectionHeading {
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum SectionHeading {
     /// Document root (level 0) - captures content before the first heading
     Root,
     /// A real Markdown heading (levels 1-6, i.e., # to ######)
@@ -132,13 +137,14 @@ impl HierarchicalWithDefaults for SectionHeading {
 /// - "0.1" = first H1 under root
 /// - "0.1.2" = second H2 under that H1
 /// - "0.1.0" = implicit heading (index component is 0)
+///
+/// # Contract
+/// - implicit section's information will be the same as its first child
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Section {
-    /// The heading that starts this section.
-    /// - `None` for the document root (level 0)
-    /// - `Some(Heading)` for actual or implicit headings
-    pub heading: Option<Heading>,
-    /// Hierarchical index in dot notation (e.g., "0", "0.1", "0.1.2")
+    /// The heading that starts this section or root
+    pub heading: SectionHeading,
+    /// Hierarchical index in dot notation (e.g., "root", "0", "0.1", "0.1.2")
     pub index: String,
     /// Text content of this section, excluding child sections.
     /// Trimmed of leading/trailing whitespace.
@@ -167,9 +173,15 @@ impl Section {
 
         // Format heading title
         let title = match &self.heading {
-            None => "(root)".to_string(),
-            Some(h) if h.text.is_empty() => "(implicit)".to_string(),
-            Some(h) => h.text.lines().next().unwrap_or("").to_string(),
+            SectionHeading::Root => "(root)".to_string(),
+            // TODO: this assumes that empty headings are implicit
+            // which is not true
+            SectionHeading::Heading(_) if self.is_implicit() => {
+                "(implicit)".to_string()
+            }
+            SectionHeading::Heading(h) => {
+                h.text.lines().next().unwrap_or("").to_string()
+            }
         };
 
         // Print section header with index and byte range
@@ -197,6 +209,19 @@ impl Section {
         }
 
         Ok(())
+    }
+
+    fn is_implicit(&self) -> bool {
+        let indices = self.index.split('.').collect::<Vec<_>>();
+        if indices.len() == 1 && indices[0] == "root" {
+            true
+        } else {
+            let last_index_number = indices.last().expect("Never: cannot be 0");
+            last_index_number
+                .parse::<usize>()
+                .expect("Never: index is constructed from ints")
+                == 0
+        }
     }
 }
 
@@ -367,20 +392,24 @@ fn hierarchy_to_section(
         .index
         .as_ref()
         .map(|idx| {
-            idx.iter()
-                .map(|n| n.to_string())
-                .collect::<Vec<_>>()
-                .join(".")
+            if idx.len() == 1 {
+                "root".to_string()
+            } else {
+                idx[1..]
+                    .iter()
+                    .map(|n| n.to_string())
+                    .collect::<Vec<_>>()
+                    .join(".")
+            }
         })
         .unwrap_or_default();
 
     // Get heading and section start byte
     // For root, content starts at doc_start (after frontmatter)
-    let (heading, section_start, content_start) = match &item.value {
-        SectionHeading::Root => (None, doc_start, doc_start),
-        SectionHeading::Heading(h) => {
-            (Some(h.clone()), h.start_byte, h.end_byte)
-        }
+    let heading = item.value.clone();
+    let (section_start, content_start) = match &heading {
+        SectionHeading::Root => (doc_start, doc_start),
+        SectionHeading::Heading(h) => (h.start_byte, h.end_byte),
     };
 
     // Calculate content end: first child's start, or next_boundary
@@ -458,14 +487,14 @@ Final thoughts.
         let tree = Tree::new(source, false);
         let sections = build_sections(&tree.root_node, source, 0).unwrap();
         assert_snapshot!(sections.to_string(), @r#"
-        [0] (root) [0..132]
-          [0.1] # Title [0..132]
+        [root] (root) [0..132]
+          [1] # Title [0..132]
             content: "Some intro content."
-            [0.1.1] ## Section A [30..102]
+            [1.1] ## Section A [30..102]
               content: "Content of section A."
-              [0.1.1.1] ### Subsection A.1 [67..102]
+              [1.1.1] ### Subsection A.1 [67..102]
                 content: "Details here."
-            [0.1.2] ## Section B [102..132]
+            [1.2] ## Section B [102..132]
               content: "Final thoughts."
         "#);
     }
@@ -481,9 +510,9 @@ Some content.
         let tree = Tree::new(source, false);
         let sections = build_sections(&tree.root_node, source, 0).unwrap();
         assert_snapshot!(sections.to_string(), @r#"
-        [0] (root) [0..68]
+        [root] (root) [0..68]
           content: "This is content before any heading."
-          [0.1] # First Heading [37..68]
+          [1] # First Heading [37..68]
             content: "Some content."
         "#);
     }
@@ -503,10 +532,10 @@ Intro content.
         let tree = Tree::new(source, false);
         let sections = build_sections(&tree.root_node, source, 0).unwrap();
         assert_snapshot!(sections.to_string(), @r#"
-        [0] (root) [0..78]
-          [0.0] (implicit) [0..78]
+        [root] (root) [0..78]
+          [0] (implicit) [0..78]
             content: "--- title: Test Document ---  Some preamble."
-            [0.0.1] ## Introduction [46..78]
+            [0.1] ## Introduction [46..78]
               content: "Intro content."
         "#);
     }
@@ -522,11 +551,11 @@ Content.
         let tree = Tree::new(source, false);
         let sections = build_sections(&tree.root_node, source, 0).unwrap();
         assert_snapshot!(sections.to_string(), @r##"
-        [0] (root) [0..36]
-          [0.1] # Title [0..36]
-            [0.1.0] (implicit) [0..36]
+        [root] (root) [0..36]
+          [1] # Title [0..36]
+            [1.0] (implicit) [0..36]
               content: "# Title"
-              [0.1.0.1] ### Deep Section [9..36]
+              [1.0.1] ### Deep Section [9..36]
                 content: "Content."
         "##);
     }
@@ -580,48 +609,52 @@ More details.
             ]
           },
           "sections": {
-            "heading": null,
-            "index": "0",
+            "heading": "Root",
+            "index": "root",
             "content": "Some preamble.",
             "start_byte": 56,
             "end_byte": 137,
             "children": [
               {
                 "heading": {
-                  "level": "H1",
-                  "text": "# Introduction\n",
-                  "start_byte": 74,
-                  "end_byte": 89,
-                  "start_point": [
-                    9,
-                    0
-                  ],
-                  "end_point": [
-                    10,
-                    0
-                  ]
+                  "Heading": {
+                    "level": "H1",
+                    "text": "# Introduction\n",
+                    "start_byte": 74,
+                    "end_byte": 89,
+                    "start_point": [
+                      9,
+                      0
+                    ],
+                    "end_point": [
+                      10,
+                      0
+                    ]
+                  }
                 },
-                "index": "0.1",
+                "index": "1",
                 "content": "Intro content here.",
                 "start_byte": 74,
                 "end_byte": 137,
                 "children": [
                   {
                     "heading": {
-                      "level": "H2",
-                      "text": "## Details\n",
-                      "start_byte": 111,
-                      "end_byte": 122,
-                      "start_point": [
-                        13,
-                        0
-                      ],
-                      "end_point": [
-                        14,
-                        0
-                      ]
+                      "Heading": {
+                        "level": "H2",
+                        "text": "## Details\n",
+                        "start_byte": 111,
+                        "end_byte": 122,
+                        "start_point": [
+                          13,
+                          0
+                        ],
+                        "end_point": [
+                          14,
+                          0
+                        ]
+                      }
                     },
-                    "index": "0.1.1",
+                    "index": "1.1",
                     "content": "More details.",
                     "start_byte": 111,
                     "end_byte": 137,
