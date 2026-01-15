@@ -89,6 +89,27 @@ pub fn scan_vault(
     (fm_by_file, referenceables_with_children_by_file, references)
 }
 
+pub fn extract_frontmatter(node: &Node) -> Option<Y> {
+    if node.kind
+        != NodeKind::MetadataBlock(pulldown_cmark::MetadataBlockKind::YamlStyle)
+    {
+        None
+    } else {
+        let content: String = node
+            .children
+            .iter()
+            .map(|child| match &child.kind {
+                NodeKind::Text(text) => text.as_ref(),
+                _ => unreachable!(
+                    "Never: Yaml style should only have text children"
+                ),
+            })
+            .collect();
+        let fm: Option<Y> = serde_yaml::from_str(&content).unwrap_or(None);
+        fm
+    }
+}
+
 // Scan a note and return a tuple of references and in-note referenceables
 //
 // Post-condition: the in-note referenceables are in order
@@ -105,26 +126,7 @@ pub fn scan_note(
     // Frontmatter
     let fm_node = tree.root_node.children.first();
     let fm_content = if let Some(fm_node) = fm_node {
-        if fm_node.kind
-            == NodeKind::MetadataBlock(
-                pulldown_cmark::MetadataBlockKind::YamlStyle,
-            )
-        {
-            let content: String = fm_node
-                .children
-                .iter()
-                .map(|child| match &child.kind {
-                    NodeKind::Text(text) => text.as_ref(),
-                    _ => unreachable!(
-                        "Never: Yaml style should only have text children"
-                    ),
-                })
-                .collect();
-            let fm: Option<Y> = serde_yaml::from_str(&content).unwrap_or(None);
-            fm
-        } else {
-            None
-        }
+        extract_frontmatter(fm_node)
     } else {
         None
     };
@@ -144,6 +146,8 @@ pub fn scan_note(
 
 struct BlockIdentifier {
     identifier: String,
+    #[allow(dead_code)]
+    // TOOD: remove this after we use identifier range in styling
     range: Range<usize>,
 }
 

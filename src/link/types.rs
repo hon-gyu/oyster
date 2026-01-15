@@ -7,7 +7,6 @@ use pulldown_cmark::HeadingLevel;
 use std::ops::Range;
 use std::path::{Path, PathBuf};
 
-// ====================
 // Referenceable
 // ====================
 
@@ -80,7 +79,6 @@ impl Referenceable {
     }
 }
 
-// ====================
 // Reference
 // ====================
 #[derive(Clone, Debug, PartialEq)]

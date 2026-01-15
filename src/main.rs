@@ -1,7 +1,9 @@
 use clap::{Args, Parser, Subcommand};
 use oyster::export::{
-    MermaidRenderMode, NodeRenderConfig, QuiverRenderMode, TikzRenderMode, render_vault,
+    MermaidRenderMode, NodeRenderConfig, QuiverRenderMode, TikzRenderMode,
+    render_vault,
 };
+use oyster::query::query_file;
 #[cfg(feature = "serve")]
 use oyster::serve::{ServeConfig, serve_site};
 use std::path::PathBuf;
@@ -61,12 +63,14 @@ struct GenerateArgs {
 
 impl GenerateArgs {
     fn node_render_config(&self) -> NodeRenderConfig {
-        let mermaid_render_mode = MermaidRenderMode::from_str(&self.mermaid_render_mode)
-            .unwrap_or(MermaidRenderMode::BuildTime);
+        let mermaid_render_mode =
+            MermaidRenderMode::from_str(&self.mermaid_render_mode)
+                .unwrap_or(MermaidRenderMode::BuildTime);
         let tikz_render_mode = TikzRenderMode::from_str(&self.tikz_render_mode)
             .unwrap_or(TikzRenderMode::ClientSide);
-        let quiver_render_mode = QuiverRenderMode::from_str(&self.quiver_render_mode)
-            .unwrap_or(QuiverRenderMode::Raw);
+        let quiver_render_mode =
+            QuiverRenderMode::from_str(&self.quiver_render_mode)
+                .unwrap_or(QuiverRenderMode::Raw);
 
         NodeRenderConfig {
             preserve_softbreak: self.preserve_softbreak,
@@ -76,7 +80,10 @@ impl GenerateArgs {
         }
     }
 
-    fn generate(&self, output: &PathBuf) -> Result<String, Box<dyn std::error::Error>> {
+    fn generate(
+        &self,
+        output: &PathBuf,
+    ) -> Result<String, Box<dyn std::error::Error>> {
         println!(
             "Generating site from vault: {}",
             self.vault_root_dir.display()
@@ -100,6 +107,14 @@ impl GenerateArgs {
 
 #[derive(Subcommand)]
 enum Commands {
+    Query {
+        /// The path of the file to query
+        file: PathBuf,
+        /// Output file to write the query result to
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+    },
+
     /// Generate a static site from an Obsidian vault
     Generate {
         #[command(flatten)]
@@ -130,6 +145,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
 
     match cli.command {
+        Commands::Query { file, output } => {
+            let result = query_file(&file).map_err(|e| e)?;
+            let json = serde_json::to_string_pretty(&result)?;
+
+            if let Some(output_path) = output {
+                std::fs::write(&output_path, &json)?;
+                eprintln!("Output written to: {}", output_path.display());
+            } else {
+                println!("{}", json);
+            }
+        }
+
         Commands::Generate { args, output } => {
             args.generate(&output)?;
         }

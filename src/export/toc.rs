@@ -1,4 +1,4 @@
-use crate::hierarchy::{Hierarchical, HierarchyNode, build_tree};
+use crate::hierarchy::{Hierarchical, HierarchyItem, build_relative_tree};
 use crate::link::Referenceable;
 use maud::{Markup, html};
 use std::ops::Range;
@@ -46,6 +46,7 @@ where
         .filter(|refable| refable.path() == vault_path)
         .collect::<Vec<_>>();
 
+    /// - rec
     fn get_heading<M>(
         vault_path: &Path,
         referenceable: &Referenceable,
@@ -98,7 +99,7 @@ where
         return None;
     }
 
-    let tree = build_tree(toc_items);
+    let tree = build_relative_tree(toc_items);
 
     Some(html! {
         nav class="toc" {
@@ -115,7 +116,7 @@ where
 }
 
 /// Recursively render a TOC tree node and its children as markup
-fn render_toc_node(node: &HierarchyNode<TocItem>) -> Markup {
+fn render_toc_node(node: &HierarchyItem<TocItem>) -> Markup {
     html! {
         li {
             a href=(format!("#{}", node.value.anchor_id)) { (node.value.text) }
