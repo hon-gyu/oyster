@@ -4,20 +4,17 @@
 //!
 //! This module provides two tree-building strategies for hierarchical items:
 //!
-//! ## `build_compact_tree`
-//!
-//! - **Relative ordering**: Only the relative level order matters, not absolute values
-//! - **No gap-filling**: H1 → H3 makes H3 a direct child of H1 (no implicit H2)
-//! - **Multiple roots**: Can produce a forest if multiple top-level items exist
-//! - **Use case**: Table of contents where you want direct parent-child relationships
+//! `build_compact_tree`
+//! - Relative ordering: Only the relative level order matters, not absolute values
+//! - No gap-filling: H1 → H3 makes H3 a direct child of H1 (no implicit H2)
+//! - Multiple roots: Can produce a forest if multiple top-level items exist
 //!
 //! ## `build_padded_tree`
 //!
-//! - **Absolute levels**: Respects actual level values (1-6 for headings)
-//! - **Gap-filling**: Creates implicit nodes for level gaps (H1 → H3 inserts implicit H2)
-//! - **Single root**: Always produces exactly one root at the specified minimum level
-//! - **Indexed**: Assigns hierarchical indices (e.g., "0.1.2") to each node
-//! - **Use case**: Document sections where structural gaps should be preserved
+//! - Absolute levels: Respects actual level values (1-6 for headings)
+//! - Gap-filling: Creates implicit nodes for level gaps (H1 → H3 inserts implicit H2)
+//! - Single root: Always produces exactly one root at the specified minimum level
+//! - Indexed: Assigns hierarchical indices (e.g., "0.1.2") to each node
 //!
 //! # Example
 //!
