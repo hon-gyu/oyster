@@ -85,6 +85,7 @@ pub struct HierarchyItem<T> {
     /// Child nodes (items at deeper hierarchical levels)
     pub children: Vec<HierarchyItem<T>>,
     /// Hierarchical index path (e.g., `[0, 1, 2]` represents "0.1.2")
+    /// if an index ends with 0, it is a virtual item (implicitly created)
     pub index: Option<Vec<usize>>,
 }
 
