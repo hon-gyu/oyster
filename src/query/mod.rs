@@ -37,36 +37,113 @@ use serde_yaml::Value as YamlValue;
 mod heading;
 pub use heading::Heading;
 
-/// Source location range with byte offsets and line numbers.
+/// Source location range with byte offsets and line:column positions.
 ///
-/// Provides a compact representation of source location:
-/// - `bytes`: `[start_byte, end_byte]` - byte range in source
-/// - `lines`: `[start_line, end_line]` - line numbers (0-indexed)
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// # Serialization
+///
+/// Serializes to:
+/// ```json
+/// { "loc": "12:5-13:6", "bytes": [100, 200] }
+/// ```
+/// where `loc` is 1-indexed (row:col-row:col) for editor compatibility.
+#[derive(Debug, Clone)]
 pub struct Range {
     /// Byte range: [start_byte, end_byte]
     pub bytes: [usize; 2],
-    /// Line range: [start_line, end_line] (0-indexed)
-    pub lines: [usize; 2],
+    /// Start position: (row, column), 0-indexed internally
+    pub start: (usize, usize),
+    /// End position: (row, column), 0-indexed internally
+    pub end: (usize, usize),
+}
+
+impl Serialize for Range {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        use serde::ser::SerializeStruct;
+        let mut s = serializer.serialize_struct("Range", 2)?;
+        // 1-indexed for display
+        let loc = format!(
+            "{}:{}-{}:{}",
+            self.start.0 + 1,
+            self.start.1 + 1,
+            self.end.0 + 1,
+            self.end.1 + 1
+        );
+        s.serialize_field("loc", &loc)?;
+        s.serialize_field("bytes", &self.bytes)?;
+        s.end()
+    }
+}
+
+impl<'de> Deserialize<'de> for Range {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        struct RangeHelper {
+            loc: String,
+            bytes: [usize; 2],
+        }
+
+        let helper = RangeHelper::deserialize(deserializer)?;
+
+        // Parse "row:col-row:col" (1-indexed) back to 0-indexed
+        let parts: Vec<&str> = helper.loc.split('-').collect();
+        if parts.len() != 2 {
+            return Err(serde::de::Error::custom("invalid loc format"));
+        }
+
+        let start_parts: Vec<&str> = parts[0].split(':').collect();
+        let end_parts: Vec<&str> = parts[1].split(':').collect();
+
+        if start_parts.len() != 2 || end_parts.len() != 2 {
+            return Err(serde::de::Error::custom("invalid loc format"));
+        }
+
+        let start_row: usize = start_parts[0]
+            .parse()
+            .map_err(serde::de::Error::custom)?;
+        let start_col: usize = start_parts[1]
+            .parse()
+            .map_err(serde::de::Error::custom)?;
+        let end_row: usize =
+            end_parts[0].parse().map_err(serde::de::Error::custom)?;
+        let end_col: usize =
+            end_parts[1].parse().map_err(serde::de::Error::custom)?;
+
+        Ok(Range {
+            bytes: helper.bytes,
+            // Convert from 1-indexed to 0-indexed
+            start: (start_row.saturating_sub(1), start_col.saturating_sub(1)),
+            end: (end_row.saturating_sub(1), end_col.saturating_sub(1)),
+        })
+    }
 }
 
 impl Range {
     pub fn new(
         start_byte: usize,
         end_byte: usize,
-        start_line: usize,
-        end_line: usize,
+        start_row: usize,
+        start_col: usize,
+        end_row: usize,
+        end_col: usize,
     ) -> Self {
         Self {
             bytes: [start_byte, end_byte],
-            lines: [start_line, end_line],
+            start: (start_row, start_col),
+            end: (end_row, end_col),
         }
     }
 
     pub fn zero() -> Self {
         Self {
             bytes: [0, 0],
-            lines: [0, 0],
+            start: (0, 0),
+            end: (0, 0),
         }
     }
 }
@@ -297,11 +374,10 @@ impl Section {
 /// # Errors
 ///
 /// Returns an error if heading extraction fails (e.g., invalid heading levels).
-pub fn build_sections(
+fn build_sections(
     root: &Node,
     source: &str,
-    doc_start_byte: usize,
-    doc_start_line: usize,
+    doc_start: Boundary,
 ) -> Result<Section, String> {
     // 1. Extract headings from AST
     let headings = extract_headings(root, source);
@@ -310,13 +386,10 @@ pub fn build_sections(
     let tree = build_padded_tree(headings, Some(0))?;
 
     // 3. Convert to Section with content extraction
-    let doc_start = Boundary {
-        byte: doc_start_byte,
-        line: doc_start_line,
-    };
     let doc_end = Boundary {
         byte: root.end_byte,
-        line: root.end_point.row,
+        row: root.end_point.row,
+        col: root.end_point.column,
     };
     Ok(hierarchy_to_section(&tree, source, doc_start, doc_end))
 }
@@ -362,7 +435,7 @@ pub fn query_file(path: &std::path::Path) -> Result<Markdown, String> {
 
     // Extract frontmatter from the first child if it's a metadata block
     let first_child = tree.root_node.children.first();
-    let (frontmatter, doc_start_byte, doc_start_line) = match first_child {
+    let (frontmatter, doc_start) = match first_child {
         Some(node) => {
             let fm_content = extract_frontmatter(node);
             match fm_content {
@@ -373,24 +446,26 @@ pub fn query_file(path: &std::path::Path) -> Result<Markdown, String> {
                             node.start_byte,
                             node.end_byte,
                             node.start_point.row,
+                            node.start_point.column,
                             node.end_point.row,
+                            node.end_point.column,
                         ),
                     };
-                    (Some(fm), node.end_byte, node.end_point.row)
+                    let start = Boundary {
+                        byte: node.end_byte,
+                        row: node.end_point.row,
+                        col: node.end_point.column,
+                    };
+                    (Some(fm), start)
                 }
-                None => (None, 0, 0),
+                None => (None, Boundary::zero()),
             }
         }
-        None => (None, 0, 0),
+        None => (None, Boundary::zero()),
     };
 
     // Build section tree, starting content after frontmatter
-    let sections = build_sections(
-        &tree.root_node,
-        &source,
-        doc_start_byte,
-        doc_start_line,
-    )?;
+    let sections = build_sections(&tree.root_node, &source, doc_start)?;
 
     Ok(Markdown {
         frontmatter,
@@ -426,7 +501,9 @@ fn extract_headings_recursive(
                 node.start_byte,
                 node.end_byte,
                 node.start_point.row,
+                node.start_point.column,
                 node.end_point.row,
+                node.end_point.column,
             ),
             id: id.as_ref().map(|s| s.to_string()),
             classes: classes.iter().map(|s| s.to_string()).collect(),
@@ -444,10 +521,21 @@ fn extract_headings_recursive(
     }
 }
 
-/// Boundary info for section ranges (byte offset and line number)
+/// Boundary info for section ranges (byte offset and position)
 struct Boundary {
     byte: usize,
-    line: usize,
+    row: usize,
+    col: usize,
+}
+
+impl Boundary {
+    fn zero() -> Self {
+        Self {
+            byte: 0,
+            row: 0,
+            col: 0,
+        }
+    }
 }
 
 /// Convert HierarchyItem<SectionHeading> to Section
@@ -488,25 +576,25 @@ fn hierarchy_to_section(
     // For root, content starts at doc_start (after frontmatter)
     // For implicit sections with children, inherit from first child
     let heading = item.value.clone();
-    let (section_start, content_start, start_line) =
+    let (section_start_byte, content_start, start_pos) =
         if is_implicit && !item.children.is_empty() {
             // Implicit section: use first child's location
             match &item.children[0].value {
                 SectionHeading::Root => {
-                    (doc_start.byte, doc_start.byte, doc_start.line)
+                    (doc_start.byte, doc_start.byte, (doc_start.row, doc_start.col))
                 }
                 SectionHeading::Heading(h) => {
-                    (h.range.bytes[0], h.range.bytes[0], h.range.lines[0])
+                    (h.range.bytes[0], h.range.bytes[0], h.range.start)
                 }
             }
         } else {
             // Normal section
             match &heading {
                 SectionHeading::Root => {
-                    (doc_start.byte, doc_start.byte, doc_start.line)
+                    (doc_start.byte, doc_start.byte, (doc_start.row, doc_start.col))
                 }
                 SectionHeading::Heading(h) => {
-                    (h.range.bytes[0], h.range.bytes[1], h.range.lines[0])
+                    (h.range.bytes[0], h.range.bytes[1], h.range.start)
                 }
             }
         };
@@ -535,24 +623,21 @@ fn hierarchy_to_section(
         .map(|(i, child)| {
             let child_next = if i + 1 < item.children.len() {
                 match &item.children[i + 1].value {
-                    SectionHeading::Root => Boundary { byte: 0, line: 0 },
+                    SectionHeading::Root => Boundary::zero(),
                     SectionHeading::Heading(h) => Boundary {
                         byte: h.range.bytes[0],
-                        line: h.range.lines[0],
+                        row: h.range.start.0,
+                        col: h.range.start.1,
                     },
                 }
             } else {
                 Boundary {
                     byte: next_boundary.byte,
-                    line: next_boundary.line,
+                    row: next_boundary.row,
+                    col: next_boundary.col,
                 }
             };
-            hierarchy_to_section(
-                child,
-                source,
-                Boundary { byte: 0, line: 0 },
-                child_next,
-            )
+            hierarchy_to_section(child, source, Boundary::zero(), child_next)
         })
         .collect();
 
@@ -561,10 +646,12 @@ fn hierarchy_to_section(
         index,
         content,
         range: Range::new(
-            section_start,
+            section_start_byte,
             next_boundary.byte,
-            start_line,
-            next_boundary.line,
+            start_pos.0,
+            start_pos.1,
+            next_boundary.row,
+            next_boundary.col,
         ),
         children,
     }
@@ -595,7 +682,7 @@ Details here.
 Final thoughts.
 "#;
         let tree = Tree::new(source, false);
-        let sections = build_sections(&tree.root_node, source, 0, 0).unwrap();
+        let sections = build_sections(&tree.root_node, source, Boundary::zero()).unwrap();
         assert_snapshot!(sections.to_string(), @r#"
         [root] (root) [0..132]
           [1] # Title [0..132]
@@ -618,7 +705,7 @@ Final thoughts.
 Some content.
 "#;
         let tree = Tree::new(source, false);
-        let sections = build_sections(&tree.root_node, source, 0, 0).unwrap();
+        let sections = build_sections(&tree.root_node, source, Boundary::zero()).unwrap();
         assert_snapshot!(sections.to_string(), @r#"
         [root] (root) [0..68]
           content: "This is content before any heading."
@@ -640,7 +727,7 @@ Some preamble.
 Intro content.
 "#;
         let tree = Tree::new(source, false);
-        let sections = build_sections(&tree.root_node, source, 0, 0).unwrap();
+        let sections = build_sections(&tree.root_node, source, Boundary::zero()).unwrap();
         assert_snapshot!(sections.to_string(), @r#"
         [root] (root) [0..78]
           [0] (implicit) [46..78]
@@ -658,7 +745,7 @@ Intro content.
 Content.
 "#;
         let tree = Tree::new(source, false);
-        let sections = build_sections(&tree.root_node, source, 0, 0).unwrap();
+        let sections = build_sections(&tree.root_node, source, Boundary::zero()).unwrap();
         assert_snapshot!(sections.to_string(), @r#"
         [root] (root) [0..36]
           [1] # Title [0..36]
@@ -706,13 +793,10 @@ More details.
               ]
             },
             "range": {
+              "loc": "1:1-6:4",
               "bytes": [
                 0,
                 56
-              ],
-              "lines": [
-                0,
-                5
               ]
             }
           },
@@ -721,13 +805,10 @@ More details.
             "index": "root",
             "content": "Some preamble.",
             "range": {
+              "loc": "6:4-17:1",
               "bytes": [
                 56,
                 137
-              ],
-              "lines": [
-                5,
-                16
               ]
             },
             "children": [
@@ -736,26 +817,20 @@ More details.
                   "level": "H1",
                   "text": "# Introduction\n",
                   "range": {
+                    "loc": "10:1-11:1",
                     "bytes": [
                       74,
                       89
-                    ],
-                    "lines": [
-                      9,
-                      10
                     ]
                   }
                 },
                 "index": "1",
                 "content": "Intro content here.",
                 "range": {
+                  "loc": "10:1-17:1",
                   "bytes": [
                     74,
                     137
-                  ],
-                  "lines": [
-                    9,
-                    16
                   ]
                 },
                 "children": [
@@ -764,26 +839,20 @@ More details.
                       "level": "H2",
                       "text": "## Details\n",
                       "range": {
+                        "loc": "14:1-15:1",
                         "bytes": [
                           111,
                           122
-                        ],
-                        "lines": [
-                          13,
-                          14
                         ]
                       }
                     },
                     "index": "1.1",
                     "content": "More details.",
                     "range": {
+                      "loc": "14:1-17:1",
                       "bytes": [
                         111,
                         137
-                      ],
-                      "lines": [
-                        13,
-                        16
                       ]
                     },
                     "children": []
@@ -843,13 +912,10 @@ More content.
               ]
             },
             "range": {
+              "loc": "1:1-6:4",
               "bytes": [
                 0,
                 56
-              ],
-              "lines": [
-                0,
-                5
               ]
             }
           },
@@ -858,13 +924,10 @@ More content.
             "index": "root",
             "content": "Some preamble.",
             "range": {
+              "loc": "6:4-25:1",
               "bytes": [
                 56,
                 205
-              ],
-              "lines": [
-                5,
-                24
               ]
             },
             "children": [
@@ -873,26 +936,20 @@ More content.
                   "level": "H1",
                   "text": "# Introduction\n",
                   "range": {
+                    "loc": "10:1-11:1",
                     "bytes": [
                       74,
                       89
-                    ],
-                    "lines": [
-                      9,
-                      10
                     ]
                   }
                 },
                 "index": "1",
                 "content": "",
                 "range": {
+                  "loc": "10:1-18:1",
                   "bytes": [
                     74,
                     139
-                  ],
-                  "lines": [
-                    9,
-                    17
                   ]
                 },
                 "children": [
@@ -901,11 +958,8 @@ More content.
                       "level": "H2",
                       "text": "",
                       "range": {
+                        "loc": "1:1-1:1",
                         "bytes": [
-                          0,
-                          0
-                        ],
-                        "lines": [
                           0,
                           0
                         ]
@@ -914,13 +968,10 @@ More content.
                     "index": "1.0",
                     "content": "",
                     "range": {
+                      "loc": "14:1-18:1",
                       "bytes": [
                         111,
                         139
-                      ],
-                      "lines": [
-                        13,
-                        17
                       ]
                     },
                     "children": [
@@ -929,26 +980,20 @@ More content.
                           "level": "H3",
                           "text": "### Details\n",
                           "range": {
+                            "loc": "14:1-15:1",
                             "bytes": [
                               111,
                               123
-                            ],
-                            "lines": [
-                              13,
-                              14
                             ]
                           }
                         },
                         "index": "1.0.1",
                         "content": "More details.",
                         "range": {
+                          "loc": "14:1-18:1",
                           "bytes": [
                             111,
                             139
-                          ],
-                          "lines": [
-                            13,
-                            17
                           ]
                         },
                         "children": []
@@ -962,26 +1007,20 @@ More content.
                   "level": "H1",
                   "text": "# Another L1 Heading\n",
                   "range": {
+                    "loc": "18:1-19:1",
                     "bytes": [
                       139,
                       160
-                    ],
-                    "lines": [
-                      17,
-                      18
                     ]
                   }
                 },
                 "index": "2",
                 "content": "",
                 "range": {
+                  "loc": "18:1-25:1",
                   "bytes": [
                     139,
                     205
-                  ],
-                  "lines": [
-                    17,
-                    24
                   ]
                 },
                 "children": [
@@ -990,11 +1029,8 @@ More content.
                       "level": "H2",
                       "text": "",
                       "range": {
+                        "loc": "1:1-1:1",
                         "bytes": [
-                          0,
-                          0
-                        ],
-                        "lines": [
                           0,
                           0
                         ]
@@ -1003,13 +1039,10 @@ More content.
                     "index": "2.0",
                     "content": "",
                     "range": {
+                      "loc": "1:1-25:1",
                       "bytes": [
                         0,
                         205
-                      ],
-                      "lines": [
-                        0,
-                        24
                       ]
                     },
                     "children": [
@@ -1018,11 +1051,8 @@ More content.
                           "level": "H3",
                           "text": "",
                           "range": {
+                            "loc": "1:1-1:1",
                             "bytes": [
-                              0,
-                              0
-                            ],
-                            "lines": [
                               0,
                               0
                             ]
@@ -1031,13 +1061,10 @@ More content.
                         "index": "2.0.0",
                         "content": "",
                         "range": {
+                          "loc": "22:1-25:1",
                           "bytes": [
                             169,
                             205
-                          ],
-                          "lines": [
-                            21,
-                            24
                           ]
                         },
                         "children": [
@@ -1046,26 +1073,20 @@ More content.
                               "level": "H4",
                               "text": "#### Another Level 4\n",
                               "range": {
+                                "loc": "22:1-23:1",
                                 "bytes": [
                                   169,
                                   190
-                                ],
-                                "lines": [
-                                  21,
-                                  22
                                 ]
                               }
                             },
                             "index": "2.0.0.1",
                             "content": "More content.",
                             "range": {
+                              "loc": "22:1-25:1",
                               "bytes": [
                                 169,
                                 205
-                              ],
-                              "lines": [
-                                21,
-                                24
                               ]
                             },
                             "children": []
