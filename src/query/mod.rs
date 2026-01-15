@@ -46,7 +46,7 @@ pub use heading::Heading;
 /// { "loc": "12:5-13:6", "bytes": [100, 200] }
 /// ```
 /// where `loc` is 1-indexed (row:col-row:col) for editor compatibility.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Range {
     /// Byte range: [start_byte, end_byte]
     pub bytes: [usize; 2],
@@ -151,7 +151,7 @@ impl Range {
 /// Contains:
 /// - `frontmatter`: Optional YAML metadata block with source location
 /// - `sections`: Hierarchical tree of document sections
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Markdown {
     /// YAML frontmatter (if present at the start of the document)
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -165,7 +165,7 @@ pub struct Markdown {
 /// Fields:
 /// - `value`: Parsed YAML value (can be any valid YAML structure)
 /// - `range`: Source location (byte range and line numbers)
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Frontmatter {
     /// Parsed YAML content
     pub value: YamlValue,
@@ -181,7 +181,7 @@ pub struct Frontmatter {
 /// # Serialization
 ///
 /// Serializes as `null` for Root, or the Heading object directly for Heading variant.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum SectionHeading {
     /// Document root (level 0) - captures content before the first heading
     Root,
@@ -268,7 +268,7 @@ impl HierarchicalWithDefaults for SectionHeading {
 ///
 /// # Contract
 /// - implicit section's information will be the same as its first child except Root
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Section {
     /// The heading that starts this section (null for root)
     pub heading: SectionHeading,
@@ -1145,6 +1145,42 @@ More details.
         assert_eq!(
             json, json2,
             "JSON roundtrip should produce identical output"
+        );
+    }
+
+    #[test]
+    fn test_struct_roundtrip() {
+        use std::io::Write;
+        use tempfile::NamedTempFile;
+
+        let source = r#"---
+title: Struct Roundtrip
+---
+
+Preamble.
+
+# Heading One
+
+Content one.
+
+## Subheading
+
+Subcontent.
+"#;
+        let mut file = NamedTempFile::new().unwrap();
+        file.write_all(source.as_bytes()).unwrap();
+
+        // Parse markdown to struct
+        let original = query_file(file.path()).unwrap();
+
+        // Serialize to JSON and back
+        let json = serde_json::to_string(&original).unwrap();
+        let roundtripped: Markdown = serde_json::from_str(&json).unwrap();
+
+        // Compare structs directly
+        assert_eq!(
+            original, roundtripped,
+            "Struct roundtrip should produce identical struct"
         );
     }
 }

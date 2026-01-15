@@ -44,7 +44,7 @@ mod heading_level_serde {
 ///
 /// - `level` serializes as integer (1-6)
 /// - Optional fields (`id`, `classes`, `attrs`) are omitted when empty
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Heading {
     /// Heading level: 1 through 6
     #[serde(with = "heading_level_serde")]
