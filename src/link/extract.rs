@@ -146,6 +146,8 @@ pub fn scan_note(
 
 struct BlockIdentifier {
     identifier: String,
+    #[allow(dead_code)]
+    // TOOD: remove this after we use identifier range in styling
     range: Range<usize>,
 }
 
