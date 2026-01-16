@@ -105,6 +105,13 @@ impl GenerateArgs {
     }
 }
 
+#[derive(Clone, Copy, clap::ValueEnum)]
+enum QueryOutputFormat {
+    Json,
+    Markdown,
+    Summary,
+}
+
 #[derive(Subcommand)]
 enum Commands {
     Query {
@@ -113,6 +120,9 @@ enum Commands {
         /// Output file to write the query result to
         #[arg(short, long)]
         output: Option<PathBuf>,
+        // Output format
+        #[arg(short, long, default_value = "json")]
+        format: QueryOutputFormat,
     },
 
     /// Generate a static site from an Obsidian vault
@@ -145,15 +155,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Query { file, output } => {
+        Commands::Query {
+            file,
+            output,
+            format,
+        } => {
             let result = query_file(&file).map_err(|e| e)?;
-            let json = serde_json::to_string_pretty(&result)?;
+            let out = match format {
+                QueryOutputFormat::Json => serde_json::to_string(&result)?,
+                QueryOutputFormat::Markdown => todo!(),
+                QueryOutputFormat::Summary => result.to_string(),
+            };
 
             if let Some(output_path) = output {
-                std::fs::write(&output_path, &json)?;
+                std::fs::write(&output_path, &out)?;
                 eprintln!("Output written to: {}", output_path.display());
             } else {
-                println!("{}", json);
+                println!("{}", out);
             }
         }
 
