@@ -321,22 +321,25 @@ impl Section {
         prefix: &str,
     ) -> std::fmt::Result {
         // Format heading info: level, title
-        let (level, title) = match &self.heading {
-            SectionHeading::Root => (0, "(root)".to_string()),
-            SectionHeading::Heading(h) if self.is_implicit() => {
-                (h.level() as usize, "(implicit)".to_string())
+        let title = match &self.heading {
+            SectionHeading::Root => "(root)".to_string(),
+            SectionHeading::Heading(_) if self.is_implicit() => "".to_string(),
+            SectionHeading::Heading(h) => {
+                h.text.lines().next().unwrap_or("").to_string()
             }
-            SectionHeading::Heading(h) => (
-                h.level() as usize,
-                h.text.lines().next().unwrap_or("").to_string(),
-            ),
         };
 
         // Print section header: level, path, title, byte range
         writeln!(
             f,
-            "L{} [{}] {} [{}..{}]",
-            level, self.path, title, self.range.bytes[0], self.range.bytes[1]
+            // "[{}] {} [{}:{}-{}:{}]",
+            "[{}] {}",
+            self.path,
+            title,
+            // self.range.start.0,
+            // self.range.start.1,
+            // self.range.end.0,
+            // self.range.end.1,
         )?;
 
         // Print content preview if non-empty
@@ -731,14 +734,14 @@ Final thoughts.
         let sections =
             build_sections(&tree.root_node, source, Boundary::zero()).unwrap();
         assert_snapshot!(sections.to_string(), @r"
-        L0 [root] (root) [0..132]
-        └── L1 [1] # Title [0..132]
+        [root] (root)
+        └── [1] # Title
             Some intro content.
-            ├── L2 [1.1] ## Section A [30..102]
+            ├── [1.1] ## Section A
             │   Content of section A.
-            │   └── L3 [1.1.1] ### Subsection A.1 [67..102]
+            │   └── [1.1.1] ### Subsection A.1
             │       Details here.
-            └── L2 [1.2] ## Section B [102..132]
+            └── [1.2] ## Section B
                 Final thoughts.
         ");
     }
@@ -755,9 +758,9 @@ Some content.
         let sections =
             build_sections(&tree.root_node, source, Boundary::zero()).unwrap();
         assert_snapshot!(sections.to_string(), @r"
-        L0 [root] (root) [0..68]
+        [root] (root)
         This is content before any heading.
-        └── L1 [1] # First Heading [37..68]
+        └── [1] # First Heading
             Some content.
         ");
     }
@@ -778,9 +781,9 @@ Intro content.
         let sections =
             build_sections(&tree.root_node, source, Boundary::zero()).unwrap();
         assert_snapshot!(sections.to_string(), @r"
-        L0 [root] (root) [0..78]
-        └── L1 [0] (implicit) [46..78]
-            └── L2 [0.1] ## Introduction [46..78]
+        [root] (root)
+        └── [0] 
+            └── [0.1] ## Introduction
                 Intro content.
         ");
     }
@@ -797,10 +800,10 @@ Content.
         let sections =
             build_sections(&tree.root_node, source, Boundary::zero()).unwrap();
         assert_snapshot!(sections.to_string(), @r"
-        L0 [root] (root) [0..36]
-        └── L1 [1] # Title [0..36]
-            └── L2 [1.0] (implicit) [9..36]
-                └── L3 [1.0.1] ### Deep Section [9..36]
+        [root] (root)
+        └── [1] # Title
+            └── [1.0] 
+                └── [1.0.1] ### Deep Section
                     Content.
         ");
     }
@@ -1253,16 +1256,16 @@ Subcontent.
         - markdown
         ---
 
-        L0 [root] (root) [56..205]
+        [root] (root)
         Some preamble.
-        ├── L1 [1] # Introduction [74..139]
-        │   └── L2 [1.0] (implicit) [111..139]
-        │       └── L3 [1.0.1] ### Details [111..139]
+        ├── [1] # Introduction
+        │   └── [1.0] 
+        │       └── [1.0.1] ### Details
         │           More details.
-        └── L1 [2] # Another L1 Heading [139..205]
-            └── L2 [2.0] (implicit) [0..205]
-                └── L3 [2.0.0] (implicit) [169..205]
-                    └── L4 [2.0.0.1] #### Another Level 4 [169..205]
+        └── [2] # Another L1 Heading
+            └── [2.0] 
+                └── [2.0.0] 
+                    └── [2.0.0.1] #### Another Level 4
                         More content.
         ");
     }
