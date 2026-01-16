@@ -160,6 +160,26 @@ pub struct Markdown {
     pub sections: Section,
 }
 
+impl std::fmt::Display for Markdown {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // Display frontmatter if present (complete, as YAML)
+        if let Some(fm) = &self.frontmatter {
+            writeln!(f, "---")?;
+            // Use serde_yaml to format the value
+            let yaml_str = serde_yaml::to_string(&fm.value)
+                .unwrap_or_else(|_| "<invalid yaml>".to_string());
+            // serde_yaml adds a trailing newline, so we trim and add our own
+            write!(f, "{}", yaml_str.trim_end())?;
+            writeln!(f)?;
+            writeln!(f, "---")?;
+            writeln!(f)?;
+        }
+
+        // Display section tree
+        write!(f, "{}", self.sections)
+    }
+}
+
 /// YAML frontmatter with source location information.
 ///
 /// Fields:
@@ -285,36 +305,38 @@ pub struct Section {
 
 impl std::fmt::Display for Section {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.fmt_with_indent(f, 0)
+        self.fmt_with_prefix(f, "")
     }
 }
 
 impl Section {
-    fn fmt_with_indent(
+    /// Maximum characters to show for content preview
+    const CONTENT_PREVIEW_LEN: usize = 50;
+
+    // TODO: make implicit sections more prominent
+    // TODO: color?
+    fn fmt_with_prefix(
         &self,
         f: &mut std::fmt::Formatter<'_>,
-        indent: usize,
+        prefix: &str,
     ) -> std::fmt::Result {
-        let prefix = "  ".repeat(indent);
-
-        // Format heading title
-        let title = match &self.heading {
-            SectionHeading::Root => "(root)".to_string(),
-            // TODO: this assumes that empty headings are implicit
-            // which is not true
-            SectionHeading::Heading(_) if self.is_implicit() => {
-                "(implicit)".to_string()
+        // Format heading info: level, title
+        let (level, title) = match &self.heading {
+            SectionHeading::Root => (0, "(root)".to_string()),
+            SectionHeading::Heading(h) if self.is_implicit() => {
+                (h.level() as usize, "(implicit)".to_string())
             }
-            SectionHeading::Heading(h) => {
-                h.text.lines().next().unwrap_or("").to_string()
-            }
+            SectionHeading::Heading(h) => (
+                h.level() as usize,
+                h.text.lines().next().unwrap_or("").to_string(),
+            ),
         };
 
-        // Print section header with path and byte range
+        // Print section header: level, path, title, byte range
         writeln!(
             f,
-            "{}[{}] {} [{}..{}]",
-            prefix, self.path, title, self.range.bytes[0], self.range.bytes[1]
+            "L{} [{}] {} [{}..{}]",
+            level, self.path, title, self.range.bytes[0], self.range.bytes[1]
         )?;
 
         // Print content preview if non-empty
@@ -322,16 +344,39 @@ impl Section {
             let preview: String = self
                 .content
                 .chars()
-                .take(50)
+                .take(Self::CONTENT_PREVIEW_LEN)
                 .map(|c| if c == '\n' { ' ' } else { c })
                 .collect();
-            let ellipsis = if self.content.len() > 50 { "..." } else { "" };
-            writeln!(f, "{}  content: \"{}{ellipsis}\"", prefix, preview)?;
+            let ellipsis =
+                if self.content.chars().count() > Self::CONTENT_PREVIEW_LEN {
+                    "..."
+                } else {
+                    ""
+                };
+            // writeln!(f, "{}content: \"{preview}{ellipsis}\"", prefix)?;
+            writeln!(f, "{}{preview}{ellipsis}", prefix)?;
         }
 
-        // Print children
-        for child in &self.children {
-            child.fmt_with_indent(f, indent + 1)?;
+        // Print children with tree branches
+        let child_count = self.children.len();
+        for (i, child) in self.children.iter().enumerate() {
+            let is_last = i == child_count - 1;
+
+            // Print branch character
+            if is_last {
+                write!(f, "{}└── ", prefix)?;
+            } else {
+                write!(f, "{}├── ", prefix)?;
+            }
+
+            // Determine prefix for child's children
+            let child_prefix = if is_last {
+                format!("{}    ", prefix)
+            } else {
+                format!("{}│   ", prefix)
+            };
+
+            child.fmt_with_prefix(f, &child_prefix)?;
         }
 
         Ok(())
@@ -685,17 +730,17 @@ Final thoughts.
         let tree = Tree::new(source, false);
         let sections =
             build_sections(&tree.root_node, source, Boundary::zero()).unwrap();
-        assert_snapshot!(sections.to_string(), @r#"
-        [root] (root) [0..132]
-          [1] # Title [0..132]
-            content: "Some intro content."
-            [1.1] ## Section A [30..102]
-              content: "Content of section A."
-              [1.1.1] ### Subsection A.1 [67..102]
-                content: "Details here."
-            [1.2] ## Section B [102..132]
-              content: "Final thoughts."
-        "#);
+        assert_snapshot!(sections.to_string(), @r"
+        L0 [root] (root) [0..132]
+        └── L1 [1] # Title [0..132]
+            Some intro content.
+            ├── L2 [1.1] ## Section A [30..102]
+            │   Content of section A.
+            │   └── L3 [1.1.1] ### Subsection A.1 [67..102]
+            │       Details here.
+            └── L2 [1.2] ## Section B [102..132]
+                Final thoughts.
+        ");
     }
 
     #[test]
@@ -709,12 +754,12 @@ Some content.
         let tree = Tree::new(source, false);
         let sections =
             build_sections(&tree.root_node, source, Boundary::zero()).unwrap();
-        assert_snapshot!(sections.to_string(), @r#"
-        [root] (root) [0..68]
-          content: "This is content before any heading."
-          [1] # First Heading [37..68]
-            content: "Some content."
-        "#);
+        assert_snapshot!(sections.to_string(), @r"
+        L0 [root] (root) [0..68]
+        This is content before any heading.
+        └── L1 [1] # First Heading [37..68]
+            Some content.
+        ");
     }
 
     #[test]
@@ -732,12 +777,12 @@ Intro content.
         let tree = Tree::new(source, false);
         let sections =
             build_sections(&tree.root_node, source, Boundary::zero()).unwrap();
-        assert_snapshot!(sections.to_string(), @r#"
-        [root] (root) [0..78]
-          [0] (implicit) [46..78]
-            [0.1] ## Introduction [46..78]
-              content: "Intro content."
-        "#);
+        assert_snapshot!(sections.to_string(), @r"
+        L0 [root] (root) [0..78]
+        └── L1 [0] (implicit) [46..78]
+            └── L2 [0.1] ## Introduction [46..78]
+                Intro content.
+        ");
     }
 
     #[test]
@@ -751,13 +796,13 @@ Content.
         let tree = Tree::new(source, false);
         let sections =
             build_sections(&tree.root_node, source, Boundary::zero()).unwrap();
-        assert_snapshot!(sections.to_string(), @r#"
-        [root] (root) [0..36]
-          [1] # Title [0..36]
-            [1.0] (implicit) [9..36]
-              [1.0.1] ### Deep Section [9..36]
-                content: "Content."
-        "#);
+        assert_snapshot!(sections.to_string(), @r"
+        L0 [root] (root) [0..36]
+        └── L1 [1] # Title [0..36]
+            └── L2 [1.0] (implicit) [9..36]
+                └── L3 [1.0.1] ### Deep Section [9..36]
+                    Content.
+        ");
     }
 
     #[test]
@@ -870,12 +915,8 @@ More details.
         "###);
     }
 
-    #[test]
-    fn test_query_file_padded() {
-        use std::io::Write;
-        use tempfile::NamedTempFile;
-
-        let source = r#"---
+    fn text_sparse_sections() -> String {
+        r#"---
 title: Test Document
 tags:
   - rust
@@ -900,7 +941,16 @@ vdiqoj
 
 More content.
 
-"#;
+"#
+        .to_string()
+    }
+
+    #[test]
+    fn test_query_file_padded() {
+        use std::io::Write;
+        use tempfile::NamedTempFile;
+
+        let source = text_sparse_sections();
         let mut file = NamedTempFile::new().unwrap();
         file.write_all(source.as_bytes()).unwrap();
 
@@ -1182,5 +1232,38 @@ Subcontent.
             original, roundtripped,
             "Struct roundtrip should produce identical struct"
         );
+    }
+
+    #[test]
+    fn test_markdown_display() {
+        use std::io::Write;
+        use tempfile::NamedTempFile;
+
+        let source = text_sparse_sections();
+
+        let mut file = NamedTempFile::new().unwrap();
+        file.write_all(source.as_bytes()).unwrap();
+
+        let result = query_file(file.path()).unwrap();
+        assert_snapshot!(result.to_string(), @r"
+        ---
+        title: Test Document
+        tags:
+        - rust
+        - markdown
+        ---
+
+        L0 [root] (root) [56..205]
+        Some preamble.
+        ├── L1 [1] # Introduction [74..139]
+        │   └── L2 [1.0] (implicit) [111..139]
+        │       └── L3 [1.0.1] ### Details [111..139]
+        │           More details.
+        └── L1 [2] # Another L1 Heading [139..205]
+            └── L2 [2.0] (implicit) [0..205]
+                └── L3 [2.0.0] (implicit) [169..205]
+                    └── L4 [2.0.0.1] #### Another Level 4 [169..205]
+                        More content.
+        ");
     }
 }
