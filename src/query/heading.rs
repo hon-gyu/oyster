@@ -1,20 +1,39 @@
 //! Heading representation for Markdown documents.
 
+use super::Range;
 use crate::hierarchy::Hierarchical;
 use pulldown_cmark::HeadingLevel;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+/// Serialize HeadingLevel as integer (1-6)
+mod heading_level_serde {
+    use super::*;
+
+    pub fn serialize<S>(level: &HeadingLevel, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_u8(*level as u8)
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<HeadingLevel, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let level: u8 = Deserialize::deserialize(deserializer)?;
+        HeadingLevel::try_from(level as usize)
+            .map_err(|_| serde::de::Error::custom(format!("invalid heading level: {}", level)))
+    }
+}
 
 /// A Markdown heading with source location and optional attributes.
 ///
 /// # Fields
 ///
 /// Core fields:
-/// - `level`: Heading level (H1-H6, corresponding to # through ######)
+/// - `level`: Heading level (1-6, corresponding to # through ######)
 /// - `text`: Raw text content including the heading markers (e.g., "# Title\n")
-///
-/// Source location:
-/// - `start_byte`, `end_byte`: Byte range in the source file
-/// - `start_point`, `end_point`: (row, column) positions (0-indexed)
+/// - `range`: Source location (byte range and line numbers)
 ///
 /// Optional attributes (from extended Markdown syntax like `{#id .class attr=value}`):
 /// - `id`: Heading ID for linking (e.g., `{#my-heading}`)
@@ -23,29 +42,25 @@ use serde::{Deserialize, Serialize};
 ///
 /// # Serialization
 ///
-/// Optional fields (`id`, `classes`, `attrs`) are omitted from JSON when empty.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// - `level` serializes as integer (1-6)
+/// - Optional fields (`id`, `classes`, `attrs`) are omitted when empty
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Heading {
-    /// Heading level: H1 (1) through H6 (6)
+    /// Heading level: 1 through 6
+    #[serde(with = "heading_level_serde")]
     pub level: HeadingLevel,
     /// Raw heading text including markers (e.g., "## Section\n")
     pub text: String,
-    /// Starting byte offset in source
-    pub start_byte: usize,
-    /// Ending byte offset in source
-    pub end_byte: usize,
-    /// Starting position as (row, column), 0-indexed
-    pub start_point: (usize, usize),
-    /// Ending position as (row, column), 0-indexed
-    pub end_point: (usize, usize),
+    /// Source location range
+    pub range: Range,
     /// Optional heading ID for anchor links (e.g., `{#introduction}`)
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none", default)]
     pub id: Option<String>,
     /// CSS classes from extended syntax (e.g., `{.warning}`)
-    #[serde(skip_serializing_if = "Vec::is_empty")]
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub classes: Vec<String>,
     /// Custom attributes as key-value pairs (e.g., `{data-section=intro}`)
-    #[serde(skip_serializing_if = "Vec::is_empty")]
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub attrs: Vec<(String, Option<String>)>,
 }
 
