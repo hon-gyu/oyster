@@ -392,7 +392,7 @@ impl Section {
     ) -> std::fmt::Result {
         // Format heading info: level, title
         let title = match &self.heading {
-            SectionHeading::Root => "(root)".to_string(),
+            SectionHeading::Root => "".to_string(),
             SectionHeading::Heading(_) if self.is_implicit() => "".to_string(),
             SectionHeading::Heading(h) => {
                 h.text.lines().next().unwrap_or("").to_string()
@@ -437,9 +437,9 @@ impl Section {
 
             // Print branch character
             if is_last {
-                write!(f, "{}└── ", prefix)?;
+                write!(f, "{}└─", prefix)?;
             } else {
-                write!(f, "{}├── ", prefix)?;
+                write!(f, "{}├─", prefix)?;
             }
 
             // Determine prefix for child's children
@@ -809,14 +809,14 @@ Final thoughts.
         let sections =
             build_sections(&tree.root_node, source, Boundary::zero()).unwrap();
         assert_snapshot!(sections.to_string(), @r"
-        [root] (root)
-        └── [1] # Title
+        [root] 
+        └─[1] # Title
             Some intro content.
-            ├── [1.1] ## Section A
+            ├─[1.1] ## Section A
             │   Content of section A.
-            │   └── [1.1.1] ### Subsection A.1
+            │   └─[1.1.1] ### Subsection A.1
             │       Details here.
-            └── [1.2] ## Section B
+            └─[1.2] ## Section B
                 Final thoughts.
         ");
     }
@@ -833,9 +833,9 @@ Some content.
         let sections =
             build_sections(&tree.root_node, source, Boundary::zero()).unwrap();
         assert_snapshot!(sections.to_string(), @r"
-        [root] (root)
+        [root] 
         This is content before any heading.
-        └── [1] # First Heading
+        └─[1] # First Heading
             Some content.
         ");
     }
@@ -856,9 +856,9 @@ Intro content.
         let sections =
             build_sections(&tree.root_node, source, Boundary::zero()).unwrap();
         assert_snapshot!(sections.to_string(), @r"
-        [root] (root)
-        └── [0]
-            └── [0.1] ## Introduction
+        [root] 
+        └─[0] 
+            └─[0.1] ## Introduction
                 Intro content.
         ");
     }
@@ -875,10 +875,10 @@ Content.
         let sections =
             build_sections(&tree.root_node, source, Boundary::zero()).unwrap();
         assert_snapshot!(sections.to_string(), @r"
-        [root] (root)
-        └── [1] # Title
-            └── [1.0]
-                └── [1.0.1] ### Deep Section
+        [root] 
+        └─[1] # Title
+            └─[1.0] 
+                └─[1.0.1] ### Deep Section
                     Content.
         ");
     }
@@ -1331,16 +1331,16 @@ Subcontent.
         - markdown
         ---
 
-        [root] (root)
+        [root] 
         Some preamble.
-        ├── [1] # Introduction
-        │   └── [1.0]
-        │       └── [1.0.1] ### Details
+        ├─[1] # Introduction
+        │   └─[1.0] 
+        │       └─[1.0.1] ### Details
         │           More details.
-        └── [2] # Another L1 Heading
-            └── [2.0]
-                └── [2.0.0]
-                    └── [2.0.0.1] #### Another Level 4
+        └─[2] # Another L1 Heading
+            └─[2.0] 
+                └─[2.0.0] 
+                    └─[2.0.0.1] #### Another Level 4
                         More content.
         ");
     }
