@@ -163,7 +163,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let result = query_file(&file).map_err(|e| e)?;
             let out = match format {
                 QueryOutputFormat::Json => serde_json::to_string(&result)?,
-                QueryOutputFormat::Markdown => todo!(),
+                QueryOutputFormat::Markdown => result.to_src(),
                 QueryOutputFormat::Summary => result.to_string(),
             };
 

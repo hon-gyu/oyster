@@ -180,6 +180,76 @@ impl std::fmt::Display for Markdown {
     }
 }
 
+impl Markdown {
+    pub fn new(source: &str) -> Result<Self, String> {
+        let tree = Tree::new_with_default_opts(&source);
+
+        // Extract frontmatter from the first child if it's a metadata block
+        let first_child = tree.root_node.children.first();
+        let (frontmatter, doc_start) = match first_child {
+            Some(node) => {
+                let fm_content = extract_frontmatter(node);
+                match fm_content {
+                    Some(value) => {
+                        let fm = Frontmatter {
+                            value,
+                            range: Range::new(
+                                node.start_byte,
+                                node.end_byte,
+                                node.start_point.row,
+                                node.start_point.column,
+                                node.end_point.row,
+                                node.end_point.column,
+                            ),
+                        };
+                        let start = Boundary {
+                            byte: node.end_byte,
+                            row: node.end_point.row,
+                            col: node.end_point.column,
+                        };
+                        (Some(fm), start)
+                    }
+                    None => (None, Boundary::zero()),
+                }
+            }
+            None => (None, Boundary::zero()),
+        };
+
+        // Build section tree, starting content after frontmatter
+        let sections = build_sections(&tree.root_node, &source, doc_start)?;
+
+        Ok(Markdown {
+            frontmatter,
+            sections,
+        })
+    }
+    /// Convert the Markdown struct back to source markdown text.
+    ///
+    /// Reconstructs the original markdown format including:
+    /// - Frontmatter (if present) in YAML format between `---` delimiters
+    /// - All sections with their headings and content
+    ///
+    /// Note: Implicit sections (created for level gaps) are skipped as they
+    /// have no content in the original source.
+    pub fn to_src(&self) -> String {
+        let mut result = String::new();
+
+        // Add frontmatter if present
+        if let Some(fm) = &self.frontmatter {
+            result.push_str("---\n");
+            let yaml_str = serde_yaml::to_string(&fm.value)
+                .unwrap_or_else(|_| String::new());
+            result.push_str(yaml_str.trim_end());
+            result.push_str("\n---\n\n");
+        }
+
+        // Add sections as markdown
+        result.push_str(&self.sections.to_src());
+
+        result
+    }
+}
+
 /// YAML frontmatter with source location information.
 ///
 /// Fields:
@@ -396,6 +466,50 @@ impl Section {
                 == 0
         }
     }
+
+    /// Convert section tree back to markdown format.
+    ///
+    /// # Returns
+    ///
+    /// A string containing the markdown representation of this section and its children.
+    fn to_src(&self) -> String {
+        let mut result = String::new();
+
+        match &self.heading {
+            SectionHeading::Root => {
+                // Root section: output content if present
+                if !self.content.is_empty() {
+                    result.push_str(&self.content);
+                    result.push_str("\n\n");
+                }
+            }
+            SectionHeading::Heading(h) => {
+                // Skip implicit sections (they have empty heading text)
+                if !h.text.is_empty() {
+                    // Output heading text (already includes trailing newline)
+                    result.push_str(&h.text);
+
+                    // Add blank line after heading
+                    if !self.content.is_empty() {
+                        result.push('\n');
+                    }
+
+                    // Output content if present
+                    if !self.content.is_empty() {
+                        result.push_str(&self.content);
+                        result.push_str("\n\n");
+                    }
+                }
+            }
+        }
+
+        // Recursively output children
+        for child in &self.children {
+            result.push_str(&child.to_src());
+        }
+
+        result
+    }
 }
 
 /// Build a hierarchical section tree from a document AST.
@@ -476,46 +590,7 @@ pub fn query_file(path: &std::path::Path) -> Result<Markdown, String> {
         return Err("File is empty".to_string());
     }
 
-    let tree = Tree::new_with_default_opts(&source);
-
-    // Extract frontmatter from the first child if it's a metadata block
-    let first_child = tree.root_node.children.first();
-    let (frontmatter, doc_start) = match first_child {
-        Some(node) => {
-            let fm_content = extract_frontmatter(node);
-            match fm_content {
-                Some(value) => {
-                    let fm = Frontmatter {
-                        value,
-                        range: Range::new(
-                            node.start_byte,
-                            node.end_byte,
-                            node.start_point.row,
-                            node.start_point.column,
-                            node.end_point.row,
-                            node.end_point.column,
-                        ),
-                    };
-                    let start = Boundary {
-                        byte: node.end_byte,
-                        row: node.end_point.row,
-                        col: node.end_point.column,
-                    };
-                    (Some(fm), start)
-                }
-                None => (None, Boundary::zero()),
-            }
-        }
-        None => (None, Boundary::zero()),
-    };
-
-    // Build section tree, starting content after frontmatter
-    let sections = build_sections(&tree.root_node, &source, doc_start)?;
-
-    Ok(Markdown {
-        frontmatter,
-        sections,
-    })
+    Markdown::new(&source)
 }
 
 /// Extract all headings from the AST in document order
@@ -782,7 +857,7 @@ Intro content.
             build_sections(&tree.root_node, source, Boundary::zero()).unwrap();
         assert_snapshot!(sections.to_string(), @r"
         [root] (root)
-        └── [0] 
+        └── [0]
             └── [0.1] ## Introduction
                 Intro content.
         ");
@@ -802,7 +877,7 @@ Content.
         assert_snapshot!(sections.to_string(), @r"
         [root] (root)
         └── [1] # Title
-            └── [1.0] 
+            └── [1.0]
                 └── [1.0.1] ### Deep Section
                     Content.
         ");
@@ -1259,14 +1334,135 @@ Subcontent.
         [root] (root)
         Some preamble.
         ├── [1] # Introduction
-        │   └── [1.0] 
+        │   └── [1.0]
         │       └── [1.0.1] ### Details
         │           More details.
         └── [2] # Another L1 Heading
-            └── [2.0] 
-                └── [2.0.0] 
+            └── [2.0]
+                └── [2.0.0]
                     └── [2.0.0.1] #### Another Level 4
                         More content.
         ");
+    }
+
+    #[test]
+    fn test_markdown_reconstruction() {
+        let source = r#"---
+title: Reconstruction Test
+tags:
+  - markdown
+---
+
+Preamble content here.
+
+# Introduction
+
+Intro content here.
+
+## Details
+
+More details.
+
+# Second Section
+
+Final content.
+"#;
+        let result = Markdown::new(source).unwrap();
+        let reconstructed = result.to_src();
+
+        assert_snapshot!(reconstructed, @r"
+        ---
+        title: Reconstruction Test
+        tags:
+        - markdown
+        ---
+
+        Preamble content here.
+
+        # Introduction
+
+        Intro content here.
+
+        ## Details
+
+        More details.
+
+        # Second Section
+
+        Final content.
+        ");
+    }
+
+    #[test]
+    fn test_roundtrip_markdown_to_struct_to_markdown() {
+        let original_source = r#"---
+title: Roundtrip Test
+---
+
+Preamble.
+
+# Heading 1
+
+Content 1.
+
+## Heading 2
+
+Content 2.
+"#;
+
+        let parsed = Markdown::new(original_source).unwrap();
+
+        // struct -> markdown
+        let reconstructed = parsed.to_src();
+
+        // markdown -> struct (again)
+        let reparsed = Markdown::new(reconstructed.as_str()).unwrap();
+
+        // Compare the two structs
+        assert_eq!(
+            parsed, reparsed,
+            "markdown -> struct -> markdown -> struct should be idempotent"
+        );
+    }
+
+    #[test]
+    fn test_roundtrip_struct_to_markdown_to_struct() {
+        let source = r#"---
+title: Struct Roundtrip
+tags:
+  - test
+---
+
+Root content.
+
+# Section 1
+
+Section 1 content.
+
+### Deep Section
+
+Deep content.
+
+# Section 2
+
+Section 2 content.
+"#;
+        // markdown -> struct
+        let original_struct = Markdown::new(source).unwrap();
+
+        // struct -> markdown
+        let markdown = original_struct.to_src();
+
+        // markdown -> struct
+        let roundtripped_struct = Markdown::new(markdown.as_str()).unwrap();
+
+        // struct -> markdown (again)
+        let markdown2 = roundtripped_struct.to_src();
+
+        // The markdown should be identical after roundtrip
+        assert_eq!(
+            markdown, markdown2,
+            "struct -> markdown -> struct -> markdown should be idempotent"
+        );
     }
 }
