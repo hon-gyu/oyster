@@ -24,7 +24,7 @@ struct GenerateArgs {
     /// Path to the vault directory
     vault_root_dir: PathBuf,
 
-    /// CSS theme to use. Available themes: dracula, tokyonight, and gruvbox
+    /// CSS theme to use. Available themes: dracula, tokyonight, gruvbox, github-light, github-dark, material-light, material-dark
     #[arg(short, long, default_value = "default")]
     theme: String,
 

@@ -1,0 +1,19 @@
+/* GitHub Dark Theme */
+:root {
+    --bg-primary: #0d1117;
+    --bg-secondary: #161b22;
+    --bg-tertiary: #161b22;
+    --text-primary: #e6edf3;
+    --text-secondary: #7d8590;
+    --accent-primary: #2f81f7;
+    --accent-secondary: #a371f7;
+    --link-primary: #58a6ff;
+    --link-hover: #79c0ff;
+    --code-text: #79c0ff;
+    --border-primary: #30363d;
+    --border-secondary: #21262d;
+    --blockquote-border: #3b434b;
+    --backlinks-heading: #58a6ff;
+    --heading-primary: #e6edf3;
+    --summary-hover: #58a6ff;
+}

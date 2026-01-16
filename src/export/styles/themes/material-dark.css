@@ -1,0 +1,19 @@
+/* Material Dark Theme */
+:root {
+    --bg-primary: #212121;
+    --bg-secondary: #2c2c2c;
+    --bg-tertiary: #2c2c2c;
+    --text-primary: #ffffff;
+    --text-secondary: #b0bec5;
+    --accent-primary: #42a5f5;
+    --accent-secondary: #29b6f6;
+    --link-primary: #42a5f5;
+    --link-hover: #64b5f6;
+    --code-text: #4fc3f7;
+    --border-primary: #424242;
+    --border-secondary: #616161;
+    --blockquote-border: #757575;
+    --backlinks-heading: #29b6f6;
+    --heading-primary: #ffffff;
+    --summary-hover: #42a5f5;
+}

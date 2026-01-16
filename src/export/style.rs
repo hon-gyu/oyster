@@ -11,6 +11,11 @@ const CALLOUT_CSS: &str = include_str!("styles/callout.css");
 const DRACULA_CSS: &str = include_str!("styles/themes/dracula.css");
 const GRUVBOX_CSS: &str = include_str!("styles/themes/gruvbox.css");
 const TOKYONIGHT_CSS: &str = include_str!("styles/themes/tokyonight.css");
+const GITHUB_LIGHT_CSS: &str = include_str!("styles/themes/github-light.css");
+const GITHUB_DARK_CSS: &str = include_str!("styles/themes/github-dark.css");
+const MATERIAL_LIGHT_CSS: &str =
+    include_str!("styles/themes/material-light.css");
+const MATERIAL_DARK_CSS: &str = include_str!("styles/themes/material-dark.css");
 
 /// Get the CSS content for a theme
 fn get_theme_css(name: &str) -> &'static str {
@@ -18,7 +23,11 @@ fn get_theme_css(name: &str) -> &'static str {
         "dracula" => DRACULA_CSS,
         "gruvbox" => GRUVBOX_CSS,
         "tokyonight" => TOKYONIGHT_CSS,
-        _ => TOKYONIGHT_CSS,
+        "github-light" => GITHUB_LIGHT_CSS,
+        "github-dark" => GITHUB_DARK_CSS,
+        "material-light" => MATERIAL_LIGHT_CSS,
+        "material-dark" => MATERIAL_DARK_CSS,
+        _ => MATERIAL_DARK_CSS,
     }
 }
 
