@@ -1,6 +1,6 @@
 //! Heading representation for Markdown documents.
 
-use super::Range;
+use super::types::Range;
 use crate::hierarchy::Hierarchical;
 use pulldown_cmark::HeadingLevel;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
