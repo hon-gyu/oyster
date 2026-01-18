@@ -3,8 +3,8 @@
 //! # Overview
 //!
 //! This module parses Markdown files and extracts:
-//! - **Frontmatter**: YAML metadata at the start of the document
-//! - **Sections**: Hierarchical tree of headings with their content
+//! - Frontmatter: YAML metadata at the start of the document
+//! - Sections: Hierarchical tree of headings with their content
 //!
 //! # Output Format
 //!
