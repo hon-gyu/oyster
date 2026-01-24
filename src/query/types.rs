@@ -6,115 +6,6 @@ use pulldown_cmark::HeadingLevel;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_yaml::Value as YamlValue;
 
-/// Source location range with byte offsets and line:column positions.
-///
-/// # Serialization
-///
-/// Serializes to:
-/// ```json
-/// { "loc": "12:5-13:6", "bytes": [100, 200] }
-/// ```
-/// where `loc` is 1-indexed (row:col-row:col) for editor compatibility.
-#[derive(Debug, Clone, PartialEq)]
-pub struct Range {
-    /// Byte range: [start_byte, end_byte]
-    pub bytes: [usize; 2],
-    /// Start position: (row, column), 0-indexed internally
-    pub start: (usize, usize),
-    /// End position: (row, column), 0-indexed internally
-    pub end: (usize, usize),
-}
-
-impl Serialize for Range {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        use serde::ser::SerializeStruct;
-        let mut s = serializer.serialize_struct("Range", 2)?;
-        // 1-indexed for display
-        let loc = format!(
-            "{}:{}-{}:{}",
-            self.start.0 + 1,
-            self.start.1 + 1,
-            self.end.0 + 1,
-            self.end.1 + 1
-        );
-        s.serialize_field("loc", &loc)?;
-        s.serialize_field("bytes", &self.bytes)?;
-        s.end()
-    }
-}
-
-impl<'de> Deserialize<'de> for Range {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        #[derive(Deserialize)]
-        struct RangeHelper {
-            loc: String,
-            bytes: [usize; 2],
-        }
-
-        let helper = RangeHelper::deserialize(deserializer)?;
-
-        // Parse "row:col-row:col" (1-indexed) back to 0-indexed
-        let parts: Vec<&str> = helper.loc.split('-').collect();
-        if parts.len() != 2 {
-            return Err(serde::de::Error::custom("invalid loc format"));
-        }
-
-        let start_parts: Vec<&str> = parts[0].split(':').collect();
-        let end_parts: Vec<&str> = parts[1].split(':').collect();
-
-        if start_parts.len() != 2 || end_parts.len() != 2 {
-            return Err(serde::de::Error::custom("invalid loc format"));
-        }
-
-        let start_row: usize =
-            start_parts[0].parse().map_err(serde::de::Error::custom)?;
-        let start_col: usize =
-            start_parts[1].parse().map_err(serde::de::Error::custom)?;
-        let end_row: usize =
-            end_parts[0].parse().map_err(serde::de::Error::custom)?;
-        let end_col: usize =
-            end_parts[1].parse().map_err(serde::de::Error::custom)?;
-
-        Ok(Range {
-            bytes: helper.bytes,
-            // Convert from 1-indexed to 0-indexed
-            start: (start_row.saturating_sub(1), start_col.saturating_sub(1)),
-            end: (end_row.saturating_sub(1), end_col.saturating_sub(1)),
-        })
-    }
-}
-
-impl Range {
-    pub fn new(
-        start_byte: usize,
-        end_byte: usize,
-        start_row: usize,
-        start_col: usize,
-        end_row: usize,
-        end_col: usize,
-    ) -> Self {
-        Self {
-            bytes: [start_byte, end_byte],
-            start: (start_row, start_col),
-            end: (end_row, end_col),
-        }
-    }
-
-    pub fn zero() -> Self {
-        Self {
-            bytes: [0, 0],
-            start: (0, 0),
-            end: (0, 0),
-        }
-    }
-}
-
 /// Structured representation of a Markdown document.
 ///
 /// Contains:
@@ -382,6 +273,10 @@ impl Section {
         Ok(())
     }
 
+    /// Returns true if the node is implicit, i.e., synthetically created for
+    /// level gaps (e.g., H1 → H3 creates implicit H2, or document root node).
+    ///
+    /// Determined by checking if the path is "root" or ending with 0 as in "1.0".
     pub(crate) fn is_implicit(&self) -> bool {
         let parts = self.path.split('.').collect::<Vec<_>>();
         if parts.len() == 1 && parts[0] == "root" {
@@ -436,5 +331,117 @@ impl Section {
         }
 
         result
+    }
+}
+
+// Range type
+// ====================
+
+/// Source location range with byte offsets and line:column positions.
+///
+/// # Serialization
+///
+/// Serializes to:
+/// ```json
+/// { "loc": "12:5-13:6", "bytes": [100, 200] }
+/// ```
+/// where `loc` is 1-indexed (row:col-row:col) for editor compatibility.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Range {
+    /// Byte range: [start_byte, end_byte]
+    pub bytes: [usize; 2],
+    /// Start position: (row, column), 0-indexed internally
+    pub start: (usize, usize),
+    /// End position: (row, column), 0-indexed internally
+    pub end: (usize, usize),
+}
+
+impl Serialize for Range {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        use serde::ser::SerializeStruct;
+        let mut s = serializer.serialize_struct("Range", 2)?;
+        // 1-indexed for display
+        let loc = format!(
+            "{}:{}-{}:{}",
+            self.start.0 + 1,
+            self.start.1 + 1,
+            self.end.0 + 1,
+            self.end.1 + 1
+        );
+        s.serialize_field("loc", &loc)?;
+        s.serialize_field("bytes", &self.bytes)?;
+        s.end()
+    }
+}
+
+impl<'de> Deserialize<'de> for Range {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        struct RangeHelper {
+            loc: String,
+            bytes: [usize; 2],
+        }
+
+        let helper = RangeHelper::deserialize(deserializer)?;
+
+        // Parse "row:col-row:col" (1-indexed) back to 0-indexed
+        let parts: Vec<&str> = helper.loc.split('-').collect();
+        if parts.len() != 2 {
+            return Err(serde::de::Error::custom("invalid loc format"));
+        }
+
+        let start_parts: Vec<&str> = parts[0].split(':').collect();
+        let end_parts: Vec<&str> = parts[1].split(':').collect();
+
+        if start_parts.len() != 2 || end_parts.len() != 2 {
+            return Err(serde::de::Error::custom("invalid loc format"));
+        }
+
+        let start_row: usize =
+            start_parts[0].parse().map_err(serde::de::Error::custom)?;
+        let start_col: usize =
+            start_parts[1].parse().map_err(serde::de::Error::custom)?;
+        let end_row: usize =
+            end_parts[0].parse().map_err(serde::de::Error::custom)?;
+        let end_col: usize =
+            end_parts[1].parse().map_err(serde::de::Error::custom)?;
+
+        Ok(Range {
+            bytes: helper.bytes,
+            // Convert from 1-indexed to 0-indexed
+            start: (start_row.saturating_sub(1), start_col.saturating_sub(1)),
+            end: (end_row.saturating_sub(1), end_col.saturating_sub(1)),
+        })
+    }
+}
+
+impl Range {
+    pub fn new(
+        start_byte: usize,
+        end_byte: usize,
+        start_row: usize,
+        start_col: usize,
+        end_row: usize,
+        end_col: usize,
+    ) -> Self {
+        Self {
+            bytes: [start_byte, end_byte],
+            start: (start_row, start_col),
+            end: (end_row, end_col),
+        }
+    }
+
+    pub fn zero() -> Self {
+        Self {
+            bytes: [0, 0],
+            start: (0, 0),
+            end: (0, 0),
+        }
     }
 }
