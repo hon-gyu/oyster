@@ -1,6 +1,6 @@
 //! Tests for the query module.
 
-use super::parser::{build_sections, query_file, Boundary};
+use super::parser::{Boundary, build_sections, query_file};
 use super::types::Markdown;
 use crate::ast::Tree;
 use insta::assert_snapshot;
@@ -27,7 +27,7 @@ Final thoughts.
     let sections =
         build_sections(&tree.root_node, source, Boundary::zero()).unwrap();
     assert_snapshot!(sections.to_string(), @r"
-    [root] 
+    [root]
     └─[1] # Title
         Some intro content.
         ├─[1.1] ## Section A
@@ -51,7 +51,7 @@ Some content.
     let sections =
         build_sections(&tree.root_node, source, Boundary::zero()).unwrap();
     assert_snapshot!(sections.to_string(), @r"
-    [root] 
+    [root]
     This is content before any heading.
     └─[1] # First Heading
         Some content.
@@ -74,8 +74,8 @@ Intro content.
     let sections =
         build_sections(&tree.root_node, source, Boundary::zero()).unwrap();
     assert_snapshot!(sections.to_string(), @r"
-    [root] 
-    └─[0] 
+    [root]
+    └─[0]
         └─[0.1] ## Introduction
             Intro content.
     ");
@@ -93,9 +93,9 @@ Content.
     let sections =
         build_sections(&tree.root_node, source, Boundary::zero()).unwrap();
     assert_snapshot!(sections.to_string(), @r"
-    [root] 
+    [root]
     └─[1] # Title
-        └─[1.0] 
+        └─[1.0]
             └─[1.0.1] ### Deep Section
                 Content.
     ");
@@ -549,15 +549,15 @@ fn test_markdown_display() {
     - markdown
     ---
 
-    [root] 
+    [root]
     Some preamble.
     ├─[1] # Introduction
-    │   └─[1.0] 
+    │   └─[1.0]
     │       └─[1.0.1] ### Details
     │           More details.
     └─[2] # Another L1 Heading
-        └─[2.0] 
-            └─[2.0.0] 
+        └─[2.0]
+            └─[2.0.0]
                 └─[2.0.0.1] #### Another Level 4
                     More content.
     ");

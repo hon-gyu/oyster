@@ -178,7 +178,7 @@ impl HierarchicalWithDefaults for SectionHeading {
 /// - implicit section's information will be the same as its first child except Root
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Section {
-    /// The heading that starts this section (null for root)
+    /// The heading that starts this section (H1-6 or root)
     pub heading: SectionHeading,
     /// Hierarchical path in dot notation (e.g., "root", "1", "1.2")
     pub path: String,
@@ -209,26 +209,21 @@ impl Section {
         prefix: &str,
     ) -> std::fmt::Result {
         // Format heading info: level, title
-        let title = match &self.heading {
-            SectionHeading::Root => "".to_string(),
-            SectionHeading::Heading(_) if self.is_implicit() => "".to_string(),
+        let title: Option<String> = match &self.heading {
+            SectionHeading::Root => None,
+            SectionHeading::Heading(_) if self.is_implicit() => None,
             SectionHeading::Heading(h) => {
-                h.text.lines().next().unwrap_or("").to_string()
+                let t = h.text.lines().next().unwrap_or("").to_string();
+                Some(t)
             }
         };
 
-        // Print section header: level, path, title, byte range
-        writeln!(
-            f,
-            // "[{}] {} [{}:{}-{}:{}]",
-            "[{}] {}",
-            self.path,
-            title,
-            // self.range.start.0,
-            // self.range.start.1,
-            // self.range.end.0,
-            // self.range.end.1,
-        )?;
+        // Print section header: path and title
+        if let Some(title) = title {
+            writeln!(f, "[{}] {}", self.path, title)?;
+        } else {
+            writeln!(f, "[{}]", self.path)?;
+        }
 
         // Print content preview if non-empty
         if !self.content.is_empty() {
