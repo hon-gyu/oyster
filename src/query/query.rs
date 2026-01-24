@@ -1,3 +1,5 @@
+use crate::query::SectionHeading;
+
 use super::types::{Markdown, Section};
 
 // Note: we don't have array construct
@@ -28,12 +30,22 @@ pub enum Expr {
 pub enum EvalError {
     IndexOutOfBounds(isize),
     FieldNotFound(String),
+    General(String),
     WIP,
 }
 
 pub fn eval(expr: Expr, md: &Markdown) -> Result<Vec<Markdown>, EvalError> {
     match expr {
         Expr::Identity => Ok(vec![md.clone()]),
+        // Functions
+        Expr::Title => match &md.sections.heading {
+            SectionHeading::Root => {
+                Err(EvalError::General("No title for root".to_string()))
+            }
+            SectionHeading::Heading(h) => {
+                Ok(vec![Markdown::new(h.text.as_str()).unwrap()])
+            }
+        },
         _ => Err(EvalError::WIP),
     }
 }
