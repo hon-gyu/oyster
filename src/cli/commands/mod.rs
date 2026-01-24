@@ -1,4 +1,4 @@
-pub mod generate;
+pub mod build;
 pub mod query;
 
 #[cfg(feature = "serve")]

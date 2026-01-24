@@ -1,14 +1,14 @@
 //! Shared argument types for CLI commands.
 
+use clap::Args;
 use oyster::export::{
     MermaidRenderMode, NodeRenderConfig, QuiverRenderMode, TikzRenderMode,
 };
-use clap::Args;
 use std::path::PathBuf;
 
 /// Common arguments for site generation
 #[derive(Args, Clone)]
-pub struct GenerateArgs {
+pub struct BuildArgs {
     /// Path to the vault directory
     pub vault_root_dir: PathBuf,
 
@@ -49,14 +49,16 @@ pub struct GenerateArgs {
     pub custom_callout_css: Option<PathBuf>,
 }
 
-impl GenerateArgs {
+impl BuildArgs {
     pub fn node_render_config(&self) -> NodeRenderConfig {
-        let mermaid_render_mode = MermaidRenderMode::from_str(&self.mermaid_render_mode)
-            .unwrap_or(MermaidRenderMode::BuildTime);
-        let tikz_render_mode =
-            TikzRenderMode::from_str(&self.tikz_render_mode).unwrap_or(TikzRenderMode::ClientSide);
+        let mermaid_render_mode =
+            MermaidRenderMode::from_str(&self.mermaid_render_mode)
+                .unwrap_or(MermaidRenderMode::BuildTime);
+        let tikz_render_mode = TikzRenderMode::from_str(&self.tikz_render_mode)
+            .unwrap_or(TikzRenderMode::ClientSide);
         let quiver_render_mode =
-            QuiverRenderMode::from_str(&self.quiver_render_mode).unwrap_or(QuiverRenderMode::Raw);
+            QuiverRenderMode::from_str(&self.quiver_render_mode)
+                .unwrap_or(QuiverRenderMode::Raw);
 
         NodeRenderConfig {
             preserve_softbreak: self.preserve_softbreak,

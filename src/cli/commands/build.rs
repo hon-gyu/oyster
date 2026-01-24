@@ -1,9 +1,9 @@
-use crate::cli::args::GenerateArgs;
+use crate::cli::args::BuildArgs;
 use oyster::export::render_vault;
 use std::path::PathBuf;
 
 pub fn run(
-    args: GenerateArgs,
+    args: BuildArgs,
     output: PathBuf,
 ) -> Result<(), Box<dyn std::error::Error>> {
     println!(
@@ -29,7 +29,7 @@ pub fn run(
 /// Generate site and return the home slug (used by serve command).
 #[cfg(feature = "serve")]
 pub fn run_with_home_slug(
-    args: &GenerateArgs,
+    args: &BuildArgs,
     output: &PathBuf,
 ) -> Result<String, Box<dyn std::error::Error>> {
     println!(

@@ -3,7 +3,7 @@
 pub mod args;
 pub mod commands;
 
-use args::{GenerateArgs, QueryOutputFormat};
+use args::{BuildArgs, QueryOutputFormat};
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 
@@ -29,9 +29,9 @@ enum Commands {
     },
 
     /// Generate a static site from an Obsidian vault
-    Generate {
+    Build {
         #[command(flatten)]
-        args: GenerateArgs,
+        args: BuildArgs,
 
         /// Output directory for the generated site
         #[arg(short, long)]
@@ -42,7 +42,7 @@ enum Commands {
     #[cfg(feature = "serve")]
     Serve {
         #[command(flatten)]
-        args: GenerateArgs,
+        args: BuildArgs,
 
         /// Port to serve on
         #[arg(long, default_value = "3000")]
@@ -64,9 +64,11 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             format,
         } => commands::query::run(file, output, format),
 
-        Commands::Generate { args, output } => commands::generate::run(args, output),
+        Commands::Build { args, output } => commands::build::run(args, output),
 
         #[cfg(feature = "serve")]
-        Commands::Serve { args, port, watch } => commands::serve::run(args, port, watch),
+        Commands::Serve { args, port, watch } => {
+            commands::serve::run(args, port, watch)
+        }
     }
 }

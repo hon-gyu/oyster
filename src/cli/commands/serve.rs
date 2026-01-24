@@ -2,13 +2,13 @@
 //!
 //! HTTP server with optional live reload for development.
 
-use super::generate;
-use crate::cli::args::GenerateArgs;
+use super::build;
+use crate::cli::args::BuildArgs;
+use axum::Router;
 use axum::response::Redirect;
 use axum::routing::get;
-use axum::Router;
-use notify_debouncer_mini::{new_debouncer, DebouncedEventKind};
-use oyster::export::{render_vault, NodeRenderConfig};
+use notify_debouncer_mini::{DebouncedEventKind, new_debouncer};
+use oyster::export::{NodeRenderConfig, render_vault};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
@@ -31,13 +31,17 @@ struct ServeConfig {
     custom_callout_css: Option<PathBuf>,
 }
 
-pub fn run(args: GenerateArgs, port: u16, watch: bool) -> Result<(), Box<dyn std::error::Error>> {
+pub fn run(
+    args: BuildArgs,
+    port: u16,
+    watch: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
     // Use temp directory for output
     let temp_dir = tempfile::tempdir()?;
     let output_dir = temp_dir.path().to_path_buf();
 
     // Initial build - returns the home slug
-    let home_slug = generate::run_with_home_slug(&args, &output_dir)?;
+    let home_slug = build::run_with_home_slug(&args, &output_dir)?;
 
     // Build config before moving args
     let node_render_config = args.node_render_config();
@@ -66,13 +70,16 @@ pub fn run(args: GenerateArgs, port: u16, watch: bool) -> Result<(), Box<dyn std
 }
 
 /// Starts the HTTP server to serve the generated site.
-async fn serve_site(config: ServeConfig) -> Result<(), Box<dyn std::error::Error>> {
+async fn serve_site(
+    config: ServeConfig,
+) -> Result<(), Box<dyn std::error::Error>> {
     let addr = format!("0.0.0.0:{}", config.port);
 
     if config.watch {
         serve_with_watch(config, &addr).await
     } else {
-        serve_static(config.output_dir, config.port, &addr, &config.home_slug).await
+        serve_static(config.output_dir, config.port, &addr, &config.home_slug)
+            .await
     }
 }
 
@@ -83,7 +90,8 @@ async fn serve_static(
     addr: &str,
     home_slug: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let home_path: &'static str = Box::leak(format!("/{}", home_slug).into_boxed_str());
+    let home_path: &'static str =
+        Box::leak(format!("/{}", home_slug).into_boxed_str());
     let app = Router::new()
         .route("/", get(|| async { Redirect::to(home_path) }))
         .fallback_service(ServeDir::new(&output_dir));
@@ -119,7 +127,8 @@ async fn serve_with_watch(
     let reloader = livereload.reloader();
 
     // Create router with livereload
-    let home_path: &'static str = Box::leak(format!("/{}", home_slug).into_boxed_str());
+    let home_path: &'static str =
+        Box::leak(format!("/{}", home_slug).into_boxed_str());
     let app = Router::new()
         .route("/", get(|| async { Redirect::to(home_path) }))
         .fallback_service(ServeDir::new(&output_dir))
@@ -134,7 +143,8 @@ async fn serve_with_watch(
     std::thread::spawn(move || {
         let (notify_tx, notify_rx) = std::sync::mpsc::channel();
         let mut debouncer =
-            new_debouncer(Duration::from_millis(500), notify_tx).expect("Failed to create debouncer");
+            new_debouncer(Duration::from_millis(500), notify_tx)
+                .expect("Failed to create debouncer");
 
         debouncer
             .watcher()
