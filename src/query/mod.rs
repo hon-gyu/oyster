@@ -27,6 +27,7 @@
 
 mod heading;
 mod parser;
+mod query;
 mod types;
 
 #[cfg(test)]
