@@ -585,7 +585,7 @@ More details.
 
 Final content.
 "#;
-    let result = Markdown::new(source).unwrap();
+    let result = Markdown::new(source);
     let reconstructed = result.to_src();
 
     assert_snapshot!(reconstructed, @r"
@@ -628,13 +628,13 @@ Content 1.
 Content 2.
 "#;
 
-    let parsed = Markdown::new(original_source).unwrap();
+    let parsed = Markdown::new(original_source);
 
     // struct -> markdown
     let reconstructed = parsed.to_src();
 
     // markdown -> struct (again)
-    let reparsed = Markdown::new(reconstructed.as_str()).unwrap();
+    let reparsed = Markdown::new(reconstructed.as_str());
 
     // Compare the two structs
     assert_eq!(
@@ -666,13 +666,13 @@ Deep content.
 Section 2 content.
 "#;
     // markdown -> struct
-    let original_struct = Markdown::new(source).unwrap();
+    let original_struct = Markdown::new(source);
 
     // struct -> markdown
     let markdown = original_struct.to_src();
 
     // markdown -> struct
-    let roundtripped_struct = Markdown::new(markdown.as_str()).unwrap();
+    let roundtripped_struct = Markdown::new(markdown.as_str());
 
     // struct -> markdown (again)
     let markdown2 = roundtripped_struct.to_src();

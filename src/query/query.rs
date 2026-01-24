@@ -43,7 +43,7 @@ pub fn eval(expr: Expr, md: &Markdown) -> Result<Vec<Markdown>, EvalError> {
                 Err(EvalError::General("No title for root".to_string()))
             }
             SectionHeading::Heading(h) => {
-                Ok(vec![Markdown::new(h.text.as_str()).unwrap()])
+                Ok(vec![Markdown::new(h.text.as_str())])
             }
         },
         _ => Err(EvalError::WIP),

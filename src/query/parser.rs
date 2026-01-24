@@ -24,7 +24,7 @@ impl Boundary {
 }
 
 impl Markdown {
-    pub fn new(source: &str) -> Result<Self, String> {
+    pub fn new(source: &str) -> Self {
         let tree = Tree::new_with_default_opts(&source);
 
         // Extract frontmatter from the first child if it's a metadata block
@@ -59,12 +59,12 @@ impl Markdown {
         };
 
         // Build section tree, starting content after frontmatter
-        let sections = build_sections(&tree.root_node, &source, doc_start)?;
+        let sections = build_sections(&tree.root_node, &source, doc_start).expect("Infallible: sections should be able to be built from valid AST");
 
-        Ok(Markdown {
+        Self {
             frontmatter,
             sections,
-        })
+        }
     }
 }
 
@@ -146,7 +146,7 @@ pub fn query_file(path: &std::path::Path) -> Result<Markdown, String> {
         return Err("File is empty".to_string());
     }
 
-    Markdown::new(&source)
+    Ok(Markdown::new(&source))
 }
 
 /// Extract all headings from the AST in document order
