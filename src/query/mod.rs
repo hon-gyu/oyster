@@ -35,4 +35,5 @@ mod tests;
 
 // Public types
 pub use heading::Heading;
+pub use query::{eval, EvalError, Expr};
 pub use types::{Frontmatter, Markdown, Range, Section, SectionHeading};
