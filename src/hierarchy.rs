@@ -158,6 +158,56 @@ impl<T> HierarchyItem<T> {
 
         Ok(())
     }
+
+    /// Factor out the node implicit information out to a boolean tree of the same shape
+    ///
+    /// Implicit information is stored as 0 indexed item right after build_padded_tree
+    ///
+    /// This function returns a tuple of two trees of the same shape as the original:
+    /// - The first boolean tree contains whether the node is implicit or not
+    /// - The second tree is the original tree with all 0 indexed shifted to 1
+    ///
+    /// Note: the original index can be found in the boolean tree
+    pub fn extract_implicit_info(
+        self,
+    ) -> (HierarchyItem<bool>, HierarchyItem<T>) {
+        // Check if this node is implicit (index ends with 0)
+        let is_implicit = self
+            .index
+            .as_ref()
+            .and_then(|idx| idx.last())
+            .map(|&last| last == 0)
+            .unwrap_or(false);
+
+        // Recursively process children
+        let (bool_children, value_children): (Vec<_>, Vec<_>) = self
+            .children
+            .into_iter()
+            .map(|child| child.extract_implicit_info())
+            .unzip();
+
+        // Boolean tree: captures whether this node was implicit
+        let bool_node = HierarchyItem {
+            value: is_implicit,
+            children: bool_children,
+            index: self.index.clone(),
+        };
+
+        // Value tree: same values, index adjusted (all 0s become 1)
+        let adjusted_index = self.index.map(|idx| {
+            idx.into_iter()
+                .map(|n| if n == 0 { 1 } else { n })
+                .collect()
+        });
+
+        let value_node = HierarchyItem {
+            value: self.value,
+            children: value_children,
+            index: adjusted_index,
+        };
+
+        (bool_node, value_node)
+    }
 }
 
 impl<T: fmt::Display> fmt::Display for HierarchyItem<T> {
@@ -690,5 +740,75 @@ mod tests {
         let result = build_padded_tree(items, None);
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("empty"));
+    }
+
+    // Extract implicit info
+    // --------------------
+
+    #[test]
+    fn test_extract_implicit_info() {
+        // Build a tree with implicit nodes: A(1), B(3), C(2)
+        // Original tree:
+        //   # A (1)
+        //   ├── ## <implicit> (1.0)
+        //   │   └── ### B (1.0.1)
+        //   └── ## C (1.1)
+        let root =
+            build_padded_tree(items(&[(1, "A"), (3, "B"), (2, "C")]), None)
+                .unwrap();
+
+        let (bool_tree, value_tree) = root.extract_implicit_info();
+
+        // Boolean tree: true for implicit nodes (index ending in 0)
+        let bool_output = format!("{}", bool_tree);
+        assert_snapshot!(bool_output, @r"
+        false (1)
+        ├── true (1.0)
+        │   └── false (1.0.1)
+        └── false (1.1)
+        ");
+
+        // Value tree: same structure, but 0 indices shifted to 1
+        let value_output = format!("{}", value_tree);
+        assert_snapshot!(value_output, @r"
+        # A (1)
+        ├── ## <implicit> (1.1)
+        │   └── ### B (1.1.1)
+        └── ## C (1.1)
+        ");
+    }
+
+    #[test]
+    fn test_extract_implicit_info_complex() {
+        // More complex example with multiple implicit nodes
+        let root = build_padded_tree(
+            items(&[(2, "A"), (4, "B"), (3, "B1"), (2, "C")]),
+            None,
+        )
+        .unwrap();
+
+        let (bool_tree, value_tree) = root.extract_implicit_info();
+
+        // Boolean tree shows implicit status
+        let bool_output = format!("{}", bool_tree);
+        assert_snapshot!(bool_output, @r"
+        true (0)
+        ├── false (0.1)
+        │   ├── true (0.1.0)
+        │   │   └── false (0.1.0.1)
+        │   └── false (0.1.1)
+        └── false (0.2)
+        ");
+
+        // Value tree with adjusted indices
+        let value_output = format!("{}", value_tree);
+        assert_snapshot!(value_output, @r"
+        # <implicit> (1)
+        ├── ## A (1.1)
+        │   ├── ### <implicit> (1.1.1)
+        │   │   └── #### B (1.1.1.1)
+        │   └── ### B1 (1.1.1)
+        └── ## C (1.2)
+        ");
     }
 }
