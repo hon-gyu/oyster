@@ -3,6 +3,7 @@
 use super::heading::Heading;
 use super::types::{Frontmatter, Markdown, Range, Section, SectionHeading};
 use crate::ast::{Node, NodeKind, Tree};
+use crate::hierarchy::HierarchyItem;
 use crate::hierarchy::build_padded_tree;
 use crate::link::extract_frontmatter;
 
@@ -143,11 +144,11 @@ fn build_sections(
 /// Extract all headings from the AST in document order
 fn extract_headings(node: &Node, source: &str) -> Vec<SectionHeading> {
     let mut headings = Vec::new();
-    extract_headings_recursive(node, source, &mut headings);
+    extract_headings_rec(node, source, &mut headings);
     headings
 }
 
-fn extract_headings_recursive(
+fn extract_headings_rec(
     node: &Node,
     source: &str,
     headings: &mut Vec<SectionHeading>,
@@ -184,7 +185,7 @@ fn extract_headings_recursive(
     }
 
     for child in &node.children {
-        extract_headings_recursive(child, source, headings);
+        extract_headings_rec(child, source, headings);
     }
 }
 
@@ -193,7 +194,7 @@ fn extract_headings_recursive(
 /// `doc_start` is passed through for the root section's content start.
 /// `next_boundary` contains both byte offset and line number for the section end.
 fn hierarchy_to_section(
-    item: &crate::hierarchy::HierarchyItem<SectionHeading>,
+    item: &HierarchyItem<SectionHeading>,
     source: &str,
     doc_start: Boundary,
     next_boundary: Boundary,
