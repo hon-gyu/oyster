@@ -19,19 +19,24 @@ pub fn run(
         eval(expr, &md).map_err(|e| format!("{:?}", e))?
     };
 
-    for result in &results {
-        let out = match format {
-            QueryOutputFormat::Json => serde_json::to_string(&result)?,
-            QueryOutputFormat::Summary => result.to_string(),
-            QueryOutputFormat::Markdown => result.to_src(),
-        };
+    if results.len() != 1 {
+        return Err(
+            "Never: Expected 1 result. Comma is not supported yet.".into()
+        );
+    }
 
-        if let Some(ref output_path) = output {
-            std::fs::write(output_path, &out)?;
-            eprintln!("Output written to: {}", output_path.display());
-        } else {
-            println!("{}", out);
-        }
+    let result = &results[0];
+    let out = match format {
+        QueryOutputFormat::Json => serde_json::to_string(&result)?,
+        QueryOutputFormat::Summary => result.to_string(),
+        QueryOutputFormat::Markdown => result.to_src(),
+    };
+
+    if let Some(ref output_path) = output {
+        std::fs::write(output_path, &out)?;
+        eprintln!("Output written to: {}", output_path.display());
+    } else {
+        println!("{}", out);
     }
 
     Ok(())
