@@ -145,12 +145,9 @@ Final thoughts.
         ---
 
         (root)
-        └─[1] # Introduction
-            Intro content here.
-            ├─[1.1] ## Details
-            │   More details.
-            └─[1.2] ## Summary
-                Summary content.
+        └─(1)
+            └─[1.1] ## Details
+                More details.
         ");
     }
 
@@ -166,34 +163,83 @@ Final thoughts.
         "#);
     }
 
-    // #[test]
-    // fn test_eval_slice() {
-    //     let md = test_doc();
-    //     // Get first child only [0:1]
-    //     let result = eval(Expr::Slice(Some(0), Some(1)), &md).unwrap();
-    //     assert_eq!(result.len(), 1);
-    //     assert_snapshot!(result[0].to_string());
-    // }
+    #[test]
+    fn test_eval_slice() {
+        let md = test_doc();
+        // Get first child only [0:1]
+        let result = eval(Expr::Slice(Some(0), Some(1)), &md).unwrap();
+        assert_eq!(result.len(), 1);
+        assert_snapshot!(result[0].to_string(), @r"
+        ---
+        title: Test Document
+        tags:
+        - rust
+        - markdown
+        ---
 
-    // #[test]
-    // fn test_eval_slice_open_end() {
-    //     let md = test_doc();
-    //     // Get all children [0:] - returns single Markdown with all children
-    //     let result = eval(Expr::Slice(Some(0), None), &md).unwrap();
-    //     assert_eq!(result.len(), 1);
-    //     assert_snapshot!(result[0].to_string());
-    // }
+        (root)
+        ├─[1] # Introduction
+        │   Intro content here.
+        │   ├─[1.1] ## Details
+        │   │   More details.
+        │   └─[1.2] ## Summary
+        │       Summary content.
+        └─[2] # Conclusion
+            Final thoughts.
+        ");
+    }
 
-    // #[test]
-    // fn test_eval_pipe() {
-    //     let md = test_doc();
-    //     // Get first child, then its title
-    //     let expr =
-    //         Expr::Pipe(Box::new(Expr::Index(0)), Box::new(Expr::Summary));
-    //     let result = eval(expr, &md).unwrap();
-    //     assert_eq!(result.len(), 1);
-    //     assert_snapshot!(result[0].to_src());
-    // }
+    #[test]
+    fn test_eval_slice_open_end() {
+        let md = test_doc();
+        // Get all children [0:] - returns single Markdown with all children
+        let result = eval(Expr::Slice(Some(0), None), &md).unwrap();
+        assert_eq!(result.len(), 1);
+        assert_snapshot!(result[0].to_string(), @r"
+        ---
+        title: Test Document
+        tags:
+        - rust
+        - markdown
+        ---
+
+        (root)
+        ├─[1] # Introduction
+        │   Intro content here.
+        │   ├─[1.1] ## Details
+        │   │   More details.
+        │   └─[1.2] ## Summary
+        │       Summary content.
+        └─[2] # Conclusion
+            Final thoughts.
+        ");
+    }
+
+    #[test]
+    fn test_eval_pipe() {
+        let md = test_doc();
+        // Get first child, then its title
+        let expr =
+            Expr::Pipe(Box::new(Expr::Index(0)), Box::new(Expr::Summary));
+        let result = eval(expr, &md).unwrap();
+        assert_eq!(result.len(), 1);
+        assert_snapshot!(result[0].to_src(), @r"
+        ---
+        title: Test Document
+        tags:
+        - rust
+        - markdown
+        ---
+
+        (root)
+        └─[1] # Introduction
+            Intro content here.
+            ├─[1.1] ## Details
+            │   More details.
+            └─[1.2] ## Summary
+                Summary content.
+        ");
+    }
 
     // #[test]
     // fn test_eval_comma() {

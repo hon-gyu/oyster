@@ -4,9 +4,8 @@
 //! TODO: most of the helper functions should be provided by the types for
 //! better encapsulation.
 use crate::query::SectionHeading;
-use pulldown_cmark::HeadingLevel;
 
-use super::types::{Markdown, Range, Section};
+use super::types::{Markdown, Section};
 
 // Note: we don't have array construct
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -26,10 +25,12 @@ pub enum Expr {
     NChildren,   // nchildren: number of children
     Frontmatter, // frontmatter: frontmatter as pure text (no section structure)
     Body,        // body: strip the frontmatter
+    Preface,     // content before the first section
     Has(String), // has: has title. Output a boolean string
     Del(String), // del: remove a section by title or by index
     Inc,         // incheading: increment all headings by one
     Dec,         // decheading: decrement all headings by one
+                 // TOC
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -85,12 +86,12 @@ fn find_child_by_title<'a>(
 // TODO(bug): heading manipulation influence the implicit heading. need similar re-parse
 
 /// Increment heading level by 1 (max H6)
-fn increment_heading(section: &Section) -> Section {
+fn increment_heading(_section: &Section) -> Section {
     todo!()
 }
 
 /// Decrement heading level by 1 (min H1)
-fn decrement_heading(section: &Section) -> Section {
+fn decrement_heading(_section: &Section) -> Section {
     todo!()
 }
 
@@ -114,12 +115,21 @@ pub fn eval(expr: Expr, md: &Markdown) -> Result<Vec<Markdown>, EvalError> {
     match expr {
         Expr::Identity => Ok(vec![md.clone()]),
         Expr::Body => Ok(vec![Markdown::new(&md.sections.to_src())]),
-
+        Expr::Preface => {
+            let preface = &md.sections.content;
+            Ok(vec![Markdown::new(&preface)])
+        }
         Expr::Field(title) => {
             // Find a section by title
             match find_child_by_title(&md.sections, &title, true) {
-                Some((idx, _)) => {
-                    Ok(vec![md.slice_sections_inclusive(idx, idx)])
+                Some((_, tgt_sec)) => {
+                    let fm_src = md
+                        .frontmatter
+                        .as_ref()
+                        .map_or("".to_string(), |fm| fm.to_src());
+                    let tgt_sec_src = tgt_sec.to_src();
+                    let src = fm_src + &tgt_sec_src;
+                    Ok(vec![Markdown::new(&src)])
                 }
                 None => Err(EvalError::FieldNotFound(title)),
             }
@@ -150,7 +160,7 @@ pub fn eval(expr: Expr, md: &Markdown) -> Result<Vec<Markdown>, EvalError> {
                         normalize_index(e, len).unwrap_or(0)
                     }
                 }
-                None => len,
+                None => len - 1,
             };
 
             if start_idx >= end_idx || start_idx >= len {
@@ -191,15 +201,7 @@ pub fn eval(expr: Expr, md: &Markdown) -> Result<Vec<Markdown>, EvalError> {
             }
         },
 
-        Expr::Summary => {
-            // Return title without # prefix
-            match get_heading_title(&md.sections.heading) {
-                Some(title) => Ok(vec![Markdown::new(&title)]),
-                None => {
-                    Err(EvalError::General("No title for root".to_string()))
-                }
-            }
-        }
+        Expr::Summary => Ok(vec![Markdown::new(&md.to_string())]),
 
         Expr::Range => {
             // Return range as "start_line:start_col-end_line:end_col"
