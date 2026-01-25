@@ -7,7 +7,7 @@ use crate::hierarchy::build_padded_tree;
 use crate::link::extract_frontmatter;
 
 /// Boundary info for section ranges (byte offset and position)
-pub(crate) struct Boundary {
+struct Boundary {
     pub byte: usize,
     pub row: usize,
     pub col: usize,
@@ -100,7 +100,7 @@ impl Markdown {
 /// # Errors
 ///
 /// Returns an error if heading extraction fails (e.g., invalid heading levels).
-pub(crate) fn build_sections(
+fn build_sections(
     root: &Node,
     source: &str,
     doc_start: Boundary,
