@@ -25,11 +25,11 @@ pub enum Expr {
     Range,       // range: section range
     NChildren,   // nchildren: number of children
     Frontmatter, // frontmatter: frontmatter as pure text (no section structure)
-    Body, // body: alias of Identify as by default we strip the frontmatter
+    Body,        // body: strip the frontmatter
     Has(String), // has: has title. Output a boolean string
     Del(String), // del: remove a section by title or by index
-    Inc,  // incheading: increment all headings by one
-    Dec,  // decheading: decrement all headings by one
+    Inc,         // incheading: increment all headings by one
+    Dec,         // decheading: decrement all headings by one
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -86,76 +86,12 @@ fn find_child_by_title<'a>(
 
 /// Increment heading level by 1 (max H6)
 fn increment_heading(section: &Section) -> Section {
-    let new_heading = match &section.heading {
-        SectionHeading::Root => SectionHeading::Root,
-        SectionHeading::Heading(h) => {
-            let new_level = match h.level {
-                HeadingLevel::H1 => HeadingLevel::H2,
-                HeadingLevel::H2 => HeadingLevel::H3,
-                HeadingLevel::H3 => HeadingLevel::H4,
-                HeadingLevel::H4 => HeadingLevel::H5,
-                HeadingLevel::H5 => HeadingLevel::H6,
-                HeadingLevel::H6 => HeadingLevel::H6, // Already at max
-            };
-            // Update heading text to reflect new level
-            let title = get_heading_title(&section.heading).unwrap_or_default();
-            let new_text =
-                format!("{} {}\n", "#".repeat(new_level as usize), title);
-            SectionHeading::Heading(super::Heading {
-                level: new_level,
-                text: new_text,
-                range: h.range.clone(),
-                id: h.id.clone(),
-                classes: h.classes.clone(),
-                attrs: h.attrs.clone(),
-            })
-        }
-    };
-
-    Section {
-        heading: new_heading,
-        path: section.path.clone(),
-        content: section.content.clone(),
-        range: section.range.clone(),
-        children: section.children.iter().map(increment_heading).collect(),
-    }
+    todo!()
 }
 
 /// Decrement heading level by 1 (min H1)
 fn decrement_heading(section: &Section) -> Section {
-    let new_heading = match &section.heading {
-        SectionHeading::Root => SectionHeading::Root,
-        SectionHeading::Heading(h) => {
-            let new_level = match h.level {
-                HeadingLevel::H1 => HeadingLevel::H1, // Already at min
-                HeadingLevel::H2 => HeadingLevel::H1,
-                HeadingLevel::H3 => HeadingLevel::H2,
-                HeadingLevel::H4 => HeadingLevel::H3,
-                HeadingLevel::H5 => HeadingLevel::H4,
-                HeadingLevel::H6 => HeadingLevel::H5,
-            };
-            // Update heading text to reflect new level
-            let title = get_heading_title(&section.heading).unwrap_or_default();
-            let new_text =
-                format!("{} {}\n", "#".repeat(new_level as usize), title);
-            SectionHeading::Heading(super::Heading {
-                level: new_level,
-                text: new_text,
-                range: h.range.clone(),
-                id: h.id.clone(),
-                classes: h.classes.clone(),
-                attrs: h.attrs.clone(),
-            })
-        }
-    };
-
-    Section {
-        heading: new_heading,
-        path: section.path.clone(),
-        content: section.content.clone(),
-        range: section.range.clone(),
-        children: section.children.iter().map(decrement_heading).collect(),
-    }
+    todo!()
 }
 
 /// Normalize index (handle negative indices)
@@ -177,7 +113,7 @@ fn normalize_index(index: isize, len: usize) -> Option<usize> {
 pub fn eval(expr: Expr, md: &Markdown) -> Result<Vec<Markdown>, EvalError> {
     match expr {
         Expr::Identity => Ok(vec![md.clone()]),
-        Expr::Body => Ok(vec![md.clone()]),
+        Expr::Body => Ok(vec![Markdown::new(&md.sections.to_src())]),
 
         Expr::Field(title) => {
             // Find a section by title
