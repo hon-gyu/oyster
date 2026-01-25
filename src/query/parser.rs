@@ -97,15 +97,35 @@ pub(crate) fn build_sections(
     // 1. Extract headings from AST
     let headings = extract_headings(root, source);
 
-    // 2. Build tree with min_level = 0 for document root
-    let tree = build_padded_tree(headings, Some(0))?;
-
-    // 3. Convert to Section with content extraction
     let doc_end = Boundary {
         byte: root.end_byte,
         row: root.end_point.row,
         col: root.end_point.column,
     };
+
+    // 2. Handle case with no headings - create root section with all content
+    if headings.is_empty() {
+        let content = source[doc_start.byte..doc_end.byte].trim().to_string();
+        return Ok(Section {
+            heading: SectionHeading::Root,
+            path: "root".to_string(),
+            content,
+            range: Range::new(
+                doc_start.byte,
+                doc_end.byte,
+                doc_start.row,
+                doc_start.col,
+                doc_end.row,
+                doc_end.col,
+            ),
+            children: vec![],
+        });
+    }
+
+    // 3. Build tree with min_level = 0 for document root
+    let tree = build_padded_tree(headings, Some(0))?;
+
+    // 4. Convert to Section with content extraction
     Ok(hierarchy_to_section(&tree, source, doc_start, doc_end))
 }
 
