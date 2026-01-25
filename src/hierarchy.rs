@@ -165,13 +165,20 @@ impl<T> HierarchyItem<T> {
     ///
     /// This function returns a tuple of two trees of the same shape as the original:
     /// - The first boolean tree contains whether the node is implicit or not
-    /// - The second tree is the original tree with all 0 indexed shifted to 1
+    /// - The second tree is the original tree with unique 1-based indices
     ///
     /// Note: the original index can be found in the boolean tree
     pub fn extract_implicit_info(
         self,
     ) -> (HierarchyItem<bool>, HierarchyItem<T>) {
-        // Check if this node is implicit (index ends with 0)
+        let (bool_tree, mut value_tree) = self.split_implicit();
+        value_tree.reassign_indices(vec![1]);
+        (bool_tree, value_tree)
+    }
+
+    /// Split tree into a boolean (implicit?) tree and a value tree without
+    /// adjusting indices. The bool tree preserves original indices.
+    fn split_implicit(self) -> (HierarchyItem<bool>, HierarchyItem<T>) {
         let is_implicit = self
             .index
             .as_ref()
@@ -179,34 +186,35 @@ impl<T> HierarchyItem<T> {
             .map(|&last| last == 0)
             .unwrap_or(false);
 
-        // Recursively process children
         let (bool_children, value_children): (Vec<_>, Vec<_>) = self
             .children
             .into_iter()
-            .map(|child| child.extract_implicit_info())
+            .map(|child| child.split_implicit())
             .unzip();
 
-        // Boolean tree: captures whether this node was implicit
         let bool_node = HierarchyItem {
             value: is_implicit,
             children: bool_children,
             index: self.index.clone(),
         };
 
-        // Value tree: same values, index adjusted (all 0s become 1)
-        let adjusted_index = self.index.map(|idx| {
-            idx.into_iter()
-                .map(|n| if n == 0 { 1 } else { n })
-                .collect()
-        });
-
         let value_node = HierarchyItem {
             value: self.value,
             children: value_children,
-            index: adjusted_index,
+            index: self.index,
         };
 
         (bool_node, value_node)
+    }
+
+    /// Reassign indices sequentially (1-based) throughout the tree
+    fn reassign_indices(&mut self, index: Vec<usize>) {
+        self.index = Some(index.clone());
+        for (i, child) in self.children.iter_mut().enumerate() {
+            let mut child_index = index.clone();
+            child_index.push(i + 1);
+            child.reassign_indices(child_index);
+        }
     }
 }
 
@@ -768,13 +776,13 @@ mod tests {
         └── false (1.1)
         ");
 
-        // Value tree: same structure, but 0 indices shifted to 1
+        // Value tree: same structure, with unique 1-based indices
         let value_output = format!("{}", value_tree);
         assert_snapshot!(value_output, @r"
         # A (1)
         ├── ## <implicit> (1.1)
         │   └── ### B (1.1.1)
-        └── ## C (1.1)
+        └── ## C (1.2)
         ");
     }
 
@@ -800,14 +808,14 @@ mod tests {
         └── false (0.2)
         ");
 
-        // Value tree with adjusted indices
+        // Value tree with unique 1-based indices
         let value_output = format!("{}", value_tree);
         assert_snapshot!(value_output, @r"
         # <implicit> (1)
         ├── ## A (1.1)
         │   ├── ### <implicit> (1.1.1)
         │   │   └── #### B (1.1.1.1)
-        │   └── ### B1 (1.1.1)
+        │   └── ### B1 (1.1.2)
         └── ## C (1.2)
         ");
     }
