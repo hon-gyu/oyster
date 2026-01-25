@@ -1,7 +1,18 @@
+#![allow(dead_code)]
+//! TODO(bug):
+//! The indexing, either by title or by index, is incorrect current.
+//! All the ranges need to be shifted, either by some transformation (efficient)
+//! or by re-parsing the entire document (inefficient).
+//!
+//! We probably want to implement this as a method on the Markdown struct or
+//! on the Section struct.
+//!
+//! Also, most of the helper functions should be provided by the types for
+//! better encapsulation.
 use crate::query::SectionHeading;
 use pulldown_cmark::HeadingLevel;
 
-use super::types::{Markdown, Section};
+use super::types::{Markdown, Range, Section};
 
 // Note: we don't have array construct
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -34,14 +45,6 @@ pub enum EvalError {
     General(String),
 }
 
-/// Convert a Section to a Markdown (without frontmatter)
-fn section_to_markdown(section: &Section) -> Markdown {
-    Markdown {
-        frontmatter: None,
-        sections: section.clone(),
-    }
-}
-
 /// Get the title text from a section heading (without # prefix)
 fn get_heading_title(heading: &SectionHeading) -> Option<String> {
     match heading {
@@ -56,6 +59,9 @@ fn get_heading_title(heading: &SectionHeading) -> Option<String> {
 }
 
 /// Find a child section by title (case-sensitive exact match)
+/// TODO(bug): higher level section should win over lower level section, which
+///     is not the case currently
+/// TODO: make rec (bool) configureable
 fn find_child_by_title<'a>(
     section: &'a Section,
     title: &str,
@@ -72,11 +78,6 @@ fn find_child_by_title<'a>(
         }
     }
     None
-}
-
-/// Check if a section contains a child with the given title
-fn has_child_with_title(section: &Section, title: &str) -> bool {
-    find_child_by_title(section, title).is_some()
 }
 
 /// Delete a section by title (returns a new section with the matching child removed)
@@ -202,7 +203,13 @@ pub fn eval(expr: Expr, md: &Markdown) -> Result<Vec<Markdown>, EvalError> {
         Expr::Field(title) => {
             // Find a section by title
             match find_child_by_title(&md.sections, &title) {
-                Some(section) => Ok(vec![section_to_markdown(section)]),
+                Some(section) => {
+                    let new_md = Markdown {
+                        frontmatter: md.frontmatter.clone(),
+                        sections: section.clone(),
+                    };
+                    Ok(vec![new_md])
+                }
                 None => Err(EvalError::FieldNotFound(title)),
             }
         }
@@ -210,7 +217,13 @@ pub fn eval(expr: Expr, md: &Markdown) -> Result<Vec<Markdown>, EvalError> {
         Expr::Index(idx) => {
             let children = &md.sections.children;
             match normalize_index(idx, children.len()) {
-                Some(i) => Ok(vec![section_to_markdown(&children[i])]),
+                Some(i) => {
+                    let new_md = Markdown {
+                        frontmatter: md.frontmatter.clone(),
+                        sections: children[i].clone(),
+                    };
+                    Ok(vec![new_md])
+                }
                 None => Err(EvalError::IndexOutOfBounds(idx)),
             }
         }
@@ -239,10 +252,12 @@ pub fn eval(expr: Expr, md: &Markdown) -> Result<Vec<Markdown>, EvalError> {
                 return Ok(vec![]);
             }
 
-            Ok(children[start_idx..end_idx]
-                .iter()
-                .map(section_to_markdown)
-                .collect())
+            let new_sections = todo!();
+            let new_md = Markdown {
+                frontmatter: md.frontmatter.clone(),
+                sections: new_sections,
+            };
+            Ok(vec![new_md])
         }
 
         Expr::Pipe(left, right) => {
@@ -314,7 +329,11 @@ pub fn eval(expr: Expr, md: &Markdown) -> Result<Vec<Markdown>, EvalError> {
         },
 
         Expr::Has(title) => {
-            let result = has_child_with_title(&md.sections, &title);
+            let result = {
+                let section: &Section = &md.sections;
+                let title: &str = &title;
+                find_child_by_title(section, title).is_some()
+            };
             Ok(vec![Markdown::new(if result { "true" } else { "false" })])
         }
 
