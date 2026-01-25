@@ -76,6 +76,14 @@ Final thoughts.
     }
 
     #[test]
+    fn test_eval_preface() {
+        let md = test_doc();
+        let result = eval(Expr::Preface, &md).unwrap();
+        assert_eq!(result.len(), 1);
+        assert_snapshot!(result[0].to_src(), @"Preamble content.");
+    }
+
+    #[test]
     fn test_eval_index() {
         let md = test_doc();
         // First child (Introduction)
@@ -241,91 +249,124 @@ Final thoughts.
         ");
     }
 
-    // #[test]
-    // fn test_eval_comma() {
-    //     let md = test_doc();
-    //     // Get both children's summaries
-    //     let expr = Expr::Comma(vec![
-    //         Expr::Pipe(Box::new(Expr::Index(0)), Box::new(Expr::Summary)),
-    //         Expr::Pipe(Box::new(Expr::Index(1)), Box::new(Expr::Summary)),
-    //     ]);
-    //     let result = eval(expr, &md).unwrap();
-    //     assert_eq!(result.len(), 2);
-    //     let output: String = result
-    //         .iter()
-    //         .map(|m| m.to_src().trim().to_string())
-    //         .collect::<Vec<_>>()
-    //         .join("\n");
-    //     assert_snapshot!(output);
-    // }
+    #[test]
+    fn test_eval_comma() {
+        let md = test_doc();
+        // Get both children's summaries
+        let expr = Expr::Comma(vec![
+            Expr::Pipe(Box::new(Expr::Index(0)), Box::new(Expr::Summary)),
+            Expr::Pipe(Box::new(Expr::Index(1)), Box::new(Expr::Summary)),
+        ]);
+        let result = eval(expr, &md).unwrap();
+        assert_eq!(result.len(), 2);
+        let output: String = result
+            .iter()
+            .map(|m| m.to_src().trim().to_string())
+            .collect::<Vec<_>>()
+            .join("\n\n<><><><>TEST SEPARATOR<><><><>\n\n");
+        assert_snapshot!(output, @r"
+        ---
+        title: Test Document
+        tags:
+        - rust
+        - markdown
+        ---
 
-    // #[test]
-    // fn test_eval_title() {
-    //     let md = test_doc();
-    //     // Get title of first child
-    //     let expr = Expr::Pipe(Box::new(Expr::Index(0)), Box::new(Expr::Title));
-    //     let result = eval(expr, &md).unwrap();
-    //     assert_eq!(result.len(), 1);
-    //     assert_snapshot!(result[0].to_src());
-    // }
+        (root)
+        └─[1] # Introduction
+            Intro content here.
+            ├─[1.1] ## Details
+            │   More details.
+            └─[1.2] ## Summary
+                Summary content.
 
-    // #[test]
-    // fn test_eval_summary() {
-    //     let md = test_doc();
-    //     // Get summary (title without #) of first child
-    //     let expr =
-    //         Expr::Pipe(Box::new(Expr::Index(0)), Box::new(Expr::Summary));
-    //     let result = eval(expr, &md).unwrap();
-    //     assert_eq!(result.len(), 1);
-    //     assert_snapshot!(result[0].to_src());
-    // }
+        <><><><>TEST SEPARATOR<><><><>
 
-    // #[test]
-    // fn test_eval_nchildren() {
-    //     let md = test_doc();
-    //     let result = eval(Expr::NChildren, &md).unwrap();
-    //     assert_eq!(result.len(), 1);
-    //     assert_snapshot!(result[0].to_src());
-    // }
+        ---
+        title: Test Document
+        tags:
+        - rust
+        - markdown
+        ---
 
-    // #[test]
-    // fn test_eval_frontmatter() {
-    //     let md = test_doc();
-    //     let result = eval(Expr::Frontmatter, &md).unwrap();
-    //     assert_eq!(result.len(), 1);
-    //     assert_snapshot!(result[0].to_src());
-    // }
+        (root)
+        └─[1] # Conclusion
+            Final thoughts.
+        ");
+    }
 
-    // #[test]
-    // fn test_eval_has_true() {
-    //     let md = test_doc();
-    //     let result = eval(Expr::Has("Details".to_string()), &md).unwrap();
-    //     assert_eq!(result.len(), 1);
-    //     assert_eq!(result[0].to_src().trim(), "true");
-    // }
+    #[test]
+    fn test_eval_title() {
+        let md = test_doc();
+        // Get title of first child
+        let expr = Expr::Title(0);
+        let result = eval(expr, &md).unwrap();
+        assert_eq!(result.len(), 1);
+        assert_snapshot!(result[0].to_src(), @"Introduction");
+    }
 
-    // #[test]
-    // fn test_eval_has_false() {
-    //     let md = test_doc();
-    //     let result = eval(Expr::Has("Nonexistent".to_string()), &md).unwrap();
-    //     assert_eq!(result.len(), 1);
-    //     assert_eq!(result[0].to_src().trim(), "false");
-    // }
+    #[test]
+    fn test_eval_nchildren() {
+        let md = test_doc();
+        let result = eval(Expr::NChildren, &md).unwrap();
+        assert_eq!(result.len(), 1);
+        assert_snapshot!(result[0].to_src(), @"2");
+    }
 
-    // #[test]
-    // fn test_eval_del() {
-    //     let md = test_doc();
-    //     let result = eval(Expr::Del("Details".to_string()), &md).unwrap();
-    //     assert_eq!(result.len(), 1);
-    //     assert_snapshot!(result[0].to_string());
-    // }
+    #[test]
+    fn test_eval_frontmatter() {
+        let md = test_doc();
+        let result = eval(Expr::Frontmatter, &md).unwrap();
+        assert_eq!(result.len(), 1);
+        assert_snapshot!(result[0].to_src(), @r"
+        title: Test Document
+        tags:
+        - rust
+        - markdown
+        ");
+    }
+
+    #[test]
+    fn test_eval_has_true() {
+        let md = test_doc();
+        let result = eval(Expr::Has("Details".to_string()), &md).unwrap();
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].to_src().trim(), "true");
+    }
+
+    #[test]
+    fn test_eval_has_false() {
+        let md = test_doc();
+        let result = eval(Expr::Has("Nonexistent".to_string()), &md).unwrap();
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].to_src().trim(), "false");
+    }
+
+    #[test]
+    fn test_eval_del() {
+        let md = test_doc();
+        let result = eval(Expr::Del("Details".to_string()), &md).unwrap();
+        assert_eq!(result.len(), 1);
+        assert_snapshot!(result[0].to_string(), @r"
+        ---
+        title: Test Document
+        tags:
+        - rust
+        - markdown
+        ---
+
+        (root)
+        └─[1] # Conclusion
+            Final thoughts.
+        ");
+    }
 
     // #[test]
     // fn test_eval_inc() {
     //     let md = test_doc();
     //     let result = eval(Expr::Inc, &md).unwrap();
     //     assert_eq!(result.len(), 1);
-    //     assert_snapshot!(result[0].to_src());
+    //     assert_snapshot!(result[0].to_src(), @"");
     // }
 
     // #[test]
@@ -335,7 +376,7 @@ Final thoughts.
     //     let expr = Expr::Pipe(Box::new(Expr::Index(0)), Box::new(Expr::Dec));
     //     let result = eval(expr, &md).unwrap();
     //     assert_eq!(result.len(), 1);
-    //     assert_snapshot!(result[0].to_src());
+    //     assert_snapshot!(result[0].to_src(), @"");
     // }
 
     // #[test]

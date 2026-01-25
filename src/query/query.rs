@@ -19,10 +19,10 @@ pub enum Expr {
     Comma(Vec<Expr>),                    // expr1, expr2, expr3
 
     // Functions
-    Title,       // title: section title
-    Summary,     // summary: section summary
-    Range,       // range: section range
-    NChildren,   // nchildren: number of children
+    Title(isize), // title: section title of the given index
+    Summary,      // summary: section summary
+    Range,        // range: section range
+    NChildren,    // nchildren: number of children
     Frontmatter, // frontmatter: frontmatter as pure text (no section structure)
     Body,        // body: strip the frontmatter
     Preface,     // content before the first section
@@ -191,15 +191,20 @@ pub fn eval(expr: Expr, md: &Markdown) -> Result<Vec<Markdown>, EvalError> {
             Ok(results)
         }
 
-        Expr::Title => match &md.sections.heading {
-            SectionHeading::Root => {
-                Err(EvalError::General("No title for root".to_string()))
+        Expr::Title(idx) => {
+            let children = &md.sections.children;
+            match normalize_index(idx, children.len()) {
+                Some(i) => {
+                    let title = get_heading_title(&children[i].heading);
+                    if let Some(title) = title {
+                        Ok(vec![Markdown::new(&title)])
+                    } else {
+                        Err(EvalError::General("No title found".to_string()))
+                    }
+                }
+                None => Err(EvalError::IndexOutOfBounds(idx)),
             }
-            SectionHeading::Heading(h) => {
-                // Return raw heading text (includes # prefix)
-                Ok(vec![Markdown::new(h.text.as_str())])
-            }
-        },
+        }
 
         Expr::Summary => Ok(vec![Markdown::new(&md.to_string())]),
 
