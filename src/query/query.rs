@@ -134,6 +134,12 @@ pub fn eval(expr: Expr, md: &Markdown) -> Result<Vec<Markdown>, EvalError> {
             let children = &md.sections.children;
             let len = children.len();
 
+            if len == 0 {
+                return Err(EvalError::General(
+                    "Cannot slice a section with no children".to_string(),
+                ));
+            }
+
             let start_idx = match start {
                 Some(s) => normalize_index(s, len).unwrap_or(0),
                 None => 0,
@@ -227,7 +233,7 @@ pub fn eval(expr: Expr, md: &Markdown) -> Result<Vec<Markdown>, EvalError> {
                 let tgt_sec_end = tgt_sec.range.bytes[1];
 
                 let part_before_start = 0;
-                let part_before_end = std::cmp::max(0, tgt_sec_start - 1);
+                let part_before_end = tgt_sec_start.saturating_sub(1);
                 let part_after_start = std::cmp::min(tgt_sec_end, md_src.len());
                 let part_after_end = md_src.len();
 
