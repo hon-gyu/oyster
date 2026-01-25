@@ -236,9 +236,10 @@ pub struct Section {
     pub content: String,
     /// Source location range
     pub range: Range,
+    /// Whether this section is synthetic (implicit)
+    pub implicit: bool,
     /// Child sections (headings at deeper levels)
     pub children: Vec<Section>,
-    pub implicit: bool,
 }
 
 impl std::fmt::Display for Section {

@@ -30,6 +30,7 @@ expression: json
         205
       ]
     },
+    "implicit": true,
     "children": [
       {
         "heading": {
@@ -44,7 +45,7 @@ expression: json
           }
         },
         "path": "1",
-        "content": "",
+        "content": "Intro content here.",
         "range": {
           "loc": "10:1-18:1",
           "bytes": [
@@ -52,16 +53,17 @@ expression: json
             139
           ]
         },
+        "implicit": false,
         "children": [
           {
             "heading": {
               "level": 2,
               "text": "",
               "range": {
-                "loc": "1:1-1:1",
+                "loc": "14:1-15:1",
                 "bytes": [
-                  0,
-                  0
+                  111,
+                  123
                 ]
               }
             },
@@ -74,6 +76,7 @@ expression: json
                 139
               ]
             },
+            "implicit": true,
             "children": [
               {
                 "heading": {
@@ -96,14 +99,12 @@ expression: json
                     139
                   ]
                 },
-                "children": [],
-                "implicit": false
+                "implicit": false,
+                "children": []
               }
-            ],
-            "implicit": true
+            ]
           }
-        ],
-        "implicit": false
+        ]
       },
       {
         "heading": {
@@ -118,7 +119,7 @@ expression: json
           }
         },
         "path": "2",
-        "content": "",
+        "content": "vdiqoj",
         "range": {
           "loc": "18:1-25:1",
           "bytes": [
@@ -126,38 +127,40 @@ expression: json
             205
           ]
         },
+        "implicit": false,
         "children": [
           {
             "heading": {
               "level": 2,
               "text": "",
               "range": {
-                "loc": "1:1-1:1",
+                "loc": "22:1-23:1",
                 "bytes": [
-                  0,
-                  0
+                  169,
+                  190
                 ]
               }
             },
             "path": "2.1",
             "content": "",
             "range": {
-              "loc": "1:1-25:1",
+              "loc": "22:1-25:1",
               "bytes": [
-                0,
+                169,
                 205
               ]
             },
+            "implicit": true,
             "children": [
               {
                 "heading": {
                   "level": 3,
                   "text": "",
                   "range": {
-                    "loc": "1:1-1:1",
+                    "loc": "22:1-23:1",
                     "bytes": [
-                      0,
-                      0
+                      169,
+                      190
                     ]
                   }
                 },
@@ -170,6 +173,7 @@ expression: json
                     205
                   ]
                 },
+                "implicit": true,
                 "children": [
                   {
                     "heading": {
@@ -192,19 +196,15 @@ expression: json
                         205
                       ]
                     },
-                    "children": [],
-                    "implicit": false
+                    "implicit": false,
+                    "children": []
                   }
-                ],
-                "implicit": true
+                ]
               }
-            ],
-            "implicit": true
+            ]
           }
-        ],
-        "implicit": false
+        ]
       }
-    ],
-    "implicit": true
+    ]
   }
 }

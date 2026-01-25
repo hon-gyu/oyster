@@ -30,6 +30,7 @@ expression: json
         137
       ]
     },
+    "implicit": true,
     "children": [
       {
         "heading": {
@@ -52,6 +53,7 @@ expression: json
             137
           ]
         },
+        "implicit": false,
         "children": [
           {
             "heading": {
@@ -74,13 +76,11 @@ expression: json
                 137
               ]
             },
-            "children": [],
-            "implicit": false
+            "implicit": false,
+            "children": []
           }
-        ],
-        "implicit": false
+        ]
       }
-    ],
-    "implicit": true
+    ]
   }
 }
