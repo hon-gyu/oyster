@@ -63,6 +63,23 @@ impl Markdown {
         result
     }
 
+    pub fn index_sections(&self, idx: usize) -> Self {
+        let new_md_src = {
+            let mut buf = String::new();
+            if let Some(frontmatter) = &self.frontmatter {
+                buf.push_str(&frontmatter.to_src());
+            }
+
+            let orgi_src = self.to_src();
+            let new_secs_byte_start =
+                self.sections.children[idx].range.bytes[0];
+            let new_secs_byte_end = self.sections.children[idx].range.bytes[1];
+            buf.push_str(&orgi_src[new_secs_byte_start..new_secs_byte_end]);
+            buf
+        };
+        Self::new(&new_md_src)
+    }
+
     // TODO(perf): This is very inefficient
     /// Left and right inclusive
     pub fn slice_sections_inclusive(
