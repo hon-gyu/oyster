@@ -27,8 +27,8 @@ pub enum Expr {
     Preface,     // content before the first section
     Has(String), // has: has title. Output a boolean string
     Del(String), // del: remove a section by title or by index
-    Inc,         // incheading: increment all headings by one
-    Dec,         // decheading: decrement all headings by one
+    Inc(isize),  // inc: increment all heading levels
+    Dec(isize),  // dec: decrement all heading
                  // TOC
 }
 
@@ -80,18 +80,6 @@ fn find_child_by_title<'a>(
     }
 
     None
-}
-
-// TODO(bug): heading manipulation influence the implicit heading. need similar re-parse
-
-/// Increment heading level by 1 (max H6)
-fn increment_heading(_section: &Section) -> Section {
-    todo!()
-}
-
-/// Decrement heading level by 1 (min H1)
-fn decrement_heading(_section: &Section) -> Section {
-    todo!()
 }
 
 /// Normalize index (handle negative indices)
@@ -255,20 +243,7 @@ pub fn eval(expr: Expr, md: &Markdown) -> Result<Vec<Markdown>, EvalError> {
             }
         }
 
-        Expr::Inc => {
-            let new_sections = increment_heading(&md.sections);
-            Ok(vec![Markdown {
-                frontmatter: md.frontmatter.clone(),
-                sections: new_sections,
-            }])
-        }
-
-        Expr::Dec => {
-            let new_sections = decrement_heading(&md.sections);
-            Ok(vec![Markdown {
-                frontmatter: md.frontmatter.clone(),
-                sections: new_sections,
-            }])
-        }
+        Expr::Inc(delta) => Ok(vec![md.with_shifted_heading_levels(delta)]),
+        Expr::Dec(delta) => Ok(vec![md.with_shifted_heading_levels(-delta)]),
     }
 }

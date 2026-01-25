@@ -371,21 +371,88 @@ Final thoughts.
         ");
     }
 
-    // #[test]
-    // fn test_eval_inc() {
-    //     let md = test_doc();
-    //     let result = eval(Expr::Inc, &md).unwrap();
-    //     assert_eq!(result.len(), 1);
-    //     assert_snapshot!(result[0].to_src(), @"");
-    // }
+    #[test]
+    fn test_eval_inc() {
+        let md = test_doc();
+        let result = eval(Expr::Inc(1), &md).unwrap();
+        assert_eq!(result.len(), 1);
+        assert_snapshot!(result[0].to_string(), @r"
+        ---
+        title: Test Document
+        tags:
+        - rust
+        - markdown
+        ---
 
-    // #[test]
-    // fn test_eval_dec() {
-    //     let md = test_doc();
-    //     // First get a child section (which has H1), then decrement
-    //     let expr = Expr::Pipe(Box::new(Expr::Index(0)), Box::new(Expr::Dec));
-    //     let result = eval(expr, &md).unwrap();
-    //     assert_eq!(result.len(), 1);
-    //     assert_snapshot!(result[0].to_src(), @"");
-    // }
+        (root)
+        Preamble content.
+        └─(1)
+            ├─[1.1] ## Introduction
+            │   Intro content here.
+            │   ├─[1.1.1] ### Details
+            │   │   More details.
+            │   └─[1.1.2] ### Summary
+            │       Summary content.
+            └─[1.2] ## Conclusion
+                Final thoughts.
+        ");
+    }
+
+    #[test]
+    fn test_eval_inc_saturated() {
+        let md = test_doc();
+        let result = eval(Expr::Inc(10), &md).unwrap();
+        assert_eq!(result.len(), 1);
+        assert_snapshot!(result[0].to_string(), @r"
+        ---
+        title: Test Document
+        tags:
+        - rust
+        - markdown
+        ---
+
+        (root)
+        Preamble content.
+        └─(1)
+            └─(1.1)
+                └─(1.1.1)
+                    └─(1.1.1.1)
+                        └─(1.1.1.1.1)
+                            ├─[1.1.1.1.1.1] ###### Introduction
+                            │   Intro content here.
+                            ├─[1.1.1.1.1.2] ###### Details
+                            │   More details.
+                            ├─[1.1.1.1.1.3] ###### Summary
+                            │   Summary content.
+                            └─[1.1.1.1.1.4] ###### Conclusion
+                                Final thoughts.
+        ");
+    }
+
+    #[test]
+    fn test_eval_dec() {
+        let md = test_doc();
+        let expr = Expr::Dec(1);
+        let result = eval(expr, &md).unwrap();
+        assert_eq!(result.len(), 1);
+        assert_snapshot!(result[0].to_string(), @r"
+        ---
+        title: Test Document
+        tags:
+        - rust
+        - markdown
+        ---
+
+        (root)
+        Preamble content.
+        ├─[1] # Introduction
+        │   Intro content here.
+        ├─[2] # Details
+        │   More details.
+        ├─[3] # Summary
+        │   Summary content.
+        └─[4] # Conclusion
+            Final thoughts.
+        ");
+    }
 }

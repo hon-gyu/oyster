@@ -80,6 +80,16 @@ impl Markdown {
         Self::new(&new_md_src)
     }
 
+    /// Return a new Markdown with all heading levels shifted by `delta`.
+    ///
+    /// Heading levels are clamped to [1, 6]. The section tree is rebuilt
+    /// to maintain valid hierarchy after shifting.
+    pub fn with_shifted_heading_levels(&self, delta: isize) -> Self {
+        let mut copy = self.clone();
+        copy.sections.shift_heading_text_levels(delta);
+        Self::new(&copy.to_src())
+    }
+
     // TODO(perf): This is very inefficient
     /// Left and right inclusive
     pub fn slice_sections_inclusive(
@@ -357,6 +367,25 @@ impl Section {
         }
 
         result
+    }
+
+    /// Shift heading text levels (internal helper, doesn't fix tree structure).
+    fn shift_heading_text_levels(&mut self, delta: isize) {
+        if let SectionHeading::Heading(h) = &mut self.heading {
+            let current = h.level as isize;
+            let new_level = (current + delta).clamp(1, 6) as usize;
+
+            h.level = HeadingLevel::try_from(new_level)
+                .expect("clamped level should be valid");
+
+            // Update text: replace leading '#' markers
+            let hash_count = h.text.chars().take_while(|c| *c == '#').count();
+            let rest = &h.text[hash_count..];
+            h.text = format!("{}{}", "#".repeat(new_level), rest);
+        }
+        for child in &mut self.children {
+            child.shift_heading_text_levels(delta);
+        }
     }
 }
 
