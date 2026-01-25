@@ -1,13 +1,7 @@
 #![allow(dead_code)]
-//! TODO(bug):
-//! The indexing, either by title or by index, is incorrect current.
-//! All the ranges need to be shifted, either by some transformation (efficient)
-//! or by re-parsing the entire document (inefficient).
+//! Query expression evaluation.
 //!
-//! We probably want to implement this as a method on the Markdown struct or
-//! on the Section struct.
-//!
-//! Also, most of the helper functions should be provided by the types for
+//! TODO: most of the helper functions should be provided by the types for
 //! better encapsulation.
 use crate::query::SectionHeading;
 use pulldown_cmark::HeadingLevel;
@@ -59,51 +53,36 @@ fn get_heading_title(heading: &SectionHeading) -> Option<String> {
 }
 
 /// Find a child section by title (case-sensitive exact match)
-/// TODO(bug): higher level section should win over lower level section, which
-///     is not the case currently
-/// TODO: make rec (bool) configureable
+///
+/// Uses breadth-first search so higher-level sections win over deeper ones.
+/// When `recursive` is false, only searches immediate children.
 fn find_child_by_title<'a>(
     section: &'a Section,
     title: &str,
-) -> Option<&'a Section> {
-    for child in &section.children {
+    recursive: bool,
+) -> Option<(usize, &'a Section)> {
+    // First pass: check all immediate children (higher level wins)
+    for (idx, child) in section.children.iter().enumerate() {
         if let Some(child_title) = get_heading_title(&child.heading) {
             if child_title == title {
-                return Some(child);
+                return Some((idx, child));
             }
         }
-        // Recurse into children
-        if let Some(found) = find_child_by_title(child, title) {
-            return Some(found);
+    }
+
+    // Second pass: recurse into children (breadth-first)
+    if recursive {
+        for child in &section.children {
+            if let Some(found) = find_child_by_title(child, title, true) {
+                return Some(found);
+            }
         }
     }
+
     None
 }
 
-/// Delete a section by title (returns a new section with the matching child removed)
-fn delete_by_title(section: &Section, title: &str) -> Section {
-    let new_children: Vec<Section> = section
-        .children
-        .iter()
-        .filter_map(|child| {
-            if let Some(child_title) = get_heading_title(&child.heading) {
-                if child_title == title {
-                    return None; // Remove this child
-                }
-            }
-            // Recurse into children
-            Some(delete_by_title(child, title))
-        })
-        .collect();
-
-    Section {
-        heading: section.heading.clone(),
-        path: section.path.clone(),
-        content: section.content.clone(),
-        range: section.range.clone(),
-        children: new_children,
-    }
-}
+// TODO(bug): heading manipulation influence the implicit heading. need similar re-parse
 
 /// Increment heading level by 1 (max H6)
 fn increment_heading(section: &Section) -> Section {
@@ -202,13 +181,9 @@ pub fn eval(expr: Expr, md: &Markdown) -> Result<Vec<Markdown>, EvalError> {
 
         Expr::Field(title) => {
             // Find a section by title
-            match find_child_by_title(&md.sections, &title) {
-                Some(section) => {
-                    let new_md = Markdown {
-                        frontmatter: md.frontmatter.clone(),
-                        sections: section.clone(),
-                    };
-                    Ok(vec![new_md])
+            match find_child_by_title(&md.sections, &title, true) {
+                Some((idx, _)) => {
+                    Ok(vec![md.slice_sections_inclusive(idx, idx)])
                 }
                 None => Err(EvalError::FieldNotFound(title)),
             }
@@ -217,13 +192,7 @@ pub fn eval(expr: Expr, md: &Markdown) -> Result<Vec<Markdown>, EvalError> {
         Expr::Index(idx) => {
             let children = &md.sections.children;
             match normalize_index(idx, children.len()) {
-                Some(i) => {
-                    let new_md = Markdown {
-                        frontmatter: md.frontmatter.clone(),
-                        sections: children[i].clone(),
-                    };
-                    Ok(vec![new_md])
-                }
+                Some(i) => Ok(vec![md.slice_sections_inclusive(i, i)]),
                 None => Err(EvalError::IndexOutOfBounds(idx)),
             }
         }
@@ -252,12 +221,7 @@ pub fn eval(expr: Expr, md: &Markdown) -> Result<Vec<Markdown>, EvalError> {
                 return Ok(vec![]);
             }
 
-            let new_sections = todo!();
-            let new_md = Markdown {
-                frontmatter: md.frontmatter.clone(),
-                sections: new_sections,
-            };
-            Ok(vec![new_md])
+            Ok(vec![md.slice_sections_inclusive(start_idx, end_idx)])
         }
 
         Expr::Pipe(left, right) => {
@@ -332,17 +296,49 @@ pub fn eval(expr: Expr, md: &Markdown) -> Result<Vec<Markdown>, EvalError> {
             let result = {
                 let section: &Section = &md.sections;
                 let title: &str = &title;
-                find_child_by_title(section, title).is_some()
+                find_child_by_title(section, title, true).is_some()
             };
             Ok(vec![Markdown::new(if result { "true" } else { "false" })])
         }
 
         Expr::Del(title) => {
-            let new_sections = delete_by_title(&md.sections, &title);
-            Ok(vec![Markdown {
-                frontmatter: md.frontmatter.clone(),
-                sections: new_sections,
-            }])
+            if let Some((idx, _)) =
+                find_child_by_title(&md.sections, &title, true)
+            {
+                let n_sections = md.sections.children.len();
+                if idx == 0 {
+                    // Deleting first section
+                    let start_idx = 1;
+                    let end_idx = n_sections - 1;
+                    Ok(vec![md.slice_sections_inclusive(start_idx, end_idx)])
+                } else if idx == n_sections - 1 {
+                    // Deleting last section
+                    let start_idx = 0;
+                    let end_idx = idx - 1;
+                    Ok(vec![md.slice_sections_inclusive(start_idx, end_idx)])
+                } else {
+                    let fst_start_idx = 0;
+                    let fst_end_idx = idx - 1;
+                    let snd_start_idx = idx + 1;
+                    let snd_end_idx = n_sections - 1;
+                    let fst =
+                        md.slice_sections_inclusive(fst_start_idx, fst_end_idx);
+                    let snd =
+                        md.slice_sections_inclusive(snd_start_idx, snd_end_idx);
+                    let fm_src: String = md
+                        .frontmatter
+                        .as_ref()
+                        .map_or("".to_string(), |fm| fm.to_src());
+                    let src = fm_src
+                        + &fst.sections.to_src()
+                        + &snd.sections.to_src();
+                    Ok(vec![Markdown::new(&src)])
+                }
+            } else {
+                Err(EvalError::General(
+                    "Did not find the section to delete".to_string(),
+                ))
+            }
         }
 
         Expr::Inc => {
