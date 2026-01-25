@@ -54,11 +54,7 @@ impl Markdown {
 
         // Add frontmatter if present
         if let Some(fm) = &self.frontmatter {
-            result.push_str("---\n");
-            let yaml_str = serde_yaml::to_string(&fm.value)
-                .unwrap_or_else(|_| String::new());
-            result.push_str(yaml_str.trim_end());
-            result.push_str("\n---\n\n");
+            result.push_str(&fm.to_src());
         }
 
         // Add sections as markdown
@@ -79,6 +75,18 @@ pub struct Frontmatter {
     pub value: YamlValue,
     /// Source location range
     pub range: Range,
+}
+
+impl Frontmatter {
+    pub fn to_src(&self) -> String {
+        let mut buf = String::new();
+        buf.push_str("---\n");
+        let yaml_str = serde_yaml::to_string(&self.value)
+            .unwrap_or_else(|_| String::new());
+        buf.push_str(yaml_str.trim_end());
+        buf.push_str("\n---\n\n");
+        buf
+    }
 }
 
 /// Internal wrapper for tree building that supports level 0 (document root).
