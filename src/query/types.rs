@@ -258,21 +258,17 @@ impl Section {
         f: &mut std::fmt::Formatter<'_>,
         prefix: &str,
     ) -> std::fmt::Result {
-        // Format heading info: level, title
-        let title: Option<String> = match &self.heading {
-            SectionHeading::Root => None,
-            SectionHeading::Heading(_) if self.implicit => None,
-            SectionHeading::Heading(h) => {
-                let t = h.text.lines().next().unwrap_or("").to_string();
-                Some(t)
-            }
-        };
-
         // Print section header: path and title
-        if let Some(title) = title {
-            writeln!(f, "[{}] {}", self.path, title)?;
+        if self.implicit {
+            writeln!(f, "({})", self.path)?;
         } else {
-            writeln!(f, "[{}]", self.path)?;
+            let title = match &self.heading {
+                SectionHeading::Heading(h) => {
+                    h.text.lines().next().unwrap_or("").to_string()
+                }
+                SectionHeading::Root => unreachable!("Root is implicit"),
+            };
+            writeln!(f, "[{}] {}", self.path, title)?;
         }
 
         // Print content preview if non-empty

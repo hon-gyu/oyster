@@ -62,7 +62,7 @@ Final thoughts.
         let result = eval(Expr::Body, &md).unwrap();
         assert_eq!(result.len(), 1);
         assert_snapshot!(result[0].to_string(), @r"
-        [root]
+        (root)
         Preamble content.
         ├─[1] # Introduction
         │   Intro content here.
@@ -89,7 +89,7 @@ Final thoughts.
         - markdown
         ---
 
-        [root]
+        (root)
         └─[1] # Introduction
             Intro content here.
             ├─[1.1] ## Details
@@ -113,7 +113,7 @@ Final thoughts.
         - markdown
         ---
 
-        [root]
+        (root)
         └─[1] # Conclusion
             Final thoughts.
         ");
@@ -144,7 +144,7 @@ Final thoughts.
         - markdown
         ---
 
-        [root]
+        (root)
         └─[1] # Introduction
             Intro content here.
             ├─[1.1] ## Details

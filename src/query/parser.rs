@@ -371,16 +371,16 @@ Final thoughts.
                 build_sections(&tree.root_node, source, Boundary::zero())
                     .unwrap();
             assert_snapshot!(sections.to_string(), @r"
-    [root]
-    └─[1] # Title
-        Some intro content.
-        ├─[1.1] ## Section A
-        │   Content of section A.
-        │   └─[1.1.1] ### Subsection A.1
-        │       Details here.
-        └─[1.2] ## Section B
-            Final thoughts.
-    ");
+            (root)
+            └─[1] # Title
+                Some intro content.
+                ├─[1.1] ## Section A
+                │   Content of section A.
+                │   └─[1.1.1] ### Subsection A.1
+                │       Details here.
+                └─[1.2] ## Section B
+                    Final thoughts.
+            ");
         }
 
         #[test]
@@ -396,7 +396,7 @@ Some content.
                 build_sections(&tree.root_node, source, Boundary::zero())
                     .unwrap();
             assert_snapshot!(sections.to_string(), @r"
-            [root]
+            (root)
             This is content before any heading.
             └─[1] # First Heading
                 Some content.
@@ -420,8 +420,8 @@ Intro content.
                 build_sections(&tree.root_node, source, Boundary::zero())
                     .unwrap();
             assert_snapshot!(sections.to_string(), @r"
-            [root]
-            └─[1]
+            (root)
+            └─(1)
                 └─[1.1] ## Introduction
                     Intro content.
             ");
@@ -440,9 +440,9 @@ Content.
                 build_sections(&tree.root_node, source, Boundary::zero())
                     .unwrap();
             assert_snapshot!(sections.to_string(), @r"
-            [root]
+            (root)
             └─[1] # Title
-                └─[1.1]
+                └─(1.1)
                     └─[1.1.1] ### Deep Section
                         Content.
             ");
@@ -621,15 +621,15 @@ Subcontent.
             - markdown
             ---
 
-            [root]
+            (root)
             Some preamble.
             ├─[1] # Introduction
-            │   └─[1.1]
+            │   └─(1.1)
             │       └─[1.1.1] ### Details
             │           More details.
             └─[2] # Another L1 Heading
-                └─[2.1]
-                    └─[2.1.1]
+                └─(2.1)
+                    └─(2.1.1)
                         └─[2.1.1.1] #### Another Level 4
                             More content.
             ");
