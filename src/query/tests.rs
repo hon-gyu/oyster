@@ -347,7 +347,7 @@ Final thoughts.
         let md = test_doc();
         let result = eval(Expr::Del("Details".to_string()), &md).unwrap();
         assert_eq!(result.len(), 1);
-        assert_snapshot!(result[0].to_string(), @r"
+        assert_snapshot!(result[0].to_src(), @r"
         ---
         title: Test Document
         tags:
@@ -355,9 +355,19 @@ Final thoughts.
         - markdown
         ---
 
-        (root)
-        └─[1] # Conclusion
-            Final thoughts.
+        Preamble content.
+
+        # Introduction
+
+        Intro content here.
+
+        ## Summary
+
+        Summary content.
+
+        # Conclusion
+
+        Final thoughts.
         ");
     }
 
@@ -377,18 +387,5 @@ Final thoughts.
     //     let result = eval(expr, &md).unwrap();
     //     assert_eq!(result.len(), 1);
     //     assert_snapshot!(result[0].to_src(), @"");
-    // }
-
-    // #[test]
-    // fn test_eval_range() {
-    //     let md = test_doc();
-    //     // Get range of first child
-    //     let expr = Expr::Pipe(Box::new(Expr::Index(0)), Box::new(Expr::Range));
-    //     let result = eval(expr, &md).unwrap();
-    //     assert_eq!(result.len(), 1);
-    //     // Range format: "line:col-line:col"
-    //     let range_str = result[0].to_src();
-    //     assert!(range_str.contains(':'), "Range should contain colons");
-    //     assert!(range_str.contains('-'), "Range should contain dash");
     // }
 }

@@ -21,7 +21,6 @@ pub enum Expr {
     // Functions
     Title(isize), // title: section title of the given index
     Summary,      // summary: section summary
-    Range,        // range: section range
     NChildren,    // nchildren: number of children
     Frontmatter, // frontmatter: frontmatter as pure text (no section structure)
     Body,        // body: strip the frontmatter
@@ -208,19 +207,6 @@ pub fn eval(expr: Expr, md: &Markdown) -> Result<Vec<Markdown>, EvalError> {
 
         Expr::Summary => Ok(vec![Markdown::new(&md.to_string())]),
 
-        Expr::Range => {
-            // Return range as "start_line:start_col-end_line:end_col"
-            let range = &md.sections.range;
-            let range_str = format!(
-                "{}:{}-{}:{}",
-                range.start.0 + 1, // 1-indexed for display
-                range.start.1 + 1,
-                range.end.0 + 1,
-                range.end.1 + 1
-            );
-            Ok(vec![Markdown::new(&range_str)])
-        }
-
         Expr::NChildren => {
             let count = md.sections.children.len();
             Ok(vec![Markdown::new(&count.to_string())])
@@ -245,38 +231,23 @@ pub fn eval(expr: Expr, md: &Markdown) -> Result<Vec<Markdown>, EvalError> {
         }
 
         Expr::Del(title) => {
-            if let Some((idx, _)) =
+            if let Some((_, tgt_sec)) =
                 find_child_by_title(&md.sections, &title, true)
             {
-                let n_sections = md.sections.children.len();
-                if idx == 0 {
-                    // Deleting first section
-                    let start_idx = 1;
-                    let end_idx = n_sections - 1;
-                    Ok(vec![md.slice_sections_inclusive(start_idx, end_idx)])
-                } else if idx == n_sections - 1 {
-                    // Deleting last section
-                    let start_idx = 0;
-                    let end_idx = idx - 1;
-                    Ok(vec![md.slice_sections_inclusive(start_idx, end_idx)])
-                } else {
-                    let fst_start_idx = 0;
-                    let fst_end_idx = idx - 1;
-                    let snd_start_idx = idx + 1;
-                    let snd_end_idx = n_sections - 1;
-                    let fst =
-                        md.slice_sections_inclusive(fst_start_idx, fst_end_idx);
-                    let snd =
-                        md.slice_sections_inclusive(snd_start_idx, snd_end_idx);
-                    let fm_src: String = md
-                        .frontmatter
-                        .as_ref()
-                        .map_or("".to_string(), |fm| fm.to_src());
-                    let src = fm_src
-                        + &fst.sections.to_src()
-                        + &snd.sections.to_src();
-                    Ok(vec![Markdown::new(&src)])
-                }
+                let md_src = &md.to_src();
+                let tgt_sec_start = tgt_sec.range.bytes[0];
+                let tgt_sec_end = tgt_sec.range.bytes[1];
+
+                let part_before_start = 0;
+                let part_before_end = std::cmp::max(0, tgt_sec_start - 1);
+                let part_after_start = std::cmp::min(tgt_sec_end, md_src.len());
+                let part_after_end = md_src.len();
+
+                let part_before =
+                    md_src[part_before_start..part_before_end].to_owned();
+                let new_md_src = part_before
+                    + &md_src[part_after_start..part_after_end].to_string();
+                Ok(vec![Markdown::new(&new_md_src)])
             } else {
                 Err(EvalError::General(
                     "Did not find the section to delete".to_string(),
