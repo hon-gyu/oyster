@@ -66,6 +66,17 @@ impl Markdown {
             sections,
         }
     }
+
+    pub fn from_path(path: &std::path::Path) -> Result<Self, String> {
+        let source = std::fs::read_to_string(path)
+            .map_err(|e| format!("Failed to read file: {}", e))?;
+
+        if source.is_empty() {
+            return Err("File is empty".to_string());
+        }
+
+        Ok(Markdown::new(&source))
+    }
 }
 
 /// Build a hierarchical section tree from a document AST.
@@ -127,46 +138,6 @@ pub(crate) fn build_sections(
 
     // 4. Convert to Section with content extraction
     Ok(hierarchy_to_section(&tree, source, doc_start, doc_end))
-}
-
-/// Query a Markdown file and extract its structured content.
-///
-/// This is the main entry point for parsing a Markdown file into
-/// a [`Markdown`] struct containing frontmatter and sections.
-///
-/// # Arguments
-///
-/// - `path`: Path to the Markdown file to parse
-///
-/// # Returns
-///
-/// A [`Markdown`] struct containing:
-/// - `frontmatter`: Parsed YAML metadata (if present) with source location
-/// - `sections`: Hierarchical tree of document sections
-///
-/// # Errors
-///
-/// Returns an error if:
-/// - The file cannot be read
-/// - The file is empty
-/// - Section building fails
-///
-/// # Example
-///
-/// ```ignore
-/// let result = query_file(Path::new("README.md"))?;
-/// println!("Title: {:?}", result.frontmatter);
-/// println!("Sections: {}", result.sections);
-/// ```
-pub fn query_file(path: &std::path::Path) -> Result<Markdown, String> {
-    let source = std::fs::read_to_string(path)
-        .map_err(|e| format!("Failed to read file: {}", e))?;
-
-    if source.is_empty() {
-        return Err("File is empty".to_string());
-    }
-
-    Ok(Markdown::new(&source))
 }
 
 /// Extract all headings from the AST in document order

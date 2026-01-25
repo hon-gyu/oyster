@@ -1,6 +1,6 @@
 //! Tests for the query module.
 
-use super::parser::{Boundary, build_sections, query_file};
+use super::parser::{Boundary, build_sections};
 use super::types::Markdown;
 use crate::ast::Tree;
 use insta::assert_snapshot;
@@ -126,7 +126,7 @@ More details.
     let mut file = NamedTempFile::new().unwrap();
     file.write_all(source.as_bytes()).unwrap();
 
-    let result = query_file(file.path()).unwrap();
+    let result = Markdown::from_path(file.path()).unwrap();
     let json = serde_json::to_string_pretty(&result).unwrap();
     assert_snapshot!(json, @r###"
     {
@@ -250,7 +250,7 @@ fn test_query_file_padded() {
     let mut file = NamedTempFile::new().unwrap();
     file.write_all(source.as_bytes()).unwrap();
 
-    let result = query_file(file.path()).unwrap();
+    let result = Markdown::from_path(file.path()).unwrap();
     let json = serde_json::to_string_pretty(&result).unwrap();
     assert_snapshot!(json, @r#####"
     {
@@ -477,7 +477,7 @@ More details.
     file.write_all(source.as_bytes()).unwrap();
 
     // Parse markdown to struct
-    let original = query_file(file.path()).unwrap();
+    let original = Markdown::from_path(file.path()).unwrap();
 
     // Serialize to JSON
     let json = serde_json::to_string_pretty(&original).unwrap();
@@ -517,7 +517,7 @@ Subcontent.
     file.write_all(source.as_bytes()).unwrap();
 
     // Parse markdown to struct
-    let original = query_file(file.path()).unwrap();
+    let original = Markdown::from_path(file.path()).unwrap();
 
     // Serialize to JSON and back
     let json = serde_json::to_string(&original).unwrap();
@@ -531,7 +531,7 @@ Subcontent.
 }
 
 #[test]
-fn test_markdown_display() {
+fn test_markdown_display_sparse_heading() {
     use std::io::Write;
     use tempfile::NamedTempFile;
 
@@ -540,7 +540,7 @@ fn test_markdown_display() {
     let mut file = NamedTempFile::new().unwrap();
     file.write_all(source.as_bytes()).unwrap();
 
-    let result = query_file(file.path()).unwrap();
+    let result = Markdown::from_path(file.path()).unwrap();
     assert_snapshot!(result.to_string(), @r"
     ---
     title: Test Document

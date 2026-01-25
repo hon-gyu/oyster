@@ -1,6 +1,7 @@
 //! Query command implementataion.
+use oyster::query::Markdown;
+
 use crate::cli::args::QueryOutputFormat;
-use oyster::query::query_file;
 use std::path::PathBuf;
 
 pub fn run(
@@ -8,7 +9,7 @@ pub fn run(
     output: Option<PathBuf>,
     format: QueryOutputFormat,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let result = query_file(&file)?;
+    let result = Markdown::from_path(&file)?;
     let out = match format {
         QueryOutputFormat::Json => serde_json::to_string(&result)?,
         QueryOutputFormat::Markdown => result.to_src(),

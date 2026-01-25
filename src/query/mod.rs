@@ -36,6 +36,3 @@ mod tests;
 // Public types
 pub use heading::Heading;
 pub use types::{Frontmatter, Markdown, Range, Section, SectionHeading};
-
-// Public functions
-pub use parser::query_file;
