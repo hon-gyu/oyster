@@ -137,9 +137,12 @@ fn build_sections(
     }
 
     // 3. Build tree with min_level = 0 for document root
-    let tree = build_padded_tree(headings, Some(0))?;
+    let mut tree = build_padded_tree(headings, Some(0))?;
 
-    // 4. Extract implicit info - splits into bool tree (implicit markers) and value tree (with 1-indexed paths)
+    // 4. Propagate range info to implicit headings from their first child
+    propagate_implicit_ranges_for_headings(&mut tree);
+
+    // 5. Extract implicit info - splits into bool tree (implicit markers) and value tree (with 1-indexed paths)
     let (implicit_tree, value_tree) = tree.extract_implicit_info();
 
     // 5. Convert to Section with content extraction
@@ -197,6 +200,31 @@ fn extract_headings_rec(
 
     for child in &node.children {
         extract_headings_rec(child, source, headings);
+    }
+}
+
+/// Propagate range info from first child to implicit headings (bottom-up).
+///
+/// After `build_padded_tree`, implicit headings have `Range::zero()`.
+/// This fulfills the contract: "implicit section's information will be
+/// the same as its first child except Root."
+fn propagate_implicit_ranges_for_headings(
+    item: &mut HierarchyItem<SectionHeading>,
+) {
+    // Recurse children first (bottom-up)
+    for child in &mut item.children {
+        propagate_implicit_ranges_for_headings(child);
+    }
+
+    // If this is an implicit heading (zero range), copy from first child
+    if let SectionHeading::Heading(h) = &mut item.value {
+        if h.range == Range::zero() {
+            if let Some(first_child) = item.children.first() {
+                if let SectionHeading::Heading(child_h) = &first_child.value {
+                    h.range = child_h.range.clone();
+                }
+            }
+        }
     }
 }
 
@@ -416,11 +444,21 @@ Some preamble.
 Intro content.
 "#;
             let tree = Tree::new(source, false);
+            assert!(matches!(
+                tree.root_node.children[0].kind,
+                AstNodeKind::MetadataBlock(_)
+            ));
+            let doc_start_node = &tree.root_node.children[1];
+            let doc_start = Boundary {
+                byte: doc_start_node.start_byte,
+                row: doc_start_node.start_point.row,
+                col: doc_start_node.start_point.column,
+            };
             let sections =
-                build_sections(&tree.root_node, source, Boundary::zero())
-                    .unwrap();
+                build_sections(&tree.root_node, source, doc_start).unwrap();
             assert_snapshot!(sections.to_string(), @r"
             (root)
+            Some preamble.
             └─(1)
                 └─[1.1] ## Introduction
                     Intro content.
@@ -624,10 +662,12 @@ Subcontent.
             (root)
             Some preamble.
             ├─[1] # Introduction
+            │   Intro content here.
             │   └─(1.1)
             │       └─[1.1.1] ### Details
             │           More details.
             └─[2] # Another L1 Heading
+                vdiqoj
                 └─(2.1)
                     └─(2.1.1)
                         └─[2.1.1.1] #### Another Level 4
