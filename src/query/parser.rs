@@ -2,12 +2,13 @@
 
 use super::heading::Heading;
 use super::types::{Frontmatter, Markdown, Range, Section, SectionHeading};
-use crate::ast::{Node, NodeKind, Tree};
+use crate::ast::{Node as AstNode, NodeKind as AstNodeKind, Tree as AstTree};
 use crate::hierarchy::HierarchyItem;
 use crate::hierarchy::build_padded_tree;
 use crate::link::extract_frontmatter;
 
 /// Boundary info for section ranges (byte offset and position)
+#[derive(Clone, Copy)]
 struct Boundary {
     pub byte: usize,
     pub row: usize,
@@ -26,7 +27,7 @@ impl Boundary {
 
 impl Markdown {
     pub fn new(source: &str) -> Self {
-        let tree = Tree::new_with_default_opts(&source);
+        let tree = AstTree::new_with_default_opts(&source);
 
         // Extract frontmatter from the first child if it's a metadata block
         let first_child = tree.root_node.children.first();
@@ -102,7 +103,7 @@ impl Markdown {
 ///
 /// Returns an error if heading extraction fails (e.g., invalid heading levels).
 fn build_sections(
-    root: &Node,
+    root: &AstNode,
     source: &str,
     doc_start: Boundary,
 ) -> Result<Section, String> {
@@ -131,29 +132,39 @@ fn build_sections(
                 doc_end.col,
             ),
             children: vec![],
+            implicit: true, // root is always implicit
         });
     }
 
     // 3. Build tree with min_level = 0 for document root
     let tree = build_padded_tree(headings, Some(0))?;
 
-    // 4. Convert to Section with content extraction
-    Ok(hierarchy_to_section(&tree, source, doc_start, doc_end))
+    // 4. Extract implicit info - splits into bool tree (implicit markers) and value tree (with 1-indexed paths)
+    let (implicit_tree, value_tree) = tree.extract_implicit_info();
+
+    // 5. Convert to Section with content extraction
+    Ok(hierarchy_to_section(
+        value_tree,
+        implicit_tree,
+        source,
+        doc_start,
+        doc_end,
+    ))
 }
 
 /// Extract all headings from the AST in document order
-fn extract_headings(node: &Node, source: &str) -> Vec<SectionHeading> {
+fn extract_headings(node: &AstNode, source: &str) -> Vec<SectionHeading> {
     let mut headings = Vec::new();
     extract_headings_rec(node, source, &mut headings);
     headings
 }
 
 fn extract_headings_rec(
-    node: &Node,
+    node: &AstNode,
     source: &str,
     headings: &mut Vec<SectionHeading>,
 ) {
-    if let NodeKind::Heading {
+    if let AstNodeKind::Heading {
         level,
         id,
         classes,
@@ -191,15 +202,18 @@ fn extract_headings_rec(
 
 /// Convert HierarchyItem<SectionHeading> to Section
 ///
+/// Takes both the value tree (with 1-indexed paths) and implicit tree (boolean markers).
 /// `doc_start` is passed through for the root section's content start.
 /// `next_boundary` contains both byte offset and line number for the section end.
 fn hierarchy_to_section(
-    item: &HierarchyItem<SectionHeading>,
+    item: HierarchyItem<SectionHeading>,
+    implicit_item: HierarchyItem<bool>,
     source: &str,
     doc_start: Boundary,
     next_boundary: Boundary,
 ) -> Section {
-    // Convert index to path string (e.g., [0, 1, 2] -> "1.2")
+    // Convert index to path string (e.g., [1, 1, 2] -> "1.2")
+    // The value tree already has 0s shifted to 1s from extract_implicit_info
     let path = item
         .index
         .as_ref()
@@ -216,43 +230,42 @@ fn hierarchy_to_section(
         })
         .unwrap_or_default();
 
-    // Check if this is an implicit section (last path component is 0, but not root)
-    let is_implicit = if let Some(idx) = &item.index {
-        idx.len() > 1 && idx.last() == Some(&0)
-    } else {
-        false
-    };
+    // Get implicit status from the boolean tree
+    let is_implicit = implicit_item.value;
 
     // Get heading and section start info
     // For root, content starts at doc_start (after frontmatter)
     // For implicit sections with children, inherit from first child
-    let heading = item.value.clone();
-    let (section_start_byte, content_start, start_pos) =
-        if is_implicit && !item.children.is_empty() {
-            // Implicit section: use first child's location
-            match &item.children[0].value {
-                SectionHeading::Root => (
-                    doc_start.byte,
-                    doc_start.byte,
-                    (doc_start.row, doc_start.col),
-                ),
-                SectionHeading::Heading(h) => {
-                    (h.range.bytes[0], h.range.bytes[0], h.range.start)
+    let heading = item.value;
+    let (section_start_byte, content_start, start_pos) = match &heading {
+        // Root section always uses doc_start for content
+        SectionHeading::Root => (
+            doc_start.byte,
+            doc_start.byte,
+            (doc_start.row, doc_start.col),
+        ),
+        // For heading sections, check if implicit
+        SectionHeading::Heading(h) => {
+            if is_implicit && !item.children.is_empty() {
+                // Implicit section: use first child's location
+                match &item.children[0].value {
+                    SectionHeading::Root => (
+                        doc_start.byte,
+                        doc_start.byte,
+                        (doc_start.row, doc_start.col),
+                    ),
+                    SectionHeading::Heading(first_child) => (
+                        first_child.range.bytes[0],
+                        first_child.range.bytes[0],
+                        first_child.range.start,
+                    ),
                 }
+            } else {
+                // Normal heading section
+                (h.range.bytes[0], h.range.bytes[1], h.range.start)
             }
-        } else {
-            // Normal section
-            match &heading {
-                SectionHeading::Root => (
-                    doc_start.byte,
-                    doc_start.byte,
-                    (doc_start.row, doc_start.col),
-                ),
-                SectionHeading::Heading(h) => {
-                    (h.range.bytes[0], h.range.bytes[1], h.range.start)
-                }
-            }
-        };
+        }
+    };
 
     // Calculate content end: first child's start, or next_boundary
     let content_end = if item.children.is_empty() {
@@ -270,13 +283,13 @@ fn hierarchy_to_section(
         String::new()
     };
 
-    // Convert children, calculating their next boundaries from AST info
-    let children: Vec<Section> = item
+    // Precompute next boundaries for all children (need to look ahead at siblings)
+    let next_boundaries: Vec<Boundary> = item
         .children
         .iter()
         .enumerate()
-        .map(|(i, child)| {
-            let child_next = if i + 1 < item.children.len() {
+        .map(|(i, _)| {
+            if i + 1 < item.children.len() {
                 match &item.children[i + 1].value {
                     SectionHeading::Root => Boundary::zero(),
                     SectionHeading::Heading(h) => Boundary {
@@ -286,13 +299,25 @@ fn hierarchy_to_section(
                     },
                 }
             } else {
-                Boundary {
-                    byte: next_boundary.byte,
-                    row: next_boundary.row,
-                    col: next_boundary.col,
-                }
-            };
-            hierarchy_to_section(child, source, Boundary::zero(), child_next)
+                next_boundary
+            }
+        })
+        .collect();
+
+    // Convert children, zipping value and implicit trees together
+    let children: Vec<Section> = item
+        .children
+        .into_iter()
+        .zip(implicit_item.children.into_iter())
+        .zip(next_boundaries.into_iter())
+        .map(|((child, child_implicit), child_next)| {
+            hierarchy_to_section(
+                child,
+                child_implicit,
+                source,
+                Boundary::zero(),
+                child_next,
+            )
         })
         .collect();
 
@@ -309,6 +334,7 @@ fn hierarchy_to_section(
             next_boundary.col,
         ),
         children,
+        implicit: is_implicit,
     }
 }
 
@@ -370,11 +396,11 @@ Some content.
                 build_sections(&tree.root_node, source, Boundary::zero())
                     .unwrap();
             assert_snapshot!(sections.to_string(), @r"
-    [root]
-    This is content before any heading.
-    └─[1] # First Heading
-        Some content.
-    ");
+            [root]
+            This is content before any heading.
+            └─[1] # First Heading
+                Some content.
+            ");
         }
 
         #[test]
@@ -394,11 +420,11 @@ Intro content.
                 build_sections(&tree.root_node, source, Boundary::zero())
                     .unwrap();
             assert_snapshot!(sections.to_string(), @r"
-    [root]
-    └─[0]
-        └─[0.1] ## Introduction
-            Intro content.
-    ");
+            [root]
+            └─[1]
+                └─[1.1] ## Introduction
+                    Intro content.
+            ");
         }
 
         #[test]
@@ -414,12 +440,12 @@ Content.
                 build_sections(&tree.root_node, source, Boundary::zero())
                     .unwrap();
             assert_snapshot!(sections.to_string(), @r"
-    [root]
-    └─[1] # Title
-        └─[1.0]
-            └─[1.0.1] ### Deep Section
-                Content.
-    ");
+            [root]
+            └─[1] # Title
+                └─[1.1]
+                    └─[1.1.1] ### Deep Section
+                        Content.
+            ");
         }
     }
 
@@ -453,87 +479,7 @@ More details.
 
             let result = Markdown::from_path(file.path()).unwrap();
             let json = serde_json::to_string_pretty(&result).unwrap();
-            assert_snapshot!(json, @r###"
-    {
-      "frontmatter": {
-        "value": {
-          "title": "Test Document",
-          "tags": [
-            "rust",
-            "markdown"
-          ]
-        },
-        "range": {
-          "loc": "1:1-6:4",
-          "bytes": [
-            0,
-            56
-          ]
-        }
-      },
-      "sections": {
-        "heading": null,
-        "path": "root",
-        "content": "Some preamble.",
-        "range": {
-          "loc": "6:4-17:1",
-          "bytes": [
-            56,
-            137
-          ]
-        },
-        "children": [
-          {
-            "heading": {
-              "level": 1,
-              "text": "# Introduction\n",
-              "range": {
-                "loc": "10:1-11:1",
-                "bytes": [
-                  74,
-                  89
-                ]
-              }
-            },
-            "path": "1",
-            "content": "Intro content here.",
-            "range": {
-              "loc": "10:1-17:1",
-              "bytes": [
-                74,
-                137
-              ]
-            },
-            "children": [
-              {
-                "heading": {
-                  "level": 2,
-                  "text": "## Details\n",
-                  "range": {
-                    "loc": "14:1-15:1",
-                    "bytes": [
-                      111,
-                      122
-                    ]
-                  }
-                },
-                "path": "1.1",
-                "content": "More details.",
-                "range": {
-                  "loc": "14:1-17:1",
-                  "bytes": [
-                    111,
-                    137
-                  ]
-                },
-                "children": []
-              }
-            ]
-          }
-        ]
-      }
-    }
-    "###);
+            assert_snapshot!(json);
         }
 
         fn text_sparse_sections() -> String {
@@ -577,206 +523,7 @@ More content.
 
             let result = Markdown::from_path(file.path()).unwrap();
             let json = serde_json::to_string_pretty(&result).unwrap();
-            assert_snapshot!(json, @r#####"
-    {
-      "frontmatter": {
-        "value": {
-          "title": "Test Document",
-          "tags": [
-            "rust",
-            "markdown"
-          ]
-        },
-        "range": {
-          "loc": "1:1-6:4",
-          "bytes": [
-            0,
-            56
-          ]
-        }
-      },
-      "sections": {
-        "heading": null,
-        "path": "root",
-        "content": "Some preamble.",
-        "range": {
-          "loc": "6:4-25:1",
-          "bytes": [
-            56,
-            205
-          ]
-        },
-        "children": [
-          {
-            "heading": {
-              "level": 1,
-              "text": "# Introduction\n",
-              "range": {
-                "loc": "10:1-11:1",
-                "bytes": [
-                  74,
-                  89
-                ]
-              }
-            },
-            "path": "1",
-            "content": "",
-            "range": {
-              "loc": "10:1-18:1",
-              "bytes": [
-                74,
-                139
-              ]
-            },
-            "children": [
-              {
-                "heading": {
-                  "level": 2,
-                  "text": "",
-                  "range": {
-                    "loc": "1:1-1:1",
-                    "bytes": [
-                      0,
-                      0
-                    ]
-                  }
-                },
-                "path": "1.0",
-                "content": "",
-                "range": {
-                  "loc": "14:1-18:1",
-                  "bytes": [
-                    111,
-                    139
-                  ]
-                },
-                "children": [
-                  {
-                    "heading": {
-                      "level": 3,
-                      "text": "### Details\n",
-                      "range": {
-                        "loc": "14:1-15:1",
-                        "bytes": [
-                          111,
-                          123
-                        ]
-                      }
-                    },
-                    "path": "1.0.1",
-                    "content": "More details.",
-                    "range": {
-                      "loc": "14:1-18:1",
-                      "bytes": [
-                        111,
-                        139
-                      ]
-                    },
-                    "children": []
-                  }
-                ]
-              }
-            ]
-          },
-          {
-            "heading": {
-              "level": 1,
-              "text": "# Another L1 Heading\n",
-              "range": {
-                "loc": "18:1-19:1",
-                "bytes": [
-                  139,
-                  160
-                ]
-              }
-            },
-            "path": "2",
-            "content": "",
-            "range": {
-              "loc": "18:1-25:1",
-              "bytes": [
-                139,
-                205
-              ]
-            },
-            "children": [
-              {
-                "heading": {
-                  "level": 2,
-                  "text": "",
-                  "range": {
-                    "loc": "1:1-1:1",
-                    "bytes": [
-                      0,
-                      0
-                    ]
-                  }
-                },
-                "path": "2.0",
-                "content": "",
-                "range": {
-                  "loc": "1:1-25:1",
-                  "bytes": [
-                    0,
-                    205
-                  ]
-                },
-                "children": [
-                  {
-                    "heading": {
-                      "level": 3,
-                      "text": "",
-                      "range": {
-                        "loc": "1:1-1:1",
-                        "bytes": [
-                          0,
-                          0
-                        ]
-                      }
-                    },
-                    "path": "2.0.0",
-                    "content": "",
-                    "range": {
-                      "loc": "22:1-25:1",
-                      "bytes": [
-                        169,
-                        205
-                      ]
-                    },
-                    "children": [
-                      {
-                        "heading": {
-                          "level": 4,
-                          "text": "#### Another Level 4\n",
-                          "range": {
-                            "loc": "22:1-23:1",
-                            "bytes": [
-                              169,
-                              190
-                            ]
-                          }
-                        },
-                        "path": "2.0.0.1",
-                        "content": "More content.",
-                        "range": {
-                          "loc": "22:1-25:1",
-                          "bytes": [
-                            169,
-                            205
-                          ]
-                        },
-                        "children": []
-                      }
-                    ]
-                  }
-                ]
-              }
-            ]
-          }
-        ]
-      }
-    }
-    "#####);
+            assert_snapshot!(json);
         }
 
         #[test]
@@ -867,25 +614,25 @@ Subcontent.
 
             let result = Markdown::from_path(file.path()).unwrap();
             assert_snapshot!(result.to_string(), @r"
-    ---
-    title: Test Document
-    tags:
-    - rust
-    - markdown
-    ---
+            ---
+            title: Test Document
+            tags:
+            - rust
+            - markdown
+            ---
 
-    [root]
-    Some preamble.
-    ├─[1] # Introduction
-    │   └─[1.0]
-    │       └─[1.0.1] ### Details
-    │           More details.
-    └─[2] # Another L1 Heading
-        └─[2.0]
-            └─[2.0.0]
-                └─[2.0.0.1] #### Another Level 4
-                    More content.
-    ");
+            [root]
+            Some preamble.
+            ├─[1] # Introduction
+            │   └─[1.1]
+            │       └─[1.1.1] ### Details
+            │           More details.
+            └─[2] # Another L1 Heading
+                └─[2.1]
+                    └─[2.1.1]
+                        └─[2.1.1.1] #### Another Level 4
+                            More content.
+            ");
         }
 
         #[test]
@@ -914,26 +661,26 @@ Final content.
             let reconstructed = result.to_src();
 
             assert_snapshot!(reconstructed, @r"
-    ---
-    title: Reconstruction Test
-    tags:
-    - markdown
-    ---
+            ---
+            title: Reconstruction Test
+            tags:
+            - markdown
+            ---
 
-    Preamble content here.
+            Preamble content here.
 
-    # Introduction
+            # Introduction
 
-    Intro content here.
+            Intro content here.
 
-    ## Details
+            ## Details
 
-    More details.
+            More details.
 
-    # Second Section
+            # Second Section
 
-    Final content.
-    ");
+            Final content.
+            ");
         }
 
         #[test]

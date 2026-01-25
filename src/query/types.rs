@@ -238,6 +238,7 @@ pub struct Section {
     pub range: Range,
     /// Child sections (headings at deeper levels)
     pub children: Vec<Section>,
+    pub implicit: bool,
 }
 
 impl std::fmt::Display for Section {
@@ -260,7 +261,7 @@ impl Section {
         // Format heading info: level, title
         let title: Option<String> = match &self.heading {
             SectionHeading::Root => None,
-            SectionHeading::Heading(_) if self.is_implicit() => None,
+            SectionHeading::Heading(_) if self.implicit => None,
             SectionHeading::Heading(h) => {
                 let t = h.text.lines().next().unwrap_or("").to_string();
                 Some(t)
@@ -315,22 +316,6 @@ impl Section {
         }
 
         Ok(())
-    }
-
-    /// Returns true if the node is implicit, i.e., synthetically created for
-    /// level gaps (e.g., H1 → H3 creates implicit H2, or document root node).
-    ///
-    /// Determined by checking if the path is "root" or ending with 0 as in "1.0".
-    pub(crate) fn is_implicit(&self) -> bool {
-        let parts = self.path.split('.').collect::<Vec<_>>();
-        if parts.len() == 1 && parts[0] == "root" {
-            true
-        } else {
-            let last = parts.last().expect("Never: path cannot be empty");
-            last.parse::<usize>()
-                .expect("Never: path is constructed from ints")
-                == 0
-        }
     }
 
     /// Convert section tree back to markdown format.

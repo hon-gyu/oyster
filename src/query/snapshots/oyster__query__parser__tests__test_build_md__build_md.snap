@@ -1,0 +1,86 @@
+---
+source: src/query/parser.rs
+expression: json
+---
+{
+  "frontmatter": {
+    "value": {
+      "title": "Test Document",
+      "tags": [
+        "rust",
+        "markdown"
+      ]
+    },
+    "range": {
+      "loc": "1:1-6:4",
+      "bytes": [
+        0,
+        56
+      ]
+    }
+  },
+  "sections": {
+    "heading": null,
+    "path": "root",
+    "content": "Some preamble.",
+    "range": {
+      "loc": "6:4-17:1",
+      "bytes": [
+        56,
+        137
+      ]
+    },
+    "children": [
+      {
+        "heading": {
+          "level": 1,
+          "text": "# Introduction\n",
+          "range": {
+            "loc": "10:1-11:1",
+            "bytes": [
+              74,
+              89
+            ]
+          }
+        },
+        "path": "1",
+        "content": "Intro content here.",
+        "range": {
+          "loc": "10:1-17:1",
+          "bytes": [
+            74,
+            137
+          ]
+        },
+        "children": [
+          {
+            "heading": {
+              "level": 2,
+              "text": "## Details\n",
+              "range": {
+                "loc": "14:1-15:1",
+                "bytes": [
+                  111,
+                  122
+                ]
+              }
+            },
+            "path": "1.1",
+            "content": "More details.",
+            "range": {
+              "loc": "14:1-17:1",
+              "bytes": [
+                111,
+                137
+              ]
+            },
+            "children": [],
+            "implicit": false
+          }
+        ],
+        "implicit": false
+      }
+    ],
+    "implicit": true
+  }
+}

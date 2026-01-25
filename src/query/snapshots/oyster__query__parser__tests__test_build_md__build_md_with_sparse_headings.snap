@@ -1,0 +1,210 @@
+---
+source: src/query/parser.rs
+expression: json
+---
+{
+  "frontmatter": {
+    "value": {
+      "title": "Test Document",
+      "tags": [
+        "rust",
+        "markdown"
+      ]
+    },
+    "range": {
+      "loc": "1:1-6:4",
+      "bytes": [
+        0,
+        56
+      ]
+    }
+  },
+  "sections": {
+    "heading": null,
+    "path": "root",
+    "content": "Some preamble.",
+    "range": {
+      "loc": "6:4-25:1",
+      "bytes": [
+        56,
+        205
+      ]
+    },
+    "children": [
+      {
+        "heading": {
+          "level": 1,
+          "text": "# Introduction\n",
+          "range": {
+            "loc": "10:1-11:1",
+            "bytes": [
+              74,
+              89
+            ]
+          }
+        },
+        "path": "1",
+        "content": "",
+        "range": {
+          "loc": "10:1-18:1",
+          "bytes": [
+            74,
+            139
+          ]
+        },
+        "children": [
+          {
+            "heading": {
+              "level": 2,
+              "text": "",
+              "range": {
+                "loc": "1:1-1:1",
+                "bytes": [
+                  0,
+                  0
+                ]
+              }
+            },
+            "path": "1.1",
+            "content": "",
+            "range": {
+              "loc": "14:1-18:1",
+              "bytes": [
+                111,
+                139
+              ]
+            },
+            "children": [
+              {
+                "heading": {
+                  "level": 3,
+                  "text": "### Details\n",
+                  "range": {
+                    "loc": "14:1-15:1",
+                    "bytes": [
+                      111,
+                      123
+                    ]
+                  }
+                },
+                "path": "1.1.1",
+                "content": "More details.",
+                "range": {
+                  "loc": "14:1-18:1",
+                  "bytes": [
+                    111,
+                    139
+                  ]
+                },
+                "children": [],
+                "implicit": false
+              }
+            ],
+            "implicit": true
+          }
+        ],
+        "implicit": false
+      },
+      {
+        "heading": {
+          "level": 1,
+          "text": "# Another L1 Heading\n",
+          "range": {
+            "loc": "18:1-19:1",
+            "bytes": [
+              139,
+              160
+            ]
+          }
+        },
+        "path": "2",
+        "content": "",
+        "range": {
+          "loc": "18:1-25:1",
+          "bytes": [
+            139,
+            205
+          ]
+        },
+        "children": [
+          {
+            "heading": {
+              "level": 2,
+              "text": "",
+              "range": {
+                "loc": "1:1-1:1",
+                "bytes": [
+                  0,
+                  0
+                ]
+              }
+            },
+            "path": "2.1",
+            "content": "",
+            "range": {
+              "loc": "1:1-25:1",
+              "bytes": [
+                0,
+                205
+              ]
+            },
+            "children": [
+              {
+                "heading": {
+                  "level": 3,
+                  "text": "",
+                  "range": {
+                    "loc": "1:1-1:1",
+                    "bytes": [
+                      0,
+                      0
+                    ]
+                  }
+                },
+                "path": "2.1.1",
+                "content": "",
+                "range": {
+                  "loc": "22:1-25:1",
+                  "bytes": [
+                    169,
+                    205
+                  ]
+                },
+                "children": [
+                  {
+                    "heading": {
+                      "level": 4,
+                      "text": "#### Another Level 4\n",
+                      "range": {
+                        "loc": "22:1-23:1",
+                        "bytes": [
+                          169,
+                          190
+                        ]
+                      }
+                    },
+                    "path": "2.1.1.1",
+                    "content": "More content.",
+                    "range": {
+                      "loc": "22:1-25:1",
+                      "bytes": [
+                        169,
+                        205
+                      ]
+                    },
+                    "children": [],
+                    "implicit": false
+                  }
+                ],
+                "implicit": true
+              }
+            ],
+            "implicit": true
+          }
+        ],
+        "implicit": false
+      }
+    ],
+    "implicit": true
+  }
+}
