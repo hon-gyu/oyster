@@ -75,7 +75,7 @@ pub trait HierarchicalWithDefaults: Hierarchical {
 /// - `[0]` = root node
 /// - `[0, 1]` = second child of root (1-indexed for real items)
 /// - `[0, 1, 0]` = implicit child (0 indicates gap-filled node)
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct HierarchyItem<T> {
     /// The wrapped value
     pub value: T,

@@ -137,12 +137,9 @@ fn build_sections(
     }
 
     // 3. Build tree with min_level = 0 for document root
-    let mut tree = build_padded_tree(headings, Some(0))?;
+    let tree = build_padded_tree(headings, Some(0))?;
 
-    // 4. Propagate range info to implicit headings from their first child
-    propagate_implicit_ranges_for_headings(&mut tree);
-
-    // 5. Extract implicit info - splits into bool tree (implicit markers) and value tree (with 1-indexed paths)
+    // 4. Extract implicit info - splits into bool tree (implicit markers) and value tree (with 1-indexed paths)
     let (implicit_tree, value_tree) = tree.extract_implicit_info();
 
     // 5. Convert to Section with content extraction
@@ -203,31 +200,6 @@ fn extract_headings_rec(
     }
 }
 
-/// Propagate range info from first child to implicit headings (bottom-up).
-///
-/// After `build_padded_tree`, implicit headings have `Range::zero()`.
-/// This fulfills the contract: "implicit section's information will be
-/// the same as its first child except Root."
-fn propagate_implicit_ranges_for_headings(
-    item: &mut HierarchyItem<SectionHeading>,
-) {
-    // Recurse children first (bottom-up)
-    for child in &mut item.children {
-        propagate_implicit_ranges_for_headings(child);
-    }
-
-    // If this is an implicit heading (zero range), copy from first child
-    if let SectionHeading::Heading(h) = &mut item.value {
-        if h.range == Range::zero() {
-            if let Some(first_child) = item.children.first() {
-                if let SectionHeading::Heading(child_h) = &first_child.value {
-                    h.range = child_h.range.clone();
-                }
-            }
-        }
-    }
-}
-
 /// Convert HierarchyItem<SectionHeading> to Section
 ///
 /// Takes both the value tree (with 1-indexed paths) and implicit tree (boolean markers).
@@ -258,59 +230,6 @@ fn hierarchy_to_section(
         })
         .unwrap_or_default();
 
-    // Get implicit status from the boolean tree
-    let is_implicit = implicit_hier.value;
-
-    // Get heading and section start info
-    // For root, content starts at doc_start (after frontmatter)
-    // For implicit sections with children, inherit from first child
-    let heading = sec_hier.value;
-    let (section_start_byte, content_start, start_pos) = match &heading {
-        // Root section always uses doc_start for content
-        SectionHeading::Root => (
-            doc_start.byte,
-            doc_start.byte,
-            (doc_start.row, doc_start.col),
-        ),
-        // For heading sections, check if implicit
-        SectionHeading::Heading(h) => {
-            if is_implicit && !sec_hier.children.is_empty() {
-                // Implicit section: use first child's location
-                match &sec_hier.children[0].value {
-                    SectionHeading::Root => (
-                        doc_start.byte,
-                        doc_start.byte,
-                        (doc_start.row, doc_start.col),
-                    ),
-                    SectionHeading::Heading(first_child) => (
-                        first_child.range.bytes[0],
-                        first_child.range.bytes[0],
-                        first_child.range.start,
-                    ),
-                }
-            } else {
-                // Normal heading section
-                (h.range.bytes[0], h.range.bytes[1], h.range.start)
-            }
-        }
-    };
-
-    // Calculate content end: first child's start, or next_boundary
-    let content_end = if sec_hier.children.is_empty() {
-        next_boundary.byte
-    } else {
-        match &sec_hier.children[0].value {
-            SectionHeading::Root => 0,
-            SectionHeading::Heading(h) => h.range.bytes[0],
-        }
-    };
-
-    let content = if content_start < content_end {
-        source[content_start..content_end].trim().to_string()
-    } else {
-        String::new()
-    };
-
     // Precompute next boundaries for all children (need to look ahead at siblings)
     let next_boundaries: Vec<Boundary> = sec_hier
         .children
@@ -335,6 +254,7 @@ fn hierarchy_to_section(
     // Convert children, zipping value and implicit trees together
     let children: Vec<Section> = sec_hier
         .children
+        .clone()
         .into_iter()
         .zip(implicit_hier.children.into_iter())
         .zip(next_boundaries.into_iter())
@@ -349,8 +269,82 @@ fn hierarchy_to_section(
         })
         .collect();
 
+    // Get implicit status from the boolean tree
+    let is_implicit = implicit_hier.value;
+
+    // Get heading and section start info
+    // For root, content starts at doc_start (after frontmatter)
+    // For implicit sections with children, inherit from first child
+    let heading = sec_hier.value;
+    let (section_start_byte, content_start, start_pos, fixed_heading) =
+        match &heading {
+            // Root section always uses doc_start for content
+            SectionHeading::Root => (
+                doc_start.byte,
+                doc_start.byte,
+                (doc_start.row, doc_start.col),
+                heading,
+            ),
+            // For heading sections, check if implicit
+            SectionHeading::Heading(h) => {
+                match (is_implicit, sec_hier.children.is_empty()) {
+                    (true, true) => {
+                        unreachable!("Never: implicit section with no children")
+                    }
+                    (true, false) => {
+                        // Implicit section: use first child's already-built heading
+                        // (children are built recursively before this point,
+                        // so implicit children already have fixed heading ranges)
+                        let child_heading_range = match &children[0].heading {
+                            SectionHeading::Root => {
+                                unreachable!("Never: root cannot be child")
+                            }
+                            SectionHeading::Heading(ch) => &ch.range,
+                        };
+                        let fixed_heading = SectionHeading::Heading(Heading {
+                            level: h.level,
+                            text: h.text.clone(),
+                            range: child_heading_range.clone(),
+                            id: h.id.clone(),
+                            classes: h.classes.clone(),
+                            attrs: h.attrs.clone(),
+                        });
+                        (
+                            child_heading_range.bytes[0],
+                            child_heading_range.bytes[0],
+                            child_heading_range.start,
+                            fixed_heading,
+                        )
+                    }
+                    (_, _) => {
+                        // Normal heading section
+                        (
+                            h.range.bytes[0],
+                            h.range.bytes[1],
+                            h.range.start,
+                            heading,
+                        )
+                    }
+                }
+            }
+        };
+
+    // Calculate content end: first child's start, or next_boundary
+    // Uses already-built children so implicit sections have correct ranges
+    let content_end = if children.is_empty() {
+        next_boundary.byte
+    } else {
+        children[0].range.bytes[0]
+    };
+
+    let content = if content_start < content_end {
+        source[content_start..content_end].trim().to_string()
+    } else {
+        String::new()
+    };
+
     Section {
-        heading,
+        heading: fixed_heading,
         path,
         content,
         range: Range::new(
