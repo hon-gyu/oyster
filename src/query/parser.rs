@@ -234,15 +234,15 @@ fn propagate_implicit_ranges_for_headings(
 /// `doc_start` is passed through for the root section's content start.
 /// `next_boundary` contains both byte offset and line number for the section end.
 fn hierarchy_to_section(
-    item: HierarchyItem<SectionHeading>,
-    implicit_item: HierarchyItem<bool>,
+    sec_hier: HierarchyItem<SectionHeading>,
+    implicit_hier: HierarchyItem<bool>,
     source: &str,
     doc_start: Boundary,
     next_boundary: Boundary,
 ) -> Section {
     // Convert index to path string (e.g., [1, 1, 2] -> "1.2")
     // The value tree already has 0s shifted to 1s from extract_implicit_info
-    let path = item
+    let path = sec_hier
         .index
         .as_ref()
         .map(|idx| {
@@ -259,12 +259,12 @@ fn hierarchy_to_section(
         .unwrap_or_default();
 
     // Get implicit status from the boolean tree
-    let is_implicit = implicit_item.value;
+    let is_implicit = implicit_hier.value;
 
     // Get heading and section start info
     // For root, content starts at doc_start (after frontmatter)
     // For implicit sections with children, inherit from first child
-    let heading = item.value;
+    let heading = sec_hier.value;
     let (section_start_byte, content_start, start_pos) = match &heading {
         // Root section always uses doc_start for content
         SectionHeading::Root => (
@@ -274,9 +274,9 @@ fn hierarchy_to_section(
         ),
         // For heading sections, check if implicit
         SectionHeading::Heading(h) => {
-            if is_implicit && !item.children.is_empty() {
+            if is_implicit && !sec_hier.children.is_empty() {
                 // Implicit section: use first child's location
-                match &item.children[0].value {
+                match &sec_hier.children[0].value {
                     SectionHeading::Root => (
                         doc_start.byte,
                         doc_start.byte,
@@ -296,10 +296,10 @@ fn hierarchy_to_section(
     };
 
     // Calculate content end: first child's start, or next_boundary
-    let content_end = if item.children.is_empty() {
+    let content_end = if sec_hier.children.is_empty() {
         next_boundary.byte
     } else {
-        match &item.children[0].value {
+        match &sec_hier.children[0].value {
             SectionHeading::Root => 0,
             SectionHeading::Heading(h) => h.range.bytes[0],
         }
@@ -312,13 +312,13 @@ fn hierarchy_to_section(
     };
 
     // Precompute next boundaries for all children (need to look ahead at siblings)
-    let next_boundaries: Vec<Boundary> = item
+    let next_boundaries: Vec<Boundary> = sec_hier
         .children
         .iter()
         .enumerate()
         .map(|(i, _)| {
-            if i + 1 < item.children.len() {
-                match &item.children[i + 1].value {
+            if i + 1 < sec_hier.children.len() {
+                match &sec_hier.children[i + 1].value {
                     SectionHeading::Root => Boundary::zero(),
                     SectionHeading::Heading(h) => Boundary {
                         byte: h.range.bytes[0],
@@ -333,10 +333,10 @@ fn hierarchy_to_section(
         .collect();
 
     // Convert children, zipping value and implicit trees together
-    let children: Vec<Section> = item
+    let children: Vec<Section> = sec_hier
         .children
         .into_iter()
-        .zip(implicit_item.children.into_iter())
+        .zip(implicit_hier.children.into_iter())
         .zip(next_boundaries.into_iter())
         .map(|((child, child_implicit), child_next)| {
             hierarchy_to_section(
@@ -365,6 +365,9 @@ fn hierarchy_to_section(
         implicit: is_implicit,
     }
 }
+
+// Test
+// ====================
 
 #[cfg(test)]
 mod tests {
