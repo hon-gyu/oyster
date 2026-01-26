@@ -98,6 +98,40 @@ fn normalize_index(index: isize, len: usize) -> Option<usize> {
     }
 }
 
+/// Remove a section by title from the section tree.
+/// Returns a new section tree without the matching section.
+///
+/// Note: this breaks the continuity the range. Need re-parsing afterwards.
+fn remove_section_by_title(section: &Section, title: &str) -> Section {
+    // Check if any immediate child matches the title
+    let filtered_children: Vec<Section> = section
+        .children
+        .iter()
+        .filter_map(|child| {
+            // Check if this child matches the title
+            if let Some(child_title) = get_heading_title(&child.heading) {
+                if child_title == title {
+                    // Skip this child (remove it)
+                    return None;
+                }
+            }
+            // Recursively process this child's children
+            let new_child = remove_section_by_title(child, title);
+            Some(new_child)
+        })
+        .collect();
+
+    // Return a new section with filtered children
+    Section {
+        heading: section.heading.clone(),
+        path: section.path.clone(),
+        content: section.content.clone(),
+        range: section.range.clone(),
+        implicit: section.implicit,
+        children: filtered_children,
+    }
+}
+
 pub fn eval(expr: Expr, md: &Markdown) -> Result<Vec<Markdown>, EvalError> {
     match expr {
         Expr::Identity => Ok(vec![md.clone()]),
@@ -225,22 +259,18 @@ pub fn eval(expr: Expr, md: &Markdown) -> Result<Vec<Markdown>, EvalError> {
         }
 
         Expr::Del(title) => {
-            if let Some((_, tgt_sec)) =
-                find_child_by_title(&md.sections, &title, true)
-            {
-                let md_src = &md.to_src();
-                let tgt_sec_start = tgt_sec.range.bytes[0];
-                let tgt_sec_end = tgt_sec.range.bytes[1];
+            if let Some(_) = find_child_by_title(&md.sections, &title, true) {
+                // Clone the section tree and remove the target section
+                let new_sections =
+                    remove_section_by_title(&md.sections, &title);
 
-                let part_before_start = 0;
-                let part_before_end = tgt_sec_start.saturating_sub(1);
-                let part_after_start = std::cmp::min(tgt_sec_end, md_src.len());
-                let part_after_end = md_src.len();
+                // Reconstruct markdown from the modified tree
+                let mut new_md_src = String::new();
+                if let Some(fm) = &md.frontmatter {
+                    new_md_src.push_str(&fm.to_src());
+                }
+                new_md_src.push_str(&new_sections.to_src());
 
-                let part_before =
-                    md_src[part_before_start..part_before_end].to_owned();
-                let new_md_src = part_before
-                    + &md_src[part_after_start..part_after_end].to_string();
                 Ok(vec![Markdown::new(&new_md_src)])
             } else {
                 Err(EvalError::General(
