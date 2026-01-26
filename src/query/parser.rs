@@ -140,7 +140,7 @@ fn build_sections(
     let tree = build_padded_tree(headings, Some(0))
         .expect("Infallible: headings should be valid");
 
-    // 5. Convert to Section with content extraction
+    // 4. Convert to Section with content extraction
     hierarchy_to_section(tree, source, doc_start, doc_end)
 }
 
