@@ -69,12 +69,7 @@ impl Markdown {
             if let Some(frontmatter) = &self.frontmatter {
                 buf.push_str(&frontmatter.to_src());
             }
-
-            let orgi_src = self.to_src();
-            let new_secs_byte_start =
-                self.sections.children[idx].range.bytes[0];
-            let new_secs_byte_end = self.sections.children[idx].range.bytes[1];
-            buf.push_str(&orgi_src[new_secs_byte_start..new_secs_byte_end]);
+            buf.push_str(&self.sections.children[idx].to_src());
             buf
         };
         Self::new(&new_md_src)
@@ -102,13 +97,9 @@ impl Markdown {
             if let Some(frontmatter) = &self.frontmatter {
                 buf.push_str(&frontmatter.to_src());
             }
-
-            let orgi_src = self.to_src();
-            let new_secs_byte_start =
-                self.sections.children[start_idx].range.bytes[0];
-            let new_secs_byte_end =
-                self.sections.children[end_idx].range.bytes[1];
-            buf.push_str(&orgi_src[new_secs_byte_start..new_secs_byte_end]);
+            for i in start_idx..=end_idx {
+                buf.push_str(&self.sections.children[i].to_src());
+            }
             buf
         };
         Self::new(&new_md_src)
