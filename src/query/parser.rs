@@ -139,17 +139,8 @@ fn build_sections(
     // 3. Build tree with min_level = 0 for document root
     let tree = build_padded_tree(headings, Some(0))?;
 
-    // 4. Extract implicit info - splits into bool tree (implicit markers) and value tree (with 1-indexed paths)
-    let (implicit_tree, value_tree) = tree.extract_implicit_info();
-
     // 5. Convert to Section with content extraction
-    Ok(hierarchy_to_section(
-        value_tree,
-        implicit_tree,
-        source,
-        doc_start,
-        doc_end,
-    ))
+    Ok(hierarchy_to_section(tree, source, doc_start, doc_end))
 }
 
 /// Extract all headings from the AST in document order
@@ -207,7 +198,6 @@ fn extract_headings_rec(
 /// `next_boundary` contains both byte offset and line number for the section end.
 fn hierarchy_to_section(
     sec_hier: HierarchyItem<SectionHeading>,
-    implicit_hier: HierarchyItem<bool>,
     source: &str,
     doc_start: Boundary,
     next_boundary: Boundary,
@@ -256,21 +246,14 @@ fn hierarchy_to_section(
         .children
         .clone()
         .into_iter()
-        .zip(implicit_hier.children.into_iter())
         .zip(next_boundaries.into_iter())
-        .map(|((child, child_implicit), child_next)| {
-            hierarchy_to_section(
-                child,
-                child_implicit,
-                source,
-                Boundary::zero(),
-                child_next,
-            )
+        .map(|(child, child_next)| {
+            hierarchy_to_section(child, source, Boundary::zero(), child_next)
         })
         .collect();
 
     // Get implicit status from the boolean tree
-    let is_implicit = implicit_hier.value;
+    let is_implicit = sec_hier.implicit.unwrap_or(false);
 
     // Get heading and section start info
     // For root, content starts at doc_start (after frontmatter)
