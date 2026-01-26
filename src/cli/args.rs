@@ -55,7 +55,7 @@ impl BuildArgs {
             MermaidRenderMode::from_str(&self.mermaid_render_mode)
                 .unwrap_or(MermaidRenderMode::BuildTime);
         let tikz_render_mode = TikzRenderMode::from_str(&self.tikz_render_mode)
-            .unwrap_or(TikzRenderMode::ClientSide);
+            .unwrap_or(TikzRenderMode::BuildTime);
         let quiver_render_mode =
             QuiverRenderMode::from_str(&self.quiver_render_mode)
                 .unwrap_or(QuiverRenderMode::Raw);
