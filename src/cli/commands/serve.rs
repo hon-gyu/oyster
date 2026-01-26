@@ -1,30 +1,14 @@
+//! Serve command implementation.
+//!
 //! HTTP server with optional live reload for development.
-//!
-//! This module provides functionality to serve a generated static site over HTTP,
-//! with optional file watching and live reload capabilities for a smooth development
-//! experience.
-//!
-//! # Example
-//!
-//! ```ignore
-//! use oyster::serve::{ServeConfig, serve_site};
-//!
-//! let config = ServeConfig {
-//!     vault_root_dir: PathBuf::from("./my-vault"),
-//!     output_dir: PathBuf::from("./output"),
-//!     port: 3000,
-//!     watch: true,
-//!     // ... other fields
-//! };
-//!
-//! serve_site(config).await?;
-//! ```
 
-use crate::export::{NodeRenderConfig, render_vault};
+use super::build;
+use crate::cli::args::BuildArgs;
 use axum::Router;
 use axum::response::Redirect;
 use axum::routing::get;
 use notify_debouncer_mini::{DebouncedEventKind, new_debouncer};
+use oyster::export::{NodeRenderConfig, render_vault};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
@@ -33,39 +17,60 @@ use tower_http::services::ServeDir;
 use tower_livereload::LiveReloadLayer;
 
 /// Configuration for serving a generated site.
-pub struct ServeConfig {
-    pub vault_root_dir: PathBuf,
-    pub output_dir: PathBuf,
-    pub port: u16,
-    pub watch: bool,
-    pub theme: String,
-    pub filter_publish: bool,
-    pub home_note_path: Option<PathBuf>,
-    pub home_name: Option<String>,
-    pub home_slug: String,
-    pub node_render_config: NodeRenderConfig,
-    pub custom_callout_css: Option<PathBuf>,
+struct ServeConfig {
+    vault_root_dir: PathBuf,
+    output_dir: PathBuf,
+    port: u16,
+    watch: bool,
+    theme: String,
+    filter_publish: bool,
+    home_note_path: Option<PathBuf>,
+    home_name: Option<String>,
+    home_slug: String,
+    node_render_config: NodeRenderConfig,
+    custom_callout_css: Option<PathBuf>,
+}
+
+pub fn run(
+    args: BuildArgs,
+    port: u16,
+    watch: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
+    // Use temp directory for output
+    let temp_dir = tempfile::tempdir()?;
+    let output_dir = temp_dir.path().to_path_buf();
+
+    // Initial build - returns the home slug
+    let home_slug = build::run_with_home_slug(&args, &output_dir)?;
+
+    // Build config before moving args
+    let node_render_config = args.node_render_config();
+
+    // Start server (temp_dir is kept alive until server stops)
+    let rt = tokio::runtime::Runtime::new()?;
+    rt.block_on(async {
+        let config = ServeConfig {
+            vault_root_dir: args.vault_root_dir,
+            output_dir,
+            port,
+            watch,
+            theme: args.theme,
+            filter_publish: args.filter_publish,
+            home_note_path: args.home_note_path,
+            home_name: args.home_name,
+            home_slug,
+            node_render_config,
+            custom_callout_css: args.custom_callout_css,
+        };
+        serve_site(config).await
+    })?;
+
+    // temp_dir is dropped here, cleaning up the temp directory
+    Ok(())
 }
 
 /// Starts the HTTP server to serve the generated site.
-///
-/// This is the main entry point for the serve functionality. Based on the
-/// configuration, it either starts a simple static file server or a server
-/// with live reload capabilities.
-///
-/// # Returns
-///
-/// Returns `Ok(())` when the server shuts down gracefully, or an error if
-/// the server fails to start or encounters a fatal error.
-///
-/// # Behavior
-///
-/// - If `config.watch` is `false`: Starts a simple static file server
-/// - If `config.watch` is `true`: Starts a server with live reload that:
-///   - Injects a live reload script into HTML responses
-///   - Watches the vault directory for `.md` file changes
-///   - Regenerates the site and triggers browser refresh on changes
-pub async fn serve_site(
+async fn serve_site(
     config: ServeConfig,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let addr = format!("0.0.0.0:{}", config.port);
@@ -79,9 +84,6 @@ pub async fn serve_site(
 }
 
 /// Starts a simple static file server without live reload.
-///
-/// Serves files from the output directory using axum's ServeDir service.
-/// This is used when the `--watch` flag is not provided.
 async fn serve_static(
     output_dir: PathBuf,
     port: u16,
@@ -102,15 +104,6 @@ async fn serve_static(
 }
 
 /// Starts the server with file watching and live reload enabled.
-///
-/// This function sets up:
-/// 1. An axum router with the `tower-livereload` middleware
-/// 2. A file watcher (using `notify`) that monitors the vault directory
-/// 3. A rebuild task that regenerates the site when changes are detected
-///
-/// The file watcher uses a 500ms debounce to avoid rapid rebuilds when
-/// multiple files change in quick succession. Only `.md` file changes
-/// trigger a rebuild.
 async fn serve_with_watch(
     config: ServeConfig,
     addr: &str,
