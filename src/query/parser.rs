@@ -61,7 +61,7 @@ impl Markdown {
         };
 
         // Build section tree, starting content after frontmatter
-        let sections = build_sections(&tree.root_node, &source, doc_start).expect("Infallible: sections should be able to be built from valid AST");
+        let sections = build_sections(&tree.root_node, &source, doc_start);
 
         Self {
             frontmatter,
@@ -106,7 +106,7 @@ fn build_sections(
     root: &AstNode,
     source: &str,
     doc_start: Boundary,
-) -> Result<Section, String> {
+) -> Section {
     // 1. Extract headings from AST
     let headings = extract_headings(root, source);
 
@@ -119,7 +119,7 @@ fn build_sections(
     // 2. Handle case with no headings - create root section with all content
     if headings.is_empty() {
         let content = source[doc_start.byte..doc_end.byte].trim().to_string();
-        return Ok(Section {
+        return Section {
             heading: SectionHeading::Root,
             path: "root".to_string(),
             content,
@@ -133,14 +133,15 @@ fn build_sections(
             ),
             children: vec![],
             implicit: true, // root is always implicit
-        });
+        };
     }
 
     // 3. Build tree with min_level = 0 for document root
-    let tree = build_padded_tree(headings, Some(0))?;
+    let tree = build_padded_tree(headings, Some(0))
+        .expect("Infallible: headings should be valid");
 
     // 5. Convert to Section with content extraction
-    Ok(hierarchy_to_section(tree, source, doc_start, doc_end))
+    hierarchy_to_section(tree, source, doc_start, doc_end)
 }
 
 /// Extract all headings from the AST in document order
@@ -376,8 +377,7 @@ Final thoughts.
 "#;
             let tree = Tree::new(source, false);
             let sections =
-                build_sections(&tree.root_node, source, Boundary::zero())
-                    .unwrap();
+                build_sections(&tree.root_node, source, Boundary::zero());
             assert_snapshot!(sections.to_string(), @r"
             (root)
             └─[1] # Title
@@ -401,8 +401,7 @@ Some content.
 "#;
             let tree = Tree::new(source, false);
             let sections =
-                build_sections(&tree.root_node, source, Boundary::zero())
-                    .unwrap();
+                build_sections(&tree.root_node, source, Boundary::zero());
             assert_snapshot!(sections.to_string(), @r"
             (root)
             This is content before any heading.
@@ -434,8 +433,7 @@ Intro content.
                 row: doc_start_node.start_point.row,
                 col: doc_start_node.start_point.column,
             };
-            let sections =
-                build_sections(&tree.root_node, source, doc_start).unwrap();
+            let sections = build_sections(&tree.root_node, source, doc_start);
             assert_snapshot!(sections.to_string(), @r"
             (root)
             Some preamble.
@@ -455,8 +453,7 @@ Content.
 "#;
             let tree = Tree::new(source, false);
             let sections =
-                build_sections(&tree.root_node, source, Boundary::zero())
-                    .unwrap();
+                build_sections(&tree.root_node, source, Boundary::zero());
             assert_snapshot!(sections.to_string(), @r"
             (root)
             └─[1] # Title
