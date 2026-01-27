@@ -842,15 +842,6 @@ Special handling in `export/frontmatter.rs`:
 
 ---
 
-## Future Enhancements
-
-From `README.md`:
-- ✅ Implemented: Parse markdown, file/heading/block references, TOC, backlinks, LaTeX, CSS themes
-- 🚧 In Progress: Additional components (sidebar explorer)
-- ⬜ TODO: Tag pages, better embed support, custom callouts, Obsidian bases, LSP
-
----
-
 ## Performance Characteristics
 
 **Complexity Analysis:**
@@ -863,15 +854,6 @@ From `README.md`:
 - Entire vault ASTs in memory during processing
 - Large vaults (1000+ notes) should still be manageable
 - Assets are copied, not buffered
-
----
-
-## Security Considerations
-
-1. **User Input**: HTML content is properly escaped (maud handles this)
-2. **File Paths**: Uses PathBuf; handles relative paths safely
-3. **LaTeX**: KaTeX has built-in XSS prevention
-4. **No Network**: Entirely offline static generation
 
 ---
 
