@@ -358,6 +358,7 @@ pub fn eval(expr: Expr, md: &Markdown) -> Result<Vec<Markdown>, EvalError> {
                     let content = strip_fences(raw);
                     let meta = serde_json::json!({
                         "language": cb.language,
+                        "language_extra": cb.extra,
                         "content": content,
                         "range": cb.range,
                     });
