@@ -126,7 +126,7 @@ impl Frontmatter {
         let yaml_str = serde_yaml::to_string(&self.value)
             .unwrap_or_else(|_| String::new());
         buf.push_str(yaml_str.trim_end());
-        buf.push_str("\n---\n\n");
+        buf.push_str("\n---\n");
         buf
     }
 }
@@ -273,21 +273,20 @@ impl Section {
             writeln!(f, "[{}] {}", self.path, title)?;
         }
 
-        // Print content preview if non-empty
-        if !self.content.is_empty() {
-            let preview: String = self
-                .content
+        // Print content preview if non-empty (trim for display only)
+        let preview_text = self.content.trim();
+        if !preview_text.is_empty() {
+            let preview: String = preview_text
                 .chars()
                 .take(Self::CONTENT_PREVIEW_LEN)
                 .map(|c| if c == '\n' { ' ' } else { c })
                 .collect();
             let ellipsis =
-                if self.content.chars().count() > Self::CONTENT_PREVIEW_LEN {
+                if preview_text.chars().count() > Self::CONTENT_PREVIEW_LEN {
                     "..."
                 } else {
                     ""
                 };
-            // writeln!(f, "{}content: \"{preview}{ellipsis}\"", prefix)?;
             writeln!(f, "{}{preview}{ellipsis}", prefix)?;
         }
 
@@ -326,33 +325,16 @@ impl Section {
 
         match &self.heading {
             SectionHeading::Root => {
-                // Root section: output content if present
-                if !self.content.is_empty() {
-                    result.push_str(&self.content);
-                    result.push_str("\n\n");
-                }
+                result.push_str(&self.content);
             }
             SectionHeading::Heading(h) => {
-                // Skip implicit sections (they have empty heading text)
                 if !h.text.is_empty() {
-                    // Output heading text (already includes trailing newline)
                     result.push_str(&h.text);
-
-                    // Add blank line after heading
-                    if !self.content.is_empty() {
-                        result.push('\n');
-                    }
-
-                    // Output content if present
-                    if !self.content.is_empty() {
-                        result.push_str(&self.content);
-                        result.push_str("\n\n");
-                    }
+                    result.push_str(&self.content);
                 }
             }
         }
 
-        // Recursively output children
         for child in &self.children {
             result.push_str(&child.to_src());
         }

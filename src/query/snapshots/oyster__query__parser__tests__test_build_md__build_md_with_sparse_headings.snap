@@ -22,11 +22,11 @@ expression: json
   "sections": {
     "heading": null,
     "path": "root",
-    "content": "Some preamble.",
+    "content": "\nSome preamble.\n\n",
     "range": {
-      "loc": "6:4-25:1",
+      "loc": "7:1-25:1",
       "bytes": [
-        56,
+        57,
         205
       ]
     },
@@ -45,7 +45,7 @@ expression: json
           }
         },
         "path": "1",
-        "content": "Intro content here.",
+        "content": "\nIntro content here.\n\n",
         "range": {
           "loc": "10:1-18:1",
           "bytes": [
@@ -91,7 +91,7 @@ expression: json
                   }
                 },
                 "path": "1.1.1",
-                "content": "More details.",
+                "content": "\nMore details.\n\n",
                 "range": {
                   "loc": "14:1-18:1",
                   "bytes": [
@@ -119,7 +119,7 @@ expression: json
           }
         },
         "path": "2",
-        "content": "vdiqoj",
+        "content": "\nvdiqoj\n\n",
         "range": {
           "loc": "18:1-25:1",
           "bytes": [
@@ -188,7 +188,7 @@ expression: json
                       }
                     },
                     "path": "2.1.1.1",
-                    "content": "More content.",
+                    "content": "\nMore content.\n",
                     "range": {
                       "loc": "22:1-25:1",
                       "bytes": [

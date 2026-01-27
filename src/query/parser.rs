@@ -47,10 +47,23 @@ impl Markdown {
                                 node.end_point.column,
                             ),
                         };
-                        let start = Boundary {
-                            byte: node.end_byte,
-                            row: node.end_point.row,
-                            col: node.end_point.column,
+                        // Skip the trailing newline of the closing ---
+                        // delimiter, since fm.to_src() already includes it.
+                        let byte = node.end_byte;
+                        let start = if byte < source.len()
+                            && source.as_bytes()[byte] == b'\n'
+                        {
+                            Boundary {
+                                byte: byte + 1,
+                                row: node.end_point.row + 1,
+                                col: 0,
+                            }
+                        } else {
+                            Boundary {
+                                byte,
+                                row: node.end_point.row,
+                                col: node.end_point.column,
+                            }
                         };
                         (Some(fm), start)
                     }
@@ -322,7 +335,7 @@ fn hierarchy_to_section(
     };
 
     let content = if content_start < content_end {
-        source[content_start..content_end].trim().to_string()
+        source[content_start..content_end].to_string()
     } else {
         String::new()
     };
