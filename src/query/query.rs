@@ -136,14 +136,11 @@ fn remove_section_by_title(section: &Section, title: &str) -> Section {
 
 /// Strip the opening fence line (```lang) and closing fence line (```)
 /// from a fenced code block, returning the inner content.
-///
-/// TODO(critical): we need more robust parsing of the info string
-/// - This doesn't consider more than three ``` in the fence
-/// - Check the spec of commonmark
 fn strip_fences(raw: &str) -> String {
     let mut lines = raw.lines();
     // Skip opening fence line
-    lines.next();
+    let first = lines.next().expect("Never: no first code fence line");
+    let leading_indent = first.len() - first.trim_start().len();
     let mut content_lines: Vec<&str> = lines.collect();
     // Remove closing fence line if present
     if let Some(last) = content_lines.last() {
@@ -153,7 +150,15 @@ fn strip_fences(raw: &str) -> String {
             content_lines.pop();
         }
     }
-    let mut result = content_lines.join("\n");
+    let mut result = content_lines
+        .iter()
+        .map(|&line| {
+            let line_indent = line.len() - line.trim_start().len();
+            let to_trim = std::cmp::min(line_indent, leading_indent);
+            &line[to_trim..]
+        })
+        .collect::<Vec<&str>>()
+        .join("\n");
     // Preserve trailing newline if the inner content had one
     if !content_lines.is_empty() {
         result.push('\n');
