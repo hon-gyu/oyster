@@ -189,26 +189,32 @@ fn extract_code_blocks_rec(
     blocks: &mut Vec<CodeBlock>,
 ) {
     if let AstNodeKind::CodeBlock(kind) = &node.kind {
-        let language = match kind {
+        let language_and_extra: (Option<String>, Option<String>) = match kind {
             CodeBlockKind::Fenced(info) => {
                 let info = info.trim();
                 if info.is_empty() {
-                    None
+                    (None, None)
                 } else {
-                    // Language is the first word of the info string
-                    // TODO(critical): we want to keep all the infomation
-                    Some(
-                        info.split_whitespace()
-                            .next()
-                            .unwrap_or("")
-                            .to_string(),
+                    info.split_once(" ").map_or(
+                        (Some(info.to_string()), None),
+                        |(lang, extra)| {
+                            let extra = extra.trim();
+                            let extra = if extra.is_empty() {
+                                None
+                            } else {
+                                Some(extra.to_string())
+                            };
+
+                            (Some(lang.to_string()), extra)
+                        },
                     )
                 }
             }
-            CodeBlockKind::Indented => None,
+            CodeBlockKind::Indented => (None, None),
         };
         blocks.push(CodeBlock {
-            language,
+            language: language_and_extra.0,
+            extra: language_and_extra.1,
             range: Range::new(
                 node.start_byte,
                 node.end_byte,
