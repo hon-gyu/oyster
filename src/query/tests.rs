@@ -7,7 +7,10 @@ mod eval_tests {
     use insta::assert_debug_snapshot;
 
     use super::*;
-    use crate::query::query::{Expr, eval};
+    use crate::query::{
+        CodeBlock,
+        query::{Expr, eval},
+    };
 
     fn test_doc_src() -> String {
         r#"---
@@ -475,9 +478,23 @@ fn main() {
 
 Some text.
 
-```python
+```python {version: 3.12}
 print("hi")
 ```
+
+````py
+print("B")
+````
+
+All indent before print should be stripped.
+   ````py
+  print("C")
+  ````
+
+All but one indent before print should be stripped.
+  ````py
+   print("C")
+ ````
 
 ## Details
 
@@ -488,22 +505,46 @@ plain block
         )
     }
 
+    fn fmt_codeblocks(code_blocks: &Vec<CodeBlock>) -> String {
+        code_blocks
+            .iter()
+            .map(|cb| cb.to_string())
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
     #[test]
     fn test_code_block_extraction() {
         let md = code_doc();
-        // Root has no code blocks (root content is empty before # Setup)
-        assert_eq!(md.sections.code_blocks.len(), 0);
+        let cbs1 = fmt_codeblocks(&md.sections.code_blocks);
+        let cbs2 = fmt_codeblocks(&md.sections.children[0].code_blocks);
+        assert_snapshot!(cbs1, @"");
+        assert_snapshot!(cbs2, @r#"
+        CodeBlock
+        - language: rust
+        - extra: None
+        - range: {"loc":"3:1-7:4","bytes":[9,57]}
 
-        // # Setup section has 2 code blocks in its content region
-        let setup = &md.sections.children[0];
-        assert_eq!(setup.code_blocks.len(), 2);
-        assert_eq!(setup.code_blocks[0].language, Some("rust".to_string()));
-        assert_eq!(setup.code_blocks[1].language, Some("python".to_string()));
+        CodeBlock
+        - language: python
+        - extra: {version: 3.12}
+        - range: {"loc":"11:1-13:4","bytes":[71,112]}
 
-        // ## Details section has 1 code block with no language
-        let details = &setup.children[0];
-        assert_eq!(details.code_blocks.len(), 1);
-        assert_eq!(details.code_blocks[0].language, None);
+        CodeBlock
+        - language: py
+        - extra: None
+        - range: {"loc":"15:1-17:5","bytes":[114,136]}
+
+        CodeBlock
+        - language: py
+        - extra: None
+        - range: {"loc":"20:4-22:7","bytes":[185,211]}
+
+        CodeBlock
+        - language: py
+        - extra: None
+        - range: {"loc":"25:3-27:6","bytes":[267,293]}
+        "#);
     }
 
     #[test]
@@ -545,16 +586,78 @@ plain block
     #[test]
     fn test_eval_codemeta() {
         let md = code_doc();
-        let expr =
-            Expr::Pipe(Box::new(Expr::Index(0)), Box::new(Expr::CodeMeta(0)));
+        let expr = Expr::Pipe(
+            Box::new(Expr::Del("Details".to_string())),
+            Box::new(Expr::CodeMeta(1)),
+        );
         let result = eval(expr, &md).unwrap();
         assert_eq!(result.len(), 1);
         let src = result[0].to_src();
-        // Should be valid JSON with language, content, and range
-        let parsed: serde_json::Value =
-            serde_json::from_str(src.trim()).unwrap();
-        assert_eq!(parsed["language"], "rust");
-        assert!(parsed["content"].as_str().unwrap().contains("fn main()"));
-        assert!(parsed["range"].is_object());
+        assert_snapshot!(src, @r#"
+        {
+          "content": "print(\"hi\")\n",
+          "language": "python",
+          "language_extra": "{version: 3.12}",
+          "range": {
+            "bytes": [
+              71,
+              112
+            ],
+            "loc": "11:1-13:4"
+          }
+        }
+        "#);
+    }
+
+    #[test]
+    fn test_eval_codemeta_all_indent_stripped() {
+        let md = code_doc();
+        let expr = Expr::Pipe(
+            Box::new(Expr::Del("Details".to_string())),
+            Box::new(Expr::CodeMeta(-2)),
+        );
+        let result = eval(expr, &md).unwrap();
+        assert_eq!(result.len(), 1);
+        let src = result[0].to_src();
+        assert_snapshot!(src, @r#"
+        {
+          "content": "  print(\"C\")\n",
+          "language": "py",
+          "language_extra": null,
+          "range": {
+            "bytes": [
+              185,
+              211
+            ],
+            "loc": "20:4-22:7"
+          }
+        }
+        "#);
+    }
+
+    #[test]
+    fn test_eval_codemeta_all_but_one_indent_stripped() {
+        let md = code_doc();
+        let expr = Expr::Pipe(
+            Box::new(Expr::Del("Details".to_string())),
+            Box::new(Expr::CodeMeta(-1)),
+        );
+        let result = eval(expr, &md).unwrap();
+        assert_eq!(result.len(), 1);
+        let src = result[0].to_src();
+        assert_snapshot!(src, @r#"
+        {
+          "content": "   print(\"C\")\n",
+          "language": "py",
+          "language_extra": null,
+          "range": {
+            "bytes": [
+              267,
+              293
+            ],
+            "loc": "25:3-27:6"
+          }
+        }
+        "#);
     }
 }
