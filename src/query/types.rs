@@ -1,5 +1,6 @@
 //! Core types for structured Markdown representation.
 
+use super::codeblock::CodeBlock;
 use super::heading::Heading;
 use crate::hierarchy::{Hierarchical, HierarchicalWithDefaults};
 use pulldown_cmark::HeadingLevel;
@@ -239,6 +240,9 @@ pub struct Section {
     pub range: Range,
     /// Whether this section is synthetic (implicit)
     pub implicit: bool,
+    /// Fenced/indented code blocks within this section's content region
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    pub code_blocks: Vec<CodeBlock>,
     /// Child sections (headings at deeper levels)
     pub children: Vec<Section>,
 }

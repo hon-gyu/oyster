@@ -1,11 +1,13 @@
 //! Parsing logic for extracting structured data from Markdown documents.
 
+use super::codeblock::CodeBlock;
 use super::heading::Heading;
 use super::types::{Frontmatter, Markdown, Range, Section, SectionHeading};
 use crate::ast::{Node as AstNode, NodeKind as AstNodeKind, Tree as AstTree};
 use crate::hierarchy::HierarchyItem;
 use crate::hierarchy::build_padded_tree;
 use crate::link::extract_frontmatter;
+use pulldown_cmark::CodeBlockKind;
 
 /// Boundary info for section ranges (byte offset and position)
 #[derive(Clone, Copy)]
@@ -120,8 +122,9 @@ fn build_sections(
     source: &str,
     doc_start: Boundary,
 ) -> Section {
-    // 1. Extract headings from AST
+    // 1. Extract headings and code blocks from AST
     let headings = extract_headings(root, source);
+    let code_blocks = extract_code_blocks(root, source);
 
     let doc_end = Boundary {
         byte: root.end_byte,
@@ -131,7 +134,15 @@ fn build_sections(
 
     // 2. Handle case with no headings - create root section with all content
     if headings.is_empty() {
-        let content = source[doc_start.byte..doc_end.byte].trim().to_string();
+        let content = source[doc_start.byte..doc_end.byte].to_string();
+        // All code blocks belong to root when there are no headings
+        let root_cbs: Vec<CodeBlock> = code_blocks
+            .into_iter()
+            .filter(|cb| {
+                cb.range.bytes[0] >= doc_start.byte
+                    && cb.range.bytes[1] <= doc_end.byte
+            })
+            .collect();
         return Section {
             heading: SectionHeading::Root,
             path: "root".to_string(),
@@ -146,6 +157,7 @@ fn build_sections(
             ),
             children: vec![],
             implicit: true, // root is always implicit
+            code_blocks: root_cbs,
         };
     }
 
@@ -154,7 +166,7 @@ fn build_sections(
         .expect("Infallible: headings should be valid");
 
     // 4. Convert to Section with content extraction
-    hierarchy_to_section(tree, source, doc_start, doc_end)
+    hierarchy_to_section(tree, source, doc_start, doc_end, &code_blocks)
 }
 
 /// Extract all headings from the AST in document order
@@ -162,6 +174,55 @@ fn extract_headings(node: &AstNode, source: &str) -> Vec<SectionHeading> {
     let mut headings = Vec::new();
     extract_headings_rec(node, source, &mut headings);
     headings
+}
+
+/// Extract all code blocks from the AST in document order
+fn extract_code_blocks(node: &AstNode, source: &str) -> Vec<CodeBlock> {
+    let mut blocks = Vec::new();
+    extract_code_blocks_rec(node, source, &mut blocks);
+    blocks
+}
+
+fn extract_code_blocks_rec(
+    node: &AstNode,
+    source: &str,
+    blocks: &mut Vec<CodeBlock>,
+) {
+    if let AstNodeKind::CodeBlock(kind) = &node.kind {
+        let language = match kind {
+            CodeBlockKind::Fenced(info) => {
+                let info = info.trim();
+                if info.is_empty() {
+                    None
+                } else {
+                    // Language is the first word of the info string
+                    // TODO(critical): we want to keep all the infomation
+                    Some(
+                        info.split_whitespace()
+                            .next()
+                            .unwrap_or("")
+                            .to_string(),
+                    )
+                }
+            }
+            CodeBlockKind::Indented => None,
+        };
+        blocks.push(CodeBlock {
+            language,
+            range: Range::new(
+                node.start_byte,
+                node.end_byte,
+                node.start_point.row,
+                node.start_point.column,
+                node.end_point.row,
+                node.end_point.column,
+            ),
+        });
+    }
+
+    for child in &node.children {
+        extract_code_blocks_rec(child, source, blocks);
+    }
 }
 
 fn extract_headings_rec(
@@ -215,6 +276,7 @@ fn hierarchy_to_section(
     source: &str,
     doc_start: Boundary,
     next_boundary: Boundary,
+    all_code_blocks: &[CodeBlock],
 ) -> Section {
     // Convert index to path string (e.g., [1, 1, 2] -> "1.2")
     // The value tree already has 0s shifted to 1s from extract_implicit_info
@@ -262,7 +324,13 @@ fn hierarchy_to_section(
         .into_iter()
         .zip(next_boundaries.into_iter())
         .map(|(child, child_next)| {
-            hierarchy_to_section(child, source, Boundary::zero(), child_next)
+            hierarchy_to_section(
+                child,
+                source,
+                Boundary::zero(),
+                child_next,
+                all_code_blocks,
+            )
         })
         .collect();
 
@@ -340,6 +408,16 @@ fn hierarchy_to_section(
         String::new()
     };
 
+    // Filter code blocks that fall within this section's content region
+    let section_cbs: Vec<CodeBlock> = all_code_blocks
+        .iter()
+        .filter(|cb| {
+            cb.range.bytes[0] >= content_start
+                && cb.range.bytes[1] <= content_end
+        })
+        .cloned()
+        .collect();
+
     Section {
         heading: fixed_heading,
         path,
@@ -354,6 +432,7 @@ fn hierarchy_to_section(
         ),
         children,
         implicit: is_implicit,
+        code_blocks: section_cbs,
     }
 }
 

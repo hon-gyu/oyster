@@ -455,4 +455,106 @@ Final thoughts.
             Final thoughts.
         ");
     }
+
+    // Code block tests
+    // --------------------
+
+    // TODO(critical): add codeblock that is indented
+    // TODO(critical): add codeblock that is imbalancely indented
+    // TODO(critical): add codeblock that starts with more than 3 backticks
+    // TODO(critical): add codeblock that has more richful info string
+    fn code_doc() -> Markdown {
+        Markdown::new(
+            r#"# Setup
+
+```rust
+fn main() {
+    println!("hello");
+}
+```
+
+Some text.
+
+```python
+print("hi")
+```
+
+## Details
+
+```
+plain block
+```
+"#,
+        )
+    }
+
+    #[test]
+    fn test_code_block_extraction() {
+        let md = code_doc();
+        // Root has no code blocks (root content is empty before # Setup)
+        assert_eq!(md.sections.code_blocks.len(), 0);
+
+        // # Setup section has 2 code blocks in its content region
+        let setup = &md.sections.children[0];
+        assert_eq!(setup.code_blocks.len(), 2);
+        assert_eq!(setup.code_blocks[0].language, Some("rust".to_string()));
+        assert_eq!(setup.code_blocks[1].language, Some("python".to_string()));
+
+        // ## Details section has 1 code block with no language
+        let details = &setup.children[0];
+        assert_eq!(details.code_blocks.len(), 1);
+        assert_eq!(details.code_blocks[0].language, None);
+    }
+
+    #[test]
+    fn test_eval_code() {
+        let md = code_doc();
+        // Navigate to # Setup, then get first code block
+        let expr =
+            Expr::Pipe(Box::new(Expr::Index(0)), Box::new(Expr::Code(0)));
+        let result = eval(expr, &md).unwrap();
+        assert_eq!(result.len(), 1);
+        assert_snapshot!(result[0].to_src(), @r#"
+        fn main() {
+            println!("hello");
+        }
+        "#);
+    }
+
+    #[test]
+    fn test_eval_code_second_block() {
+        let md = code_doc();
+        let expr =
+            Expr::Pipe(Box::new(Expr::Index(0)), Box::new(Expr::Code(1)));
+        let result = eval(expr, &md).unwrap();
+        assert_eq!(result.len(), 1);
+        assert_snapshot!(result[0].to_src(), @r#"
+        print("hi")
+        "#);
+    }
+
+    #[test]
+    fn test_eval_code_out_of_bounds() {
+        let md = code_doc();
+        let expr =
+            Expr::Pipe(Box::new(Expr::Index(0)), Box::new(Expr::Code(10)));
+        let result = eval(expr, &md);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_eval_codemeta() {
+        let md = code_doc();
+        let expr =
+            Expr::Pipe(Box::new(Expr::Index(0)), Box::new(Expr::CodeMeta(0)));
+        let result = eval(expr, &md).unwrap();
+        assert_eq!(result.len(), 1);
+        let src = result[0].to_src();
+        // Should be valid JSON with language, content, and range
+        let parsed: serde_json::Value =
+            serde_json::from_str(src.trim()).unwrap();
+        assert_eq!(parsed["language"], "rust");
+        assert!(parsed["content"].as_str().unwrap().contains("fn main()"));
+        assert!(parsed["range"].is_object());
+    }
 }

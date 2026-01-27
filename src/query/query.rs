@@ -19,9 +19,9 @@ pub enum Expr {
     Comma(Vec<Expr>),                    // expr1, expr2, expr3
 
     // Functions
-    Title(isize), // title: section title of the given index
-    Summary,      // summary: section summary
-    NChildren,    // nchildren: number of children
+    Title(isize),    // title: section title of the given index
+    Summary,         // summary: section summary
+    NChildren,       // nchildren: number of children
     Frontmatter, // frontmatter: frontmatter as pure text (no section structure)
     Body,        // body: strip the frontmatter
     Preface,     // content before the first section
@@ -29,7 +29,8 @@ pub enum Expr {
     Del(String), // del: remove a section by title or by index
     Inc(isize),  // inc: increment all heading levels
     Dec(isize),  // dec: decrement all heading
-                 // TOC
+    Code(isize), // code: Nth code block's content (fences stripped)
+    CodeMeta(isize), // codemeta: Nth code block as JSON { language, content, range }
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -128,7 +129,52 @@ fn remove_section_by_title(section: &Section, title: &str) -> Section {
         content: section.content.clone(),
         range: section.range.clone(),
         implicit: section.implicit,
+        code_blocks: section.code_blocks.clone(),
         children: filtered_children,
+    }
+}
+
+/// Strip the opening fence line (```lang) and closing fence line (```)
+/// from a fenced code block, returning the inner content.
+///
+/// TODO(critical): we need more robust parsing of the info string
+/// - This doesn't consider more than three ``` in the fence
+/// - Check the spec of commonmark
+fn strip_fences(raw: &str) -> String {
+    let mut lines = raw.lines();
+    // Skip opening fence line
+    lines.next();
+    let mut content_lines: Vec<&str> = lines.collect();
+    // Remove closing fence line if present
+    if let Some(last) = content_lines.last() {
+        if last.trim_start().starts_with("```")
+            || last.trim_start().starts_with("~~~")
+        {
+            content_lines.pop();
+        }
+    }
+    let mut result = content_lines.join("\n");
+    // Preserve trailing newline if the inner content had one
+    if !content_lines.is_empty() {
+        result.push('\n');
+    }
+    result
+}
+
+/// Collect all code blocks from a section tree in document order.
+fn collect_code_blocks(section: &Section) -> Vec<&super::codeblock::CodeBlock> {
+    let mut result = Vec::new();
+    collect_code_blocks_rec(section, &mut result);
+    result
+}
+
+fn collect_code_blocks_rec<'a>(
+    section: &'a Section,
+    out: &mut Vec<&'a super::codeblock::CodeBlock>,
+) {
+    out.extend(section.code_blocks.iter());
+    for child in &section.children {
+        collect_code_blocks_rec(child, out);
     }
 }
 
@@ -281,5 +327,46 @@ pub fn eval(expr: Expr, md: &Markdown) -> Result<Vec<Markdown>, EvalError> {
 
         Expr::Inc(delta) => Ok(vec![md.with_shifted_heading_levels(delta)]),
         Expr::Dec(delta) => Ok(vec![md.with_shifted_heading_levels(-delta)]),
+
+        Expr::Code(idx) => {
+            let cbs = collect_code_blocks(&md.sections);
+            match normalize_index(idx, cbs.len()) {
+                Some(i) => {
+                    let cb = cbs[i];
+                    let src = md.sections.to_src();
+                    let base = md.sections.range.bytes[0];
+                    let start = cb.range.bytes[0] - base;
+                    let end = cb.range.bytes[1] - base;
+                    let raw = &src[start..end];
+                    let content = strip_fences(raw);
+                    Ok(vec![Markdown::new(&content)])
+                }
+                None => Err(EvalError::IndexOutOfBounds(idx)),
+            }
+        }
+
+        Expr::CodeMeta(idx) => {
+            let cbs = collect_code_blocks(&md.sections);
+            match normalize_index(idx, cbs.len()) {
+                Some(i) => {
+                    let cb = cbs[i];
+                    let src = md.sections.to_src();
+                    let base = md.sections.range.bytes[0];
+                    let start = cb.range.bytes[0] - base;
+                    let end = cb.range.bytes[1] - base;
+                    let raw = &src[start..end];
+                    let content = strip_fences(raw);
+                    let meta = serde_json::json!({
+                        "language": cb.language,
+                        "content": content,
+                        "range": cb.range,
+                    });
+                    let json_str = serde_json::to_string_pretty(&meta)
+                        .unwrap_or_else(|_| "{}".to_string());
+                    Ok(vec![Markdown::new(&json_str)])
+                }
+                None => Err(EvalError::IndexOutOfBounds(idx)),
+            }
+        }
     }
 }
