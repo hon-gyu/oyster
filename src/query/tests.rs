@@ -621,7 +621,7 @@ plain block
         let src = result[0].to_src();
         assert_snapshot!(src, @r#"
         {
-          "content": "  print(\"C\")\n",
+          "content": "print(\"C\")\n",
           "language": "py",
           "language_extra": null,
           "range": {
@@ -647,7 +647,7 @@ plain block
         let src = result[0].to_src();
         assert_snapshot!(src, @r#"
         {
-          "content": "   print(\"C\")\n",
+          "content": " print(\"C\")\n",
           "language": "py",
           "language_extra": null,
           "range": {

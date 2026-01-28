@@ -136,11 +136,16 @@ fn remove_section_by_title(section: &Section, title: &str) -> Section {
 
 /// Strip the opening fence line (```lang) and closing fence line (```)
 /// from a fenced code block, returning the inner content.
-fn strip_fences(raw: &str) -> String {
+///
+/// `fence_indent` is the column of the opening fence (0-indexed), i.e. the
+/// number of leading spaces before the backticks in the original source.
+/// The byte range stored in `CodeBlock` excludes those leading spaces, so
+/// the caller must pass the indent explicitly.
+fn strip_fences(raw: &str, fence_indent: usize) -> String {
     let mut lines = raw.lines();
     // Skip opening fence line
-    let first = lines.next().expect("Never: no first code fence line");
-    let leading_indent = first.len() - first.trim_start().len();
+    lines.next().expect("Never: no first code fence line");
+    let leading_indent = fence_indent;
     let mut content_lines: Vec<&str> = lines.collect();
     // Remove closing fence line if present
     if let Some(last) = content_lines.last() {
@@ -343,7 +348,7 @@ pub fn eval(expr: Expr, md: &Markdown) -> Result<Vec<Markdown>, EvalError> {
                     let start = cb.range.bytes[0] - base;
                     let end = cb.range.bytes[1] - base;
                     let raw = &src[start..end];
-                    let content = strip_fences(raw);
+                    let content = strip_fences(raw, cb.range.start.1);
                     Ok(vec![Markdown::new(&content)])
                 }
                 None => Err(EvalError::IndexOutOfBounds(idx)),
@@ -360,7 +365,7 @@ pub fn eval(expr: Expr, md: &Markdown) -> Result<Vec<Markdown>, EvalError> {
                     let start = cb.range.bytes[0] - base;
                     let end = cb.range.bytes[1] - base;
                     let raw = &src[start..end];
-                    let content = strip_fences(raw);
+                    let content = strip_fences(raw, cb.range.start.1);
                     let meta = serde_json::json!({
                         "language": cb.language,
                         "language_extra": cb.extra,
