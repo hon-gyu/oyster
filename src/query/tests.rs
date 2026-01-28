@@ -461,11 +461,6 @@ Final thoughts.
 
     // Code block tests
     // --------------------
-
-    // TODO(critical): add codeblock that is indented
-    // TODO(critical): add codeblock that is imbalancely indented
-    // TODO(critical): add codeblock that starts with more than 3 backticks
-    // TODO(critical): add codeblock that has more richful info string
     fn code_doc() -> Markdown {
         Markdown::new(
             r#"# Setup
