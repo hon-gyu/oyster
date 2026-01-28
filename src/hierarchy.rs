@@ -1,35 +1,13 @@
-//! Generic utilities for building hierarchical tree structures from flat lists.
+//! Tree-building utilities for hierarchical items.
 //!
-//! # Overview
+//! Two strategies:
 //!
-//! This module provides two tree-building strategies for hierarchical items:
+//! - [`build_relative_tree`]: Uses relative level ordering. No gap-filling
+//!   (H1 → H3 makes H3 a direct child). May produce multiple roots.
 //!
-//! `build_compact_tree`
-//! - Relative ordering: Only the relative level order matters, not absolute values
-//! - No gap-filling: H1 → H3 makes H3 a direct child of H1 (no implicit H2)
-//! - Multiple roots: Can produce a forest if multiple top-level items exist
-//!
-//! ## `build_padded_tree`
-//!
-//! - Absolute levels: Respects actual level values (1-6 for headings)
-//! - Gap-filling: Creates implicit nodes for level gaps (H1 → H3 inserts implicit H2)
-//! - Single root: Always produces exactly one root at the specified minimum level
-//! - Indexed: Assigns hierarchical indices (e.g., "0.1.2") to each node
-//!
-//! # Example
-//!
-//! ```ignore
-//! // Items: H1, H3, H2 (note the gap from H1 to H3)
-//! let items = vec![Item::new(1), Item::new(3), Item::new(2)];
-//!
-//! // Compact: H3 becomes direct child of H1
-//! // H1 ─┬─ H3
-//! //     └─ H2
-//!
-//! // Padded: Implicit H2 inserted
-//! // H1 ─┬─ H2 (implicit) ── H3
-//! //     └─ H2
-//! ```
+//! - [`build_padded_tree`]: Uses absolute levels. Fills gaps with implicit nodes
+//!   (H1 → H3 inserts implicit H2). Always one root. Nodes carry 1-based
+//!   hierarchical indices and an `implicit` flag.
 
 use crate::export::utils::get_relative_dest;
 use crate::link::Referenceable;
@@ -37,53 +15,26 @@ use std::collections::BTreeSet;
 use std::fmt;
 use std::path::{Path, PathBuf};
 
-/// Trait for types that have a hierarchical level.
-///
-/// Implementors must provide a `level()` method returning the item's level
-/// in the hierarchy (e.g., 1-6 for Markdown headings).
+/// Trait for types that have a hierarchical level (e.g., 1-6 for headings).
 pub trait Hierarchical {
-    /// Returns the hierarchical level of this item.
     fn level(&self) -> usize;
 }
 
-/// Trait for hierarchical types that can create placeholder items.
-///
-/// Used by `build_padded_tree` to fill gaps in the hierarchy.
-/// For example, if H1 is followed directly by H3, an implicit H2 is created
-/// using `default_at_level(2, ...)`.
+/// Extension of [`Hierarchical`] that can create placeholder items for gap-filling.
 pub trait HierarchicalWithDefaults: Hierarchical {
-    /// Create a default/implicit item at the specified level.
-    ///
-    /// # Arguments
-    ///
-    /// - `level`: The hierarchical level for the new item
-    /// - `index`: Optional hierarchical index (e.g., `[0, 1, 2]` for "0.1.2")
+    /// Create an implicit item at the given level (used to fill hierarchy gaps).
     fn default_at_level(level: usize, index: Option<Vec<usize>>) -> Self;
 }
 
-/// A node in a hierarchical tree structure.
-///
-/// # Fields
-///
-/// - `value`: The wrapped item of type `T`
-/// - `children`: Child nodes at deeper levels
-/// - `index`: Hierarchical position as a path (e.g., `[0, 1, 2]` = "0.1.2")
-///
-/// # Index Format
-///
-/// The index is a vector representing the path from root:
-/// - `[0]` = root node
-/// - `[0, 1]` = second child of root (1-indexed for real items)
-/// - `[0, 1, 0]` = implicit child (0 indicates gap-filled node)
-#[derive(Debug)]
+/// A node in a hierarchical tree. Carries a value, children, a 1-based
+/// hierarchical index path (e.g., `[1, 2, 1]` = "1.2.1"), and an optional
+/// `implicit` flag indicating gap-filled nodes.
+#[derive(Debug, Clone)]
 pub struct HierarchyItem<T> {
-    /// The wrapped value
     pub value: T,
-    /// Child nodes (items at deeper hierarchical levels)
     pub children: Vec<HierarchyItem<T>>,
-    /// Hierarchical index path (e.g., `[0, 1, 2]` represents "0.1.2")
-    /// if an index ends with 0, it is a virtual item (implicitly created)
     pub index: Option<Vec<usize>>,
+    pub implicit: Option<bool>,
 }
 
 impl<T> HierarchyItem<T> {
@@ -92,11 +43,11 @@ impl<T> HierarchyItem<T> {
             value,
             children: Vec::new(),
             index: None,
+            implicit: None,
         }
     }
 
-    /// Chained indexing - navigate through the tree using a path of child indices
-    /// Example: query_by_index(&[0, 1]) returns the second child (index 1) of the first child (index 0)
+    /// Navigate through the tree by chaining child indices.
     pub fn query_by_index(
         &self,
         indices: &[usize],
@@ -113,7 +64,6 @@ impl<T> HierarchyItem<T> {
         self.children[first].query_by_index(&indices[1..])
     }
 
-    /// Helper function to format the tree with a prefix
     fn fmt_with_prefix(
         &self,
         f: &mut fmt::Formatter<'_>,
@@ -159,26 +109,17 @@ impl<T> HierarchyItem<T> {
         Ok(())
     }
 
-    /// Factor out the node implicit information out to a boolean tree of the same shape
-    ///
-    /// Implicit information is stored as 0 indexed item right after build_padded_tree
-    ///
-    /// This function returns a tuple of two trees of the same shape as the original:
-    /// - The first boolean tree contains whether the node is implicit or not
-    /// - The second tree is the original tree with unique 1-based indices
-    ///
-    /// Note: the original index can be found in the boolean tree
-    pub fn extract_implicit_info(
-        self,
-    ) -> (HierarchyItem<bool>, HierarchyItem<T>) {
-        let (bool_tree, mut value_tree) = self.split_implicit();
+    /// Transfer node implicit information from 0-indexed node to the implicit field
+    fn fuse_implicit_info(self) -> HierarchyItem<T> {
+        let mut value_tree = self.assign_implicit();
         value_tree.reassign_indices(vec![1]);
-        (bool_tree, value_tree)
+        value_tree
     }
 
-    /// Split tree into a boolean (implicit?) tree and a value tree without
-    /// adjusting indices. The bool tree preserves original indices.
-    fn split_implicit(self) -> (HierarchyItem<bool>, HierarchyItem<T>) {
+    /// Assign `implicit` field
+    ///
+    /// Must be called before `reassign_indices`
+    fn assign_implicit(self) -> HierarchyItem<T> {
         let is_implicit = self
             .index
             .as_ref()
@@ -186,25 +127,20 @@ impl<T> HierarchyItem<T> {
             .map(|&last| last == 0)
             .unwrap_or(false);
 
-        let (bool_children, value_children): (Vec<_>, Vec<_>) = self
+        let value_children: Vec<_> = self
             .children
             .into_iter()
-            .map(|child| child.split_implicit())
-            .unzip();
-
-        let bool_node = HierarchyItem {
-            value: is_implicit,
-            children: bool_children,
-            index: self.index.clone(),
-        };
+            .map(|child| child.assign_implicit())
+            .collect();
 
         let value_node = HierarchyItem {
             value: self.value,
             children: value_children,
             index: self.index,
+            implicit: Some(is_implicit),
         };
 
-        (bool_node, value_node)
+        value_node
     }
 
     /// Reassign indices sequentially (1-based) throughout the tree
@@ -224,18 +160,10 @@ impl<T: fmt::Display> fmt::Display for HierarchyItem<T> {
     }
 }
 
-/// Build a tree from a flat list of hierarchical items
+/// Build a tree from a flat list using relative level ordering.
 ///
-/// This function takes an ordered list of items that implement `Hierarchical`
-/// and builds a tree structure based on their levels. Items with higher levels
-/// become children of items with lower levels.
-///
-/// Explanation of "compact"
-/// - the absolute value of level doesn't matter, only the relative order.
-///
-/// # Example
-/// Given headings: H1, H2, H3, H2
-/// The tree will be: H1 -> [H2 -> [H3], H2]
+/// Only relative level order matters — no gap-filling, no indices.
+/// May produce multiple roots (a forest).
 pub fn build_relative_tree<T: Hierarchical>(
     items: Vec<T>,
 ) -> Vec<HierarchyItem<T>> {
@@ -275,58 +203,23 @@ pub fn build_relative_tree<T: Hierarchical>(
     roots
 }
 
-/// Build a single-rooted tree from a flat list of hierarchical items.
+/// Build a single-rooted tree with gap-filling and 1-based indices.
 ///
-/// This function creates a tree with gap-filling: if items skip levels
-/// (e.g., H1 → H3), implicit nodes are inserted at the skipped levels.
+/// Implicit nodes are inserted for level gaps (H1 → H3 inserts an implicit H2).
+/// Each node gets a 1-based hierarchical index and `implicit` flag.
 ///
-/// # Arguments
+/// `min_level` sets the root level (`None` defaults to 1).
 ///
-/// - `items`: Flat list of hierarchical items in document order
-/// - `min_level`: Optional root level for the tree
-///   - `None`: Root at level 1 (default)
-///   - `Some(0)`: Root at level 0 (useful for document root before headings)
-///   - `Some(n)`: Root at level n
-///
-/// # Returns
-///
-/// A single [`HierarchyItem<T>`] representing the root of the tree.
-///
-/// # Index Assignment
-///
-/// Each node receives a hierarchical index:
-/// - **Real items**: Indices start at 1 (e.g., first H1 = "0.1", second H1 = "0.2")
-/// - **Implicit items**: Index is 0 (e.g., gap-filled H2 = "0.1.0")
-///
-/// # Examples
+/// # Example
 ///
 /// ```text
 /// Input: A(1), B(3), C(2)
 ///
-/// Output tree:
-///   [0] Root
-///   └── [0.1] A (level 1)
-///       ├── [0.1.0] implicit (level 2)
-///       │   └── [0.1.0.1] B (level 3)
-///       └── [0.1.1] C (level 2)
+///   # A (1)
+///   ├── ## <implicit> (1.1)    // implicit=true
+///   │   └── ### B (1.1.1)
+///   └── ## C (1.2)
 /// ```
-///
-/// ```text
-/// Input: A(2), B(4), C(2) with min_level=Some(0)
-///
-/// Output tree:
-///   [0] Root (level 0, implicit)
-///   └── [0.0] implicit (level 1)
-///       └── [0.0.1] A (level 2)
-///           └── [0.0.1.0] implicit (level 3)
-///               └── [0.0.1.0.1] B (level 4)
-/// ```
-///
-/// # Errors
-///
-/// Returns an error if:
-/// - Input is empty
-/// - Any item has a level less than the specified `min_level`
 pub fn build_padded_tree<T: HierarchicalWithDefaults>(
     items: Vec<T>,
     min_level: Option<usize>,
@@ -450,7 +343,10 @@ pub fn build_padded_tree<T: HierarchicalWithDefaults>(
     }
 
     // By construction, there's always exactly one root
-    Ok(roots.into_iter().next().unwrap())
+    let root = roots.into_iter().next().unwrap();
+
+    // Extract implicit info
+    Ok(root.fuse_implicit_info())
 }
 
 // File tree
@@ -678,9 +574,9 @@ mod tests {
         let output = format!("{}", root);
         assert_snapshot!(output, @r"
         # A (1)
-        ├── ## <implicit> (1.0)
-        │   └── ### B (1.0.1)
-        └── ## C (1.1)
+        ├── ## <implicit> (1.1)
+        │   └── ### B (1.1.1)
+        └── ## C (1.2)
         ");
     }
 
@@ -702,15 +598,15 @@ mod tests {
         .unwrap();
         let output = format!("{}", root);
         assert_snapshot!(output, @r"
-        # <implicit> (0)
-        ├── ## A (0.1)
-        │   ├── ### <implicit> (0.1.0)
-        │   │   └── #### B (0.1.0.1)
-        │   └── ### B1 (0.1.1)
-        └── ## C (0.2)
-            ├── ### D (0.2.1)
-            └── ### E (0.2.2)
-                └── #### F (0.2.2.1)
+        # <implicit> (1)
+        ├── ## A (1.1)
+        │   ├── ### <implicit> (1.1.1)
+        │   │   └── #### B (1.1.1.1)
+        │   └── ### B1 (1.1.2)
+        └── ## C (1.2)
+            ├── ### D (1.2.1)
+            └── ### E (1.2.2)
+                └── #### F (1.2.2.1)
         ");
     }
 
@@ -723,14 +619,14 @@ mod tests {
         .unwrap();
         let output = format!("{}", root);
         assert_snapshot!(output, @r"
-         <implicit> (0)
-        └── # <implicit> (0.0)
-            └── ## <implicit> (0.0.0)
-                └── ### H1 (0.0.0.1)
-                    ├── #### <implicit> (0.0.0.1.0)
-                    │   └── ##### <implicit> (0.0.0.1.0.0)
-                    │       └── ###### H2 (0.0.0.1.0.0.1)
-                    └── #### H1b (0.0.0.1.1)
+         <implicit> (1)
+        └── # <implicit> (1.1)
+            └── ## <implicit> (1.1.1)
+                └── ### H1 (1.1.1.1)
+                    ├── #### <implicit> (1.1.1.1.1)
+                    │   └── ##### <implicit> (1.1.1.1.1.1)
+                    │       └── ###### H2 (1.1.1.1.1.1.1)
+                    └── #### H1b (1.1.1.1.2)
         ");
     }
 
@@ -748,75 +644,5 @@ mod tests {
         let result = build_padded_tree(items, None);
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("empty"));
-    }
-
-    // Extract implicit info
-    // --------------------
-
-    #[test]
-    fn test_extract_implicit_info() {
-        // Build a tree with implicit nodes: A(1), B(3), C(2)
-        // Original tree:
-        //   # A (1)
-        //   ├── ## <implicit> (1.0)
-        //   │   └── ### B (1.0.1)
-        //   └── ## C (1.1)
-        let root =
-            build_padded_tree(items(&[(1, "A"), (3, "B"), (2, "C")]), None)
-                .unwrap();
-
-        let (bool_tree, value_tree) = root.extract_implicit_info();
-
-        // Boolean tree: true for implicit nodes (index ending in 0)
-        let bool_output = format!("{}", bool_tree);
-        assert_snapshot!(bool_output, @r"
-        false (1)
-        ├── true (1.0)
-        │   └── false (1.0.1)
-        └── false (1.1)
-        ");
-
-        // Value tree: same structure, with unique 1-based indices
-        let value_output = format!("{}", value_tree);
-        assert_snapshot!(value_output, @r"
-        # A (1)
-        ├── ## <implicit> (1.1)
-        │   └── ### B (1.1.1)
-        └── ## C (1.2)
-        ");
-    }
-
-    #[test]
-    fn test_extract_implicit_info_complex() {
-        // More complex example with multiple implicit nodes
-        let root = build_padded_tree(
-            items(&[(2, "A"), (4, "B"), (3, "B1"), (2, "C")]),
-            None,
-        )
-        .unwrap();
-
-        let (bool_tree, value_tree) = root.extract_implicit_info();
-
-        // Boolean tree shows implicit status
-        let bool_output = format!("{}", bool_tree);
-        assert_snapshot!(bool_output, @r"
-        true (0)
-        ├── false (0.1)
-        │   ├── true (0.1.0)
-        │   │   └── false (0.1.0.1)
-        │   └── false (0.1.1)
-        └── false (0.2)
-        ");
-
-        // Value tree with unique 1-based indices
-        let value_output = format!("{}", value_tree);
-        assert_snapshot!(value_output, @r"
-        # <implicit> (1)
-        ├── ## A (1.1)
-        │   ├── ### <implicit> (1.1.1)
-        │   │   └── #### B (1.1.1.1)
-        │   └── ### B1 (1.1.2)
-        └── ## C (1.2)
-        ");
     }
 }

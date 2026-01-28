@@ -25,6 +25,7 @@
 //!   - headinng contains extra information (e.g., id, classes, attrs), which might
 //!     be dropped during serialization
 
+pub mod codeblock;
 mod heading;
 mod parser;
 mod query;
@@ -34,6 +35,7 @@ mod types;
 mod tests;
 
 // Public types
+pub use codeblock::CodeBlock;
 pub use heading::Heading;
-pub use query::{eval, EvalError, Expr};
+pub use query::{EvalError, Expr, eval};
 pub use types::{Frontmatter, Markdown, Range, Section, SectionHeading};

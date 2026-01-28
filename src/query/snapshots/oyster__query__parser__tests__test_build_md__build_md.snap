@@ -22,11 +22,11 @@ expression: json
   "sections": {
     "heading": null,
     "path": "root",
-    "content": "Some preamble.",
+    "content": "\nSome preamble.\n\n",
     "range": {
-      "loc": "6:4-17:1",
+      "loc": "7:1-17:1",
       "bytes": [
-        56,
+        57,
         137
       ]
     },
@@ -45,7 +45,7 @@ expression: json
           }
         },
         "path": "1",
-        "content": "Intro content here.",
+        "content": "\nIntro content here.\n\n",
         "range": {
           "loc": "10:1-17:1",
           "bytes": [
@@ -68,7 +68,7 @@ expression: json
               }
             },
             "path": "1.1",
-            "content": "More details.",
+            "content": "\nMore details.\n",
             "range": {
               "loc": "14:1-17:1",
               "bytes": [

@@ -68,6 +68,12 @@ enum Commands {
         /// Decrement heading levels by delta
         #[arg(long)]
         dec: Vec<i64>,
+        /// Extract the Nth code block's content (0-indexed)
+        #[arg(long)]
+        code: Vec<i64>,
+        /// Extract the Nth code block as JSON metadata (0-indexed)
+        #[arg(long)]
+        codemeta: Vec<i64>,
     },
 
     /// Generate a static site from an Obsidian vault
@@ -140,6 +146,10 @@ fn extract_ordered_exprs(matches: &ArgMatches) -> Vec<Expr> {
     collect_string_arg(matches, "delete", &mut indexed, Expr::Del);
     collect_i64_arg(matches, "inc", &mut indexed, |n| Expr::Inc(n as isize));
     collect_i64_arg(matches, "dec", &mut indexed, |n| Expr::Dec(n as isize));
+    collect_i64_arg(matches, "code", &mut indexed, |n| Expr::Code(n as isize));
+    collect_i64_arg(matches, "codemeta", &mut indexed, |n| {
+        Expr::CodeMeta(n as isize)
+    });
 
     // Boolean flags
     collect_flag(matches, "summary", &mut indexed, Expr::Summary);

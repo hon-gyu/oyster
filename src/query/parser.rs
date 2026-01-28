@@ -1,11 +1,13 @@
 //! Parsing logic for extracting structured data from Markdown documents.
 
+use super::codeblock::CodeBlock;
 use super::heading::Heading;
 use super::types::{Frontmatter, Markdown, Range, Section, SectionHeading};
 use crate::ast::{Node as AstNode, NodeKind as AstNodeKind, Tree as AstTree};
 use crate::hierarchy::HierarchyItem;
 use crate::hierarchy::build_padded_tree;
 use crate::link::extract_frontmatter;
+use pulldown_cmark::CodeBlockKind;
 
 /// Boundary info for section ranges (byte offset and position)
 #[derive(Clone, Copy)]
@@ -47,10 +49,23 @@ impl Markdown {
                                 node.end_point.column,
                             ),
                         };
-                        let start = Boundary {
-                            byte: node.end_byte,
-                            row: node.end_point.row,
-                            col: node.end_point.column,
+                        // Skip the trailing newline of the closing ---
+                        // delimiter, since fm.to_src() already includes it.
+                        let byte = node.end_byte;
+                        let start = if byte < source.len()
+                            && source.as_bytes()[byte] == b'\n'
+                        {
+                            Boundary {
+                                byte: byte + 1,
+                                row: node.end_point.row + 1,
+                                col: 0,
+                            }
+                        } else {
+                            Boundary {
+                                byte,
+                                row: node.end_point.row,
+                                col: node.end_point.column,
+                            }
                         };
                         (Some(fm), start)
                     }
@@ -61,7 +76,7 @@ impl Markdown {
         };
 
         // Build section tree, starting content after frontmatter
-        let sections = build_sections(&tree.root_node, &source, doc_start).expect("Infallible: sections should be able to be built from valid AST");
+        let sections = build_sections(&tree.root_node, &source, doc_start);
 
         Self {
             frontmatter,
@@ -106,9 +121,10 @@ fn build_sections(
     root: &AstNode,
     source: &str,
     doc_start: Boundary,
-) -> Result<Section, String> {
-    // 1. Extract headings from AST
+) -> Section {
+    // 1. Extract headings and code blocks from AST
     let headings = extract_headings(root, source);
+    let code_blocks = extract_code_blocks(root, source);
 
     let doc_end = Boundary {
         byte: root.end_byte,
@@ -118,8 +134,16 @@ fn build_sections(
 
     // 2. Handle case with no headings - create root section with all content
     if headings.is_empty() {
-        let content = source[doc_start.byte..doc_end.byte].trim().to_string();
-        return Ok(Section {
+        let content = source[doc_start.byte..doc_end.byte].to_string();
+        // All code blocks belong to root when there are no headings
+        let root_cbs: Vec<CodeBlock> = code_blocks
+            .into_iter()
+            .filter(|cb| {
+                cb.range.bytes[0] >= doc_start.byte
+                    && cb.range.bytes[1] <= doc_end.byte
+            })
+            .collect();
+        return Section {
             heading: SectionHeading::Root,
             path: "root".to_string(),
             content,
@@ -133,26 +157,16 @@ fn build_sections(
             ),
             children: vec![],
             implicit: true, // root is always implicit
-        });
+            code_blocks: root_cbs,
+        };
     }
 
     // 3. Build tree with min_level = 0 for document root
-    let mut tree = build_padded_tree(headings, Some(0))?;
+    let tree = build_padded_tree(headings, Some(0))
+        .expect("Infallible: headings should be valid");
 
-    // 4. Propagate range info to implicit headings from their first child
-    propagate_implicit_ranges_for_headings(&mut tree);
-
-    // 5. Extract implicit info - splits into bool tree (implicit markers) and value tree (with 1-indexed paths)
-    let (implicit_tree, value_tree) = tree.extract_implicit_info();
-
-    // 5. Convert to Section with content extraction
-    Ok(hierarchy_to_section(
-        value_tree,
-        implicit_tree,
-        source,
-        doc_start,
-        doc_end,
-    ))
+    // 4. Convert to Section with content extraction
+    hierarchy_to_section(tree, source, doc_start, doc_end, &code_blocks)
 }
 
 /// Extract all headings from the AST in document order
@@ -160,6 +174,61 @@ fn extract_headings(node: &AstNode, source: &str) -> Vec<SectionHeading> {
     let mut headings = Vec::new();
     extract_headings_rec(node, source, &mut headings);
     headings
+}
+
+/// Extract all code blocks from the AST in document order
+fn extract_code_blocks(node: &AstNode, source: &str) -> Vec<CodeBlock> {
+    let mut blocks = Vec::new();
+    extract_code_blocks_rec(node, source, &mut blocks);
+    blocks
+}
+
+fn extract_code_blocks_rec(
+    node: &AstNode,
+    source: &str,
+    blocks: &mut Vec<CodeBlock>,
+) {
+    if let AstNodeKind::CodeBlock(kind) = &node.kind {
+        let language_and_extra: (Option<String>, Option<String>) = match kind {
+            CodeBlockKind::Fenced(info) => {
+                let info = info.trim();
+                if info.is_empty() {
+                    (None, None)
+                } else {
+                    info.split_once(" ").map_or(
+                        (Some(info.to_string()), None),
+                        |(lang, extra)| {
+                            let extra = extra.trim();
+                            let extra = if extra.is_empty() {
+                                None
+                            } else {
+                                Some(extra.to_string())
+                            };
+
+                            (Some(lang.to_string()), extra)
+                        },
+                    )
+                }
+            }
+            CodeBlockKind::Indented => (None, None),
+        };
+        blocks.push(CodeBlock {
+            language: language_and_extra.0,
+            extra: language_and_extra.1,
+            range: Range::new(
+                node.start_byte,
+                node.end_byte,
+                node.start_point.row,
+                node.start_point.column,
+                node.end_point.row,
+                node.end_point.column,
+            ),
+        });
+    }
+
+    for child in &node.children {
+        extract_code_blocks_rec(child, source, blocks);
+    }
 }
 
 fn extract_headings_rec(
@@ -203,46 +272,21 @@ fn extract_headings_rec(
     }
 }
 
-/// Propagate range info from first child to implicit headings (bottom-up).
-///
-/// After `build_padded_tree`, implicit headings have `Range::zero()`.
-/// This fulfills the contract: "implicit section's information will be
-/// the same as its first child except Root."
-fn propagate_implicit_ranges_for_headings(
-    item: &mut HierarchyItem<SectionHeading>,
-) {
-    // Recurse children first (bottom-up)
-    for child in &mut item.children {
-        propagate_implicit_ranges_for_headings(child);
-    }
-
-    // If this is an implicit heading (zero range), copy from first child
-    if let SectionHeading::Heading(h) = &mut item.value {
-        if h.range == Range::zero() {
-            if let Some(first_child) = item.children.first() {
-                if let SectionHeading::Heading(child_h) = &first_child.value {
-                    h.range = child_h.range.clone();
-                }
-            }
-        }
-    }
-}
-
 /// Convert HierarchyItem<SectionHeading> to Section
 ///
 /// Takes both the value tree (with 1-indexed paths) and implicit tree (boolean markers).
 /// `doc_start` is passed through for the root section's content start.
 /// `next_boundary` contains both byte offset and line number for the section end.
 fn hierarchy_to_section(
-    item: HierarchyItem<SectionHeading>,
-    implicit_item: HierarchyItem<bool>,
+    sec_hier: HierarchyItem<SectionHeading>,
     source: &str,
     doc_start: Boundary,
     next_boundary: Boundary,
+    all_code_blocks: &[CodeBlock],
 ) -> Section {
     // Convert index to path string (e.g., [1, 1, 2] -> "1.2")
     // The value tree already has 0s shifted to 1s from extract_implicit_info
-    let path = item
+    let path = sec_hier
         .index
         .as_ref()
         .map(|idx| {
@@ -258,67 +302,14 @@ fn hierarchy_to_section(
         })
         .unwrap_or_default();
 
-    // Get implicit status from the boolean tree
-    let is_implicit = implicit_item.value;
-
-    // Get heading and section start info
-    // For root, content starts at doc_start (after frontmatter)
-    // For implicit sections with children, inherit from first child
-    let heading = item.value;
-    let (section_start_byte, content_start, start_pos) = match &heading {
-        // Root section always uses doc_start for content
-        SectionHeading::Root => (
-            doc_start.byte,
-            doc_start.byte,
-            (doc_start.row, doc_start.col),
-        ),
-        // For heading sections, check if implicit
-        SectionHeading::Heading(h) => {
-            if is_implicit && !item.children.is_empty() {
-                // Implicit section: use first child's location
-                match &item.children[0].value {
-                    SectionHeading::Root => (
-                        doc_start.byte,
-                        doc_start.byte,
-                        (doc_start.row, doc_start.col),
-                    ),
-                    SectionHeading::Heading(first_child) => (
-                        first_child.range.bytes[0],
-                        first_child.range.bytes[0],
-                        first_child.range.start,
-                    ),
-                }
-            } else {
-                // Normal heading section
-                (h.range.bytes[0], h.range.bytes[1], h.range.start)
-            }
-        }
-    };
-
-    // Calculate content end: first child's start, or next_boundary
-    let content_end = if item.children.is_empty() {
-        next_boundary.byte
-    } else {
-        match &item.children[0].value {
-            SectionHeading::Root => 0,
-            SectionHeading::Heading(h) => h.range.bytes[0],
-        }
-    };
-
-    let content = if content_start < content_end {
-        source[content_start..content_end].trim().to_string()
-    } else {
-        String::new()
-    };
-
     // Precompute next boundaries for all children (need to look ahead at siblings)
-    let next_boundaries: Vec<Boundary> = item
+    let next_boundaries: Vec<Boundary> = sec_hier
         .children
         .iter()
         .enumerate()
         .map(|(i, _)| {
-            if i + 1 < item.children.len() {
-                match &item.children[i + 1].value {
+            if i + 1 < sec_hier.children.len() {
+                match &sec_hier.children[i + 1].value {
                     SectionHeading::Root => Boundary::zero(),
                     SectionHeading::Heading(h) => Boundary {
                         byte: h.range.bytes[0],
@@ -333,24 +324,108 @@ fn hierarchy_to_section(
         .collect();
 
     // Convert children, zipping value and implicit trees together
-    let children: Vec<Section> = item
+    let children: Vec<Section> = sec_hier
         .children
+        .clone()
         .into_iter()
-        .zip(implicit_item.children.into_iter())
         .zip(next_boundaries.into_iter())
-        .map(|((child, child_implicit), child_next)| {
+        .map(|(child, child_next)| {
             hierarchy_to_section(
                 child,
-                child_implicit,
                 source,
                 Boundary::zero(),
                 child_next,
+                all_code_blocks,
             )
         })
         .collect();
 
+    // Get implicit status from the boolean tree
+    let is_implicit = sec_hier.implicit.unwrap_or(false);
+
+    // Get heading and section start info
+    // For root, content starts at doc_start (after frontmatter)
+    // For implicit sections with children, inherit from first child
+    let heading = sec_hier.value;
+    let (section_start_byte, content_start, start_pos, fixed_heading) =
+        match &heading {
+            // Root section always uses doc_start for content
+            SectionHeading::Root => (
+                doc_start.byte,
+                doc_start.byte,
+                (doc_start.row, doc_start.col),
+                heading,
+            ),
+            // For heading sections, check if implicit
+            SectionHeading::Heading(h) => {
+                match (is_implicit, sec_hier.children.is_empty()) {
+                    (true, true) => {
+                        unreachable!("Never: implicit section with no children")
+                    }
+                    (true, false) => {
+                        // Implicit section: use first child's already-built heading
+                        // (children are built recursively before this point,
+                        // so implicit children already have fixed heading ranges)
+                        let child_heading_range = match &children[0].heading {
+                            SectionHeading::Root => {
+                                unreachable!("Never: root cannot be child")
+                            }
+                            SectionHeading::Heading(ch) => &ch.range,
+                        };
+                        let fixed_heading = SectionHeading::Heading(Heading {
+                            level: h.level,
+                            text: h.text.clone(),
+                            range: child_heading_range.clone(),
+                            id: h.id.clone(),
+                            classes: h.classes.clone(),
+                            attrs: h.attrs.clone(),
+                        });
+                        (
+                            child_heading_range.bytes[0],
+                            child_heading_range.bytes[0],
+                            child_heading_range.start,
+                            fixed_heading,
+                        )
+                    }
+                    (_, _) => {
+                        // Normal heading section
+                        (
+                            h.range.bytes[0],
+                            h.range.bytes[1],
+                            h.range.start,
+                            heading,
+                        )
+                    }
+                }
+            }
+        };
+
+    // Calculate content end: first child's start, or next_boundary
+    // Uses already-built children so implicit sections have correct ranges
+    let content_end = if children.is_empty() {
+        next_boundary.byte
+    } else {
+        children[0].range.bytes[0]
+    };
+
+    let content = if content_start < content_end {
+        source[content_start..content_end].to_string()
+    } else {
+        String::new()
+    };
+
+    // Filter code blocks that fall within this section's content region
+    let section_cbs: Vec<CodeBlock> = all_code_blocks
+        .iter()
+        .filter(|cb| {
+            cb.range.bytes[0] >= content_start
+                && cb.range.bytes[1] <= content_end
+        })
+        .cloned()
+        .collect();
+
     Section {
-        heading,
+        heading: fixed_heading,
         path,
         content,
         range: Range::new(
@@ -363,8 +438,12 @@ fn hierarchy_to_section(
         ),
         children,
         implicit: is_implicit,
+        code_blocks: section_cbs,
     }
 }
+
+// Test
+// ====================
 
 #[cfg(test)]
 mod tests {
@@ -396,8 +475,7 @@ Final thoughts.
 "#;
             let tree = Tree::new(source, false);
             let sections =
-                build_sections(&tree.root_node, source, Boundary::zero())
-                    .unwrap();
+                build_sections(&tree.root_node, source, Boundary::zero());
             assert_snapshot!(sections.to_string(), @r"
             (root)
             └─[1] # Title
@@ -421,8 +499,7 @@ Some content.
 "#;
             let tree = Tree::new(source, false);
             let sections =
-                build_sections(&tree.root_node, source, Boundary::zero())
-                    .unwrap();
+                build_sections(&tree.root_node, source, Boundary::zero());
             assert_snapshot!(sections.to_string(), @r"
             (root)
             This is content before any heading.
@@ -454,8 +531,7 @@ Intro content.
                 row: doc_start_node.start_point.row,
                 col: doc_start_node.start_point.column,
             };
-            let sections =
-                build_sections(&tree.root_node, source, doc_start).unwrap();
+            let sections = build_sections(&tree.root_node, source, doc_start);
             assert_snapshot!(sections.to_string(), @r"
             (root)
             Some preamble.
@@ -475,8 +551,7 @@ Content.
 "#;
             let tree = Tree::new(source, false);
             let sections =
-                build_sections(&tree.root_node, source, Boundary::zero())
-                    .unwrap();
+                build_sections(&tree.root_node, source, Boundary::zero());
             assert_snapshot!(sections.to_string(), @r"
             (root)
             └─[1] # Title
