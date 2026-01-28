@@ -9,20 +9,29 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 mod heading_level_serde {
     use super::*;
 
-    pub fn serialize<S>(level: &HeadingLevel, serializer: S) -> Result<S::Ok, S::Error>
+    pub fn serialize<S>(
+        level: &HeadingLevel,
+        serializer: S,
+    ) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
         serializer.serialize_u8(*level as u8)
     }
 
-    pub fn deserialize<'de, D>(deserializer: D) -> Result<HeadingLevel, D::Error>
+    pub fn deserialize<'de, D>(
+        deserializer: D,
+    ) -> Result<HeadingLevel, D::Error>
     where
         D: Deserializer<'de>,
     {
         let level: u8 = Deserialize::deserialize(deserializer)?;
-        HeadingLevel::try_from(level as usize)
-            .map_err(|_| serde::de::Error::custom(format!("invalid heading level: {}", level)))
+        HeadingLevel::try_from(level as usize).map_err(|_| {
+            serde::de::Error::custom(format!(
+                "invalid heading level: {}",
+                level
+            ))
+        })
     }
 }
 

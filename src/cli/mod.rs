@@ -146,9 +146,7 @@ fn extract_ordered_exprs(matches: &ArgMatches) -> Vec<Expr> {
     collect_string_arg(matches, "delete", &mut indexed, Expr::Del);
     collect_i64_arg(matches, "inc", &mut indexed, |n| Expr::Inc(n as isize));
     collect_i64_arg(matches, "dec", &mut indexed, |n| Expr::Dec(n as isize));
-    collect_i64_arg(matches, "code", &mut indexed, |n| {
-        Expr::Code(n as isize)
-    });
+    collect_i64_arg(matches, "code", &mut indexed, |n| Expr::Code(n as isize));
     collect_i64_arg(matches, "codemeta", &mut indexed, |n| {
         Expr::CodeMeta(n as isize)
     });
