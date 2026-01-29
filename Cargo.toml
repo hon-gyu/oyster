@@ -1,43 +1,62 @@
-[package]
-name = "oyster"
+[workspace]
+members = ["oyster-lib", "oyster", "mdq"]
+resolver = "2"
+
+[workspace.package]
 version = "0.1.0"
 edition = "2024"
 license = "AGPL-3.0-or-later"
 
-[features]
-serve = ["dep:tokio", "dep:axum", "dep:tower-livereload", "dep:notify-debouncer-mini", "dep:tower", "dep:tower-http"]
+[workspace.dependencies]
+# Core library
+oyster-lib = { path = "oyster-lib" }
 
-[dependencies]
+# CLI parsing
 clap = { version = "4.5.48", features = ["derive"] }
+
+# Serialization
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.149"
+serde_yaml = "0.9.34"
+
+# Markdown parsing
+pulldown-cmark = { version = "0.13.0", features = ["serde"] }
+pulldown-cmark-escape = "0.11.0"
+
+# Tree and collections
 ego-tree = "0.10.0"
+nonempty = "0.12.0"
+
+# Utilities
 itertools = "0.14.0"
+regex = "1.12.2"
+url = "2.5.7"
+pathdiff = "0.2.3"
+percent-encoding = "2.3.2"
+similar = "2.7.0"
+tempfile = "3.23.0"
+
+# Rendering
 katex = "0.4.6"
 maud = "0.27.0"
 minijinja = "2.12.0"
-nonempty = "0.12.0"
-pathdiff = "0.2.3"
-percent-encoding = "2.3.2"
-pulldown-cmark = { version = "0.13.0", features = ["serde"] }
-pulldown-cmark-escape = "0.11.0"
-regex = "1.12.2"
 scraper = "0.25.0"
-serde = { version = "1.0.228", features = ["derive"] }
-serde_yaml = "0.9.34"
-similar = "2.7.0"
-tempfile = "3.23.0"
 tree-sitter = "0.25.9"
-url = "2.5.7"
 
-# Serve and watch
-tokio = { version = "1", features = ["full"], optional = true }
-axum = { version = "0.8", optional = true }
-tower-livereload = { version = "0.9", optional = true }
-notify-debouncer-mini = { version = "0.5", optional = true }
-tower = { version = "0.5", optional = true }
-tower-http = { version = "0.6", features = ["fs"], optional = true }
-serde_json = "1.0.149"
+# Server (optional)
+tokio = { version = "1", features = ["full"] }
+axum = "0.8"
+tower-livereload = "0.9"
+notify-debouncer-mini = "0.5"
+tower = "0.5"
+tower-http = { version = "0.6", features = ["fs"] }
 
-[dev-dependencies]
+# Testing
 insta = { version = "1.43.1", features = ["yaml"] }
 rstest = "0.26.1"
 reqwest = { version = "0.12", features = ["blocking"] }
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true

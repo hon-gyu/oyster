@@ -1,5 +1,5 @@
 //! Query command implementataion.
-use oyster::query::{Expr, Markdown, eval};
+use oyster_lib::query::{Expr, Markdown, eval};
 
 use crate::cli::args::QueryOutputFormat;
 use std::path::PathBuf;

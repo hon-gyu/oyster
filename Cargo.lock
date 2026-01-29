@@ -1127,6 +1127,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "mdq"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "oyster-lib",
+ "serde_json",
+]
+
+[[package]]
 name = "memchr"
 version = "2.7.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1300,6 +1309,20 @@ version = "0.1.0"
 dependencies = [
  "axum",
  "clap",
+ "notify-debouncer-mini",
+ "oyster-lib",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "tower-http",
+ "tower-livereload",
+]
+
+[[package]]
+name = "oyster-lib"
+version = "0.1.0"
+dependencies = [
+ "axum",
  "ego-tree",
  "insta",
  "itertools 0.14.0",

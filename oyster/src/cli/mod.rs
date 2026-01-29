@@ -5,7 +5,7 @@ pub mod commands;
 
 use args::{BuildArgs, QueryOutputFormat};
 use clap::{ArgMatches, CommandFactory, FromArgMatches, Parser, Subcommand};
-use oyster::query::Expr;
+use oyster_lib::query::Expr;
 use std::path::PathBuf;
 
 #[derive(Parser)]

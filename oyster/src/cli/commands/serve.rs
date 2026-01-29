@@ -8,7 +8,7 @@ use axum::Router;
 use axum::response::Redirect;
 use axum::routing::get;
 use notify_debouncer_mini::{DebouncedEventKind, new_debouncer};
-use oyster::export::{NodeRenderConfig, render_vault};
+use oyster_lib::export::{NodeRenderConfig, render_vault};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
