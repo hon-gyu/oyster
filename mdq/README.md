@@ -12,12 +12,12 @@ TBA
 mdq <file> [OPTIONS]
 ```
 
-### Examples
-
 Show table-of-content summary:
 ```bash
 mdq document.md --summary
 ```
+
+TIP: use `--summary` to get a quick overview of the document, then iteratively refine your query.
 
 Extract frontmatter:
 ```bash
