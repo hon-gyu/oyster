@@ -11,4 +11,10 @@ help:  ## Show this help (usage: make help)
 		} \
 	}' $(MAKEFILE_LIST)
 
+.PHONY: publish
+publish:  ## Publish all crates to crates.io (oyster-lib, mdq, oyster-md)
+	cargo publish -p oyster-lib
+	cargo publish -p mdq
+	cargo publish -p oyster-md
+
 include Makefile.local
