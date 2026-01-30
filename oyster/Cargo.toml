@@ -3,6 +3,8 @@ name = "oyster"
 version = "0.1.0"
 edition = "2024"
 license = "AGPL-3.0-or-later"
+description = "Static site generator for Markdown with bidirectional links and HTML rendering"
+repository = "https://github.com/hon-gyu/oyster"
 
 [features]
 default = []
@@ -17,7 +19,7 @@ serve = [
 ]
 
 [dependencies]
-oyster-lib = { path = "../oyster-lib" }
+oyster-lib = { path = "../oyster-lib", version = "0.1.0" }
 clap = { version = "4.5.48", features = ["derive"] }
 serde_json = "1.0.149"
 
