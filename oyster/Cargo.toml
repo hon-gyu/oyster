@@ -1,10 +1,14 @@
 [package]
-name = "oyster"
+name = "oyster-md"
 version = "0.1.0"
 edition = "2024"
 license = "AGPL-3.0-or-later"
 description = "Static site generator for Markdown with bidirectional links and HTML rendering"
 repository = "https://github.com/hon-gyu/oyster"
+
+[[bin]]
+name = "oyster"
+path = "src/main.rs"
 
 [features]
 default = []
