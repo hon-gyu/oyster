@@ -1,5 +1,5 @@
 use insta::assert_snapshot;
-use oyster::ast::Tree;
+use oyster_lib::ast::Tree;
 use std::fs;
 
 #[test]

@@ -1,7 +1,7 @@
 //! Shared argument types for CLI commands.
 
 use clap::Args;
-use oyster::export::{
+use oyster_lib::export::{
     MermaidRenderMode, NodeRenderConfig, QuiverRenderMode, TikzRenderMode,
 };
 use std::path::PathBuf;

@@ -1,6 +1,6 @@
 use insta::assert_snapshot;
-use oyster::ast::Tree;
-use oyster::export::latex::render_latex;
+use oyster_lib::ast::Tree;
+use oyster_lib::export::latex::render_latex;
 use std::fs;
 
 #[test]

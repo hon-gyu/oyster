@@ -1,5 +1,5 @@
 use crate::cli::args::BuildArgs;
-use oyster::export::render_vault;
+use oyster_lib::export::render_vault;
 use std::path::PathBuf;
 
 pub fn run(

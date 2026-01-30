@@ -1,10 +1,10 @@
 mod test_utils;
 
 use insta::*;
-use oyster::ast::Tree;
-use oyster::export::NodeRenderConfig;
-use oyster::export::content;
-use oyster::export::vault_db::StaticVaultStore;
+use oyster_lib::ast::Tree;
+use oyster_lib::export::NodeRenderConfig;
+use oyster_lib::export::content;
+use oyster_lib::export::vault_db::StaticVaultStore;
 use std::fs;
 use std::path::Path;
 use test_utils::{format_html_simple, render_full_html};

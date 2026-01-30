@@ -1,6 +1,6 @@
 use insta::{assert_debug_snapshot, assert_snapshot};
-use oyster::ast::Tree;
-use oyster::link::{Reference, Referenceable, scan_note, scan_vault};
+use oyster_lib::ast::Tree;
+use oyster_lib::link::{Reference, Referenceable, scan_note, scan_vault};
 use std::fs;
 use std::path::PathBuf;
 
