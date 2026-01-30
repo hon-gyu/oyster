@@ -31,7 +31,7 @@ cargo build --release --features serve
 Generate a static website from your Obsidian vault:
 
 ```bash
-oyster generate --output <OUTPUT_DIR> <VAULT_ROOT_DIR>
+oyster build --output <OUTPUT_DIR> <VAULT_ROOT_DIR>
 ```
 
 **Available options:**
@@ -49,17 +49,6 @@ oyster generate --output <OUTPUT_DIR> <VAULT_ROOT_DIR>
   - `build-time`: Use `latex2pdf` and `pdf2svg`
   - `raw-latex`: Keep raw LaTeX
 - `--custom-callout-css <FILE>` - Path to custom CSS file for callout customization
-
-**Example with options:**
-```bash
-oyster generate \
-  --output ./dist \
-  --theme default \
-  --mermaid-render-mode client-side \
-  ./my-vault
-```
-
-### Local Development
 
 Test your generated site locally with:
 ```bash
@@ -103,12 +92,10 @@ Then open http://localhost:8000/home.html in your browser.
 - ✅ Callout
 - ✅ Custom callout
 - ⬜ CodeGen
-- ⬜ Markdown to structured data (YAML / JSON)
+- ✅Markdown to structured data (YAML / JSON)
   - ⬜ CHANGELOG validation
-  - ⬜ query CLI
-    - ⬜ filter by frontmatter 
-    - ⬜ table to csv
-- ⬜ SSG hot reload
+  - ✅ query CLI
+- ✅ SSG hot reload
 - ⬜ LSP (inspired by [markdown-oxide](https://github.com/Feel-ix-343/markdown-oxide))
 
 ### Long-term
@@ -117,7 +104,3 @@ Then open http://localhost:8000/home.html in your browser.
   - Github issues / PRs
   - Github Wiki
   - Linear
-
-## Ideas & Explorations 
-- Vault as some sort of database
-- CRDT
