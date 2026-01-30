@@ -6,25 +6,40 @@ Features:
 - AST generation for CommonMark specification, Github-flavored Markdown, and Obsidian-specific extensions[^1].
 - Static site generator: publish vault to HTML (alternative to [Obsidian Publish](https://obsidian.md/publish))
 - Optional extensions: Mermaid diagrams, TikZ, Quiver, HTML embeds
-- More to come: markdown transclusion, jq-like query language for markdown, UI, LSP...
+- [mdq](./mdq/) - A standalone jq-inspired CLI for querying Markdown
+- More to come: markdown transclusion, UI, LSP...
 
 [^1]: wikilinks, embeded notes, callouts
 
-## Usage
+## Installation
 
-### Installation
+### From crates.io
 
-Build from source:
 ```bash
+cargo install oyster-md
+```
+
+To install with the `serve` command (local dev server with live reload):
+```bash
+cargo install oyster-md --features serve
+```
+
+### From source
+
+```bash
+git clone https://github.com/hon-gyu/oyster.git
+cd oyster
 cargo build --release
 ```
 
 The binary will be available at `./target/release/oyster`.
 
-To build with the `serve` command (adds ~95 dependencies for local dev server with live reload):
+To build with the `serve` feature:
 ```bash
 cargo build --release --features serve
 ```
+
+## Usage
 
 ### Generate Static Site
 

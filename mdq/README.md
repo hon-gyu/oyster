@@ -4,7 +4,21 @@ A command-line tool for querying and extracting data from Markdown files. Syntax
 
 ## Installation
 
-TBA
+### From crates.io
+
+```bash
+cargo install mdq
+```
+
+### From source
+
+```bash
+git clone https://github.com/hon-gyu/oyster.git
+cd oyster
+cargo build --release --package mdq
+```
+
+The binary will be available at `./target/release/mdq`.
 
 ## Usage
 
