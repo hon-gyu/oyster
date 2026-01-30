@@ -5,6 +5,7 @@ edition = "2024"
 license = "AGPL-3.0-or-later"
 description = "Markdown processing library with querying, bidirectional links, and HTML rendering"
 repository = "https://github.com/hon-gyu/oyster"
+exclude = ["tests/"]
 
 [features]
 serve = ["dep:tokio", "dep:axum", "dep:tower-livereload", "dep:notify-debouncer-mini", "dep:tower", "dep:tower-http"]
