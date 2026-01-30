@@ -1,5 +1,5 @@
 [workspace]
-members = ["oyster-lib", "oyster", "mdq"]
+members = ["oyster-lib", "oyster", "mkq"]
 resolver = "2"
 
 [workspace.package]

@@ -1,4 +1,4 @@
-# mdq - Markdown Query Tool
+# mkq - Markdown Query Tool
 
 A command-line tool for querying and extracting data from Markdown files. Syntax inspired by jq.
 
@@ -7,7 +7,7 @@ A command-line tool for querying and extracting data from Markdown files. Syntax
 ### From crates.io
 
 ```bash
-cargo install mdq
+cargo install mkq
 ```
 
 ### From source
@@ -15,47 +15,47 @@ cargo install mdq
 ```bash
 git clone https://github.com/hon-gyu/oyster.git
 cd oyster
-cargo build --release --package mdq
+cargo build --release --package mkq
 ```
 
-The binary will be available at `./target/release/mdq`.
+The binary will be available at `./target/release/mkq`.
 
 ## Usage
 
 ```bash
-mdq <file> [OPTIONS]
+mkq <file> [OPTIONS]
 ```
 
 Show table-of-content summary:
 ```bash
-mdq document.md --summary
+mkq document.md --summary
 ```
 
 TIP: use `--summary` to get a quick overview of the document, then iteratively refine your query.
 
 Extract frontmatter:
 ```bash
-mdq document.md --frontmatter
+mkq document.md --frontmatter
 ```
 
 Select a section by title:
 ```bash
-mdq document.md --field "Introduction"
+mkq document.md --field "Introduction"
 ```
 
 Get the number of child sections:
 ```bash
-mdq document.md --nchildren
+mkq document.md --nchildren
 ```
 
 Chain multiple operations:
 ```bash
-mdq document.md --field "Introduction" --nchildren
+mkq document.md --field "Introduction" --nchildren
 ```
 
 Extract code blocks:
 ```bash
-mdq document.md --code 0  # Get first code block
+mkq document.md --code 0  # Get first code block
 ```
 
 ## Output Formats

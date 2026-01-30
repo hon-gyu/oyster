@@ -1,6 +1,6 @@
 use clap::{CommandFactory, FromArgMatches, Parser};
 use oyster_lib::cli::{extract_ordered_exprs, pipe_exprs};
-use oyster_lib::query::{Markdown, eval};
+use oyster_lib::query::{eval, Markdown};
 use std::path::PathBuf;
 
 #[derive(Parser)]

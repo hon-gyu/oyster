@@ -6,7 +6,7 @@ Features:
 - AST generation for CommonMark specification, Github-flavored Markdown, and Obsidian-specific extensions[^1].
 - Static site generator: publish vault to HTML (alternative to [Obsidian Publish](https://obsidian.md/publish))
 - Optional extensions: Mermaid diagrams, TikZ, Quiver, HTML embeds
-- [mdq](./mdq/) - A standalone jq-inspired CLI for querying Markdown
+- [mkq](./mkq/) - A standalone jq-inspired CLI for querying Markdown
 - More to come: markdown transclusion, UI, LSP...
 
 [^1]: wikilinks, embeded notes, callouts
