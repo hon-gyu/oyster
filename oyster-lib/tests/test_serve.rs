@@ -18,7 +18,7 @@ impl Drop for ServerGuard {
 }
 
 fn start_server(vault_dir: &str, port: u16, watch: bool) -> ServerGuard {
-    let mut cmd = Command::new(env!("CARGO_BIN_EXE_oyster"));
+    let mut cmd = Command::new(std::env::var("CARGO_BIN_EXE_oyster").unwrap());
     cmd.arg("serve")
         .arg(vault_dir)
         .arg("--port")
