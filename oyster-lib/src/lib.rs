@@ -1,4 +1,5 @@
 pub mod ast;
+pub mod cli;
 pub mod export;
 pub mod hierarchy;
 pub mod link;

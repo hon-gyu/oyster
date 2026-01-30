@@ -8,6 +8,7 @@ license = "AGPL-3.0-or-later"
 serve = ["dep:tokio", "dep:axum", "dep:tower-livereload", "dep:notify-debouncer-mini", "dep:tower", "dep:tower-http"]
 
 [dependencies]
+clap = { version = "4.5.48", features = ["derive"] }
 ego-tree = "0.10.0"
 itertools = "0.14.0"
 katex = "0.4.6"
