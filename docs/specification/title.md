@@ -1,3 +1,5 @@
+# Obsidian Title Syntax Specification
+
 Obsidian does not allow these characters in note titles:
 - `#` (heading separator)
 - `^` (block reference)

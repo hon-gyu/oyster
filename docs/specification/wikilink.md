@@ -1,7 +1,6 @@
 # Wikilink Syntax Specification
 
 This document defines the syntax of Obsidian wikilinks.
-For resolution semantics, see [[wikilink-semantics]].
 
 ## Grammar
 

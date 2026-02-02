@@ -1,4 +1,4 @@
-## Block Identifier Definition
+# Block Identifier Specification
 
 Block identifiers mark referenceable blocks:
 
