@@ -306,3 +306,20 @@ This section describes one possible implementation approach.
 > [!CITE]
 > This is a quote callout (alias for QUOTE)
 ```
+
+
+## Rendering
+
+Callouts render as a container with:
+1. A declaration/header showing type and title
+2. Content body
+
+### Foldable Callouts
+
+Foldable callouts use HTML disclosure elements (`<details>`/`<summary>`):
+
+| Marker | Behavior |
+|--------|----------|
+| `+` | Expanded by default (`open` attribute) |
+| `-` | Collapsed by default |
+| (none) | Not foldable (no disclosure element) |

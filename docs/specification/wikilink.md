@@ -90,5 +90,3 @@ Multiple consecutive `#` are treated as a single separator:
 | `![[Note#Heading]]` | Embed from heading |
 | `![[image.png]]` | Embed image |
 | `![[Note#^block]]` | Embed specific block |
-
-```
