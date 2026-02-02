@@ -1,12 +1,50 @@
-# Wikilink Resolution Semantics
+# Link Resolution Semantics
 
-This document defines how links in Obsidian (wikilinks and markdown links) resolve to their targets.
+This document defines how links in Obsidian resolve to their targets.
+
+## Link Syntax Forms
+
+Obsidian supports two link syntaxes that share the same resolution semantics:
+
+### Wikilinks
+
+```
+[[target#heading#subheading|display]]
+[[target#^blockid|display]]
+```
+
+- Target, headings, block ID, and display text are written directly
+- `|` separates target from display text
+- No encoding required for spaces or special characters
+
+### Markdown Links
+
+```
+[display](target#heading)
+[display](target#^blockid)
+```
+
+- Follows CommonMark inline link syntax
+- Display text comes first, target in parentheses
+- Spaces and special characters must be percent-encoded: `Three%20laws%20of%20motion.md`
+- After percent-decoding, follows identical resolution rules as wikilinks
+
+### Equivalence
+
+After parsing, both forms resolve identically:
+
+| Wikilink | Markdown Link | Target |
+|----------|---------------|--------|
+| `[[Note 2]]` | `[text](Note%202)` | Note 2 |
+| `[[#Heading]]` | `[text](#Heading)` | Current note's heading |
+| `[[Note#H1#H2]]` | `[text](Note#H1#H2)` | Nested heading |
+| `[[##L2######L4]]` | `[text](##L2######L4)` | Hash normalization applies |
 
 ## Overview
 
 Resolution happens in stages:
 
-1. **Parse** the wikilink into components (target, headings, block, display)
+1. **Parse** the link into components (target, headings, block, display)
 2. **Resolve file** - find matching note or asset
 3. **Resolve in-note target** - find heading or block within the file
 4. **Fallback** - if in-note target not found, fall back to file
@@ -292,7 +330,7 @@ Only the **first** identifier (`^id1`) references the table.
 
 ## Display Text
 
-### Parsing
+### Wikilink Display Text
 
 First `|` separates target from display; remaining content is literal:
 
@@ -303,21 +341,35 @@ First `|` separates target from display; remaining content is literal:
 | `[[#H1\|custom]]` | `#H1`       | `custom` |
 | `[[#H1 \| #H2]]`  | `#H1`       | `#H2`    |
 
+### Markdown Link Display Text
+
+Display text is the content between `[` and `]`:
+
+| Input | Target | Display |
+| ----- | ------ | ------- |
+| `[text](Note)` | `Note` | `text` |
+| `[](Note)` | `Note` | (empty) |
+| `[a\|b](Note)` | `Note` | `a\|b` |
+
 ### Whitespace Trimming
 
 - Target: leading/trailing whitespace trimmed
 - Display: leading/trailing whitespace trimmed
 - `[[Note 2 \| text ]]` → target: `Note 2`, display: `text`
 
-### Default Display Text (Obsidian)
+### Default Display Text
 
-If no `|` is present, display text equals the raw content by default:
+If no display text is provided:
 
+**Wikilinks:** display text equals the raw content:
 - `[[Note]]` → display: `Note`
 - `[[Note#Heading]]` → display: `Note#Heading`
 - `[[#^blockid]]` → display: `#^blockid`
 
-The default display is implementation-dependent.
+**Markdown links:** display can be empty:
+- `[](Note)` → display: (empty string)
+
+The rendering of default/empty display text is implementation-dependent.
 
 ## Embeds
 
