@@ -107,11 +107,11 @@ let block_id_cases =
 
 let%expect_test "parse_content" =
   let cols =
-    [ Ascii_table_kernel.Column.create "name" (fun (n, _, _, _, _) -> n)
-    ; Ascii_table_kernel.Column.create "input" (fun (_, i, _, _, _) -> i)
-    ; Ascii_table_kernel.Column.create "target" (fun (_, _, t, _, _) -> t)
-    ; Ascii_table_kernel.Column.create "frag" (fun (_, _, _, f, _) -> f)
-    ; Ascii_table_kernel.Column.create "display" (fun (_, _, _, _, d) -> d)
+    [ Ascii_table.Column.create "name" (fun (n, _, _, _, _) -> n)
+    ; Ascii_table.Column.create "input" (fun (_, i, _, _, _) -> i)
+    ; Ascii_table.Column.create "target" (fun (_, _, t, _, _) -> t)
+    ; Ascii_table.Column.create "frag" (fun (_, _, _, f, _) -> f)
+    ; Ascii_table.Column.create "display" (fun (_, _, _, _, d) -> d)
     ]
   in
   let rows =
@@ -124,7 +124,7 @@ let%expect_test "parse_content" =
       , pp_opt Fn.id w.display ))
   in
   print_string
-    (Ascii_table_kernel.to_string_noattr cols rows ~bars:`Ascii ~limit_width_to:120);
+    (Ascii_table.to_string_noattr cols rows ~bars:`Ascii ~limit_width_to:120);
   [%expect
     {|
     |-------------------------------------------------------------------------------------------|
@@ -154,9 +154,9 @@ let%expect_test "parse_content" =
 let%expect_test "scan" =
   let meta = Cmarkit.Meta.none in
   let cols =
-    [ Ascii_table_kernel.Column.create "name" (fun (n, _, _) -> n)
-    ; Ascii_table_kernel.Column.create "input" (fun (_, i, _) -> i)
-    ; Ascii_table_kernel.Column.create "result" (fun (_, _, r) -> r)
+    [ Ascii_table.Column.create "name" (fun (n, _, _) -> n)
+    ; Ascii_table.Column.create "input" (fun (_, i, _) -> i)
+    ; Ascii_table.Column.create "result" (fun (_, _, r) -> r)
     ]
   in
   let rows =
@@ -169,7 +169,7 @@ let%expect_test "scan" =
       name, input, result)
   in
   print_string
-    (Ascii_table_kernel.to_string_noattr cols rows ~bars:`Ascii ~limit_width_to:150);
+    (Ascii_table.to_string_noattr cols rows ~bars:`Ascii ~limit_width_to:150);
   [%expect
     {|
     |----------------------------------------------------------------------------------------------------------------------------------------|
@@ -190,9 +190,9 @@ let%expect_test "scan" =
 
 let%expect_test "block_id" =
   let cols =
-    [ Ascii_table_kernel.Column.create "name" (fun (n, _, _) -> n)
-    ; Ascii_table_kernel.Column.create "input" (fun (_, i, _) -> i)
-    ; Ascii_table_kernel.Column.create "result" (fun (_, _, r) -> r)
+    [ Ascii_table.Column.create "name" (fun (n, _, _) -> n)
+    ; Ascii_table.Column.create "input" (fun (_, i, _) -> i)
+    ; Ascii_table.Column.create "result" (fun (_, _, r) -> r)
     ]
   in
   let rows =
@@ -201,7 +201,7 @@ let%expect_test "block_id" =
       name, input, result)
   in
   print_string
-    (Ascii_table_kernel.to_string_noattr cols rows ~bars:`Ascii ~limit_width_to:100);
+    (Ascii_table.to_string_noattr cols rows ~bars:`Ascii ~limit_width_to:100);
   [%expect
     {|
     |-------------------------------------------------------------------|

@@ -1,6 +1,6 @@
 (library
  (name test_oystermark_expect)
- (libraries oystermark cmarkit core textutils.ascii_table_kernel)
+ (libraries oystermark cmarkit core textutils.ascii_table)
  (inline_tests)
  (preprocess
   (pps ppx_expect ppx_jane)))
