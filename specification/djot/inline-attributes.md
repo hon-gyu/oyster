@@ -13,8 +13,7 @@ Attribute specifiers may contain line breaks.
 
 Example:
 
-An attribute on _emphasized text_{#foo
-.bar .baz key="my value"}
+An attribute on _emphasized text_{#foo .bar .baz key="my value"}
 
 <p>An attribute on <em class="bar baz" id="foo" key="my value">emphasized text</em></p>
 
