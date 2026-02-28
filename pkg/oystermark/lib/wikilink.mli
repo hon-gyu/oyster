@@ -2,16 +2,16 @@
 
 (** The type for wikilink fragment references. *)
 type fragment =
-  | Heading of string list  (** e.g. [["H1"; "H2"]] for [[Note#H1#H2]] *)
-  | Block_ref of string     (** e.g. ["blockid"] for [[Note#^blockid]] *)
+  | Heading of string list (** e.g. [["H1"; "H2"]] for [[Note#H1#H2]] *)
+  | Block_ref of string (** e.g. ["blockid"] for [[Note#^blockid]] *)
 
 (** The type for wikilinks. *)
-type t = {
-  target : string option;    (** File path, [None] = current note *)
-  fragment : fragment option;
-  display : string option;   (** Text after [|] *)
-  embed : bool;              (** [![[...]]] *)
-}
+type t =
+  { target : string option (** File path, [None] = current note *)
+  ; fragment : fragment option
+  ; display : string option (** Text after [|] *)
+  ; embed : bool (** [![[...]]] *)
+  }
 
 (** Inline extension constructor for wikilinks. *)
 type Cmarkit.Inline.t += Ext_wikilink of t Cmarkit.node
