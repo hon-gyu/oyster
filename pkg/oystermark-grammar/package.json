@@ -1,0 +1,16 @@
+{
+  "name": "oystermark-grammar",
+  "version": "1.0.0",
+  "description": "OysterMark PEG grammar (Peggy)",
+  "scripts": {
+    "build": "peggy grammars/OysterMarkCore.peggy -o dist/oystermark-core.js",
+    "test": "peggy grammars/OysterMarkCore.peggy --test 'Hello world\n'"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "packageManager": "pnpm@10.15.0",
+  "devDependencies": {
+    "peggy": "^5.0.6"
+  }
+}
