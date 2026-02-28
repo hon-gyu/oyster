@@ -1,3 +1,4 @@
 (test
  (name test_oystermark)
+ (modules test_oystermark)
  (libraries oystermark cmarkit))

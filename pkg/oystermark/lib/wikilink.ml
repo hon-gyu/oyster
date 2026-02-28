@@ -21,7 +21,7 @@ let is_valid_block_id s =
        Char.is_alphanum c || Char.equal c '-')
   && Char.is_alphanum (String.get s 0)
 
-let parse_content ~embed content =
+let parse_content ~(embed:bool) (content : string) : t =
   (* Split on first unescaped | *)
   let ref_part, display =
     match String.lsplit2 content ~on:'|' with
