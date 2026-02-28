@@ -1,0 +1,10 @@
+name = "OysterMark"
+version = "0.1.0"
+defaultTargets = ["oystermark"]
+
+[[lean_lib]]
+name = "OysterMark"
+
+[[lean_exe]]
+name = "oystermark"
+root = "Main"
