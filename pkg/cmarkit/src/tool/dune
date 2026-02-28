@@ -1,0 +1,14 @@
+(library
+ (name cmarkit_tool)
+ (wrapped false)
+ (modules cmarkit_cli cmarkit_std cmd_commonmark cmd_html cmd_latex cmd_locs)
+ (libraries cmarkit cmdliner)
+ (flags
+  (:standard -no-strict-sequence -w -9-27-32-33-35)))
+
+(executable
+ (name cmarkit_main)
+ (modules cmarkit_main)
+ (libraries cmarkit_tool)
+ (flags
+  (:standard -w -9-27-32-33-35)))

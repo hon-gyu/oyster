@@ -1,0 +1,15 @@
+(library
+ (name cmarkit)
+ (wrapped false)
+ (modules
+  cmarkit_data
+  cmarkit_data_uchar
+  cmarkit_data_html
+  cmarkit_base
+  cmarkit
+  cmarkit_renderer
+  cmarkit_commonmark
+  cmarkit_html
+  cmarkit_latex)
+ (flags
+  (:standard -w -9-27-32-35)))
