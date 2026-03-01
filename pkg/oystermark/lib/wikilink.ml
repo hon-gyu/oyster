@@ -18,7 +18,8 @@ type Cmarkit.Inline.t += Ext_wikilink of t Cmarkit.node
 (** Meta key to tag wikilink nodes. *)
 let meta_key : unit Cmarkit.Meta.key = Cmarkit.Meta.key ()
 
-let parse_wikilink_content ~(embed : bool) (content : string) : t =
+(** Parse wikilink given the content inside [[]] *)
+let make ~(embed : bool) (content : string) : t =
   (* Split on first unescaped | *)
   let ref_part, display =
     match String.lsplit2 content ~on:'|' with
@@ -124,7 +125,7 @@ let scan (s : string) (meta : Cmarkit.Meta.t) : Cmarkit.Inline.t list option =
             let content =
               String.sub s ~pos:content_start ~len:(close_pos - content_start)
             in
-            let wikilink = parse_wikilink_content ~embed content in
+            let wikilink = make ~embed content in
             let wl_meta = Cmarkit.Meta.tag meta_key (Cmarkit.Meta.make ()) in
             let before =
               if start_pos > pos

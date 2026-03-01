@@ -1,8 +1,14 @@
 (** Obsidian block identifier types and detection. *)
 open Core
 
+open Cmarkit
+
 (** The type for block identifiers (without the [^] prefix). *)
-type t = string
+type t =
+  { id : string
+  ; byte_pos : int
+    (** The byte position of the start of the block identifier in the inline text. *)
+  }
 
 let meta_key : t Cmarkit.Meta.key = Cmarkit.Meta.key ()
 
@@ -12,27 +18,44 @@ let is_valid_block_id (s : string) : bool =
   && Char.is_alphanum (String.get s 0)
 ;;
 
-(** [extract_trailing s] checks if [s] ends with a block identifier pattern.
-    Returns [Some (text_before, block_id)] or [None]. *)
-let extract_trailing s =
-  let s = String.rstrip s in
-  (* Find the last '^' that is preceded by whitespace or is at start *)
-  let rec find_caret i =
-    if i < 0
-    then None
-    else if Char.equal (String.get s i) '^'
-    then (
-      let preceded_by_space = i = 0 || Char.is_whitespace (String.get s (i - 1)) in
-      if preceded_by_space
-      then (
-        let candidate = String.drop_prefix s (i + 1) in
-        if is_valid_block_id candidate
-        then (
-          let before = String.rstrip (String.prefix s i) in
-          Some (before, candidate))
-        else find_caret (i - 1))
-      else find_caret (i - 1))
-    else find_caret (i - 1)
+let make_opt (s : string) : t option =
+  match String.rsplit2 s ~on:'^' with
+  | None -> None
+  | Some (text_before, ident_candidate) ->
+    let ident_candidate_stripped = String.rstrip ident_candidate in
+    if is_valid_block_id ident_candidate_stripped
+    then Some { id = ident_candidate_stripped; byte_pos = String.length text_before }
+    else None
+;;
+
+(** Extract block ID from the last text node of a paragraph's inline. *)
+let extract_block_id_from_inline (inline : Cmarkit.Inline.t) : t option =
+  (* Find and modify the last Text node in the inline tree *)
+  let rec last_text = function
+    | Cmarkit.Inline.Text (s, _meta) -> Some s
+    | Cmarkit.Inline.Inlines (inlines, _meta) ->
+      let rec try_last = function
+        | [] -> None
+        | [ x ] -> last_text x
+        | _ :: rest -> try_last rest
+      in
+      try_last inlines
+    | _ -> None
   in
-  find_caret (String.length s - 1)
+  match last_text inline with
+  | None -> None
+  | Some s -> make_opt s
+;;
+
+(** Block mapper that attach block IDs to paragraphs' metadata. *)
+let tag_block_id_meta (mapper : Mapper.t) (block : Block.t) : Block.t Mapper.result =
+  match block with
+  | Block.Paragraph (p, meta) ->
+    let inline = Block.Paragraph.inline p in
+    (match extract_block_id_from_inline inline with
+     | None -> Mapper.default
+     | Some block_id ->
+       let meta_with_block_id = Meta.add meta_key block_id meta in
+       Mapper.ret (Block.Paragraph (p, meta_with_block_id)))
+  | _ -> Mapper.default
 ;;
