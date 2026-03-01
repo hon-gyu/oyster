@@ -1,8 +1,9 @@
 open Core
 
+(** The type for wikilink fragment references. *)
 type fragment =
-  | Heading of string list
-  | Block_ref of string
+  | Heading of string list (** e.g. [["H1"; "H2"]] for [[Note#H1#H2]] *)
+  | Block_ref of string (** e.g. ["blockid"] for [[Note#^blockid]] *)
 
 type t =
   { target : string option
@@ -11,17 +12,13 @@ type t =
   ; embed : bool
   }
 
+(** Inline extension constructor for wikilinks. *)
 type Cmarkit.Inline.t += Ext_wikilink of t Cmarkit.node
 
+(** Meta key to tag wikilink nodes. *)
 let meta_key : unit Cmarkit.Meta.key = Cmarkit.Meta.key ()
 
-let is_valid_block_id s =
-  String.length s > 0
-  && String.for_all s ~f:(fun c -> Char.is_alphanum c || Char.equal c '-')
-  && Char.is_alphanum (String.get s 0)
-;;
-
-let parse_content ~(embed : bool) (content : string) : t =
+let parse_wikilink_content ~(embed : bool) (content : string) : t =
   (* Split on first unescaped | *)
   let ref_part, display =
     match String.lsplit2 content ~on:'|' with
@@ -42,7 +39,7 @@ let parse_content ~(embed : bool) (content : string) : t =
         else if String.is_prefix frag_str ~prefix:"^"
         then (
           let candidate = String.drop_prefix frag_str 1 in
-          if is_valid_block_id candidate
+          if Block_id.is_valid_block_id candidate
           then Some (Block_ref candidate)
           else (
             (* Treat as heading with literal ^ *)
@@ -64,7 +61,7 @@ let parse_content ~(embed : bool) (content : string) : t =
 ;;
 
 (* Find the index of substring [needle] in [haystack] starting at [from]. *)
-let find_substring haystack ~needle ~from =
+let find_substring (haystack : string) ~(needle : string) ~(from : int) : int option =
   let nlen = String.length needle in
   let hlen = String.length haystack in
   if from + nlen > hlen
@@ -82,7 +79,9 @@ let find_substring haystack ~needle ~from =
 
 let is_escaped s pos = pos > 0 && Char.equal (String.get s (pos - 1)) '\\'
 
-let scan s meta =
+(** [scan s meta] scans text [s] for wikilinks. Returns [Some inlines] if
+    any [[\[[\]\]]] found, [None] otherwise. *)
+let scan (s : string) (meta : Cmarkit.Meta.t) : Cmarkit.Inline.t list option =
   let len = String.length s in
   if len < 4
   then None (* minimum: [[x]] *)
@@ -125,7 +124,7 @@ let scan s meta =
             let content =
               String.sub s ~pos:content_start ~len:(close_pos - content_start)
             in
-            let wikilink = parse_content ~embed content in
+            let wikilink = parse_wikilink_content ~embed content in
             let wl_meta = Cmarkit.Meta.tag meta_key (Cmarkit.Meta.make ()) in
             let before =
               if start_pos > pos

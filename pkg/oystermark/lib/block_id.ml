@@ -1,15 +1,19 @@
+(** Obsidian block identifier types and detection. *)
 open Core
 
+(** The type for block identifiers (without the [^] prefix). *)
 type t = string
 
 let meta_key : t Cmarkit.Meta.key = Cmarkit.Meta.key ()
 
-let is_valid_block_id s =
+let is_valid_block_id (s : string) : bool =
   String.length s > 0
   && String.for_all s ~f:(fun c -> Char.is_alphanum c || Char.equal c '-')
   && Char.is_alphanum (String.get s 0)
 ;;
 
+(** [extract_trailing s] checks if [s] ends with a block identifier pattern.
+    Returns [Some (text_before, block_id)] or [None]. *)
 let extract_trailing s =
   let s = String.rstrip s in
   (* Find the last '^' that is preceded by whitespace or is at start *)

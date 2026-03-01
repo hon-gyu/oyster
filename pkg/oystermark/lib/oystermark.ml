@@ -2,7 +2,7 @@ module Wikilink = Wikilink
 module Block_id = Block_id
 
 (** Extract block ID from the last text node of a paragraph's inline. *)
-let extract_block_id_from_inline inline =
+let extract_block_id_from_inline (inline : Cmarkit.Inline.t) =
   (* Find and modify the last Text node in the inline tree *)
   let rec last_text = function
     | Cmarkit.Inline.Text (s, _meta) -> Some s
@@ -34,6 +34,8 @@ let rec replace_last_text inline new_text =
   | other -> other
 ;;
 
+(** The mapper that transforms a cmarkit Doc, resolving wikilinks in inline
+    text nodes and block identifiers at paragraph ends. *)
 let mapper =
   Cmarkit.Mapper.make
     ~inline_ext_default:(fun _m i -> Some i)
@@ -61,6 +63,9 @@ let mapper =
     ()
 ;;
 
+
+(** [of_string ?strict ?layout s] parses markdown string [s] into a cmarkit
+    Doc with wikilinks and block IDs resolved via the mapper. *)
 let of_string ?(strict = false) ?(layout = false) s =
   let doc = Cmarkit.Doc.of_string ~strict ~layout s in
   Cmarkit.Mapper.map_doc mapper doc
