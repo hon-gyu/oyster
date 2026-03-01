@@ -47,7 +47,7 @@ let extract_block_id_from_inline (inline : Cmarkit.Inline.t) : t option =
   | Some s -> make_opt s
 ;;
 
-(** Block mapper that attach block IDs to paragraphs' metadata. *)
+(** Block mapper that attaches block IDs to paragraphs' metadata if they have one. *)
 let tag_block_id_meta (mapper : Mapper.t) (block : Block.t) : Block.t Mapper.result =
   match block with
   | Block.Paragraph (p, meta) ->

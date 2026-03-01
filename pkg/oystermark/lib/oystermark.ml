@@ -20,12 +20,7 @@ let rec replace_last_text inline new_text =
 let mapper =
   Cmarkit.Mapper.make
     ~inline_ext_default:(fun _m i -> Some i)
-    ~inline:(fun _m -> function
-       | Cmarkit.Inline.Text (s, meta) ->
-         (match Wikilink.scan s meta with
-          | None -> Cmarkit.Mapper.default
-          | Some inlines -> Cmarkit.Mapper.ret (Cmarkit.Inline.Inlines (inlines, meta)))
-       | _ -> Cmarkit.Mapper.default)
+    ~inline:Wikilink.parse
     ~block: Block_id.tag_block_id_meta
     ()
 ;;

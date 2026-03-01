@@ -1,4 +1,12 @@
+(** Add Obsidian-style wikilinks extension to Cmarkit.
+
+A wikilink looks like [[Note#^blockid|display text]] or [[Note#Heading1#Heading2|display text]].
+
+When there's a [!] before the [[, the content is embedded.
+*)
+
 open Core
+open Cmarkit
 
 (** The type for wikilink fragment references. *)
 type fragment =
@@ -80,62 +88,106 @@ let find_substring (haystack : string) ~(needle : string) ~(from : int) : int op
 
 let is_escaped s pos = pos > 0 && Char.equal (String.get s (pos - 1)) '\\'
 
-(** [scan s meta] scans text [s] for wikilinks. Returns [Some inlines] if
-    any [[\[[\]\]]] found, [None] otherwise. *)
-let scan (s : string) (meta : Cmarkit.Meta.t) : Cmarkit.Inline.t list option =
-  let len = String.length s in
-  if len < 4
-  then None (* minimum: [[x]] *)
-  else (
-    let rec find_links acc pos =
-      match find_substring s ~needle:"[[" ~from:pos with
-      | None ->
-        if List.is_empty acc
-        then None
+(** Inline mapper that recognises wikilinks inside [Text] nodes.
+
+    Intended for use as the [~inline] callback of {!Cmarkit.Mapper.make}.
+    Scans the text for [[…]] (and ![[![…]]) delimiters, splitting it into a
+    list of plain [Text] and [Ext_wikilink] nodes spliced via [Inlines].
+
+    Returns [Mapper.default] for non-[Text] nodes or when no [[…]] is present,
+    so the mapper falls through to its default behaviour. *)
+let parse (_mapper : Mapper.t) (i : Inline.t) : Inline.t Mapper.result =
+  match i with
+  | Inline.Text (text, meta) ->
+    let len = String.length text in
+    if len < 4 || not (String.is_substring text ~substring:"[[")
+    then Mapper.default
+    else (
+      let parent_loc = Meta.textloc meta in
+      (* Compute a sub-textloc for the byte range [off, off+n) within the
+         parent text.  Byte positions are shifted relative to the parent's
+         first_byte; line positions are approximated using the parent's
+         first_line (accurate for the common single-line case). *)
+      let sub_meta ~off ~n =
+        if Textloc.is_none parent_loc
+        then Meta.none
         else (
+          let base = Textloc.first_byte parent_loc in
+          let first_line = Textloc.first_line parent_loc in
+          let loc =
+            Textloc.v
+              ~file:(Textloc.file parent_loc)
+              ~first_byte:(base + off)
+              ~last_byte:(base + off + n - 1)
+              ~first_line
+              ~last_line:first_line
+          in
+          Meta.make ~textloc:loc ())
+      in
+      (* Walk text left-to-right, accumulating inlines in reverse order.
+         pos is the start of the not-yet-emitted prefix. *)
+      let rec loop acc pos =
+        match find_substring text ~needle:"[[" ~from:pos with
+        | None ->
+          (* No more openers — emit any remaining text. *)
           let tail =
             if pos < len
-            then [ Cmarkit.Inline.Text (String.drop_prefix s pos, meta) ]
+            then
+              [ Cmarkit.Inline.Text
+                  (String.drop_prefix text pos, sub_meta ~off:pos ~n:(len - pos))
+              ]
             else []
           in
-          Some (List.rev acc @ tail))
-      | Some open_pos ->
-        (* Check for embed (!) and escaping *)
-        let embed, start_pos =
-          if
-            open_pos > 0
-            && Char.equal (String.get s (open_pos - 1)) '!'
-            && not (is_escaped s (open_pos - 1))
-          then true, open_pos - 1
-          else false, open_pos
-        in
-        (* Check if the [[ itself is escaped *)
-        if is_escaped s (if embed then open_pos - 1 else open_pos)
-        then find_links acc (open_pos + 2)
-        else (
-          let content_start = open_pos + 2 in
-          match find_substring s ~needle:"]]" ~from:content_start with
-          | None ->
-            if List.is_empty acc
-            then None
-            else (
-              let tail = [ Cmarkit.Inline.Text (String.drop_prefix s pos, meta) ] in
-              Some (List.rev acc @ tail))
-          | Some close_pos ->
-            let content =
-              String.sub s ~pos:content_start ~len:(close_pos - content_start)
-            in
-            let wikilink = make ~embed content in
-            let wl_meta = Cmarkit.Meta.tag meta_key (Cmarkit.Meta.make ()) in
-            let before =
-              if start_pos > pos
-              then
-                [ Cmarkit.Inline.Text (String.sub s ~pos ~len:(start_pos - pos), meta) ]
-              else []
-            in
-            let wl_node = Ext_wikilink (wikilink, wl_meta) in
-            let acc = wl_node :: (List.rev before @ acc) in
-            find_links acc (close_pos + 2))
-    in
-    find_links [] 0)
-;;
+          List.rev acc @ tail
+        | Some open_pos ->
+          (* Check for a preceding unescaped '!' (embed syntax). *)
+          let embed, start_pos =
+            if
+              open_pos > 0
+              && Char.equal (String.get text (open_pos - 1)) '!'
+              && not (is_escaped text (open_pos - 1))
+            then true, open_pos - 1
+            else false, open_pos
+          in
+          (* Skip escaped openers. *)
+          if is_escaped text (if embed then open_pos - 1 else open_pos)
+          then loop acc (open_pos + 2)
+          else (
+            let content_start = open_pos + 2 in
+            match find_substring text ~needle:"]]" ~from:content_start with
+            | None ->
+              (* Unmatched opener — treat the rest as plain text. *)
+              let tail =
+                [ Cmarkit.Inline.Text
+                    ( String.drop_prefix text pos
+                    , sub_meta ~off:pos ~n:(len - pos) )
+                ]
+              in
+              List.rev acc @ tail
+            | Some close_pos ->
+              let content =
+                String.sub text ~pos:content_start ~len:(close_pos - content_start)
+              in
+              let wikilink = make ~embed content in
+              (* Wikilink span: from start_pos (incl. '!' for embeds) to close_pos+1 (incl. ']]'). *)
+              let wl_span = close_pos + 2 - start_pos in
+              let wl_meta =
+                Meta.tag meta_key (sub_meta ~off:start_pos ~n:wl_span)
+              in
+              (* Emit any literal text between the previous position and this wikilink. *)
+              let before =
+                if start_pos > pos
+                then
+                  [ Cmarkit.Inline.Text
+                      ( String.sub text ~pos ~len:(start_pos - pos)
+                      , sub_meta ~off:pos ~n:(start_pos - pos) )
+                  ]
+                else []
+              in
+              let wl_node = Ext_wikilink (wikilink, wl_meta) in
+              let acc = wl_node :: (List.rev before @ acc) in
+              loop acc (close_pos + 2))
+      in
+      let inlines = loop [] 0 in
+      Mapper.ret (Inline.Inlines (inlines, meta)))
+  | _ -> Mapper.default
