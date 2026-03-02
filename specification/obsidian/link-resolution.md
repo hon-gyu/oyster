@@ -40,15 +40,6 @@ After parsing, both forms resolve identically:
 | `[[Note#H1#H2]]` | `[text](Note#H1#H2)` | Nested heading |
 | `[[##L2######L4]]` | `[text](##L2######L4)` | Hash normalization applies |
 
-## Overview
-
-Resolution happens in stages:
-
-1. **Parse** the link into components (target, headings, block, display)
-2. **Resolve file** - find matching note or asset
-3. **Resolve in-note target** - find heading or block within the file
-4. **Fallback** - if in-note target not found, fall back to file
-
 ## File Resolution
 
 ### Extension Handling
