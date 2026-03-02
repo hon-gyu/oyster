@@ -65,25 +65,10 @@ let of_markdown_dest (dest : string) : t option =
     | Some (t, frag_str) ->
       let target = if String.is_empty t then None else Some t in
       let fragment =
-        if String.is_empty frag_str
-        then None
-        else if String.is_prefix frag_str ~prefix:"^"
-        then (
-          let candidate = String.drop_prefix frag_str 1 in
-          if Block_id.is_valid_block_id candidate
-          then Some (Block_ref candidate)
-          else (
-            let parts =
-              String.split frag_str ~on:'#'
-              |> List.filter ~f:(fun s -> not (String.is_empty s))
-            in
-            if List.is_empty parts then None else Some (Heading parts)))
-        else (
-          let parts =
-            String.split frag_str ~on:'#'
-            |> List.filter ~f:(fun s -> not (String.is_empty s))
-          in
-          if List.is_empty parts then None else Some (Heading parts))
+        match Wikilink.parse_fragment frag_str with
+        | None -> None
+        | Some (Wikilink.Heading hs) -> Some (Heading hs)
+        | Some (Wikilink.Block_ref s) -> Some (Block_ref s)
       in
       Some { target; fragment })
 ;;

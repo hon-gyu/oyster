@@ -26,6 +26,30 @@ type Inline.t += Ext_wikilink of t node
 (** Meta key to tag wikilink nodes. *)
 let meta_key : unit Meta.key = Meta.key ()
 
+(** Parse a fragment string (the part after '#') into a fragment value. *)
+let parse_fragment (frag_str : string) : fragment option =
+  if String.is_empty frag_str
+  then None
+  else if String.is_prefix frag_str ~prefix:"^"
+  then (
+    let candidate = String.drop_prefix frag_str 1 in
+    if Block_id.is_valid_block_id candidate
+    then Some (Block_ref candidate)
+    else (
+      (* Treat as heading with literal ^ *)
+      let parts =
+        String.split frag_str ~on:'#'
+        |> List.filter ~f:(fun s -> not (String.is_empty s))
+      in
+      if List.is_empty parts then None else Some (Heading parts)))
+  else (
+    let parts =
+      String.split frag_str ~on:'#'
+      |> List.filter ~f:(fun s -> not (String.is_empty s))
+    in
+    if List.is_empty parts then None else Some (Heading parts))
+;;
+
 (** Parse wikilink given the content inside [[]] *)
 let make ~(embed : bool) (content : string) : t =
   (* Split on first unescaped | *)
@@ -42,28 +66,7 @@ let make ~(embed : bool) (content : string) : t =
       target, None
     | Some (t, frag_str) ->
       let target = if String.is_empty t then None else Some t in
-      let fragment =
-        if String.is_empty frag_str
-        then None
-        else if String.is_prefix frag_str ~prefix:"^"
-        then (
-          let candidate = String.drop_prefix frag_str 1 in
-          if Block_id.is_valid_block_id candidate
-          then Some (Block_ref candidate)
-          else (
-            (* Treat as heading with literal ^ *)
-            let parts =
-              String.split frag_str ~on:'#'
-              |> List.filter ~f:(fun s -> not (String.is_empty s))
-            in
-            if List.is_empty parts then None else Some (Heading parts)))
-        else (
-          let parts =
-            String.split frag_str ~on:'#'
-            |> List.filter ~f:(fun s -> not (String.is_empty s))
-          in
-          if List.is_empty parts then None else Some (Heading parts))
-      in
+      let fragment = parse_fragment frag_str in
       target, fragment
   in
   { target; fragment; display; embed }
