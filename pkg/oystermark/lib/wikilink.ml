@@ -21,10 +21,10 @@ type t =
   }
 
 (** Inline extension constructor for wikilinks. *)
-type Cmarkit.Inline.t += Ext_wikilink of t Cmarkit.node
+type Inline.t += Ext_wikilink of t node
 
 (** Meta key to tag wikilink nodes. *)
-let meta_key : unit Cmarkit.Meta.key = Cmarkit.Meta.key ()
+let meta_key : unit Meta.key = Meta.key ()
 
 (** Parse wikilink given the content inside [[]] *)
 let make ~(embed : bool) (content : string) : t =
