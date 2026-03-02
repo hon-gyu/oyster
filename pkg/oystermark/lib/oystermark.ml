@@ -1,5 +1,8 @@
 module Wikilink = Wikilink
 module Block_id = Block_id
+module Link_ref = Link_ref
+module Vault_index = Vault_index
+module Resolve = Resolve
 
 (** Replace the last Text node's content in an inline tree. *)
 let rec replace_last_text inline new_text =
@@ -21,14 +24,73 @@ let mapper =
   Cmarkit.Mapper.make
     ~inline_ext_default:(fun _m i -> Some i)
     ~inline:Wikilink.parse
-    ~block: Block_id.tag_block_id_meta
+    ~block:Block_id.tag_block_id_meta
     ()
 ;;
-
 
 (** [of_string ?strict ?layout s] parses markdown string [s] into a cmarkit
     Doc with wikilinks and block IDs resolved via the mapper. *)
 let of_string ?(strict = false) ?(layout = false) s =
   let doc = Cmarkit.Doc.of_string ~strict ~layout s in
   Cmarkit.Mapper.map_doc mapper doc
+;;
+
+(** Meta key for attaching resolution results to link nodes. *)
+let resolved_key : Resolve.target Cmarkit.Meta.key = Cmarkit.Meta.key ()
+
+(** Build a vault index from a root directory. *)
+let build_index ~vault_root = Vault_index.build ~vault_root
+
+(** Create a resolution mapper that resolves links against the given index. *)
+let resolution_mapper ~index ~current_file =
+  Cmarkit.Mapper.make
+    ~inline_ext_default:(fun _m i ->
+      match i with
+      | Wikilink.Ext_wikilink (w, meta) ->
+        let link_ref = Link_ref.of_wikilink w in
+        let result = Resolve.resolve ~index ~current_file link_ref in
+        let meta' = Cmarkit.Meta.add resolved_key result meta in
+        Some (Wikilink.Ext_wikilink (w, meta'))
+      | other -> Some other)
+    ~inline:(fun _m i ->
+      match i with
+      | Cmarkit.Inline.Link (link, meta) ->
+        let ref_ = Cmarkit.Inline.Link.reference link in
+        (match ref_ with
+         | `Inline (ld, _ld_meta) ->
+           (match Cmarkit.Link_definition.dest ld with
+            | Some (dest, _dest_meta) ->
+              (match Link_ref.of_markdown_dest dest with
+               | None ->
+                 (* External link — skip *)
+                 Cmarkit.Mapper.default
+               | Some link_ref ->
+                 let result = Resolve.resolve ~index ~current_file link_ref in
+                 let meta' = Cmarkit.Meta.add resolved_key result meta in
+                 Cmarkit.Mapper.ret (Cmarkit.Inline.Link (link, meta')))
+            | None -> Cmarkit.Mapper.default)
+         | `Ref _ -> Cmarkit.Mapper.default)
+      | Cmarkit.Inline.Image (link, meta) ->
+        let ref_ = Cmarkit.Inline.Link.reference link in
+        (match ref_ with
+         | `Inline (ld, _ld_meta) ->
+           (match Cmarkit.Link_definition.dest ld with
+            | Some (dest, _dest_meta) ->
+              (match Link_ref.of_markdown_dest dest with
+               | None -> Cmarkit.Mapper.default
+               | Some link_ref ->
+                 let result = Resolve.resolve ~index ~current_file link_ref in
+                 let meta' = Cmarkit.Meta.add resolved_key result meta in
+                 Cmarkit.Mapper.ret (Cmarkit.Inline.Image (link, meta')))
+            | None -> Cmarkit.Mapper.default)
+         | `Ref _ -> Cmarkit.Mapper.default)
+      | _ -> Cmarkit.Mapper.default)
+    ()
+;;
+
+(** Parse and resolve a markdown string against a vault index. *)
+let of_string_resolved ?(strict = false) ?(layout = false) ~index ~current_file s =
+  let doc = of_string ~strict ~layout s in
+  let res_mapper = resolution_mapper ~index ~current_file in
+  Cmarkit.Mapper.map_doc res_mapper doc
 ;;

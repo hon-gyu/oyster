@@ -1,3 +1,3 @@
 (library
  (name oystermark)
- (libraries cmarkit core))
+ (libraries cmarkit core core_unix core_unix.sys_unix))

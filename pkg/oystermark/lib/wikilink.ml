@@ -159,8 +159,7 @@ let parse (_mapper : Mapper.t) (i : Inline.t) : Inline.t Mapper.result =
               (* Unmatched opener — treat the rest as plain text. *)
               let tail =
                 [ Cmarkit.Inline.Text
-                    ( String.drop_prefix text pos
-                    , sub_meta ~off:pos ~n:(len - pos) )
+                    (String.drop_prefix text pos, sub_meta ~off:pos ~n:(len - pos))
                 ]
               in
               List.rev acc @ tail
@@ -171,9 +170,7 @@ let parse (_mapper : Mapper.t) (i : Inline.t) : Inline.t Mapper.result =
               let wikilink = make ~embed content in
               (* Wikilink span: from start_pos (incl. '!' for embeds) to close_pos+1 (incl. ']]'). *)
               let wl_span = close_pos + 2 - start_pos in
-              let wl_meta =
-                Meta.tag meta_key (sub_meta ~off:start_pos ~n:wl_span)
-              in
+              let wl_meta = Meta.tag meta_key (sub_meta ~off:start_pos ~n:wl_span) in
               (* Emit any literal text between the previous position and this wikilink. *)
               let before =
                 if start_pos > pos
@@ -191,3 +188,4 @@ let parse (_mapper : Mapper.t) (i : Inline.t) : Inline.t Mapper.result =
       let inlines = loop [] 0 in
       Mapper.ret (Inline.Inlines (inlines, meta)))
   | _ -> Mapper.default
+;;
