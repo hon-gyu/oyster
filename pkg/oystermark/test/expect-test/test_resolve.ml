@@ -1,8 +1,7 @@
 open! Core
 open Oystermark
 
-(* ====================================================================
-   Link_ref tests
+(* Link_ref tests
    ==================================================================== *)
 
 let pp_link_ref_fragment : Link_ref.fragment option -> string = function
@@ -166,8 +165,7 @@ let%expect_test "of_markdown_dest" =
     |}]
 ;;
 
-(* ====================================================================
-   Resolve tests
+(* Resolve tests
    ==================================================================== *)
 
 (** Helper to build a synthetic vault index for testing. *)
@@ -425,8 +423,7 @@ let%expect_test "is_path_subsequence" =
     |}]
 ;;
 
-(* ====================================================================
-   Vault_index extraction tests
+(* Vault_index extraction tests
    ==================================================================== *)
 
 let%expect_test "extract_headings" =
