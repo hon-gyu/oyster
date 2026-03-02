@@ -24,14 +24,22 @@ let pp_textloc (meta : Cmarkit.Meta.t) =
   let loc = Cmarkit.Meta.textloc meta in
   if Cmarkit.Textloc.is_none loc
   then "none"
-  else Printf.sprintf "%d..%d" (Cmarkit.Textloc.first_byte loc) (Cmarkit.Textloc.last_byte loc)
+  else
+    Printf.sprintf
+      "%d..%d"
+      (Cmarkit.Textloc.first_byte loc)
+      (Cmarkit.Textloc.last_byte loc)
 ;;
 
 let rec pp_inline = function
   | Cmarkit.Inline.Text (s, m) -> Printf.sprintf "Text(%s @%s)" s (pp_textloc m)
   | Cmarkit.Inline.Inlines (is, m) ->
-    Printf.sprintf "Inlines(@%s)[%s]" (pp_textloc m) (List.map is ~f:pp_inline |> String.concat ~sep:", ")
-  | Wikilink.Ext_wikilink (w, m) -> Printf.sprintf "Wikilink(%s @%s)" (pp_wikilink w) (pp_textloc m)
+    Printf.sprintf
+      "Inlines(@%s)[%s]"
+      (pp_textloc m)
+      (List.map is ~f:pp_inline |> String.concat ~sep:", ")
+  | Wikilink.Ext_wikilink (w, m) ->
+    Printf.sprintf "Wikilink(%s @%s)" (pp_wikilink w) (pp_textloc m)
   | _ -> "?"
 ;;
 
@@ -83,7 +91,8 @@ let%expect_test "parse_content" =
       , Option.value ~default:"-" w.display ))
   in
   print_string (Ascii_table.to_string_noattr cols rows ~limit_width_to:120);
-  [%expect {|
+  [%expect
+    {|
     ┌──────────────────────┬──────────────────┬──────────┬────────────────────────┬─────────────┐
     │ name                 │ input            │ target   │ frag                   │ display     │
     ├──────────────────────┼──────────────────┼──────────┼────────────────────────┼─────────────┤
@@ -134,9 +143,7 @@ let text_node ~base input =
   Cmarkit.Inline.Text (input, Cmarkit.Meta.make ~textloc:loc ())
 ;;
 
-let dummy_mapper =
-  Cmarkit.Mapper.make ~inline_ext_default:(fun _m i -> Some i) ()
-;;
+let dummy_mapper = Cmarkit.Mapper.make ~inline_ext_default:(fun _m i -> Some i) ()
 
 let%expect_test "parse" =
   let cols =
@@ -157,7 +164,8 @@ let%expect_test "parse" =
       name, input, result)
   in
   print_string (Ascii_table.to_string_noattr cols rows ~limit_width_to:150);
-  [%expect {|
+  [%expect
+    {|
     ┌──────────────┬──────────────────────────────┬──────────────────────────────────────────────────────────────────────────────────────────┐
     │ name         │ input                        │ nodes                                                                                    │
     ├──────────────┼──────────────────────────────┼──────────────────────────────────────────────────────────────────────────────────────────┤
@@ -203,7 +211,8 @@ let%expect_test "block_id" =
       name, input, result)
   in
   print_string (Ascii_table.to_string_noattr cols rows);
-  [%expect {|
+  [%expect
+    {|
     ┌───────────────────┬────────────────────┬──────────────────────────┐
     │ name              │ input              │ (byte_pos, id)           │
     ├───────────────────┼────────────────────┼──────────────────────────┤
