@@ -1,6 +1,7 @@
 (** Vault index: walks a vault directory and indexes files, headings, and block IDs. *)
 
 open Core
+open Oystermark_base
 
 type heading_entry =
   { text : string

@@ -169,7 +169,7 @@ let%expect_test "of_markdown_dest" =
    ==================================================================== *)
 
 (** Helper to build a synthetic vault index for testing. *)
-let test_index : Vault_index.t =
+let test_index : Index.t =
   { files =
       [ { rel_path = "Note1.md"
         ; headings =
@@ -423,7 +423,7 @@ let%expect_test "is_path_subsequence" =
     |}]
 ;;
 
-(* Vault_index extraction tests
+(* Index extraction tests
    ==================================================================== *)
 
 let%expect_test "extract_headings" =
@@ -441,8 +441,8 @@ let%expect_test "extract_headings" =
 |}
   in
   let doc = Cmarkit.Doc.of_string ~strict:false md in
-  let headings = Vault_index.extract_headings doc in
-  List.iter headings ~f:(fun (h : Vault_index.heading_entry) ->
+  let headings = Index.extract_headings doc in
+  List.iter headings ~f:(fun (h : Index.heading_entry) ->
     Printf.printf "H%d: %s\n" h.level h.text);
   [%expect
     {|
@@ -473,7 +473,7 @@ Third paragraph ^block-2
       ()
   in
   let doc = Cmarkit.Mapper.map_doc mapper doc in
-  let block_ids = Vault_index.extract_block_ids doc in
+  let block_ids = Index.extract_block_ids doc in
   List.iter block_ids ~f:(fun id -> Printf.printf "%s\n" id);
   [%expect
     {|

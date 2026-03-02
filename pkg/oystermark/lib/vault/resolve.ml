@@ -45,8 +45,8 @@ let is_path_subsequence ~(haystack : string list) ~(needle : string list) : bool
 ;;
 
 (** Resolve a target string to a file entry. Exact match first, then subsequence. *)
-let resolve_file (files : Vault_index.file_entry list) (target_str : string)
-  : Vault_index.file_entry option
+let resolve_file (files : Index.file_entry list) (target_str : string)
+  : Index.file_entry option
   =
   let normalized = normalize_target target_str in
   (* Exact match *)
@@ -62,8 +62,8 @@ let resolve_file (files : Vault_index.file_entry list) (target_str : string)
 
 (** Resolve a heading query (list of heading texts) against document headings.
     Finds a subsequence where levels strictly increase (backtracking). *)
-let resolve_headings (headings : Vault_index.heading_entry list) (query : string list)
-  : Vault_index.heading_entry option
+let resolve_headings (headings : Index.heading_entry list) (query : string list)
+  : Index.heading_entry option
   =
   let headings_arr = Array.of_list headings in
   let n_headings = Array.length headings_arr in
@@ -96,7 +96,7 @@ let resolve_headings (headings : Vault_index.heading_entry list) (query : string
 ;;
 
 (** Resolve a link reference against the vault index. *)
-let resolve ~(index : Vault_index.t) ~(current_file : string) (link_ref : Link_ref.t)
+let resolve ~(index : Index.t) ~(current_file : string) (link_ref : Link_ref.t)
   : target
   =
   let current_entry =

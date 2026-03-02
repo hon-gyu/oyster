@@ -1,8 +1,8 @@
-module Wikilink = Wikilink
-module Block_id = Block_id
-module Link_ref = Link_ref
-module Vault_index = Vault_index
-module Resolve = Resolve
+module Wikilink = Oystermark_base.Wikilink
+module Block_id = Oystermark_base.Block_id
+module Link_ref = Vault.Link_ref
+module Index = Vault.Index
+module Resolve = Vault.Resolve
 
 (** Replace the last Text node's content in an inline tree. *)
 let rec replace_last_text inline new_text =
@@ -39,7 +39,7 @@ let of_string ?(strict = false) ?(layout = false) s =
 let resolved_key : Resolve.target Cmarkit.Meta.key = Cmarkit.Meta.key ()
 
 (** Build a vault index from a root directory. *)
-let build_index ~vault_root = Vault_index.build ~vault_root
+let build_index ~vault_root = Index.build ~vault_root
 
 (** Create a resolution mapper that resolves links against the given index. *)
 let resolution_mapper ~index ~current_file =

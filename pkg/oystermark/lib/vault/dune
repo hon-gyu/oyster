@@ -1,0 +1,3 @@
+(library
+ (name vault)
+ (libraries oystermark_base cmarkit core core_unix core_unix.sys_unix))

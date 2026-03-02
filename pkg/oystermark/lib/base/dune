@@ -1,0 +1,3 @@
+(library
+ (name oystermark_base)
+ (libraries cmarkit core))
