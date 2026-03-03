@@ -6,11 +6,13 @@ open Oystermark_base
 type fragment =
   | Heading of string list
   | Block_ref of string
+[@@deriving sexp]
 
 type t =
   { target : string option (** Target file path *)
   ; fragment : fragment option
   }
+[@@deriving sexp]
 
 let is_external (s : string) : bool =
   String.is_prefix s ~prefix:"http://"
@@ -51,6 +53,34 @@ let percent_decode (s : string) : string =
       loop (i + 1))
   in
   loop 0
+;;
+
+let%expect_test "percent_decode" =
+  let cases =
+    [ "no encoding", "hello"
+    ; "space", "hello%20world"
+    ; "multiple", "a%20b%20c"
+    ; "hash", "Note%23Heading"
+    ; "invalid hex", "hello%ZZ"
+    ; "truncated", "hello%2"
+    ; "empty", ""
+    ; "percent at end", "hello%"
+    ]
+  in
+  let rows = List.map cases ~f:(fun (name, input) -> name, input, percent_decode input) in
+  List.iter rows ~f:(fun (name, input, output) ->
+    printf "%s: '%s' -> '%s'\n" name input output);
+  [%expect
+    {|
+    no encoding: 'hello' -> 'hello'
+    space: 'hello%20world' -> 'hello world'
+    multiple: 'a%20b%20c' -> 'a b c'
+    hash: 'Note%23Heading' -> 'Note#Heading'
+    invalid hex: 'hello%ZZ' -> 'hello%ZZ'
+    truncated: 'hello%2' -> 'hello%2'
+    empty: '' -> ''
+    percent at end: 'hello%' -> 'hello%'
+    |}]
 ;;
 
 let of_cmark_dest (dest : string) : t option =
