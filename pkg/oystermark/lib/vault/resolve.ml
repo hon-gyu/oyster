@@ -43,7 +43,7 @@ let is_path_subsequence ~(haystack : string list) ~(needle : string list) : bool
   loop 0 needle
 ;;
 
-let%expect_test _ =
+let%expect_test "is_path_subsequence" =
   let haystack = [ "foo"; "bar"; "baz"; "qux" ] in
   let n1 = [ "bar"; "baz" ] in
   let n2 = [ "baz"; "bar" ] in

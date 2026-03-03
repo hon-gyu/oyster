@@ -138,7 +138,7 @@ let%expect_test "of_markdown_dest" =
   let rows =
     List.map cases ~f:(fun (name, input) ->
       let result =
-        match Link_ref.of_markdown_dest input with
+        match Link_ref.of_cmark_dest input with
         | None -> "None (external)"
         | Some r -> pp_link_ref r
       in
@@ -197,15 +197,15 @@ let pp_target : Resolve.target -> string = function
   | Resolve.Heading { path; heading; level } ->
     Printf.sprintf "Heading(%s, %s, H%d)" path heading level
   | Resolve.Block { path; block_id } -> Printf.sprintf "Block(%s, %s)" path block_id
-  | Resolve.Current_file -> "Current_file"
-  | Resolve.Current_heading { heading; level } ->
+  | Resolve.Curr_file -> "Current_file"
+  | Resolve.Curr_heading { heading; level } ->
     Printf.sprintf "Current_heading(%s, H%d)" heading level
-  | Resolve.Current_block { block_id } -> Printf.sprintf "Current_block(%s)" block_id
+  | Resolve.Curr_block { block_id } -> Printf.sprintf "Current_block(%s)" block_id
   | Resolve.Unresolved -> "Unresolved"
 ;;
 
 let resolve_case name link_ref =
-  let result = Resolve.resolve ~index:test_index ~current_file:"Note1.md" link_ref in
+  let result = Resolve.resolve link_ref "Note1.md" test_index in
   name, pp_target result
 ;;
 
@@ -366,60 +366,6 @@ let%expect_test "resolve_self_references" =
     │ current invalid heading │ Current_file            │
     │ current invalid block   │ Current_file            │
     └─────────────────────────┴─────────────────────────┘
-    |}]
-;;
-
-let%expect_test "normalize_target" =
-  let cases =
-    [ "Note", "Note.md"
-    ; "Note.md", "Note.md"
-    ; "image.png", "image.png"
-    ; "dir/Note", "dir/Note.md"
-    ; "Figure.jpg.md", "Figure.jpg.md"
-    ]
-  in
-  List.iter cases ~f:(fun (input, expected) ->
-    let result = Resolve.normalize_target input in
-    if String.equal result expected
-    then Printf.printf "%s -> %s: OK\n" input result
-    else Printf.printf "%s -> %s: FAIL (expected %s)\n" input result expected);
-  [%expect
-    {|
-    Note -> Note.md: OK
-    Note.md -> Note.md: OK
-    image.png -> image.png: OK
-    dir/Note -> dir/Note.md: OK
-    Figure.jpg.md -> Figure.jpg.md: OK
-    |}]
-;;
-
-let%expect_test "is_path_subsequence" =
-  let cases =
-    [ [ "dir"; "note.md" ], [ "dir"; "note.md" ], true
-    ; [ "dir"; "inner_dir"; "note.md" ], [ "dir"; "note.md" ], true
-    ; [ "dir"; "inner_dir"; "note.md" ], [ "inner_dir"; "note.md" ], true
-    ; [ "dir"; "inner_dir"; "note.md" ], [ "random"; "note.md" ], false
-    ; [ "a"; "b"; "c" ], [ "a"; "c" ], true
-    ; [ "a"; "b"; "c" ], [ "c"; "a" ], false
-    ]
-  in
-  List.iter cases ~f:(fun (haystack, needle, expected) ->
-    let result = Resolve.is_path_subsequence ~haystack ~needle in
-    let status = if Bool.equal result expected then "OK" else "FAIL" in
-    Printf.printf
-      "[%s] in [%s] = %b: %s\n"
-      (String.concat ~sep:"/" needle)
-      (String.concat ~sep:"/" haystack)
-      result
-      status);
-  [%expect
-    {|
-    [dir/note.md] in [dir/note.md] = true: OK
-    [dir/note.md] in [dir/inner_dir/note.md] = true: OK
-    [inner_dir/note.md] in [dir/inner_dir/note.md] = true: OK
-    [random/note.md] in [dir/inner_dir/note.md] = false: OK
-    [a/c] in [a/b/c] = true: OK
-    [c/a] in [a/b/c] = false: OK
     |}]
 ;;
 
