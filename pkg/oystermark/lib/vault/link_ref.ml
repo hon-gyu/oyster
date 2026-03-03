@@ -1,4 +1,4 @@
-(** Unified link reference extracted from both wikilinks and markdown links. *)
+(** Unified internal link reference extracted from both wikilinks and markdown links. *)
 
 open Core
 open Oystermark_base
@@ -8,7 +8,7 @@ type fragment =
   | Block_ref of string
 
 type t =
-  { target : string option
+  { target : string option (** Target file path *)
   ; fragment : fragment option
   }
 
@@ -53,11 +53,22 @@ let percent_decode (s : string) : string =
   loop 0
 ;;
 
-let of_markdown_dest (dest : string) : t option =
+let of_cmark_dest (dest : string) : t option =
   let decoded = percent_decode dest in
   if is_external decoded
   then None
   else (
     let wikilink = Wikilink.make ~embed:false decoded in
     Some (of_wikilink wikilink))
+;;
+
+let of_cmark_reference (ref : Cmarkit.Inline.Link.reference) : t option =
+  match ref with
+  | `Ref _ -> None
+  | `Inline (ld, _ld_meta) ->
+    (match Cmarkit.Link_definition.dest ld with
+     | None ->
+       (* When destination is empty, Obsidian resolves it to a file named "().md". *)
+       Some { target = Some "().md"; fragment = None }
+     | Some (dest, dest_meta) -> of_cmark_dest dest)
 ;;

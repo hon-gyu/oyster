@@ -21,7 +21,7 @@ type target =
   | Curr_block of { block_id : string }
   | Unresolved
 
-(** Check if needle components form a subsequence of haystack components. *)
+(** Check if needle components form a (ordered) subsequence of haystack components. *)
 let is_path_subsequence ~(haystack : string list) ~(needle : string list) : bool =
   let hay_len = List.length haystack in
   let hay_arr = Array.of_list haystack in
@@ -108,6 +108,7 @@ let resolve_headings (headings : Index.heading_entry list) (query : string list)
 
 (** Resolve a link reference against the vault index. *)
 let resolve (link_ref : Link_ref.t) (curr_file : string) (index : Index.t) : target =
+  (* TODO(refactor): the matches be re-written to use Let_syntax? *)
   let current_entry =
     List.find index.files ~f:(fun f -> String.equal f.rel_path curr_file)
   in
