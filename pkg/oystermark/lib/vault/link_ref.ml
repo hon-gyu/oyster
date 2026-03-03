@@ -58,18 +58,6 @@ let of_markdown_dest (dest : string) : t option =
   if is_external decoded
   then None
   else (
-    (* Parse using same logic as Oystermark_base.Wikilink.make: split on first # *)
-    match String.lsplit2 decoded ~on:'#' with
-    | None ->
-      let target = if String.is_empty decoded then None else Some decoded in
-      Some { target; fragment = None }
-    | Some (t, frag_str) ->
-      let target = if String.is_empty t then None else Some t in
-      let fragment =
-        match Wikilink.parse_fragment frag_str with
-        | None -> None
-        | Some (Wikilink.Heading hs) -> Some (Heading hs)
-        | Some (Wikilink.Block_ref s) -> Some (Block_ref s)
-      in
-      Some { target; fragment })
+    let wikilink = Wikilink.make ~embed:false decoded in
+    Some (of_wikilink wikilink))
 ;;

@@ -16,13 +16,12 @@ type file_entry =
 
 type t = { files : file_entry list }
 
-(** Extract heading text as plain text from a cmarkit inline. *)
 let inline_to_plain_text (inline : Cmarkit.Inline.t) : string =
   let lines = Cmarkit.Inline.to_plain_text ~break_on_soft:false inline in
   String.concat ~sep:"\n" (List.map lines ~f:(String.concat ~sep:""))
 ;;
 
-(** Extract all headings from a parsed cmarkit document. *)
+(* Use Cmarkit.Folder to extract headings from a document. *)
 let extract_headings (doc : Cmarkit.Doc.t) : heading_entry list =
   let folder =
     Cmarkit.Folder.make
@@ -41,13 +40,17 @@ let extract_headings (doc : Cmarkit.Doc.t) : heading_entry list =
   Cmarkit.Folder.fold_doc folder [] doc
 ;;
 
-(** Extract all block IDs from a parsed cmarkit document using Block_id.meta_key. *)
+(* Use Cmarkit.Folder to extract block IDs from a document. *)
 let extract_block_ids (doc : Cmarkit.Doc.t) : string list =
   let folder =
     Cmarkit.Folder.make
       ~block:(fun _f acc block ->
         match block with
         | Cmarkit.Block.Paragraph (_p, meta) ->
+          (* TODO: block id itself points to the block that contains
+             its previous sibling inline.
+             We should get it.
+             *)
           (match Cmarkit.Meta.find Block_id.meta_key meta with
            | Some (bid : Block_id.t) -> Cmarkit.Folder.ret (acc @ [ bid.id ])
            | None -> Cmarkit.Folder.default)
@@ -59,16 +62,14 @@ let extract_block_ids (doc : Cmarkit.Doc.t) : string list =
   Cmarkit.Folder.fold_doc folder [] doc
 ;;
 
-(** Check if a filename/dirname is hidden (starts with '.'). *)
-let is_hidden (name : string) : bool = String.is_prefix name ~prefix:"."
-
-(** Recursively list all files under a directory, returning relative paths. *)
+(* Recursively list all files, returning relative paths. *)
 let rec list_files_recursive ~(root : string) ~(rel_prefix : string) : string list =
   let entries =
     try Sys_unix.ls_dir root with
     | _ -> []
   in
   List.concat_map entries ~f:(fun name ->
+    let is_hidden (name : string) : bool = String.is_prefix name ~prefix:"." in
     if is_hidden name
     then []
     else (
@@ -82,7 +83,7 @@ let rec list_files_recursive ~(root : string) ~(rel_prefix : string) : string li
 ;;
 
 (** Build a vault index from a root directory. *)
-let build ~(vault_root : string) : t =
+let build (vault_root : string) : t =
   let all_files = list_files_recursive ~root:vault_root ~rel_prefix:"" in
   let files =
     List.map all_files ~f:(fun rel_path ->
@@ -90,7 +91,6 @@ let build ~(vault_root : string) : t =
       then (
         let full_path = Filename.concat vault_root rel_path in
         let content = In_channel.read_all full_path in
-        (* Parse directly with cmarkit, then apply block_id mapper to tag paragraphs *)
         let doc = Cmarkit.Doc.of_string ~strict:false content in
         let mapper =
           Cmarkit.Mapper.make

@@ -13,16 +13,13 @@ type target =
       { path : string
       ; block_id : string
       }
-  | Current_file
-  | Current_heading of
+  | Curr_file
+  | Curr_heading of
       { heading : string
       ; level : int
       }
-  | Current_block of { block_id : string }
+  | Curr_block of { block_id : string }
   | Unresolved
-
-(** Normalize a target string: if it has no '.', append ".md". *)
-let normalize_target (s : string) : string = if String.mem s '.' then s else s ^ ".md"
 
 (** Check if needle components form a subsequence of haystack components. *)
 let is_path_subsequence ~(haystack : string list) ~(needle : string list) : bool =
@@ -44,10 +41,24 @@ let is_path_subsequence ~(haystack : string list) ~(needle : string list) : bool
   loop 0 needle
 ;;
 
+let%expect_test _ =
+  let haystack = [ "foo"; "bar"; "baz"; "qux" ] in
+  let n1 = [ "bar"; "baz" ] in
+  let n2 = [ "baz"; "bar" ] in
+  printf "%b\n" (is_path_subsequence ~haystack ~needle:n1);
+  printf "%b\n" (is_path_subsequence ~haystack ~needle:n2);
+  [%expect
+    {|
+    true
+    false
+    |}]
+;;
+
 (** Resolve a target string to a file entry. Exact match first, then subsequence. *)
 let resolve_file (files : Index.file_entry list) (target_str : string)
   : Index.file_entry option
   =
+  let normalize_target s = if String.mem s '.' then s else s ^ ".md" in
   let normalized = normalize_target target_str in
   (* Exact match *)
   match List.find files ~f:(fun f -> String.equal f.rel_path normalized) with
@@ -96,31 +107,29 @@ let resolve_headings (headings : Index.heading_entry list) (query : string list)
 ;;
 
 (** Resolve a link reference against the vault index. *)
-let resolve ~(index : Index.t) ~(current_file : string) (link_ref : Link_ref.t)
-  : target
-  =
+let resolve (link_ref : Link_ref.t) (curr_file : string) (index : Index.t) : target =
   let current_entry =
-    List.find index.files ~f:(fun f -> String.equal f.rel_path current_file)
+    List.find index.files ~f:(fun f -> String.equal f.rel_path curr_file)
   in
   match link_ref.target with
   | None ->
     (* Self-reference: fragment only *)
     (match link_ref.fragment with
-     | None -> Current_file
+     | None -> Curr_file
      | Some (Link_ref.Heading hs) ->
        (match current_entry with
         | Some entry ->
           (match resolve_headings entry.headings hs with
-           | Some h -> Current_heading { heading = h.text; level = h.level }
-           | None -> Current_file)
-        | None -> Current_file)
+           | Some h -> Curr_heading { heading = h.text; level = h.level }
+           | None -> Curr_file)
+        | None -> Curr_file)
      | Some (Link_ref.Block_ref bid) ->
        (match current_entry with
         | Some entry ->
           if List.exists entry.block_ids ~f:(String.equal bid)
-          then Current_block { block_id = bid }
-          else Current_file
-        | None -> Current_file))
+          then Curr_block { block_id = bid }
+          else Curr_file
+        | None -> Curr_file))
   | Some target_str ->
     (match resolve_file index.files target_str with
      | None -> Unresolved

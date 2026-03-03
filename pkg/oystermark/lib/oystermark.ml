@@ -48,7 +48,7 @@ let resolution_mapper ~index ~current_file =
       match i with
       | Wikilink.Ext_wikilink (w, meta) ->
         let link_ref = Link_ref.of_wikilink w in
-        let result = Resolve.resolve ~index ~current_file link_ref in
+        let result = Resolve.resolve link_ref current_file index in
         let meta' = Cmarkit.Meta.add resolved_key result meta in
         Some (Wikilink.Ext_wikilink (w, meta'))
       | other -> Some other)
@@ -65,7 +65,7 @@ let resolution_mapper ~index ~current_file =
                  (* External link — skip *)
                  Cmarkit.Mapper.default
                | Some link_ref ->
-                 let result = Resolve.resolve ~index ~current_file link_ref in
+                 let result = Resolve.resolve link_ref current_file index in
                  let meta' = Cmarkit.Meta.add resolved_key result meta in
                  Cmarkit.Mapper.ret (Cmarkit.Inline.Link (link, meta')))
             | None -> Cmarkit.Mapper.default)
@@ -79,7 +79,7 @@ let resolution_mapper ~index ~current_file =
               (match Link_ref.of_markdown_dest dest with
                | None -> Cmarkit.Mapper.default
                | Some link_ref ->
-                 let result = Resolve.resolve ~index ~current_file link_ref in
+                 let result = Resolve.resolve link_ref current_file index in
                  let meta' = Cmarkit.Meta.add resolved_key result meta in
                  Cmarkit.Mapper.ret (Cmarkit.Inline.Image (link, meta')))
             | None -> Cmarkit.Mapper.default)
