@@ -21,6 +21,8 @@ type target =
   | Curr_block of { block_id : string }
   | Unresolved
 
+let resolved_key : target Cmarkit.Meta.key = Cmarkit.Meta.key ()
+
 (** Check if needle components form a (ordered) subsequence of haystack components. *)
 let is_path_subsequence ~(haystack : string list) ~(needle : string list) : bool =
   let hay_len = List.length haystack in

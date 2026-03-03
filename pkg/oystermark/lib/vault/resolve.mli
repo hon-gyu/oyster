@@ -17,5 +17,8 @@ type target =
   | Curr_block of { block_id : string }
   | Unresolved
 
+(** Meta key for storing resolved targets in the target *)
+val resolved_key : target Cmarkit.Meta.key
+
 (** Resolve a link reference against the vault index. *)
 val resolve : Link_ref.t -> string -> Index.t -> target
