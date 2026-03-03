@@ -106,3 +106,60 @@ let build (vault_root : string) : t =
   in
   { files }
 ;;
+
+
+let%expect_test "extract_headings" =
+  let md =
+    {|
+# Title
+
+## Chapter 1
+
+### Section 1.1
+
+## Chapter 2
+
+#### Deep
+|}
+  in
+  let doc = Cmarkit.Doc.of_string ~strict:false md in
+  let headings = extract_headings doc in
+  List.iter headings ~f:(fun (h : heading_entry) ->
+    Printf.printf "H%d: %s\n" h.level h.text);
+  [%expect
+    {|
+    H1: Title
+    H2: Chapter 1
+    H3: Section 1.1
+    H2: Chapter 2
+    H4: Deep
+    |}]
+;;
+
+let%expect_test "extract_block_ids" =
+  let md =
+    {|
+First paragraph ^para1
+
+Second paragraph without block id
+
+Third paragraph ^block-2
+|}
+  in
+  let doc = Cmarkit.Doc.of_string ~strict:false md in
+  (* Need to tag block_id mapper first *)
+  let mapper =
+    Cmarkit.Mapper.make
+      ~inline_ext_default:(fun _m i -> Some i)
+      ~block:Block_id.tag_block_id_meta
+      ()
+  in
+  let doc = Cmarkit.Mapper.map_doc mapper doc in
+  let block_ids = extract_block_ids doc in
+  List.iter block_ids ~f:(fun id -> Printf.printf "%s\n" id);
+  [%expect
+    {|
+    para1
+    block-2
+    |}]
+;;
