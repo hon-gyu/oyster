@@ -22,14 +22,15 @@ let slugify s =
 ;;
 
 (* Strip the .md extension from a path for SSG-friendly URLs. *)
-let strip_md_ext : string -> string = fun path ->
+let strip_md_ext : string -> string =
+  fun path ->
   match String.chop_suffix path ~suffix:".md" with
   | Some p -> p
   | None -> path
 ;;
 
-(** Convert a resolved target to an href string. *)
-let target_to_href = function
+(* Convert a resolved target to an href string. *)
+let target_to_href : Resolve.target -> string = function
   | Resolve.File { path } -> strip_md_ext path
   | Resolve.Heading { path; heading; _ } -> strip_md_ext path ^ "#" ^ slugify heading
   | Resolve.Block { path; block_id } -> strip_md_ext path ^ "#^" ^ block_id
@@ -40,7 +41,7 @@ let target_to_href = function
 ;;
 
 (** Default display text for a wikilink when no explicit display is given. *)
-let wikilink_default_display (w : Wikilink.t) =
+let wikilink_default_display (w : Wikilink.t) : string =
   match w.target, w.fragment with
   | Some t, None -> t
   | Some t, Some (Wikilink.Heading hs) -> t ^ "#" ^ String.concat ~sep:"#" hs
@@ -51,13 +52,14 @@ let wikilink_default_display (w : Wikilink.t) =
 ;;
 
 (** Render a wikilink as an HTML anchor. *)
-let render_wikilink c (w : Wikilink.t) meta =
+let render_wikilink (c : Cmarkit_renderer.context) (w : Wikilink.t) (meta : Meta.t) : unit
+  =
   let href =
     match Meta.find Resolve.resolved_key meta with
     | Some target -> target_to_href target
     | None -> "#"
   in
-  let display = Option.value (w.display) ~default:(wikilink_default_display w) in
+  let display = Option.value w.display ~default:(wikilink_default_display w) in
   let unresolved =
     match Meta.find Resolve.resolved_key meta with
     | Some Resolve.Unresolved -> true
@@ -72,11 +74,15 @@ let render_wikilink c (w : Wikilink.t) meta =
 ;;
 
 (** Render a standard link, overriding href if a resolved target is present. *)
-let render_link c (l : Inline.Link.t) meta =
+let render_link (c : Cmarkit_renderer.context) (l : Inline.Link.t) (meta : Meta.t) : bool =
   match Meta.find Resolve.resolved_key meta with
   | Some target ->
     let href = target_to_href target in
-    let unresolved = match target with Resolve.Unresolved -> true | _ -> false in
+    let unresolved =
+      match target with
+      | Resolve.Unresolved -> true
+      | _ -> false
+    in
     C.string c "<a href=\"";
     Cmarkit_html.pct_encoded_string c href;
     if unresolved then C.string c "\" class=\"unresolved";
@@ -87,8 +93,8 @@ let render_link c (l : Inline.Link.t) meta =
   | None -> false (* fall through to default renderer *)
 ;;
 
-(** Extract plain text from an inline tree. *)
-let rec plain_text buf = function
+(* Extract plain text from an inline tree. *)
+let rec plain_text (buf : Buffer.t) : Inline.t -> unit = function
   | Inline.Text (s, _) -> Buffer.add_string buf s
   | Inline.Inlines (is, _) -> List.iter is ~f:(plain_text buf)
   | Inline.Emphasis (e, _) | Inline.Strong_emphasis (e, _) ->
@@ -100,8 +106,10 @@ let rec plain_text buf = function
   | _ -> ()
 ;;
 
-(** Render an image, overriding src if a resolved target is present. *)
-let render_image c (l : Inline.Link.t) _meta =
+(* Render an image, overriding src if a resolved target is present. *)
+let render_image (c : Cmarkit_renderer.context) (l : Inline.Link.t) (_meta : Meta.t)
+  : bool
+  =
   match Meta.find Resolve.resolved_key _meta with
   | Some target ->
     let href = target_to_href target in
@@ -116,23 +124,28 @@ let render_image c (l : Inline.Link.t) _meta =
   | None -> false
 ;;
 
-let inline c = function
-  | Wikilink.Ext_wikilink (w, meta) -> render_wikilink c w meta; true
+let inline (c : Cmarkit_renderer.context) : Inline.t -> bool = function
+  | Wikilink.Ext_wikilink (w, meta) ->
+    render_wikilink c w meta;
+    true
   | Inline.Link (l, meta) -> render_link c l meta
   | Inline.Image (l, meta) -> render_image c l meta
   | _ -> false
 ;;
 
-(** Render a paragraph, appending a block-id anchor if present. *)
-let block c = function
+(* Render a paragraph, appending a block-id anchor if present. *)
+let block (c : Cmarkit_renderer.context) : Block.t -> bool = function
   | Block.Paragraph (p, meta) ->
     (match Meta.find Block_id.meta_key meta with
      | Some (block_id : Block_id.t) ->
        C.string c "<p>";
        C.inline c (Block.Paragraph.inline p);
-       C.string c
-         (Printf.sprintf {| <span id="^%s" class="block-id">^%s</span>|}
-            block_id.id block_id.id);
+       C.string
+         c
+         (Printf.sprintf
+            {| <span id="^%s" class="block-id">^%s</span>|}
+            block_id.id
+            block_id.id);
        C.string c "</p>\n";
        true
      | None -> false)
@@ -145,4 +158,6 @@ let renderer ~safe () =
   Cmarkit_renderer.compose default custom
 ;;
 
-let of_doc ~safe doc = Cmarkit_renderer.doc_to_string (renderer ~safe ()) doc
+let of_doc ~safe (doc : Doc.t) : string =
+  Cmarkit_renderer.doc_to_string (renderer ~safe ()) doc
+;;
