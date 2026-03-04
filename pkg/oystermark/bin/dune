@@ -1,4 +1,4 @@
 (executable
  (public_name oystermark)
  (name main)
- (libraries oystermark))
+ (libraries oystermark core core_unix))
