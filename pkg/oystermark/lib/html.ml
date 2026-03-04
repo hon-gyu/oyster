@@ -1,7 +1,7 @@
 (** HTML renderer for oystermark documents.
 
     Extends {!Cmarkit_html.renderer} to handle wikilinks, resolved link targets,
-    and block IDs. *)
+    and block IDs. Uses tyxml for type-safe HTML construction of custom elements. *)
 
 open Core
 open Cmarkit
@@ -9,8 +9,10 @@ module C = Cmarkit_renderer.Context
 module Resolve = Vault.Resolve
 module Block_id = Oystermark_base.Block_id
 module Wikilink = Oystermark_base.Wikilink
+module H = Tyxml.Html
 
-(* Slugify a heading string for use as an HTML fragment identifier. *)
+let elt_to_string (e : 'a H.elt) : string = Format.asprintf "%a" (H.pp_elt ()) e
+
 let slugify s =
   s
   |> String.lowercase
@@ -40,7 +42,13 @@ let target_to_href : Resolve.target -> string = function
   | Resolve.Unresolved -> "#"
 ;;
 
-(** Default display text for a wikilink when no explicit display is given. *)
+let is_unresolved (meta : Meta.t) : bool =
+  match Meta.find Resolve.resolved_key meta with
+  | Some Resolve.Unresolved -> true
+  | _ -> false
+;;
+
+(* Default display text for a wikilink when no explicit display is given. *)
 let wikilink_default_display (w : Wikilink.t) : string =
   match w.target, w.fragment with
   | Some t, None -> t
@@ -51,75 +59,99 @@ let wikilink_default_display (w : Wikilink.t) : string =
   | None, None -> ""
 ;;
 
-(** Render a wikilink as an HTML anchor. *)
+let media_type_of_href (href : string) : [> `Audio | `Iframe | `Image | `Link | `Video ] =
+  let has_ext ext = String.is_suffix href ~suffix:ext in
+  if List.exists [ ".png"; ".jpg"; ".jpeg"; ".gif"; ".svg"; ".webp" ] ~f:has_ext
+  then `Image
+  else if List.exists [ ".mp4"; ".webm"; ".mov" ] ~f:has_ext
+  then `Video
+  else if List.exists [ ".mp3"; ".flac"; ".ogg"; ".wav" ] ~f:has_ext
+  then `Audio
+  else if List.exists [ ".pdf" ] ~f:has_ext
+  then `Iframe
+  else `Link
+;;
+
+(* Render a wikilink as HTML. Handles embed=true for media content. *)
 let render_wikilink (c : Cmarkit_renderer.context) (w : Wikilink.t) (meta : Meta.t) : unit
   =
-  let href =
+  let href_of_meta (meta : Meta.t) =
     match Meta.find Resolve.resolved_key meta with
     | Some target -> target_to_href target
     | None -> "#"
   in
+  let href = href_of_meta meta in
   let display = Option.value w.display ~default:(wikilink_default_display w) in
-  let unresolved =
-    match Meta.find Resolve.resolved_key meta with
-    | Some Resolve.Unresolved -> true
-    | _ -> false
-  in
-  C.string c "<a href=\"";
-  Cmarkit_html.pct_encoded_string c href;
-  if unresolved then C.string c "\" class=\"unresolved";
-  C.string c "\">";
-  Cmarkit_html.html_escaped_string c display;
-  C.string c "</a>"
+  if w.embed
+  then (
+    let s =
+      match media_type_of_href href with
+      | `Image -> elt_to_string (H.img ~src:href ~alt:display ())
+      | `Video ->
+        elt_to_string
+          (H.video
+             ~a:[ H.a_controls () ]
+             [ H.source ~a:[ H.a_src href ] (); H.txt display ])
+      | `Audio ->
+        elt_to_string
+          (H.audio
+             ~a:[ H.a_controls () ]
+             [ H.source ~a:[ H.a_src href ] (); H.txt display ])
+      | `Iframe -> elt_to_string (H.iframe ~a:[ H.a_src href; H.a_title display ] [])
+      | `Link ->
+        (* Unknown embed type: render as a link *)
+        let attrs =
+          H.a_href href
+          :: (if is_unresolved meta then [ H.a_class [ "unresolved" ] ] else [])
+        in
+        elt_to_string (H.a ~a:attrs [ H.txt display ])
+    in
+    C.string c s)
+  else (
+    let attrs =
+      H.a_href href :: (if is_unresolved meta then [ H.a_class [ "unresolved" ] ] else [])
+    in
+    C.string c (elt_to_string (H.a ~a:attrs [ H.txt display ])))
 ;;
 
-(** Render a standard link, overriding href if a resolved target is present. *)
+(* Render a standard link, overriding href if a resolved target is present.
+    We render inline content via the cmarkit renderer into a sub-buffer,
+    then embed it in the tyxml anchor via Unsafe.data. *)
 let render_link (c : Cmarkit_renderer.context) (l : Inline.Link.t) (meta : Meta.t) : bool =
   match Meta.find Resolve.resolved_key meta with
   | Some target ->
     let href = target_to_href target in
-    let unresolved =
-      match target with
-      | Resolve.Unresolved -> true
-      | _ -> false
+    let attrs =
+      H.a_href href :: (if is_unresolved meta then [ H.a_class [ "unresolved" ] ] else [])
     in
-    C.string c "<a href=\"";
-    Cmarkit_html.pct_encoded_string c href;
-    if unresolved then C.string c "\" class=\"unresolved";
-    C.string c "\">";
-    C.inline c (Inline.Link.text l);
-    C.string c "</a>";
+    (* Render inline children to a sub-buffer *)
+    let buf = Buffer.create 128 in
+    let sub_ctx = C.make (C.renderer c) buf in
+    C.init sub_ctx (C.get_doc c);
+    C.inline sub_ctx (Inline.Link.text l);
+    let inner_html = Buffer.contents buf in
+    C.string c (elt_to_string (H.a ~a:attrs [ H.Unsafe.data inner_html ]));
     true
-  | None -> false (* fall through to default renderer *)
+  | None -> false
 ;;
 
-(* Extract plain text from an inline tree. *)
-let rec plain_text (buf : Buffer.t) : Inline.t -> unit = function
-  | Inline.Text (s, _) -> Buffer.add_string buf s
-  | Inline.Inlines (is, _) -> List.iter is ~f:(plain_text buf)
-  | Inline.Emphasis (e, _) | Inline.Strong_emphasis (e, _) ->
-    plain_text buf (Inline.Emphasis.inline e)
-  | Inline.Code_span (cs, _) ->
-    let lines = Inline.Code_span.code_layout cs in
-    List.iter lines ~f:(fun l ->
-      Buffer.add_string buf (Cmarkit.Block_line.tight_to_string l))
-  | _ -> ()
-;;
-
-(* Render an image, overriding src if a resolved target is present. *)
-let render_image (c : Cmarkit_renderer.context) (l : Inline.Link.t) (_meta : Meta.t)
-  : bool
+(* Render an image with resolved target. *)
+let render_image (c : Cmarkit_renderer.context) (l : Inline.Link.t) (meta : Meta.t) : bool
   =
-  match Meta.find Resolve.resolved_key _meta with
+  match Meta.find Resolve.resolved_key meta with
   | Some target ->
     let href = target_to_href target in
-    C.string c "<img src=\"";
-    Cmarkit_html.pct_encoded_string c href;
-    C.string c "\" alt=\"";
     let buf = Buffer.create 64 in
-    plain_text buf (Inline.Link.text l);
-    Cmarkit_html.html_escaped_string c (Buffer.contents buf);
-    C.string c "\" />";
+    let rec extract_text = function
+      | Inline.Text (s, _) -> Buffer.add_string buf s
+      | Inline.Inlines (is, _) -> List.iter is ~f:extract_text
+      | Inline.Emphasis (e, _) | Inline.Strong_emphasis (e, _) ->
+        extract_text (Inline.Emphasis.inline e)
+      | _ -> ()
+    in
+    extract_text (Inline.Link.text l);
+    let alt = Buffer.contents buf in
+    C.string c (elt_to_string (H.img ~src:href ~alt ()));
     true
   | None -> false
 ;;
@@ -133,19 +165,15 @@ let inline (c : Cmarkit_renderer.context) : Inline.t -> bool = function
   | _ -> false
 ;;
 
-(* Render a paragraph, appending a block-id anchor if present. *)
+(** Render a paragraph with block-id. The ^blockid text stays visible
+    (it's part of the inline content). We add an id to the <p> for linking. *)
 let block (c : Cmarkit_renderer.context) : Block.t -> bool = function
   | Block.Paragraph (p, meta) ->
     (match Meta.find Block_id.meta_key meta with
      | Some (block_id : Block_id.t) ->
-       C.string c "<p>";
+       let id = "^" ^ block_id.id in
+       C.string c (Format.asprintf "<p id=\"%s\">" id);
        C.inline c (Block.Paragraph.inline p);
-       C.string
-         c
-         (Printf.sprintf
-            {| <span id="^%s" class="block-id">^%s</span>|}
-            block_id.id
-            block_id.id);
        C.string c "</p>\n";
        true
      | None -> false)
