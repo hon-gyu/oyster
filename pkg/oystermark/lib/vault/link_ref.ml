@@ -4,8 +4,8 @@ open Core
 open Oystermark_base
 
 type fragment =
-  | Heading of string list
-  | Block_ref of string
+  | Heading of string list  (** Headings *)
+  | Block_ref of string  (** Block id *)
 [@@deriving sexp]
 
 type t =
