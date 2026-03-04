@@ -1,3 +1,4 @@
 (library
  (name oystermark)
- (libraries oystermark_base vault cmarkit core))
+ (libraries oystermark_base vault cmarkit core)
+ (preprocess (pps ppx_jane ppx_string)))

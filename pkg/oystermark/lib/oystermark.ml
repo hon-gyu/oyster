@@ -3,6 +3,7 @@ module Block_id = Oystermark_base.Block_id
 module Link_ref = Vault.Link_ref
 module Index = Vault.Index
 module Resolve = Vault.Resolve
+module Html = Html
 
 (** The mapper that transforms a cmarkit Doc, parsing wikilinks in inline
     text nodes and tag block identifiers at paragraph ends to meta. *)
