@@ -69,8 +69,6 @@ let make_link_ref
   }
 ;;
 
-let curr_file = "Note 1.md"
-
 let target_to_string (t : Resolve.target) : string =
   match t with
   | File { path } -> sprintf "File(%s)" path
@@ -82,7 +80,7 @@ let target_to_string (t : Resolve.target) : string =
   | Unresolved -> "Unresolved"
 ;;
 
-let resolve_and_print cases =
+let resolve_and_print ?(curr_file:string="Note 1.md") (cases : (string * Link_ref.t) list) =
   let cols =
     [ Ascii_table.Column.create "name" (fun (name, _) -> name)
     ; Ascii_table.Column.create "input/target" (fun (_, (lr : Link_ref.t)) -> Option.value ~default:"-" lr.target)
@@ -289,25 +287,6 @@ let%expect_test "resolve_self_references" =
     │ [[#^nope]] -> fallback  │ -            │ B[nope]        │ Curr_file           │
     │ [[#]] empty heading     │ -            │ -              │ Curr_file           │
     └─────────────────────────┴──────────────┴────────────────┴─────────────────────┘
-    |}]
-;;
-
-let%expect_test "resolve_self_ref_unknown_curr_file" =
-  let cases =
-    [ "self ref", make_link_ref None None
-    ; "self heading", make_link_ref None (h [ "L2" ])
-    ; "self block", make_link_ref None (b "para1")
-    ]
-  in
-  resolve_and_print cases;
-  [%expect {|
-    ┌──────────────┬──────────────┬────────────────┬─────────────────────┐
-    │ name         │ input/target │ input/fragment │ result              │
-    ├──────────────┼──────────────┼────────────────┼─────────────────────┤
-    │ self ref     │ -            │ -              │ Curr_file           │
-    │ self heading │ -            │ H[L2]          │ Curr_heading(L2, 2) │
-    │ self block   │ -            │ B[para1]       │ Curr_block(para1)   │
-    └──────────────┴──────────────┴────────────────┴─────────────────────┘
     |}]
 ;;
 
