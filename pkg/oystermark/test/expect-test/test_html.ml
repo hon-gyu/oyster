@@ -12,8 +12,7 @@ let test_index : Index.t =
         ; block_ids = [ "para1"; "block-2" ]
         }
       ; { rel_path = "Note 2.md"
-        ; headings =
-            [ { text = "Some heading"; level = 2 } ]
+        ; headings = [ { text = "Some heading"; level = 2 } ]
         ; block_ids = []
         }
       ; { rel_path = "image.png"; headings = []; block_ids = [] }
@@ -26,7 +25,9 @@ let test_index : Index.t =
 ;;
 
 let render ?(curr_file = "Note 1.md") (md : string) : unit =
-  let doc = Oystermark.resolve ~index:test_index ~curr_file md in
+  let doc =
+    Oystermark.Base.of_string md |> Oystermark.resolve ~index:test_index ~curr_file
+  in
   print_string (Html.of_doc ~safe:true doc)
 ;;
 
@@ -83,14 +84,16 @@ let%expect_test "wikilink: embed image" =
 
 let%expect_test "wikilink: embed video" =
   render "![[video.mp4]]";
-  [%expect {|
+  [%expect
+    {|
     <p><video controls="controls"><source src="video.mp4"/>video.mp4</video></p>
     |}]
 ;;
 
 let%expect_test "wikilink: embed audio" =
   render "![[audio.mp3]]";
-  [%expect {|
+  [%expect
+    {|
     <p><audio controls="controls"><source src="audio.mp3"/>audio.mp3</audio></p>
     |}]
 ;;
@@ -164,7 +167,8 @@ let%expect_test "mixed: multiple wikilinks" =
 
 let%expect_test "plain markdown renders normally" =
   render "# Hello\n\nA paragraph with **bold** and *italic*.";
-  [%expect {|
+  [%expect
+    {|
     <h1>Hello</h1>
     <p>A paragraph with <strong>bold</strong> and <em>italic</em>.</p>
     |}]

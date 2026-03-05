@@ -1,11 +1,23 @@
 open Core
 module Index = Oystermark.Index
 
-let render_file ~(index : Index.t) ~(vault_root : string) ~(rel_path : string) : string =
-  let full_path = Filename.concat vault_root rel_path in
-  let content = In_channel.read_all full_path in
-  let doc = Oystermark.resolve ~index ~curr_file:rel_path content in
-  Oystermark.Html.of_doc ~safe:true doc
+(* NOTE:
+
+  let%map_open.Command combines two things:
+
+  1. %map — it's a ppx that desugars to Command.Param.map. It takes a command parameter
+   spec and maps a function over its result. So let%map x = param in body becomes
+  Command.Param.map param ~f:(fun x -> body).
+  2. open — it opens Command.Param locally, so you can write anon, flag, string, etc.
+  directly instead of Command.Param.anon, Command.Param.flag, etc.
+
+  Combined with and, multiple parameters are collected in parallel (using
+  Command.Param.both under the hood), then the function body receives all of them.
+*)
+
+let render_doc ~(index : Index.t) ~(curr_file : string) (doc : Cmarkit.Doc.t) : string =
+  let resolved = Oystermark.resolve ~index ~curr_file doc in
+  Oystermark.Html.of_doc ~safe:true resolved
 ;;
 
 let file_cmd : Command.t =
@@ -14,13 +26,17 @@ let file_cmd : Command.t =
     (let%map_open.Command vault_root = anon ("vault-root" %: string)
      and file = anon ("file" %: string) in
      fun () ->
-       let index = Index.build vault_root in
+       let vault = Oystermark.build_vault vault_root in
        let rel_path =
          match String.chop_prefix file ~prefix:(vault_root ^ "/") with
          | Some rel -> rel
          | None -> file
        in
-       print_string (render_file ~index ~vault_root ~rel_path))
+       let doc =
+         List.Assoc.find vault.docs ~equal:String.equal rel_path
+         |> Option.value_exn ~message:(sprintf "File %s not found in vault" rel_path)
+       in
+       print_string (render_doc ~index:vault.index ~curr_file:rel_path doc))
 ;;
 
 let vault_cmd : Command.t =
@@ -34,17 +50,15 @@ let vault_cmd : Command.t =
          | Some d -> d
          | None -> vault_root ^ "/_site"
        in
-       let (index : Index.t) = Index.build vault_root in
-       List.iter index.files ~f:(fun (entry : Index.file_entry) ->
-         if String.is_suffix entry.rel_path ~suffix:".md"
-         then (
-           let html = render_file ~index ~vault_root ~rel_path:entry.rel_path in
-           let out_rel = String.chop_suffix_exn entry.rel_path ~suffix:".md" ^ ".html" in
-           let out_path = Filename.concat output_dir out_rel in
-           let out_dir = Filename.dirname out_path in
-           Core_unix.mkdir_p out_dir;
-           Out_channel.write_all out_path ~data:html;
-           printf "  %s -> %s\n" entry.rel_path out_rel)))
+       let vault = Oystermark.build_vault vault_root in
+       List.iter vault.docs ~f:(fun (rel_path, doc) ->
+         let html = render_doc ~index:vault.index ~curr_file:rel_path doc in
+         let out_rel = String.chop_suffix_exn rel_path ~suffix:".md" ^ ".html" in
+         let out_path = Filename.concat output_dir out_rel in
+         let out_dir = Filename.dirname out_path in
+         Core_unix.mkdir_p out_dir;
+         Out_channel.write_all out_path ~data:html;
+         printf "  %s -> %s\n" rel_path out_rel))
 ;;
 
 let () =

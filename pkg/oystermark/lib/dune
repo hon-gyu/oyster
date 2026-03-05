@@ -1,4 +1,5 @@
 (library
  (name oystermark)
  (libraries oystermark_base vault cmarkit core tyxml)
- (preprocess (pps ppx_jane ppx_string)))
+ (preprocess
+  (pps ppx_jane ppx_string)))

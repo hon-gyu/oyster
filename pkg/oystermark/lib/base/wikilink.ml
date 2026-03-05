@@ -38,14 +38,12 @@ let parse_fragment (frag_str : string) : fragment option =
     else (
       (* Treat as heading with literal ^ *)
       let parts =
-        String.split frag_str ~on:'#'
-        |> List.filter ~f:(fun s -> not (String.is_empty s))
+        String.split frag_str ~on:'#' |> List.filter ~f:(fun s -> not (String.is_empty s))
       in
       if List.is_empty parts then None else Some (Heading parts)))
   else (
     let parts =
-      String.split frag_str ~on:'#'
-      |> List.filter ~f:(fun s -> not (String.is_empty s))
+      String.split frag_str ~on:'#' |> List.filter ~f:(fun s -> not (String.is_empty s))
     in
     if List.is_empty parts then None else Some (Heading parts))
 ;;

@@ -23,6 +23,19 @@ module Index = Vault.Index
 module Resolve = Vault.Resolve
 module Html = Html
 
+(** A scanned vault: the index plus pre-resolved docs from pass 1. *)
+type vault =
+  { index : Index.t
+  ; docs : (string * Cmarkit.Doc.t) list (** [(rel_path, doc)] *)
+  }
+
+(** Scan a vault directory: parse every markdown file (pass 1) and build the
+    index in a single traversal. *)
+let build_vault (vault_root : string) : vault =
+  let index, docs = Index.build vault_root in
+  { index; docs }
+;;
+
 (** Create a resolution mapper that resolves links against the given index. *)
 let resolution_mapper ~(index : Index.t) ~(curr_file : string) =
   Cmarkit.Mapper.make
@@ -57,15 +70,9 @@ let resolution_mapper ~(index : Index.t) ~(curr_file : string) =
 ;;
 
 (** Parse and resolve a markdown string against a vault index. *)
-let resolve
-      ?(strict = false)
-      ?(layout = false)
-      ~(index : Index.t)
-      ~(curr_file : string)
-      (s : string)
-      : Cmarkit.Doc.t
+let resolve ~(index : Index.t) ~(curr_file : string) (pre_resolve : Cmarkit.Doc.t)
+  : Cmarkit.Doc.t
   =
-  let doc = Base.of_string ~strict ~layout s in
   let res_mapper = resolution_mapper ~index ~curr_file in
-  Cmarkit.Mapper.map_doc res_mapper doc
+  Cmarkit.Mapper.map_doc res_mapper pre_resolve
 ;;

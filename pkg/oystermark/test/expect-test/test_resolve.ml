@@ -53,8 +53,8 @@ let test_index : Index.t =
 ;;
 
 let make_link_ref
-  (target : string option)
-  (fragment : (string list * [ `Heading | `Block_ref ]) option)
+      (target : string option)
+      (fragment : (string list * [ `Heading | `Block_ref ]) option)
   : Link_ref.t
   =
   { target
@@ -80,16 +80,19 @@ let target_to_string (t : Resolve.target) : string =
   | Unresolved -> "Unresolved"
 ;;
 
-let resolve_and_print ?(curr_file:string="Note 1.md") (cases : (string * Link_ref.t) list) =
+let resolve_and_print
+      ?(curr_file : string = "Note 1.md")
+      (cases : (string * Link_ref.t) list)
+  =
   let cols =
     [ Ascii_table.Column.create "name" (fun (name, _) -> name)
-    ; Ascii_table.Column.create "input/target" (fun (_, (lr : Link_ref.t)) -> Option.value ~default:"-" lr.target)
-    ; Ascii_table.Column.create "input/fragment" (fun (_, (lr : Link_ref.t)) -> (
-      match lr.fragment with
-      | None -> "-"
-      | Some (Heading hs) -> "H[" ^ String.concat ~sep:"; " hs ^ "]"
-      | Some (Block_ref s) -> "B[" ^ s ^ "]"
-    ))
+    ; Ascii_table.Column.create "input/target" (fun (_, (lr : Link_ref.t)) ->
+        Option.value ~default:"-" lr.target)
+    ; Ascii_table.Column.create "input/fragment" (fun (_, (lr : Link_ref.t)) ->
+        match lr.fragment with
+        | None -> "-"
+        | Some (Heading hs) -> "H[" ^ String.concat ~sep:"; " hs ^ "]"
+        | Some (Block_ref s) -> "B[" ^ s ^ "]")
     ; Ascii_table.Column.create "result" (fun (_, lr) ->
         Resolve.resolve lr curr_file test_index |> target_to_string)
     ]
@@ -128,7 +131,8 @@ let%expect_test "resolve_file" =
     ]
   in
   resolve_and_print cases;
-  [%expect {|
+  [%expect
+    {|
     ┌───────────────────────┬─────────────────────────────────┬────────────────┬──────────────────────────────────────────┐
     │ name                  │ input/target                    │ input/fragment │ result                                   │
     ├───────────────────────┼─────────────────────────────────┼────────────────┼──────────────────────────────────────────┤
@@ -169,7 +173,8 @@ let%expect_test "resolve_note_vs_asset_priority" =
     ]
   in
   resolve_and_print cases;
-  [%expect {|
+  [%expect
+    {|
     ┌────────────────────────┬───────────────────┬────────────────┬─────────────────────────┐
     │ name                   │ input/target      │ input/fragment │ result                  │
     ├────────────────────────┼───────────────────┼────────────────┼─────────────────────────┤
@@ -187,16 +192,19 @@ let%expect_test "resolve_note_vs_asset_priority" =
 let%expect_test "resolve_headings_note2" =
   let cases =
     [ "single heading", make_link_ref (t "Note 2") (h [ "Some level 2 title" ])
-    ; "nested heading", make_link_ref (t "Note 2") (h [ "Some level 2 title"; "Level 3 title" ])
+    ; ( "nested heading"
+      , make_link_ref (t "Note 2") (h [ "Some level 2 title"; "Level 3 title" ]) )
     ; "nested skip level", make_link_ref (t "Note 2") (h [ "Some level 2 title"; "L4" ])
     ; "L3 directly", make_link_ref (t "Note 2") (h [ "Level 3 title" ])
     ; "L4 directly", make_link_ref (t "Note 2") (h [ "L4" ])
     ; "random -> fallback", make_link_ref (t "Note 2") (h [ "random" ])
-    ; "random#L3 -> fallback", make_link_ref (t "Note 2") (h [ "random"; "Level 3 title" ])
+    ; ( "random#L3 -> fallback"
+      , make_link_ref (t "Note 2") (h [ "random"; "Level 3 title" ]) )
     ]
   in
   resolve_and_print cases;
-  [%expect {|
+  [%expect
+    {|
     ┌───────────────────────┬──────────────┬──────────────────────────────────────┬───────────────────────────────────────────┐
     │ name                  │ input/target │ input/fragment                       │ result                                    │
     ├───────────────────────┼──────────────┼──────────────────────────────────────┼───────────────────────────────────────────┤
@@ -218,13 +226,15 @@ let%expect_test "resolve_headings_note1" =
     ; "L2 L4", make_link_ref (t "Note 1") (h [ "L2"; "L4" ])
     ; "L2 L3 L4", make_link_ref (t "Note 1") (h [ "L2"; "L3"; "L4" ])
     ; "L2 L4 L3 -> fallback", make_link_ref (t "Note 1") (h [ "L2"; "L4"; "L3" ])
-    ; "L2 L4 Another L3 -> fallback", make_link_ref (t "Note 1") (h [ "L2"; "L4"; "Another L3" ])
+    ; ( "L2 L4 Another L3 -> fallback"
+      , make_link_ref (t "Note 1") (h [ "L2"; "L4"; "Another L3" ]) )
     ; "NoSuch -> fallback", make_link_ref (t "Note 1") (h [ "NoSuch" ])
     ; "heading unresolved file", make_link_ref (t "nonexistent") (h [ "L2" ])
     ]
   in
   resolve_and_print cases;
-  [%expect {|
+  [%expect
+    {|
     ┌──────────────────────────────┬──────────────┬───────────────────────┬───────────────────────────┐
     │ name                         │ input/target │ input/fragment        │ result                    │
     ├──────────────────────────────┼──────────────┼───────────────────────┼───────────────────────────┤
@@ -250,7 +260,8 @@ let%expect_test "resolve_blocks" =
     ]
   in
   resolve_and_print cases;
-  [%expect {|
+  [%expect
+    {|
     ┌─────────────────────────────┬──────────────┬────────────────┬─────────────────────────────────────┐
     │ name                        │ input/target │ input/fragment │ result                              │
     ├─────────────────────────────┼──────────────┼────────────────┼─────────────────────────────────────┤
@@ -275,7 +286,8 @@ let%expect_test "resolve_self_references" =
     ]
   in
   resolve_and_print cases;
-  [%expect {|
+  [%expect
+    {|
     ┌─────────────────────────┬──────────────┬────────────────┬─────────────────────┐
     │ name                    │ input/target │ input/fragment │ result              │
     ├─────────────────────────┼──────────────┼────────────────┼─────────────────────┤
@@ -297,7 +309,8 @@ let%expect_test "resolve_asset_with_fragment" =
     ]
   in
   resolve_and_print cases;
-  [%expect {|
+  [%expect
+    {|
     ┌───────────────────────────┬──────────────┬────────────────┬───────────────────┐
     │ name                      │ input/target │ input/fragment │ result            │
     ├───────────────────────────┼──────────────┼────────────────┼───────────────────┤

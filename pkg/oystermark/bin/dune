@@ -2,4 +2,5 @@
  (public_name oystermark)
  (name main)
  (libraries oystermark core core_unix core_unix.command_unix)
- (preprocess (pps ppx_jane)))
+ (preprocess
+  (pps ppx_jane)))
