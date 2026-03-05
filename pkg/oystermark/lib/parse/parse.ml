@@ -2,7 +2,13 @@
 
 open Core
 module Block_id = Block_id
+module Frontmatter = Frontmatter
 module Wikilink = Wikilink
+
+type doc =
+  { doc : Cmarkit.Doc.t
+  ; frontmatter : Yaml.value option
+  }
 
 (** The mapper that transforms a cmarkit Doc, parsing wikilinks in inline
     text nodes and tag block identifiers at paragraph ends to meta. *)
@@ -14,11 +20,13 @@ let mapper =
     ()
 ;;
 
-(** [of_string ?strict ?layout s] parses markdown string [s] into a cmarkit
-    Doc with wikilinks and block IDs resolved via the mapper. *)
-let of_string ?(strict = false) ?(layout = false) (s : string) : Cmarkit.Doc.t =
-  let doc = Cmarkit.Doc.of_string ~strict ~layout s in
-  Cmarkit.Mapper.map_doc mapper doc
+(** [of_string ?strict ?layout s] parses markdown string [s] into a {!doc}
+    with frontmatter extracted and wikilinks/block IDs resolved. *)
+let of_string ?(strict = false) ?(layout = false) (s : string) : doc =
+  let { Frontmatter.yaml; body } = Frontmatter.of_string s in
+  let cmarkit_doc = Cmarkit.Doc.of_string ~strict ~layout body in
+  let doc = Cmarkit.Mapper.map_doc mapper cmarkit_doc in
+  { doc; frontmatter = yaml }
 ;;
 
 let inline_to_plain_text (inline : Cmarkit.Inline.t) : string =

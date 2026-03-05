@@ -191,8 +191,7 @@ let parse (_mapper : Mapper.t) (i : Inline.t) : Inline.t Mapper.result =
   | _ -> Mapper.default
 ;;
 
-let to_plain_text ~break_on_soft:_ (inline : Cmarkit.Inline.t) : Cmarkit.Inline.t
-  =
+let to_plain_text ~break_on_soft:_ (inline : Cmarkit.Inline.t) : Cmarkit.Inline.t =
   match inline with
   | Ext_wikilink (wl, _meta) ->
     let wl : t = wl in

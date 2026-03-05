@@ -3,7 +3,7 @@ module Link_ref = Link_ref
 module Resolve = Resolve
 open Core
 
-type t = Index.t * (string * Cmarkit.Doc.t) list
+type t = Index.t * (string * Parse.doc) list
 
 (** Build a vault index from a root directory.
     Returns the index and a list of [(rel_path, doc)] pairs for each markdown file,
@@ -16,10 +16,10 @@ let build (vault_root : string) : t =
       then (
         let full_path = Filename.concat vault_root rel_path in
         let content = In_channel.read_all full_path in
-        let doc = Parse.of_string content in
-        let headings = Index.extract_headings doc in
-        let block_ids = Index.extract_block_ids doc in
-        Some (({ rel_path; headings; block_ids } : Index.file_entry), (rel_path, doc)))
+        let parsed = Parse.of_string content in
+        let headings = Index.extract_headings parsed.doc in
+        let block_ids = Index.extract_block_ids parsed.doc in
+        Some (({ rel_path; headings; block_ids } : Index.file_entry), (rel_path, parsed)))
       else None)
   in
   let files =

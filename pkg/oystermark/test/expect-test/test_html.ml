@@ -26,7 +26,7 @@ let test_index : Vault.Index.t =
 
 let render ?(curr_file = "Note 1.md") (md : string) : unit =
   let doc =
-    Oystermark.Parse.of_string md |> Oystermark.resolve ~index:test_index ~curr_file
+    (Oystermark.Parse.of_string md).doc |> Oystermark.resolve ~index:test_index ~curr_file
   in
   print_string (Html.of_doc ~safe:true doc)
 ;;

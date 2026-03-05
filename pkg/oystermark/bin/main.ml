@@ -17,11 +17,11 @@ open Core
 let render_doc
       ~(index : Oystermark.Vault.Index.t)
       ~(curr_file : string)
-      (doc : Cmarkit.Doc.t)
+      (parsed : Oystermark.Parse.doc)
   : string
   =
-  let resolved = Oystermark.resolve ~index ~curr_file doc in
-  Oystermark.Html.of_doc ~safe:true resolved
+  let resolved = Oystermark.resolve ~index ~curr_file parsed.doc in
+  Oystermark.Html.of_doc ~safe:true ~frontmatter:parsed.frontmatter resolved
 ;;
 
 let file_cmd : Command.t =

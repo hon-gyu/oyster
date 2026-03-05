@@ -186,6 +186,8 @@ let renderer ~safe () =
   Cmarkit_renderer.compose default custom
 ;;
 
-let of_doc ~safe (doc : Doc.t) : string =
-  Cmarkit_renderer.doc_to_string (renderer ~safe ()) doc
+let of_doc ~safe ?(frontmatter : Yaml.value option = None) (doc : Doc.t) : string =
+  let fm_html = Parse.Frontmatter.to_html frontmatter in
+  let body_html = Cmarkit_renderer.doc_to_string (renderer ~safe ()) doc in
+  fm_html ^ body_html
 ;;

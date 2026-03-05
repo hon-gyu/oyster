@@ -1,3 +1,6 @@
 (library
  (name parse)
- (libraries cmarkit core))
+ (libraries cmarkit core yaml)
+ (inline_tests)
+ (preprocess
+  (pps ppx_jane)))
