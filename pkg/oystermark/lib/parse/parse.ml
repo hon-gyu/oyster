@@ -1,5 +1,6 @@
 (** Pre-resolution file-level parsing  *)
 
+open Core
 module Block_id = Block_id
 module Wikilink = Wikilink
 
@@ -18,4 +19,11 @@ let mapper =
 let of_string ?(strict = false) ?(layout = false) (s : string) : Cmarkit.Doc.t =
   let doc = Cmarkit.Doc.of_string ~strict ~layout s in
   Cmarkit.Mapper.map_doc mapper doc
+;;
+
+let inline_to_plain_text (inline : Cmarkit.Inline.t) : string =
+  let lines =
+    Cmarkit.Inline.to_plain_text ~ext:Wikilink.to_plain_text ~break_on_soft:false inline
+  in
+  String.concat ~sep:"\n" (List.map lines ~f:(String.concat ~sep:""))
 ;;

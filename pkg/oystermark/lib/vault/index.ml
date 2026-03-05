@@ -16,11 +16,6 @@ type file_entry =
 
 type t = { files : file_entry list }
 
-let inline_to_plain_text (inline : Cmarkit.Inline.t) : string =
-  let lines = Cmarkit.Inline.to_plain_text ~break_on_soft:false inline in
-  String.concat ~sep:"\n" (List.map lines ~f:(String.concat ~sep:""))
-;;
-
 (* Use Cmarkit.Folder to extract headings from a document. *)
 let extract_headings (doc : Cmarkit.Doc.t) : heading_entry list =
   let folder =
