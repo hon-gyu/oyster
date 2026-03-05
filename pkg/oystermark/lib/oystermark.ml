@@ -1,26 +1,27 @@
+(** Oystermark extends CommonMark with Obsidian-style wikilinks and block
+    references. Processing follows a two-pass pipeline:
+
+    {b Pass 1 — Doc-level parsing} ([of_string]):
+    Each document is parsed independently. The mapper rewrites inline text nodes
+    to recognize wikilink syntax and scans paragraph blocks for trailing block-id
+    markers ({e ^id}), attaching them as block metadata.
+
+    {b Index construction} (external):
+    The vault is scanned across all documents to build an {!Index.t} that maps
+    note names, headings, and block ids to their locations.
+
+    {b Pass 2 — Resolution} ([of_string_resolved]):
+    Each document is mapped again with the vault index. Wikilinks and standard
+    markdown links/images are resolved to concrete targets, and the resolution
+    result is attached to the node's metadata via {!Resolve.resolved_key}. *)
+
+module Base = Oystermark_base
 module Wikilink = Oystermark_base.Wikilink
 module Block_id = Oystermark_base.Block_id
 module Link_ref = Vault.Link_ref
 module Index = Vault.Index
 module Resolve = Vault.Resolve
 module Html = Html
-
-(** The mapper that transforms a cmarkit Doc, parsing wikilinks in inline
-    text nodes and tag block identifiers at paragraph ends to meta. *)
-let mapper =
-  Cmarkit.Mapper.make
-    ~inline_ext_default:(fun _m i -> Some i)
-    ~inline:Wikilink.parse
-    ~block:Block_id.tag_block_id_meta
-    ()
-;;
-
-(** [of_string ?strict ?layout s] parses markdown string [s] into a cmarkit
-    Doc with wikilinks and block IDs resolved via the mapper. *)
-let of_string ?(strict = false) ?(layout = false) (s : string) : Cmarkit.Doc.t =
-  let doc = Cmarkit.Doc.of_string ~strict ~layout s in
-  Cmarkit.Mapper.map_doc mapper doc
-;;
 
 (** Create a resolution mapper that resolves links against the given index. *)
 let resolution_mapper ~(index : Index.t) ~(curr_file : string) =
@@ -56,8 +57,15 @@ let resolution_mapper ~(index : Index.t) ~(curr_file : string) =
 ;;
 
 (** Parse and resolve a markdown string against a vault index. *)
-let of_string_resolved ?(strict = false) ?(layout = false) ~index ~curr_file s =
-  let doc = of_string ~strict ~layout s in
+let resolve
+      ?(strict = false)
+      ?(layout = false)
+      ~(index : Index.t)
+      ~(curr_file : string)
+      (s : string)
+      : Cmarkit.Doc.t
+  =
+  let doc = Base.of_string ~strict ~layout s in
   let res_mapper = resolution_mapper ~index ~curr_file in
   Cmarkit.Mapper.map_doc res_mapper doc
 ;;

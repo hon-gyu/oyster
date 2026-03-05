@@ -26,7 +26,7 @@ let test_index : Index.t =
 ;;
 
 let render ?(curr_file = "Note 1.md") (md : string) : unit =
-  let doc = Oystermark.of_string_resolved ~index:test_index ~curr_file md in
+  let doc = Oystermark.resolve ~index:test_index ~curr_file md in
   print_string (Html.of_doc ~safe:true doc)
 ;;
 
