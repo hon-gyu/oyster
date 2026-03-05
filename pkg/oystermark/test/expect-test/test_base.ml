@@ -1,5 +1,7 @@
 open! Core
 open Oystermark
+module Wikilink = Parse.Wikilink
+module Block_id = Parse.Block_id
 
 (* Pretty-printing helpers
 -------------------- *)

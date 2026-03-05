@@ -1,7 +1,7 @@
 (** Unified internal link reference extracted from both wikilinks and markdown links. *)
 
 open Core
-open Oystermark_base
+open Parse
 
 type fragment =
   | Heading of string list (** Headings *)

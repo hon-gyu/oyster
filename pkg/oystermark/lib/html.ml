@@ -7,8 +7,8 @@ open Core
 open Cmarkit
 module C = Cmarkit_renderer.Context
 module Resolve = Vault.Resolve
-module Block_id = Oystermark_base.Block_id
-module Wikilink = Oystermark_base.Wikilink
+module Block_id = Parse.Block_id
+module Wikilink = Parse.Wikilink
 module H = Tyxml.Html
 
 let elt_to_string (e : 'a H.elt) : string = Format.asprintf "%a" (H.pp_elt ()) e

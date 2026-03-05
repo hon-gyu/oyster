@@ -1,5 +1,4 @@
 open Core
-module Index = Oystermark.Index
 
 (* NOTE:
 
@@ -15,7 +14,12 @@ module Index = Oystermark.Index
   Command.Param.both under the hood), then the function body receives all of them.
 *)
 
-let render_doc ~(index : Index.t) ~(curr_file : string) (doc : Cmarkit.Doc.t) : string =
+let render_doc
+      ~(index : Oystermark.Vault.Index.t)
+      ~(curr_file : string)
+      (doc : Cmarkit.Doc.t)
+  : string
+  =
   let resolved = Oystermark.resolve ~index ~curr_file doc in
   Oystermark.Html.of_doc ~safe:true resolved
 ;;
@@ -26,17 +30,17 @@ let file_cmd : Command.t =
     (let%map_open.Command vault_root = anon ("vault-root" %: string)
      and file = anon ("file" %: string) in
      fun () ->
-       let vault = Oystermark.build_vault vault_root in
+       let index, docs = Oystermark.Vault.build vault_root in
        let rel_path =
          match String.chop_prefix file ~prefix:(vault_root ^ "/") with
          | Some rel -> rel
          | None -> file
        in
        let doc =
-         List.Assoc.find vault.docs ~equal:String.equal rel_path
+         List.Assoc.find docs ~equal:String.equal rel_path
          |> Option.value_exn ~message:(sprintf "File %s not found in vault" rel_path)
        in
-       print_string (render_doc ~index:vault.index ~curr_file:rel_path doc))
+       print_string (render_doc ~index ~curr_file:rel_path doc))
 ;;
 
 let vault_cmd : Command.t =
@@ -50,9 +54,9 @@ let vault_cmd : Command.t =
          | Some d -> d
          | None -> vault_root ^ "/_site"
        in
-       let vault = Oystermark.build_vault vault_root in
-       List.iter vault.docs ~f:(fun (rel_path, doc) ->
-         let html = render_doc ~index:vault.index ~curr_file:rel_path doc in
+       let index, docs = Oystermark.Vault.build vault_root in
+       List.iter docs ~f:(fun (rel_path, doc) ->
+         let html = render_doc ~index ~curr_file:rel_path doc in
          let out_rel = String.chop_suffix_exn rel_path ~suffix:".md" ^ ".html" in
          let out_path = Filename.concat output_dir out_rel in
          let out_dir = Filename.dirname out_path in

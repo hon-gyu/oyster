@@ -1,6 +1,6 @@
-module Resolve = Resolve
 module Index = Index
 module Link_ref = Link_ref
+module Resolve = Resolve
 open Core
 
 type t = Index.t * (string * Cmarkit.Doc.t) list
@@ -16,7 +16,7 @@ let build (vault_root : string) : t =
       then (
         let full_path = Filename.concat vault_root rel_path in
         let content = In_channel.read_all full_path in
-        let doc = Oystermark_base.of_string content in
+        let doc = Parse.of_string content in
         let headings = Index.extract_headings doc in
         let block_ids = Index.extract_block_ids doc in
         Some (({ rel_path; headings; block_ids } : Index.file_entry), (rel_path, doc)))

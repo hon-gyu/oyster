@@ -2,6 +2,8 @@
 
 open! Core
 open Oystermark
+module Link_ref = Vault.Link_ref
+module Wikilink = Parse.Wikilink
 
 (* Extract all Link_ref.t values from a parsed document, in order. *)
 let extract_link_refs (doc : Cmarkit.Doc.t) : Link_ref.t list =
@@ -42,7 +44,7 @@ let pp_link_ref (lr : Link_ref.t) = Link_ref.sexp_of_t lr |> Sexp.to_string_hum
 
 (** Parse a single inline markdown snippet and return the first Link_ref extracted. *)
 let link_ref_of (md : string) : string =
-  let doc = Oystermark_base.of_string md in
+  let doc = Oystermark.Parse.of_string md in
   match extract_link_refs doc with
   | [ lr ] -> pp_link_ref lr
   | [] -> "<none>"

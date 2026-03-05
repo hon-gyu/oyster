@@ -1,5 +1,8 @@
 open! Core
 open Oystermark
+module Index = Vault.Index
+module Link_ref = Vault.Link_ref
+module Resolve = Vault.Resolve
 
 (* Resolve tests
    ==================================================================== *)

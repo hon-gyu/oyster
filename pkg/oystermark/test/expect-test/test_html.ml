@@ -1,7 +1,7 @@
 open! Core
 open Oystermark
 
-let test_index : Index.t =
+let test_index : Vault.Index.t =
   { files =
       [ { rel_path = "Note 1.md"
         ; headings =
@@ -26,7 +26,7 @@ let test_index : Index.t =
 
 let render ?(curr_file = "Note 1.md") (md : string) : unit =
   let doc =
-    Oystermark.Base.of_string md |> Oystermark.resolve ~index:test_index ~curr_file
+    Oystermark.Parse.of_string md |> Oystermark.resolve ~index:test_index ~curr_file
   in
   print_string (Html.of_doc ~safe:true doc)
 ;;
