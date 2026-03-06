@@ -180,14 +180,22 @@ let block (c : Cmarkit_renderer.context) : Block.t -> bool = function
   | _ -> false
 ;;
 
-let renderer ~safe () =
+let renderer ~(backend_blocks : bool) ~(safe : bool) () : Cmarkit_renderer.t =
   let custom = Cmarkit_renderer.make ~inline ~block () in
-  let default = Cmarkit_html.renderer ~safe () in
+  let default = Cmarkit_html.renderer ~backend_blocks ~safe () in
   Cmarkit_renderer.compose default custom
 ;;
 
-let of_doc ~safe ?(frontmatter : Yaml.value option = None) (doc : Doc.t) : string =
+let of_doc
+      ~(backend_blocks : bool)
+      ~(safe : bool)
+      (frontmatter : Yaml.value option)
+      (doc : Doc.t)
+  : string
+  =
   let fm_html = Parse.Frontmatter.to_html frontmatter in
-  let body_html = Cmarkit_renderer.doc_to_string (renderer ~safe ()) doc in
+  let body_html =
+    Cmarkit_renderer.doc_to_string (renderer ~backend_blocks ~safe ()) doc
+  in
   fm_html ^ body_html
 ;;

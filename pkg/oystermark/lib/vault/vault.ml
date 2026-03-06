@@ -32,7 +32,9 @@ let build_index
 
 (** Simple build: read all .md files, optionally filter, build index.
     For pipeline-aware builds, use the lower-level functions directly. *)
-let build ?(filter : (string -> Parse.doc -> bool) option) (vault_root : string) : t =
+let build (vault_root : string)
+  : t
+  =
   let all_files = list_files vault_root in
   let files_and_docs =
     List.filter_map all_files ~f:(fun rel_path ->
@@ -41,9 +43,7 @@ let build ?(filter : (string -> Parse.doc -> bool) option) (vault_root : string)
         let full_path = Filename.concat vault_root rel_path in
         let content = In_channel.read_all full_path in
         let parsed = Parse.of_string content in
-        match filter with
-        | Some f when not (f rel_path parsed) -> None
-        | _ -> Some (rel_path, parsed))
+        Some (rel_path, parsed))
       else None)
   in
   let other_files =

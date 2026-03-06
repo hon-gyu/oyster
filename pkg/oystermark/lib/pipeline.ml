@@ -15,8 +15,7 @@ open Core
 (** Vault context available after indexing. *)
 type vault_ctx =
   { vault_root : string
-  ; index : Vault.Index.t
-  ; docs : (string * Parse.doc) list
+  ; vault : Vault.t
   ; vault_meta : Cmarkit.Meta.t
   }
 
