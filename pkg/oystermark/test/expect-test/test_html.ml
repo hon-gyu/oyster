@@ -25,10 +25,12 @@ let test_index : Vault.Index.t =
 ;;
 
 let render ?(curr_file = "Note 1.md") (md : string) : unit =
-  let doc =
-    (Oystermark.Parse.of_string md).doc |> Oystermark.resolve ~index:test_index ~curr_file
+  let parsed = Oystermark.Parse.of_string md in
+  let mapper =
+    Oystermark.resolution_cmarkit_mapper ~index:test_index ~curr_file
   in
-  print_string (Html.of_doc ~safe:true doc)
+  let resolved = Cmarkit.Mapper.map_doc mapper parsed.doc in
+  print_string (Html.of_doc ~safe:true resolved)
 ;;
 
 (* Wikilinks

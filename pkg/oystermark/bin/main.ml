@@ -30,17 +30,51 @@ let file_cmd : Command.t =
     (let%map_open.Command vault_root = anon ("vault-root" %: string)
      and file = anon ("file" %: string) in
      fun () ->
-       let index, docs = Oystermark.Vault.build vault_root in
+       let pipeline = Oystermark.default_pipeline in
+       let all_files = Oystermark.Vault.list_files vault_root in
        let rel_path =
          match String.chop_prefix file ~prefix:(vault_root ^ "/") with
          | Some rel -> rel
          | None -> file
        in
-       let doc =
-         List.Assoc.find docs ~equal:String.equal rel_path
+       (* Build vault with pipeline to get index *)
+       let other_files =
+         List.filter all_files ~f:(fun p -> not (String.is_suffix p ~suffix:".md"))
+       in
+       (* Read + parse all files for index *)
+       let parsed =
+         List.filter_map all_files ~f:(fun rp ->
+           if not (String.is_suffix rp ~suffix:".md")
+           then None
+           else (
+             let full_path = Filename.concat vault_root rp in
+             let content = In_channel.read_all full_path in
+             let { Parse.Frontmatter.yaml; body } = Parse.Frontmatter.of_string content in
+             match pipeline.on_frontmatter rp yaml with
+             | None -> None
+             | Some yaml' ->
+               let cmarkit_doc = Cmarkit.Doc.of_string ~strict:false body in
+               let doc = Cmarkit.Mapper.map_doc Parse.mapper cmarkit_doc in
+               let pdoc : Parse.doc =
+                 { doc; frontmatter = yaml'; meta = Cmarkit.Meta.none }
+               in
+               (match pipeline.on_parse rp pdoc with
+                | None -> None
+                | Some pdoc' -> Some (rp, pdoc'))))
+       in
+       let index = Oystermark.Vault.build_index ~md_docs:parsed ~other_files in
+       let vault_ctx : Oystermark.Pipeline.vault_ctx =
+         { vault_root; index; docs = parsed; vault_meta = Cmarkit.Meta.none }
+       in
+       let target_doc =
+         List.Assoc.find parsed ~equal:String.equal rel_path
          |> Option.value_exn ~message:(sprintf "File %s not found in vault" rel_path)
        in
-       print_string (render_doc ~index ~curr_file:rel_path doc))
+       match pipeline.on_index vault_ctx rel_path target_doc with
+       | None -> eprintf "File %s is a draft, skipping.\n" rel_path
+       | Some final ->
+         print_string
+           (Oystermark.Html.of_doc ~safe:true ~frontmatter:final.frontmatter final.doc))
 ;;
 
 let vault_cmd : Command.t =
@@ -54,9 +88,8 @@ let vault_cmd : Command.t =
          | Some d -> d
          | None -> vault_root ^ "/_site"
        in
-       let index, docs = Oystermark.Vault.build vault_root in
-       List.iter docs ~f:(fun (rel_path, doc) ->
-         let html = render_doc ~index ~curr_file:rel_path doc in
+       let results = Oystermark.render_vault ~safe:true vault_root in
+       List.iter results ~f:(fun (rel_path, html) ->
          let out_rel = String.chop_suffix_exn rel_path ~suffix:".md" ^ ".html" in
          let out_path = Filename.concat output_dir out_rel in
          let out_dir = Filename.dirname out_path in

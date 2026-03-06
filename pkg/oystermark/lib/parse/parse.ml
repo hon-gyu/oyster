@@ -8,6 +8,7 @@ module Wikilink = Wikilink
 type doc =
   { doc : Cmarkit.Doc.t
   ; frontmatter : Yaml.value option
+  ; meta : Cmarkit.Meta.t
   }
 
 (** The mapper that transforms a cmarkit Doc, parsing wikilinks in inline
@@ -26,7 +27,7 @@ let of_string ?(strict = false) ?(layout = false) (s : string) : doc =
   let { Frontmatter.yaml; body } = Frontmatter.of_string s in
   let cmarkit_doc = Cmarkit.Doc.of_string ~strict ~layout body in
   let doc = Cmarkit.Mapper.map_doc mapper cmarkit_doc in
-  { doc; frontmatter = yaml }
+  { doc; frontmatter = yaml; meta = Cmarkit.Meta.none }
 ;;
 
 let inline_to_plain_text (inline : Cmarkit.Inline.t) : string =

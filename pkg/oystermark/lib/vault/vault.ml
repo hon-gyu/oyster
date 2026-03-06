@@ -5,11 +5,35 @@ open Core
 
 type t = Index.t * (string * Parse.doc) list
 
-(** Build a vault index from a root directory.
-    Returns the index and a list of [(rel_path, doc)] pairs for each markdown file,
-    where each [doc] has already been through pass-1 parsing (wikilinks + block IDs). *)
-let build (vault_root : string) : t =
-  let all_files = Index.list_files_recursive ~root:vault_root ~rel_prefix:"" in
+(** List all files in the vault (relative paths, hidden dirs excluded). *)
+let list_files (vault_root : string) : string list =
+  Index.list_files_recursive ~root:vault_root ~rel_prefix:""
+;;
+
+(** Build an index from a list of [(rel_path, parsed_doc)] pairs
+    plus a list of non-md relative paths. *)
+let build_index
+  ~(md_docs : (string * Parse.doc) list)
+  ~(other_files : string list)
+  : Index.t
+  =
+  let md_entries =
+    List.map md_docs ~f:(fun (rel_path, (pdoc : Parse.doc)) ->
+      let headings = Index.extract_headings pdoc.doc in
+      let block_ids = Index.extract_block_ids pdoc.doc in
+      ({ rel_path; headings; block_ids } : Index.file_entry))
+  in
+  let non_md =
+    List.map other_files ~f:(fun rel_path ->
+      ({ rel_path; headings = []; block_ids = [] } : Index.file_entry))
+  in
+  { files = md_entries @ non_md }
+;;
+
+(** Simple build: read all .md files, optionally filter, build index.
+    For pipeline-aware builds, use the lower-level functions directly. *)
+let build ?(filter : (string -> Parse.doc -> bool) option) (vault_root : string) : t =
+  let all_files = list_files vault_root in
   let files_and_docs =
     List.filter_map all_files ~f:(fun rel_path ->
       if String.is_suffix rel_path ~suffix:".md"
@@ -17,19 +41,14 @@ let build (vault_root : string) : t =
         let full_path = Filename.concat vault_root rel_path in
         let content = In_channel.read_all full_path in
         let parsed = Parse.of_string content in
-        let headings = Index.extract_headings parsed.doc in
-        let block_ids = Index.extract_block_ids parsed.doc in
-        Some (({ rel_path; headings; block_ids } : Index.file_entry), (rel_path, parsed)))
+        match filter with
+        | Some f when not (f rel_path parsed) -> None
+        | _ -> Some (rel_path, parsed))
       else None)
   in
-  let files =
-    let non_md =
-      List.filter_map all_files ~f:(fun rel_path ->
-        if String.is_suffix rel_path ~suffix:".md"
-        then None
-        else Some ({ rel_path; headings = []; block_ids = [] } : Index.file_entry))
-    in
-    List.map files_and_docs ~f:fst @ non_md
+  let other_files =
+    List.filter all_files ~f:(fun p -> not (String.is_suffix p ~suffix:".md"))
   in
-  { files }, List.map files_and_docs ~f:snd
+  let index = build_index ~md_docs:files_and_docs ~other_files in
+  index, files_and_docs
 ;;

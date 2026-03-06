@@ -1,6 +1,7 @@
 (library
  (name test_oystermark_expect)
  (libraries oystermark cmarkit core textutils.ascii_table)
- (inline_tests)
+ (inline_tests
+  (deps (source_tree ../data)))
  (preprocess
   (pps ppx_expect ppx_jane)))
