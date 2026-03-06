@@ -13,41 +13,6 @@ module Vault = Vault
 module Html = Html
 module Pipeline = Pipeline
 
-(** Build a [Cmarkit.Mapper.t] that resolves links against the vault index. *)
-let resolution_cmarkit_mapper ~(index : Vault.Index.t) ~(curr_file : string)
-  : Cmarkit.Mapper.t
-  =
-  Cmarkit.Mapper.make
-    ~inline_ext_default:(fun _m i ->
-      match i with
-      | Parse.Wikilink.Ext_wikilink (w, meta) ->
-        let link_ref = Vault.Link_ref.of_wikilink w in
-        let result = Vault.Resolve.resolve link_ref curr_file index in
-        let meta' = Cmarkit.Meta.add Vault.Resolve.resolved_key result meta in
-        Some (Parse.Wikilink.Ext_wikilink (w, meta'))
-      | other -> Some other)
-    ~inline:(fun _m i ->
-      match i with
-      | Cmarkit.Inline.Link (link, meta) ->
-        let ref_ = Cmarkit.Inline.Link.reference link in
-        (match Vault.Link_ref.of_cmark_reference ref_ with
-         | Some link_ref ->
-           let result = Vault.Resolve.resolve link_ref curr_file index in
-           let meta' = Cmarkit.Meta.add Vault.Resolve.resolved_key result meta in
-           Cmarkit.Mapper.ret (Cmarkit.Inline.Link (link, meta'))
-         | None -> Cmarkit.Mapper.default)
-      | Cmarkit.Inline.Image (link, meta) ->
-        let ref_ = Cmarkit.Inline.Link.reference link in
-        (match Vault.Link_ref.of_cmark_reference ref_ with
-         | Some link_ref ->
-           let result = Vault.Resolve.resolve link_ref curr_file index in
-           let meta' = Cmarkit.Meta.add Vault.Resolve.resolved_key result meta in
-           Cmarkit.Mapper.ret (Cmarkit.Inline.Image (link, meta'))
-         | None -> Cmarkit.Mapper.default)
-      | _ -> Cmarkit.Mapper.default)
-    ()
-;;
-
 (** Build and render a vault through the pipeline.
 
     Stages:
@@ -90,13 +55,9 @@ let render_vault
     List.filter discovered ~f:(fun p -> not (String.is_suffix p ~suffix:".md"))
   in
   let index = Vault.build_index ~md_docs:parsed ~other_files in
-  let resolved : (string * Parse.doc) list =
-    List.map parsed ~f:(fun (rel_path, pdoc) ->
-      let mapper = resolution_cmarkit_mapper ~index ~curr_file:rel_path in
-      rel_path, { pdoc with doc = Cmarkit.Mapper.map_doc mapper pdoc.doc })
-  in
-  let vault_ctx : Pipeline.vault_ctx =
-    { vault_root; vault = index, resolved; vault_meta = Cmarkit.Meta.none }
+  let resolved : (string * Parse.doc) list = Vault.Resolve.resolve_docs parsed index in
+  let vault_ctx : Vault.t =
+    { vault_root; index; docs=resolved; vault_meta = Cmarkit.Meta.none }
   in
   List.filter_map resolved ~f:(fun (rel_path, pdoc) ->
     match pipeline.on_vault vault_ctx rel_path pdoc with

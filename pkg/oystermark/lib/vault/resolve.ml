@@ -149,3 +149,45 @@ let resolve (link_ref : Link_ref.t) (curr_file : string) (index : Index.t) : tar
           then Block { path = file.rel_path; block_id = bid }
           else File { path = file.rel_path }))
 ;;
+
+(** Build a [Cmarkit.Mapper.t] that resolves links against the vault index. *)
+let resolution_cmarkit_mapper ~(index : Index.t) ~(curr_file : string)
+  : Cmarkit.Mapper.t
+  =
+  Cmarkit.Mapper.make
+    ~inline_ext_default:(fun _m i ->
+      match i with
+      | Parse.Wikilink.Ext_wikilink (w, meta) ->
+        let link_ref = Link_ref.of_wikilink w in
+        let result = resolve link_ref curr_file index in
+        let meta' = Cmarkit.Meta.add resolved_key result meta in
+        Some (Parse.Wikilink.Ext_wikilink (w, meta'))
+      | other -> Some other)
+    ~inline:(fun _m i ->
+      match i with
+      | Cmarkit.Inline.Link (link, meta) ->
+        let ref_ = Cmarkit.Inline.Link.reference link in
+        (match Link_ref.of_cmark_reference ref_ with
+         | Some link_ref ->
+           let result = resolve link_ref curr_file index in
+           let meta' = Cmarkit.Meta.add resolved_key result meta in
+           Cmarkit.Mapper.ret (Cmarkit.Inline.Link (link, meta'))
+         | None -> Cmarkit.Mapper.default)
+      | Cmarkit.Inline.Image (link, meta) ->
+        let ref_ = Cmarkit.Inline.Link.reference link in
+        (match Link_ref.of_cmark_reference ref_ with
+         | Some link_ref ->
+           let result = resolve link_ref curr_file index in
+           let meta' = Cmarkit.Meta.add resolved_key result meta in
+           Cmarkit.Mapper.ret (Cmarkit.Inline.Image (link, meta'))
+         | None -> Cmarkit.Mapper.default)
+      | _ -> Cmarkit.Mapper.default)
+    ()
+;;
+
+(** Resolve links in a list of parsed docs against the vault index. *)
+let resolve_docs (docs : (string * Parse.doc) list) (index : Index.t)  : (string * Parse.doc) list =
+  List.map docs ~f:(fun (rel_path, pdoc) ->
+    let mapper = resolution_cmarkit_mapper ~index ~curr_file:rel_path in
+    rel_path, { pdoc with doc = Cmarkit.Mapper.map_doc mapper pdoc.doc })
+;;

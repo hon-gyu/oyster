@@ -12,19 +12,12 @@
 
 open Core
 
-(** Vault context available after indexing. *)
-type vault_ctx =
-  { vault_root : string
-  ; vault : Vault.t
-  ; vault_meta : Cmarkit.Meta.t
-  }
-
 (** Pipeline: a record of hooks, one per stage. *)
 type t =
   { on_discover : string -> bool
   ; on_frontmatter : string -> Yaml.value option -> Yaml.value option option
   ; on_parse : string -> Parse.doc -> Parse.doc option
-  ; on_vault : vault_ctx -> string -> Parse.doc -> Parse.doc option
+  ; on_vault : Vault.t -> string -> Parse.doc -> Parse.doc option
   }
 
 (** The identity pipeline — passes everything through unchanged. *)
@@ -71,23 +64,35 @@ let compose (a : t) (b : t) : t =
 
 (* {1 Frontmatter helpers} *)
 
-(* Test whether frontmatter has [draft: true]. *)
-let is_draft_frontmatter (fm : Yaml.value option) : bool =
-  match fm with
-  | Some (`O fields) ->
-    (match List.Assoc.find fields ~equal:String.equal "draft" with
-     | Some (`Bool true) -> true
-     | _ -> false)
-  | _ -> false
-;;
-
 (* {1 Built-in pipelines} *)
 
-module Builtin = struct
-  (** Exclude files with [draft: true] frontmatter. Filter at frontmatter stage. *)
-  let exclude_drafts : t =
-    make
-      ~on_frontmatter:(fun _path fm -> if is_draft_frontmatter fm then None else Some fm)
-      ()
-  ;;
-end
+(** Exclude files with [draft: true] frontmatter. Apply on frontmatter stage. *)
+let exclude_drafts : t =
+  make
+    ~on_frontmatter:(fun _path fm ->
+      match fm with
+      | Some (`O fields) ->
+        (match List.Assoc.find fields ~equal:String.equal "draft" with
+         | Some (`Bool true) -> None
+         | _ -> Some fm)
+      | _ -> invalid_arg "frontmatter is not an object")
+    ()
+;;
+
+(** Exclude files without [publish: true] frontmatter. Apply on frontmatter stage. *)
+let exclude_unpublish : t =
+  make
+    ~on_frontmatter:(fun _path fm ->
+      match fm with
+      | Some (`O fields) ->
+        (match List.Assoc.find fields ~equal:String.equal "publish" with
+         | Some (`Bool true) -> Some fm
+         | _ -> None)
+      | _ -> invalid_arg "frontmatter is not an object")
+    ()
+;;
+
+(** Exclude notes that has `.draft` in stem. Apply on discover stage. *)
+let exclude_draft_from_note_name : t =
+  make ~on_discover:(fun path -> not (String.is_suffix ~suffix:".draft.md" path)) ()
+;;

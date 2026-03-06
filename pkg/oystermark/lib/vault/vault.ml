@@ -3,7 +3,12 @@ module Link_ref = Link_ref
 module Resolve = Resolve
 open Core
 
-type t = Index.t * (string * Parse.doc) list
+type t =
+  { vault_root : string
+  ; index : Index.t (** index of all files in the vault *)
+  ; docs : (string * Parse.doc) list
+  ; vault_meta : Cmarkit.Meta.t
+  }
 
 (** List all files in the vault (relative paths, hidden dirs excluded). *)
 let list_files (vault_root : string) : string list =
@@ -12,9 +17,7 @@ let list_files (vault_root : string) : string list =
 
 (** Build an index from a list of [(rel_path, parsed_doc)] pairs
     plus a list of non-md relative paths. *)
-let build_index
-  ~(md_docs : (string * Parse.doc) list)
-  ~(other_files : string list)
+let build_index ~(md_docs : (string * Parse.doc) list) ~(other_files : string list)
   : Index.t
   =
   let md_entries =
@@ -32,11 +35,9 @@ let build_index
 
 (** Simple build: read all .md files, optionally filter, build index.
     For pipeline-aware builds, use the lower-level functions directly. *)
-let build (vault_root : string)
-  : t
-  =
+let of_root_path (vault_root : string) : t =
   let all_files = list_files vault_root in
-  let files_and_docs =
+  let (docs : (string * Parse.doc) list) =
     List.filter_map all_files ~f:(fun rel_path ->
       if String.is_suffix rel_path ~suffix:".md"
       then (
@@ -49,6 +50,7 @@ let build (vault_root : string)
   let other_files =
     List.filter all_files ~f:(fun p -> not (String.is_suffix p ~suffix:".md"))
   in
-  let index = build_index ~md_docs:files_and_docs ~other_files in
-  index, files_and_docs
+  let index = build_index ~md_docs:docs ~other_files in
+  let resolved_docs : (string * Parse.doc) list = Resolve.resolve_docs docs index in
+  { vault_root; index; docs = resolved_docs; vault_meta = Cmarkit.Meta.none }
 ;;
