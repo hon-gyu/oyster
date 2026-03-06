@@ -59,12 +59,14 @@ let render_vault
   let vault_ctx : Vault.t =
     { vault_root; index; docs=resolved; vault_meta = Cmarkit.Meta.none }
   in
+  (* TODO: current we only have body.  *)
   List.filter_map resolved ~f:(fun (rel_path, pdoc) ->
     match pipeline.on_vault vault_ctx rel_path pdoc with
     | None -> None
     | Some final ->
-      let (html : string) =
+      let (html_body : string) =
         Html.of_doc ~backend_blocks ~safe final.frontmatter final.doc
       in
+      let html = html_body in
       Some (rel_path, html))
 ;;
