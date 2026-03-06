@@ -5,7 +5,7 @@
     1. {b discover} — filter paths before reading
     2. {b frontmatter} — filter/transform after frontmatter extraction
     3. {b parse} — transform after full parse, before indexing
-    4. {b index} — transform with full vault context (link resolution lives here) *)
+    4. {b vault} — transform with full vault context (after link resolution) *)
 
 open Core
 
@@ -49,20 +49,6 @@ let resolution_cmarkit_mapper ~(index : Vault.Index.t) ~(curr_file : string)
     ()
 ;;
 
-(** Link resolution as a pipeline on_index hook. *)
-let resolve_hook : Pipeline.vault_ctx -> string -> Parse.doc -> Parse.doc option =
-  fun (ctx : Pipeline.vault_ctx) rel_path pdoc ->
-  let mapper = resolution_cmarkit_mapper ~index:ctx.index ~curr_file:rel_path in
-  Some { pdoc with doc = Cmarkit.Mapper.map_doc mapper pdoc.doc }
-;;
-
-(** The default pipeline: exclude drafts (at frontmatter stage),
-    then resolve links (at index stage). *)
-let default_pipeline : Pipeline.t =
-  Pipeline.compose Pipeline.exclude_drafts
-    { Pipeline.default with on_index = resolve_hook }
-;;
-
 (** Build and render a vault through the pipeline.
 
     Stages:
@@ -70,10 +56,10 @@ let default_pipeline : Pipeline.t =
     2. Read + extract frontmatter, apply [on_frontmatter].
     3. Full parse, apply [on_parse].
     4. Build index.
-    5. Apply [on_index] with vault context.
+    5. Apply [on_vault] with vault context.
     6. Render to HTML. *)
 let render_vault
-  ?(pipeline : Pipeline.t = default_pipeline)
+  ?(pipeline : Pipeline.t = Pipeline.default)
   ~(safe : bool)
   (vault_root : string)
   : (string * string) list
@@ -107,12 +93,18 @@ let render_vault
     List.filter discovered ~f:(fun p -> not (String.is_suffix p ~suffix:".md"))
   in
   let index = Vault.build_index ~md_docs:parsed ~other_files in
-  (* Stage 4: on_index *)
-  let vault_ctx : Pipeline.vault_ctx =
-    { vault_root; index; docs = parsed; vault_meta = Cmarkit.Meta.none }
+  (* Built-in: resolve links *)
+  let resolved : (string * Parse.doc) list =
+    List.map parsed ~f:(fun (rel_path, pdoc) ->
+      let mapper = resolution_cmarkit_mapper ~index ~curr_file:rel_path in
+      (rel_path, { pdoc with doc = Cmarkit.Mapper.map_doc mapper pdoc.doc }))
   in
-  List.filter_map parsed ~f:(fun (rel_path, pdoc) ->
-    match pipeline.on_index vault_ctx rel_path pdoc with
+  (* Stage 4: on_vault (runs after resolution) *)
+  let vault_ctx : Pipeline.vault_ctx =
+    { vault_root; index; docs = resolved; vault_meta = Cmarkit.Meta.none }
+  in
+  List.filter_map resolved ~f:(fun (rel_path, pdoc) ->
+    match pipeline.on_vault vault_ctx rel_path pdoc with
     | None -> None
     | Some final ->
       let html = Html.of_doc ~safe ~frontmatter:final.frontmatter final.doc in

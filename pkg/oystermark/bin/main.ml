@@ -70,7 +70,12 @@ let file_cmd : Command.t =
          List.Assoc.find parsed ~equal:String.equal rel_path
          |> Option.value_exn ~message:(sprintf "File %s not found in vault" rel_path)
        in
-       match pipeline.on_index vault_ctx rel_path target_doc with
+       (* Built-in: resolve links *)
+       let mapper = Oystermark.resolution_cmarkit_mapper ~index ~curr_file:rel_path in
+       let target_doc =
+         { target_doc with doc = Cmarkit.Mapper.map_doc mapper target_doc.doc }
+       in
+       match pipeline.on_vault vault_ctx rel_path target_doc with
        | None -> eprintf "File %s is a draft, skipping.\n" rel_path
        | Some final ->
          print_string
