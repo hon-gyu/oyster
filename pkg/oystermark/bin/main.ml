@@ -18,7 +18,8 @@ let file_cmd : Command.t =
   Command.basic
     ~summary:"Render a single markdown file to stdout"
     (let%map_open.Command vault_root = anon ("vault-root" %: string)
-     and file = anon ("file" %: string) in
+     and file = anon ("file" %: string)
+     and output_dir = anon (maybe ("output-dir" %: string)) in
      fun () ->
        let rel_path =
          match String.chop_prefix file ~prefix:(vault_root ^ "/") with
@@ -30,29 +31,44 @@ let file_cmd : Command.t =
          List.Assoc.find vault.docs ~equal:String.equal rel_path
          |> Option.value_exn ~message:(sprintf "File %s not found in vault" rel_path)
        in
-       print_string
-         (Oystermark.Html.of_doc ~backend_blocks:true ~safe:false doc))
+       if Option.is_none output_dir
+       then
+         Out_channel.write_all
+           (Filename.concat (Option.value_exn output_dir) "index.html")
+           ~data:(Oystermark.Html.of_doc ~backend_blocks:true ~safe:false doc)
+       else print_string (Oystermark.Html.of_doc ~backend_blocks:true ~safe:false doc))
 ;;
 
 let vault_cmd : Command.t =
   Command.basic
     ~summary:"Render all markdown files in a vault to HTML"
     (let%map_open.Command (vault_root : string) = anon ("vault-root" %: string)
-     and (output_dir : string option) = anon (maybe ("output-dir" %: string)) in
+     and (output_dir : string option) = anon (maybe ("output-dir" %: string))
+     and (verbose : bool) = flag "verbose" no_arg ~doc:"Print progress messages" in
      fun () ->
        let output_dir : string =
          match output_dir with
          | Some d -> d
-         | None -> vault_root ^ "/_site"
+         | None ->
+           let curr_dir = Sys_unix.getcwd () in
+           curr_dir ^ "/_site"
        in
-       let results = Oystermark.render_vault ~backend_blocks:true ~safe:false vault_root in
-       List.iter results ~f:(fun (rel_path, html) ->
+       let results =
+         Oystermark.render_vault ~backend_blocks:true ~safe:false vault_root
+       in
+       List.iteri results ~f:(fun i (rel_path, html) ->
          let out_rel = String.chop_suffix_exn rel_path ~suffix:".md" ^ ".html" in
          let out_path = Filename.concat output_dir out_rel in
          let out_dir = Filename.dirname out_path in
          Core_unix.mkdir_p out_dir;
          Out_channel.write_all out_path ~data:html;
-         printf "  %s -> %s\n" rel_path out_rel))
+         if verbose
+         then printf "  %s -> %s\n" rel_path out_rel
+         else (
+           let print_char c = Out_channel.output_char Out_channel.stdout c in
+           if i mod 100 = 0 && i > 0 then print_char '\n';
+           print_char '.';
+           Out_channel.flush Out_channel.stdout)))
 ;;
 
 let () =
