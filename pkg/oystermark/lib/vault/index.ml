@@ -77,6 +77,27 @@ let rec list_files_recursive ~(root : string) ~(rel_prefix : string) : string li
       | _ -> [ rel_path ]))
 ;;
 
+(** Recursively list all directories, returning relative paths with trailing [/]. *)
+let rec list_dirs_recursive ~(root : string) ~(rel_prefix : string) : string list =
+  let (entries : string list) =
+    try Sys_unix.ls_dir root with
+    | _ -> []
+  in
+  List.concat_map entries ~f:(fun name ->
+    let is_hidden (name : string) : bool = String.is_prefix name ~prefix:"." in
+    if is_hidden name
+    then []
+    else (
+      let full_path = Filename.concat root name in
+      let rel_path =
+        if String.is_empty rel_prefix then name else Filename.concat rel_prefix name
+      in
+      match Sys_unix.is_directory full_path with
+      | `Yes ->
+        (rel_path ^ "/") :: list_dirs_recursive ~root:full_path ~rel_prefix:rel_path
+      | _ -> []))
+;;
+
 let%expect_test "extract_headings" =
   let md =
     {|

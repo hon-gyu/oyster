@@ -151,9 +151,7 @@ let resolve (link_ref : Link_ref.t) (curr_file : string) (index : Index.t) : tar
 ;;
 
 (** Build a [Cmarkit.Mapper.t] that resolves links against the vault index. *)
-let resolution_cmarkit_mapper ~(index : Index.t) ~(curr_file : string)
-  : Cmarkit.Mapper.t
-  =
+let resolution_cmarkit_mapper ~(index : Index.t) ~(curr_file : string) : Cmarkit.Mapper.t =
   Cmarkit.Mapper.make
     ~block_ext_default:(fun _m b -> Some b)
     ~inline_ext_default:(fun _m i ->
@@ -187,7 +185,9 @@ let resolution_cmarkit_mapper ~(index : Index.t) ~(curr_file : string)
 ;;
 
 (** Resolve links in a list of parsed docs against the vault index. *)
-let resolve_docs (docs : (string * Cmarkit.Doc.t) list) (index : Index.t)  : (string * Cmarkit.Doc.t) list =
+let resolve_docs (docs : (string * Cmarkit.Doc.t) list) (index : Index.t)
+  : (string * Cmarkit.Doc.t) list
+  =
   List.map docs ~f:(fun (rel_path, doc) ->
     let mapper = resolution_cmarkit_mapper ~index ~curr_file:rel_path in
     rel_path, Cmarkit.Mapper.map_doc mapper doc)

@@ -151,9 +151,11 @@ let%expect_test "toc_html" =
 let toc_cmark_list (paths : string list) : Cmarkit.Block.t =
   let m : Cmarkit.Meta.t = Cmarkit.Meta.none in
   let text (s : string) : Cmarkit.Inline.t = Cmarkit.Inline.Text (s, m) in
-  let wikilink ~(target : string) ~(file_path : string) ~(display : string option) : Cmarkit.Inline.t =
+  let wikilink ~(target : string) ~(file_path : string) ~(display : string option)
+    : Cmarkit.Inline.t
+    =
     let wl : Parse.Wikilink.t =
-      { target = Some target; fragment = None; display = display; embed = false }
+      { target = Some target; fragment = None; display; embed = false }
     in
     let resolved : Vault.Resolve.target = File { path = file_path } in
     let meta : Cmarkit.Meta.t = Cmarkit.Meta.add Vault.Resolve.resolved_key resolved m in
@@ -192,7 +194,8 @@ let%expect_test "toc_cmark_list" =
   let block = toc_cmark_list paths in
   let doc = Cmarkit.Doc.make block in
   print_endline (Parse.commonmark_of_doc doc);
-  [%expect {|
+  [%expect
+    {|
     - [[a.jpg]]
     - x
       - [[x/q]]

@@ -20,7 +20,7 @@ let mapper =
     block and wikilinks/block IDs parsed. *)
 let of_string ?(strict = false) ?(layout = false) (s : string) : Cmarkit.Doc.t =
   let open Cmarkit in
-  let (yaml_opt, body) = Frontmatter.of_string s in
+  let yaml_opt, body = Frontmatter.of_string s in
   let cmarkit_doc = Doc.of_string ~strict ~layout body in
   let body_doc = Mapper.map_doc mapper cmarkit_doc in
   match yaml_opt, Doc.block body_doc with

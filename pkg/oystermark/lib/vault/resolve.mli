@@ -24,9 +24,9 @@ val resolved_key : target Cmarkit.Meta.key
 val resolve : Link_ref.t -> string -> Index.t -> target
 
 (** Build a [Cmarkit.Mapper.t] that resolves links against the vault index. *)
-val resolution_cmarkit_mapper
-  :  index:Index.t
-  -> curr_file:string
-  -> Cmarkit.Mapper.t
+val resolution_cmarkit_mapper : index:Index.t -> curr_file:string -> Cmarkit.Mapper.t
 
-val resolve_docs : (string * Cmarkit.Doc.t) list ->  Index.t  -> (string * Cmarkit.Doc.t) list
+val resolve_docs
+  :  (string * Cmarkit.Doc.t) list
+  -> Index.t
+  -> (string * Cmarkit.Doc.t) list

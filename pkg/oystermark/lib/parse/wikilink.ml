@@ -61,7 +61,7 @@ let%expect_test "to_commonmark" =
     }
   in
   print_endline (to_commonmark wl);
-  [%expect {| [[foo^block-id|quux]] |}];
+  [%expect {| [[foo^block-id|quux]] |}]
 ;;
 
 (** Inline extension constructor for wikilinks. *)
