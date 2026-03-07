@@ -86,7 +86,9 @@ let exclude_draft_from_note_name : t =
   make ~on_discover:(fun path -> not (String.is_suffix ~suffix:".draft.md" path)) ()
 ;;
 
-let prepend_block (prefix : Cmarkit.Block.t) : Cmarkit.Block.t Cmarkit.Mapper.mapper =
+let prepend_block ?(after_frontmatter = true) (prefix : Cmarkit.Block.t)
+  : Cmarkit.Block.t Cmarkit.Mapper.mapper
+  =
   let open Cmarkit in
   let fired = ref false in
   fun _m (b : Block.t) ->
@@ -95,18 +97,26 @@ let prepend_block (prefix : Cmarkit.Block.t) : Cmarkit.Block.t Cmarkit.Mapper.ma
     else (
       fired := true;
       match b with
-      | Block.Blocks (blocks, meta) -> Mapper.ret (Block.Blocks (prefix :: blocks, meta))
+      | Block.Blocks (blocks, meta) ->
+        let blocks' =
+          match after_frontmatter, blocks with
+          | true, (Parse.Frontmatter.Frontmatter _ as fm) :: rest -> fm :: prefix :: rest
+          | _ -> prefix :: blocks
+        in
+        Mapper.ret (Block.Blocks (blocks', meta))
       | _ -> Mapper.ret (Block.Blocks ([ prefix; b ], Meta.none)))
 ;;
 
-let prepend_html_code_block (content : string) : Cmarkit.Block.t Cmarkit.Mapper.mapper =
+let prepend_html_code_block ?(after_frontmatter = true) (content : string)
+  : Cmarkit.Block.t Cmarkit.Mapper.mapper
+  =
   let open Cmarkit in
   let cb : Block.Code_block.t =
     Block.Code_block.make
       ~info_string:("=html", Meta.none)
       (Block_line.list_of_string content)
   in
-  prepend_block (Block.Code_block (cb, Meta.none))
+  prepend_block ~after_frontmatter (Block.Code_block (cb, Meta.none))
 ;;
 
 let of_block_mapper (block_mapper : Cmarkit.Block.t Cmarkit.Mapper.mapper) : t =
@@ -114,10 +124,44 @@ let of_block_mapper (block_mapper : Cmarkit.Block.t Cmarkit.Mapper.mapper) : t =
   let mapper : Mapper.t =
     Mapper.make ~inline_ext_default:(fun _m i -> Some i) ~block:block_mapper ()
   in
-  make
-    ~on_parse:(fun _path doc ->
-      Some (Mapper.map_doc mapper doc))
-    ()
+  make ~on_parse:(fun _path doc -> Some (Mapper.map_doc mapper doc)) ()
+;;
+
+let%expect_test "prepend_block after_frontmatter inserts after frontmatter" =
+  let block_mapper = prepend_html_code_block ~after_frontmatter:true "<nav>toc</nav>" in
+  let pipeline = of_block_mapper block_mapper in
+  let doc = Parse.of_string "---\ntitle: Hello\n---\n# Heading\n\nBody text." in
+  let doc' = pipeline.on_parse "test.md" doc |> Option.value_exn in
+  print_endline (Parse.commonmark_of_cmark_doc doc');
+  [%expect
+    {|
+    ---
+    title: Hello
+    ---
+    ```=html
+    <nav>toc</nav>
+    ```
+    # Heading
+
+    Body text.
+    |}]
+;;
+
+let%expect_test "prepend_block after_frontmatter without frontmatter prepends normally" =
+  let block_mapper = prepend_html_code_block ~after_frontmatter:true "<nav>toc</nav>" in
+  let pipeline = of_block_mapper block_mapper in
+  let doc = Parse.of_string "# Heading\n\nBody text." in
+  let doc' = pipeline.on_parse "test.md" doc |> Option.value_exn in
+  print_endline (Parse.commonmark_of_cmark_doc doc');
+  [%expect
+    {|
+    ```=html
+    <nav>toc</nav>
+    ```
+    # Heading
+
+    Body text.
+    |}]
 ;;
 
 let%expect_test "prepend_html_code_block" =
@@ -126,7 +170,8 @@ let%expect_test "prepend_html_code_block" =
   let doc = Parse.of_string "Hello, world again!" in
   let doc' = pipeline.on_parse "test.md" doc |> Option.value_exn in
   print_endline (Parse.commonmark_of_cmark_doc doc');
-  [%expect {|
+  [%expect
+    {|
     ```=html
     <p>Hello, world!</p>
     ```
@@ -140,7 +185,8 @@ let%expect_test "prepend_html_code_block fires exactly once on multi-block doc" 
   let doc = Parse.of_string "# Heading\n\nParagraph one.\n\nParagraph two." in
   let doc' = pipeline.on_parse "test.md" doc |> Option.value_exn in
   print_endline (Parse.commonmark_of_cmark_doc doc');
-  [%expect {|
+  [%expect
+    {|
     ```=html
     <nav>toc</nav>
     ```

@@ -11,7 +11,7 @@ open Core
 
 type t = Yaml.value
 
-let to_commonmark (fm : Yaml.value) : string = "---\n" ^ Yaml.to_string_exn fm ^ "\n---\n"
+let to_commonmark (fm : Yaml.value) : string = "---\n" ^ Yaml.to_string_exn fm ^ "---\n"
 
 type Cmarkit.Block.t += Frontmatter of Yaml.value
 
