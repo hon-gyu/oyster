@@ -59,7 +59,7 @@ let extract_block_ids (doc : Cmarkit.Doc.t) : string list =
 
 (* Recursively list all files, returning relative paths. *)
 let rec list_files_recursive ~(root : string) ~(rel_prefix : string) : string list =
-  let entries =
+  let (entries : string list) =
     try Sys_unix.ls_dir root with
     | _ -> []
   in

@@ -28,7 +28,7 @@ let render_vault
   =
   let all_files = Vault.list_files vault_root in
   (* Stage 1: discover *)
-  let discovered = List.filter all_files ~f:pipeline.on_discover in
+  let discovered = List.filter all_files ~f:(fun p -> pipeline.on_discover p all_files) in
   (* Stage 2: parse *)
   let parsed =
     List.filter_map discovered ~f:(fun rel_path ->
@@ -47,9 +47,11 @@ let render_vault
     List.filter discovered ~f:(fun p -> not (String.is_suffix p ~suffix:".md"))
   in
   let index = Vault.build_index ~md_docs:parsed ~other_files in
-  let resolved : (string * Cmarkit.Doc.t) list = Vault.Resolve.resolve_docs parsed index in
+  let resolved : (string * Cmarkit.Doc.t) list =
+    Vault.Resolve.resolve_docs parsed index
+  in
   let vault_ctx : Vault.t =
-    { vault_root; index; docs=resolved; vault_meta = Cmarkit.Meta.none }
+    { vault_root; index; docs = resolved; vault_meta = Cmarkit.Meta.none }
   in
   (* Stage 4: Render *)
   List.filter_map resolved ~f:(fun (rel_path, doc) ->

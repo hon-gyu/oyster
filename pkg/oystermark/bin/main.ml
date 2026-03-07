@@ -57,7 +57,7 @@ let vault_cmd : Command.t =
          Oystermark.render_vault ~backend_blocks:true ~safe:false vault_root
        in
        List.iteri results ~f:(fun i (rel_path, html) ->
-         let out_rel = String.chop_suffix_exn rel_path ~suffix:".md" ^ ".html" in
+         let out_rel = String.chop_suffix_exn rel_path ~suffix:".md" ^ "/index.html" in
          let out_path = Filename.concat output_dir out_rel in
          let out_dir = Filename.dirname out_path in
          Core_unix.mkdir_p out_dir;
