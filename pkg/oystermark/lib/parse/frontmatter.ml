@@ -20,20 +20,22 @@ let is_delimiter (line : string) : bool = String.equal (String.rstrip line) deli
 
 (** [of_string s] splits [s] into frontmatter YAML and the remaining body.
     If [s] does not start with [---], returns [{ yaml = None; body = s }]. *)
-let of_string (s : string) : (Yaml.value option * string) =
+let of_string (s : string) : Yaml.value option * string =
   match String.lsplit2 s ~on:'\n' with
-  | None -> (None, s)
+  | None -> None, s
   | Some (first_line, rest) ->
     if not (is_delimiter first_line)
-    then (None, s )
+    then None, s
     else (
       (* Find the closing delimiter *)
       let lines = String.split_lines rest in
-      let rec find_close (acc : string list) (remaining : string list) : (Yaml.value option * string) =
+      let rec find_close (acc : string list) (remaining : string list)
+        : Yaml.value option * string
+        =
         match remaining with
         | [] ->
           (* No closing delimiter found — treat everything as body *)
-          (None, s)
+          None, s
         | line :: tl ->
           if is_delimiter line
           then (
@@ -44,7 +46,7 @@ let of_string (s : string) : (Yaml.value option * string) =
               | Error _ -> None
             in
             let body = String.concat ~sep:"\n" tl in
-            ( yaml, body ))
+            yaml, body)
           else find_close (line :: acc) tl
       in
       find_close [] lines)
@@ -104,7 +106,7 @@ module For_test = struct
   ;;
 
   let%expect_test "no frontmatter" =
-    let (yaml, body) = of_string "# Hello\n\nSome text" in
+    let yaml, body = of_string "# Hello\n\nSome text" in
     Printf.printf "yaml: %s\nbody: %s\n" (pp_yaml yaml) body;
     [%expect
       {|
@@ -116,7 +118,9 @@ module For_test = struct
   ;;
 
   let%expect_test "with frontmatter" =
-    let (yaml, body) = of_string "---\ntitle: Hello\ntags: [a, b]\n---\n# Hello\n\nSome text" in
+    let yaml, body =
+      of_string "---\ntitle: Hello\ntags: [a, b]\n---\n# Hello\n\nSome text"
+    in
     Printf.printf "yaml: %sbody: %s\n" (pp_yaml yaml) body;
     [%expect
       {|
@@ -131,7 +135,7 @@ module For_test = struct
   ;;
 
   let%expect_test "unclosed frontmatter" =
-    let (yaml, body) = of_string "---\ntitle: Hello\nno closing" in
+    let yaml, body = of_string "---\ntitle: Hello\nno closing" in
     Printf.printf "yaml: %s\nbody: %s\n" (pp_yaml yaml) body;
     [%expect
       {|
@@ -143,7 +147,7 @@ module For_test = struct
   ;;
 
   let%expect_test "empty frontmatter" =
-    let (yaml, body) = of_string "---\n---\n# Body" in
+    let yaml, body = of_string "---\n---\n# Body" in
     Printf.printf "yaml: %sbody: %s\n" (pp_yaml yaml) body;
     [%expect
       {|
