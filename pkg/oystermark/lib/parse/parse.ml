@@ -30,9 +30,34 @@ let of_string ?(strict = false) ?(layout = false) (s : string) : doc =
   { doc; frontmatter = yaml; meta = Cmarkit.Meta.none }
 ;;
 
+(** Render inlines to plain text, losing their markdown syntax. Used in rendering
+    heading to plain text. *)
 let inline_to_plain_text (inline : Cmarkit.Inline.t) : string =
   let lines =
-    Cmarkit.Inline.to_plain_text ~ext:Wikilink.to_plain_text ~break_on_soft:false inline
+    Cmarkit.Inline.to_plain_text
+      ~ext:(fun ~break_on_soft inline ->
+        match inline with
+        | Wikilink.Ext_wikilink (wl, _meta) ->
+          let text = Wikilink.to_plain_text wl in
+          Cmarkit.Inline.Text (text, Cmarkit.Meta.none)
+        | other -> other)
+      ~break_on_soft:false
+      inline
   in
   String.concat ~sep:"\n" (List.map lines ~f:(String.concat ~sep:""))
+;;
+
+let commonmark_of_doc (doc : Cmarkit.Doc.t) : string =
+  let custom =
+    let inline (c : Cmarkit_renderer.context) = function
+      | Wikilink.Ext_wikilink (wl, _) ->
+        Cmarkit_renderer.Context.string c (Wikilink.to_commonmark wl);
+        true
+      | _ -> false
+    in
+    Cmarkit_renderer.make ~inline ()
+  in
+  let default = Cmarkit_commonmark.renderer () in
+  let r = Cmarkit_renderer.compose default custom in
+  Cmarkit_renderer.doc_to_string r doc
 ;;

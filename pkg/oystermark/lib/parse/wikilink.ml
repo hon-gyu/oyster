@@ -20,6 +20,50 @@ type t =
   ; embed : bool
   }
 
+(** Render wikilink back to markdown syntax. *)
+let to_commonmark (wl : t) : string =
+  let buf = Buffer.create 16 in
+  (* Left bracket *)
+  if wl.embed then Buffer.add_string buf "![[" else Buffer.add_string buf "[[";
+  (* Target *)
+  Buffer.add_string buf (Option.value ~default:"" wl.target);
+  (* Fragment *)
+  (match wl.fragment with
+   | None -> ()
+   | Some (Heading frag) ->
+     Buffer.add_string buf "#";
+     Buffer.add_string buf (String.concat ~sep:"#" frag)
+   | Some (Block_ref frag) -> Buffer.add_string buf ("^" ^ frag));
+  (* Display *)
+  (match wl.display with
+   | None -> ()
+   | Some d -> Buffer.add_string buf ("|" ^ d));
+  (* Right bracket *)
+  Buffer.add_string buf "]]";
+  Buffer.contents buf
+;;
+
+let%expect_test "to_commonmark" =
+  let wl : t =
+    { target = Some "foo"
+    ; fragment = Some (Heading [ "bar"; "baz" ])
+    ; display = Some "quux"
+    ; embed = false
+    }
+  in
+  print_endline (to_commonmark wl);
+  [%expect {| [[foo#bar#baz|quux]] |}];
+  let wl : t =
+    { target = Some "foo"
+    ; fragment = Some (Block_ref "block-id")
+    ; display = Some "quux"
+    ; embed = false
+    }
+  in
+  print_endline (to_commonmark wl);
+  [%expect {| [[foo^block-id|quux]] |}];
+;;
+
 (** Inline extension constructor for wikilinks. *)
 type Inline.t += Ext_wikilink of t node
 
@@ -69,6 +113,8 @@ let make ~(embed : bool) (content : string) : t =
   in
   { target; fragment; display; embed }
 ;;
+
+(* TODO(future): a roundtrip PBT *)
 
 (* Find the index of substring [needle] in [haystack] starting at [from]. *)
 let find_substring (haystack : string) ~(needle : string) ~(from : int) : int option =
@@ -191,18 +237,25 @@ let parse (_mapper : Mapper.t) (i : Inline.t) : Inline.t Mapper.result =
   | _ -> Mapper.default
 ;;
 
-let to_plain_text ~break_on_soft:_ (inline : Cmarkit.Inline.t) : Cmarkit.Inline.t =
-  match inline with
-  | Ext_wikilink (wl, _meta) ->
-    let wl : t = wl in
-    let text =
-      match wl.display with
-      | Some d -> d
-      | None ->
-        (match wl.target with
-         | Some t -> t
-         | None -> "")
-    in
-    Cmarkit.Inline.Text (text, Cmarkit.Meta.none)
-  | other -> other
+(** Render a wikilink to plain text, losing its markdown syntax. Used in rendering
+    heading to plain text. *)
+let to_plain_text (wl : t) : string =
+  match wl.display with
+  | Some d -> d
+  | None ->
+    (match wl.target with
+     | Some t -> t
+     | None -> "")
+;;
+
+let%expect_test "wikilink to plain text" =
+  let wl : t =
+    { target = Some "foo"
+    ; fragment = Some (Heading [ "bar"; "baz" ])
+    ; display = Some "quux"
+    ; embed = false
+    }
+  in
+  print_endline (to_plain_text wl);
+  [%expect {| quux |}]
 ;;
