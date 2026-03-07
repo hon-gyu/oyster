@@ -66,7 +66,7 @@ let vault_cmd : Command.t =
          then printf "  %s -> %s\n" rel_path out_rel
          else (
            let print_char c = Out_channel.output_char Out_channel.stdout c in
-           if i mod 100 = 0 && i > 0 then print_char '\n';
+           if i mod 60 = 0 && i > 0 then print_char '\n';
            print_char '.';
            Out_channel.flush Out_channel.stdout)))
 ;;

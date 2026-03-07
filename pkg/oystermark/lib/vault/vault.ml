@@ -10,6 +10,10 @@ type t =
   ; vault_meta : Cmarkit.Meta.t
   }
 
+let all_note_paths (vault : t) : string list =
+  List.map vault.docs ~f:fst
+;;
+
 (** List all files in the vault (relative paths, hidden dirs excluded). *)
 let list_files (vault_root : string) : string list =
   Index.list_files_recursive ~root:vault_root ~rel_prefix:""
