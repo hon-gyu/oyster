@@ -72,7 +72,7 @@ let media_type_of_href (href : string) : [> `Audio | `Iframe | `Image | `Link | 
   else `Link
 ;;
 
-(** Render a wikilink. Handles embed=true for media content. href depends on metadata. *)
+(* Render a wikilink as HTML. Handles embed=true for media content. *)
 let render_wikilink (c : Cmarkit_renderer.context) (w : Wikilink.t) (meta : Meta.t) : unit
   =
   let href_of_meta (meta : Meta.t) =
@@ -167,11 +167,7 @@ let inline (c : Cmarkit_renderer.context) : Inline.t -> bool = function
 
 (** Render a paragraph with block-id. The ^blockid text stays visible
     (it's part of the inline content). We add an id to the <p> for linking. *)
-let block
-      ?(top_fm_keys_ignored = Set.empty (module String))
-      (c : Cmarkit_renderer.context)
-  : Block.t -> bool
-  = function
+let block (c : Cmarkit_renderer.context) : Block.t -> bool = function
   | Block.Paragraph (p, meta) ->
     (match Meta.find Block_id.meta_key meta with
      | Some (block_id : Block_id.t) ->
@@ -182,30 +178,17 @@ let block
        true
      | None -> false)
   | Parse.Frontmatter.Frontmatter y ->
-    C.string c (Parse.Frontmatter.to_html ~top_keys_ignored:top_fm_keys_ignored (Some y));
+    C.string c (Parse.Frontmatter.to_html (Some y));
     true
   | _ -> false
 ;;
 
-let renderer
-      ?(top_fm_keys_ignored = Set.empty (module String))
-      ~(backend_blocks : bool)
-      ~(safe : bool)
-      ()
-  : Cmarkit_renderer.t
-  =
-  let block = block ~top_fm_keys_ignored in
+let renderer ~(backend_blocks : bool) ~(safe : bool) () : Cmarkit_renderer.t =
   let custom = Cmarkit_renderer.make ~inline ~block () in
   let default = Cmarkit_html.renderer ~backend_blocks ~safe () in
   Cmarkit_renderer.compose default custom
 ;;
 
-let of_doc
-      ?(top_fm_keys_ignored = Set.empty (module String))
-      ~(backend_blocks : bool)
-      ~(safe : bool)
-      (doc : Doc.t)
-  : string
-  =
+let of_doc ~(backend_blocks : bool) ~(safe : bool) (doc : Doc.t) : string =
   Cmarkit_renderer.doc_to_string (renderer ~backend_blocks ~safe ()) doc
 ;;
