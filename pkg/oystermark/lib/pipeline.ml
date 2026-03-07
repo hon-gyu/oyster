@@ -57,6 +57,11 @@ let ( >> ) a b = compose a b
 
 (* {1 Built-in pipelines} *)
 
+(** Exclude notes that has `.draft` in stem. Apply on discover stage. *)
+let exclude_draft_by_note_name : t =
+  make ~on_discover:(fun path -> not (String.is_suffix ~suffix:".draft.md" path)) ()
+;;
+
 (** Exclude files with [draft: true] frontmatter. Apply on parse stage. *)
 let exclude_drafts : t =
   make
@@ -83,9 +88,26 @@ let exclude_unpublish : t =
     ()
 ;;
 
-(** Exclude notes that has `.draft` in stem. Apply on discover stage. *)
-let exclude_draft_by_note_name : t =
-  make ~on_discover:(fun path -> not (String.is_suffix ~suffix:".draft.md" path)) ()
+let drop_keys_in_frontmatter (keys : string list) : t =
+  let yaml_f : Yaml.value -> Yaml.value = function
+    | `O fields ->
+      `O
+        (List.filter_map fields ~f:(fun (k, v) ->
+           if List.mem keys k ~equal:String.equal then None else Some (k, v)))
+    | other -> other
+  in
+  make
+    ~on_parse:(fun _path doc ->
+      let b_mapper = Parse.Frontmatter.make_block_mapper yaml_f in
+      let mapper =
+        Cmarkit.Mapper.make
+          ~inline_ext_default:(fun _m i -> Some i)
+          ~block_ext_default:(fun _m b -> Some b)
+          ~block:b_mapper
+          ()
+      in
+      Some (Cmarkit.Mapper.map_doc mapper doc))
+    ()
 ;;
 
 let add_block
@@ -122,7 +144,10 @@ let add_block
            | `Append -> Block.Blocks ([ b; new_b ], Meta.none)))
 ;;
 
-let add_html_code_block ?(after_frontmatter = true) (loc : [ `Prepend | `Append ]) (content : string)
+let add_html_code_block
+      ?(after_frontmatter = true)
+      (loc : [ `Prepend | `Append ])
+      (content : string)
   : Cmarkit.Block.t Cmarkit.Mapper.mapper
   =
   let open Cmarkit in
@@ -160,7 +185,12 @@ let home_toc : t =
   make ~on_vault ()
 ;;
 
-let default : t = exclude_draft_by_note_name >> exclude_unpublish >> home_toc
+let default : t =
+  exclude_draft_by_note_name
+  >> exclude_unpublish
+  >> drop_keys_in_frontmatter [ "publish"; "draft" ]
+  >> home_toc
+;;
 
 let%test_module "prepend block" =
   (module struct

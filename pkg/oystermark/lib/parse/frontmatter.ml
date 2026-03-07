@@ -15,6 +15,16 @@ let to_commonmark (fm : Yaml.value) : string = "---\n" ^ Yaml.to_string_exn fm ^
 
 type Cmarkit.Block.t += Frontmatter of Yaml.value
 
+let make_block_mapper (f : Yaml.value -> Yaml.value)
+  : Cmarkit.Block.t Cmarkit.Mapper.mapper
+  =
+  let open Cmarkit in
+  fun (_m : Mapper.t) (block : Block.t) ->
+    match block with
+    | Frontmatter y -> Mapper.ret (Frontmatter (f y))
+    | other -> Mapper.default
+;;
+
 let delimiter : string = "---"
 let is_delimiter (line : string) : bool = String.equal (String.rstrip line) delimiter
 
