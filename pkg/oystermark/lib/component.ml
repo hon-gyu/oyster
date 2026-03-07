@@ -19,19 +19,22 @@ let strip_md_ext (path : string) : string =
 
 let spf = Printf.sprintf
 
-(** Render a table of contents as a nested [<ul>] tree from a list of relative paths.
-    Paths are grouped by directory, producing nested lists for shared prefixes.
-    Markdown file names are stripped of their extension.
-    [dir_href_map] maps a directory name to an optional href; if [None], no anchor
-    is added to the directory entry. *)
-let toc
-      ?(dir_href_f = fun dir -> Some (dir ^ "/index"))
-      ?(collapsible = false)
-      ?(collapsed_by_default = false)
-      (paths : string list)
-  : html
-  =
-  let rec build_tree (entries : (string list * string) list) =
+(** Intermediate TOC tree: a list of entries, each either a leaf file or a
+    directory containing a subtree. *)
+type toc_entry =
+  | Leaf of
+      { name : string
+      ; path : string
+      }
+  | Dir of
+      { name : string
+      ; children : toc_entry list
+      }
+
+(** Build a [toc_entry list] from a flat list of relative paths.
+    Paths are grouped by directory, producing nested entries for shared prefixes. *)
+let build_toc_entries (paths : string list) : toc_entry list =
+  let rec build (entries : (string list * string) list) : toc_entry list =
     let (by_head : (string * (string list * string)) list list) =
       List.filter_map entries ~f:(fun (segs, path) ->
         match segs with
@@ -40,21 +43,43 @@ let toc
       |> List.sort ~compare:(fun (a, _) (b, _) -> String.compare a b)
       |> List.group ~break:(fun (a, _) (b, _) -> not (String.equal a b))
     in
-    let render_dir_label dir =
-      match dir_href_f dir with
-      | None -> dir
-      | Some href -> spf {|<a href="%s">%s</a>|} href dir
-    in
-    let render_item = function
+    List.filter_map by_head ~f:(function
       | [] -> None
-      | [ (name, ([], path)) ] ->
-        let href = strip_md_ext path in
-        Some (spf {|<li><a href="%s">%s</a></li>|} href (strip_md_ext name))
-      | (dir, _) :: _ as group ->
+      | [ (name, ([], path)) ] -> Some (Leaf { name; path })
+      | (name, _) :: _ as group ->
         let children = List.map group ~f:snd in
-        let subtree = build_tree children in
-        let label = render_dir_label dir in
-        let item =
+        Some (Dir { name; children = build children }))
+  in
+  build (List.map paths ~f:(fun p -> String.split p ~on:'/', p))
+;;
+
+(** Render a table of contents as a nested [<ul>] tree from a list of relative paths.
+    Paths are grouped by directory, producing nested lists for shared prefixes.
+    Markdown file names are stripped of their extension.
+    [dir_href_f] maps a directory name to an optional href; if [None], no anchor
+    is added to the directory entry. *)
+let toc_html
+      ?(dir_href_f = fun dir -> Some (dir ^ "/index"))
+      ?(collapsible = false)
+      ?(collapsed_by_default = false)
+      (paths : string list)
+  : html
+  =
+  let render_dir_label (dir : string) : string =
+    match dir_href_f dir with
+    | None -> dir
+    | Some href -> spf {|<a href="%s">%s</a>|} href dir
+  in
+  let rec render_entries (entries : toc_entry list) : html =
+    let items =
+      List.map entries ~f:(fun entry ->
+        match entry with
+        | Leaf { name; path } ->
+          let href = strip_md_ext path in
+          spf {|<li><a href="%s">%s</a></li>|} href (strip_md_ext name)
+        | Dir { name; children } ->
+          let subtree = render_entries children in
+          let label = render_dir_label name in
           if collapsible
           then (
             let open_attr = if collapsed_by_default then "" else " open" in
@@ -63,23 +88,16 @@ let toc
               open_attr
               label
               subtree)
-          else spf "<li>%s\n%s</li>" label subtree
-        in
-        Some item
+          else spf "<li>%s\n%s</li>" label subtree)
     in
-    let items = List.filter_map by_head ~f:render_item in
-    let items_str = String.concat ~sep:"\n" items in
-    "<ul>\n" ^ items_str ^ "\n</ul>"
+    "<ul>\n" ^ String.concat ~sep:"\n" items ^ "\n</ul>"
   in
-  let (parts_and_path_by_entry : (string list * string) list) =
-    List.map paths ~f:(fun p -> String.split p ~on:'/', p)
-  in
-  build_tree parts_and_path_by_entry
+  render_entries (build_toc_entries paths)
 ;;
 
-let%expect_test "toc" =
+let%expect_test "toc_html" =
   let paths = [ "x/y/z.md"; "x/y/t.md"; "a.jpg"; "x/q.md" ] in
-  print_endline (toc ~dir_href_f:(fun (_ : string) -> None) paths);
+  print_endline (toc_html ~dir_href_f:(fun (_ : string) -> None) paths);
   [%expect
     {|
     <ul>
@@ -95,7 +113,7 @@ let%expect_test "toc" =
     </ul></li>
     </ul>
     |}];
-  print_endline (toc paths);
+  print_endline (toc_html paths);
   [%expect
     {|
     <ul>
@@ -111,22 +129,75 @@ let%expect_test "toc" =
     </ul></li>
     </ul>
     |}];
-  print_endline (toc ~collapsible:true ~collapsed_by_default:false paths);
+  print_endline (toc_html ~collapsible:true ~collapsed_by_default:false paths);
   [%expect
     {|
-      <ul>
-      <li><a href="a.jpg">a.jpg</a></li>
-      <li style="list-style: none"><details open><summary><a href="x/index">x</a></summary>
-      <ul>
-      <li><a href="x/q">q</a></li>
-      <li style="list-style: none"><details open><summary><a href="y/index">y</a></summary>
-      <ul>
-      <li><a href="x/y/t">t</a></li>
-      <li><a href="x/y/z">z</a></li>
-      </ul></details></li>
-      </ul></details></li>
-      </ul>
-      |}]
+    <ul>
+    <li><a href="a.jpg">a.jpg</a></li>
+    <li style="list-style: none"><details open><summary><a href="x/index">x</a></summary><ul>
+    <li><a href="x/q">q</a></li>
+    <li style="list-style: none"><details open><summary><a href="y/index">y</a></summary><ul>
+    <li><a href="x/y/t">t</a></li>
+    <li><a href="x/y/z">z</a></li>
+    </ul></details></li>
+    </ul></details></li>
+    </ul>
+    |}]
+;;
+
+(** Render a table of contents as a [Cmarkit.Block.t] unordered list from a list
+    of relative paths. Leaf entries become links; directories become plain text
+    with a nested sub-list. *)
+let toc_cmark_list (paths : string list) : Cmarkit.Block.t =
+  let m : Cmarkit.Meta.t = Cmarkit.Meta.none in
+  let text (s : string) : Cmarkit.Inline.t = Cmarkit.Inline.Text (s, m) in
+  let wikilink ~(target : string) ~(display : string option) : Cmarkit.Inline.t =
+    let wl : Parse.Wikilink.t =
+      { target = Some target; fragment = None; display = display; embed = false }
+    in
+    Parse.Wikilink.Ext_wikilink (wl, m)
+  in
+  let list_item (block : Cmarkit.Block.t) : Cmarkit.Block.List_item.t Cmarkit.node =
+    Cmarkit.Block.List_item.make block, m
+  in
+  let ul (items : Cmarkit.Block.List_item.t Cmarkit.node list) : Cmarkit.Block.t =
+    Cmarkit.Block.List (Cmarkit.Block.List'.make (`Unordered '-') items, m)
+  in
+  let para (inline : Cmarkit.Inline.t) : Cmarkit.Block.t =
+    Cmarkit.Block.Paragraph (Cmarkit.Block.Paragraph.make inline, m)
+  in
+  let rec render_entries (entries : toc_entry list) : Cmarkit.Block.t =
+    let items : Cmarkit.Block.List_item.t Cmarkit.node list =
+      List.map entries ~f:(fun entry ->
+        match entry with
+        | Leaf { name; path } ->
+          let target : string = strip_md_ext path in
+          list_item (para (wikilink ~target ~display:None))
+        | Dir { name; children } ->
+          let sub_list : Cmarkit.Block.t = render_entries children in
+          let content : Cmarkit.Block.t =
+            Cmarkit.Block.Blocks ([ para (text name); sub_list ], m)
+          in
+          list_item content)
+    in
+    ul items
+  in
+  render_entries (build_toc_entries paths)
+;;
+
+let%expect_test "toc_cmark_list" =
+  let paths = [ "x/y/z.md"; "x/y/t.md"; "a.jpg"; "x/q.md" ] in
+  let block = toc_cmark_list paths in
+  let doc = Cmarkit.Doc.make block in
+  print_endline (Parse.commonmark_of_doc doc);
+  [%expect {|
+    - [[a.jpg]]
+    - x
+      - [[x/q]]
+      - y
+        - [[x/y/t]]
+        - [[x/y/z]]
+    |}]
 ;;
 
 (** Extract all file paths that a resolved doc links to. *)
@@ -172,57 +243,5 @@ let backlinks (rel_path : string) : vault_component =
   in
   match linking_paths with
   | [] -> ""
-  | paths -> toc (List.sort paths ~compare:String.compare)
-;;
-
-(** Render a file explorer as a nested [<ul>] tree from the vault index. *)
-let file_explorer : vault_component =
-  fun (vault : Vault.t) ->
-  let paths =
-    List.map vault.index.files ~f:(fun (e : Vault.Index.file_entry) -> e.rel_path)
-    |> List.sort ~compare:String.compare
-  in
-  (* Build a tree: (dir_name, subtree) or (file_name, leaf). *)
-  let rec build_tree (entries : (string list * string) list) : html =
-    (* Group by first path component *)
-    let groups =
-      List.map entries ~f:(fun (components, full_path) ->
-        match components with
-        | [] -> "", [], full_path
-        | hd :: tl -> hd, tl, full_path)
-      |> List.sort ~compare:(fun (a, _, _) (b, _, _) -> String.compare a b)
-    in
-    let grouped =
-      List.group groups ~break:(fun (a, _, _) (b, _, _) -> not (String.equal a b))
-    in
-    let items =
-      List.map grouped ~f:(fun group ->
-        match group with
-        | [ (name, [], full_path) ] ->
-          (* Leaf file *)
-          let href = strip_md_ext full_path in
-          Printf.sprintf "<li><a href=\"%s\">%s</a></li>" href name
-        | (dir_name, _, _) :: _ ->
-          (* Check if this is a directory or a single file with deeper path *)
-          let children =
-            List.map group ~f:(fun (_, rest, full_path) -> rest, full_path)
-          in
-          let has_subtree =
-            List.exists children ~f:(fun (rest, _) -> not (List.is_empty rest))
-          in
-          if has_subtree
-          then Printf.sprintf "<li>%s\n%s</li>" dir_name (build_tree children)
-          else (
-            (* Single file at this level *)
-            match children with
-            | [ ([], full_path) ] ->
-              let href = strip_md_ext full_path in
-              Printf.sprintf "<li><a href=\"%s\">%s</a></li>" href dir_name
-            | _ -> Printf.sprintf "<li>%s\n%s</li>" dir_name (build_tree children))
-        | [] -> "")
-    in
-    "<ul>\n" ^ String.concat ~sep:"\n" items ^ "\n</ul>"
-  in
-  let entries = List.map paths ~f:(fun p -> String.split p ~on:'/', p) in
-  build_tree entries
+  | paths -> toc_html (List.sort paths ~compare:String.compare)
 ;;
