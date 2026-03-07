@@ -18,7 +18,7 @@ let%expect_test "render_vault: draft excluded" =
 ;;
 
 let%expect_test "render_vault: home page" =
-  let results = Oystermark.render_vault ~backend_blocks:true ~safe:false vault_root in
+  let results = Oystermark.render_vault ~pipeline:Pipeline.id ~backend_blocks:true ~safe:false vault_root in
   let home_html =
     List.Assoc.find_exn results ~equal:String.equal "home.md"
   in
@@ -27,7 +27,7 @@ let%expect_test "render_vault: home page" =
 ;;
 
 let%expect_test "render_vault: subdir index" =
-  let results = Oystermark.render_vault ~backend_blocks:true ~safe:false vault_root in
+  let results = Oystermark.render_vault ~pipeline:Pipeline.id ~backend_blocks:true ~safe:false vault_root in
   let index_html =
     List.Assoc.find_exn results ~equal:String.equal "subdir/index.md"
   in
@@ -36,7 +36,7 @@ let%expect_test "render_vault: subdir index" =
 ;;
 
 let%expect_test "render_vault: regular note unchanged" =
-  let results = Oystermark.render_vault ~backend_blocks:true ~safe:false vault_root in
+  let results = Oystermark.render_vault ~pipeline:Pipeline.id ~backend_blocks:true ~safe:false vault_root in
   let note_html =
     List.Assoc.find_exn results ~equal:String.equal "subdir/note-a.md"
   in
@@ -46,11 +46,9 @@ let%expect_test "render_vault: regular note unchanged" =
 
 let%expect_test "render_vault: custom pipeline can drop files" =
   let drop_home : Pipeline.t =
-    { Pipeline.default with
-      on_discover = (fun path -> not (String.equal path "home.md"))
-    }
+    Pipeline.make ~on_discover:(fun path -> not (String.equal path "home.md")) ()
   in
-  let pipeline = Pipeline.compose drop_home Pipeline.default in
+  let pipeline = Pipeline.compose drop_home Pipeline.id in
   let results = Oystermark.render_vault ~pipeline ~backend_blocks:true ~safe:false vault_root in
   let files = List.map results ~f:fst |> List.sort ~compare:String.compare in
   List.iter files ~f:(fun f -> printf "%s\n" f);
