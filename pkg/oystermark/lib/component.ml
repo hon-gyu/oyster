@@ -8,7 +8,7 @@
 open Core
 
 type html = string
-type doc_component = string * Parse.doc -> html
+type doc_component = string * Cmarkit.Doc.t -> html
 type vault_component = Vault.t -> html
 
 let strip_md_ext (path : string) : string =
@@ -237,8 +237,8 @@ let extract_outgoing_paths (doc : Cmarkit.Doc.t) : string list =
 let backlinks (rel_path : string) : vault_component =
   fun (vault : Vault.t) ->
   let linking_paths =
-    List.filter_map vault.docs ~f:(fun (src_path, pdoc) ->
-      let targets = extract_outgoing_paths pdoc.doc in
+    List.filter_map vault.docs ~f:(fun (src_path, doc) ->
+      let targets = extract_outgoing_paths doc in
       if List.mem targets rel_path ~equal:String.equal then Some src_path else None)
   in
   match linking_paths with

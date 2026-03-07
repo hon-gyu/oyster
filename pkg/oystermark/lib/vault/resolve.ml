@@ -155,6 +155,7 @@ let resolution_cmarkit_mapper ~(index : Index.t) ~(curr_file : string)
   : Cmarkit.Mapper.t
   =
   Cmarkit.Mapper.make
+    ~block_ext_default:(fun _m b -> Some b)
     ~inline_ext_default:(fun _m i ->
       match i with
       | Parse.Wikilink.Ext_wikilink (w, meta) ->
@@ -186,8 +187,8 @@ let resolution_cmarkit_mapper ~(index : Index.t) ~(curr_file : string)
 ;;
 
 (** Resolve links in a list of parsed docs against the vault index. *)
-let resolve_docs (docs : (string * Parse.doc) list) (index : Index.t)  : (string * Parse.doc) list =
-  List.map docs ~f:(fun (rel_path, pdoc) ->
+let resolve_docs (docs : (string * Cmarkit.Doc.t) list) (index : Index.t)  : (string * Cmarkit.Doc.t) list =
+  List.map docs ~f:(fun (rel_path, doc) ->
     let mapper = resolution_cmarkit_mapper ~index ~curr_file:rel_path in
-    rel_path, { pdoc with doc = Cmarkit.Mapper.map_doc mapper pdoc.doc })
+    rel_path, Cmarkit.Mapper.map_doc mapper doc)
 ;;

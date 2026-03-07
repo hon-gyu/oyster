@@ -29,4 +29,4 @@ val resolution_cmarkit_mapper
   -> curr_file:string
   -> Cmarkit.Mapper.t
 
-val resolve_docs : (string * Parse.doc) list ->  Index.t  -> (string * Parse.doc) list
+val resolve_docs : (string * Cmarkit.Doc.t) list ->  Index.t  -> (string * Cmarkit.Doc.t) list

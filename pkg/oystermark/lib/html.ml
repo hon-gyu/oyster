@@ -177,6 +177,9 @@ let block (c : Cmarkit_renderer.context) : Block.t -> bool = function
        C.string c "</p>\n";
        true
      | None -> false)
+  | Parse.Frontmatter.Frontmatter y ->
+    C.string c (Parse.Frontmatter.to_html (Some y));
+    true
   | _ -> false
 ;;
 
@@ -186,16 +189,6 @@ let renderer ~(backend_blocks : bool) ~(safe : bool) () : Cmarkit_renderer.t =
   Cmarkit_renderer.compose default custom
 ;;
 
-let of_doc
-      ~(backend_blocks : bool)
-      ~(safe : bool)
-      (frontmatter : Yaml.value option)
-      (doc : Doc.t)
-  : string
-  =
-  let fm_html = Parse.Frontmatter.to_html frontmatter in
-  let body_html =
-    Cmarkit_renderer.doc_to_string (renderer ~backend_blocks ~safe ()) doc
-  in
-  fm_html ^ body_html
+let of_doc ~(backend_blocks : bool) ~(safe : bool) (doc : Doc.t) : string =
+  Cmarkit_renderer.doc_to_string (renderer ~backend_blocks ~safe ()) doc
 ;;

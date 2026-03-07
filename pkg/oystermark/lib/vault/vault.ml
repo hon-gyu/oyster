@@ -6,7 +6,7 @@ open Core
 type t =
   { vault_root : string
   ; index : Index.t (** index of all files in the vault *)
-  ; docs : (string * Parse.doc) list
+  ; docs : (string * Cmarkit.Doc.t) list
   ; vault_meta : Cmarkit.Meta.t
   }
 
@@ -15,15 +15,15 @@ let list_files (vault_root : string) : string list =
   Index.list_files_recursive ~root:vault_root ~rel_prefix:""
 ;;
 
-(** Build an index from a list of [(rel_path, parsed_doc)] pairs
+(** Build an index from a list of [(rel_path, doc)] pairs
     plus a list of non-md relative paths. *)
-let build_index ~(md_docs : (string * Parse.doc) list) ~(other_files : string list)
+let build_index ~(md_docs : (string * Cmarkit.Doc.t) list) ~(other_files : string list)
   : Index.t
   =
   let md_entries =
-    List.map md_docs ~f:(fun (rel_path, (pdoc : Parse.doc)) ->
-      let headings = Index.extract_headings pdoc.doc in
-      let block_ids = Index.extract_block_ids pdoc.doc in
+    List.map md_docs ~f:(fun (rel_path, doc) ->
+      let headings = Index.extract_headings doc in
+      let block_ids = Index.extract_block_ids doc in
       ({ rel_path; headings; block_ids } : Index.file_entry))
   in
   let non_md =
@@ -37,7 +37,7 @@ let build_index ~(md_docs : (string * Parse.doc) list) ~(other_files : string li
     For pipeline-aware builds, use the lower-level functions directly. *)
 let of_root_path (vault_root : string) : t =
   let all_files = list_files vault_root in
-  let (docs : (string * Parse.doc) list) =
+  let (docs : (string * Cmarkit.Doc.t) list) =
     List.filter_map all_files ~f:(fun rel_path ->
       if String.is_suffix rel_path ~suffix:".md"
       then (
@@ -51,6 +51,6 @@ let of_root_path (vault_root : string) : t =
     List.filter all_files ~f:(fun p -> not (String.is_suffix p ~suffix:".md"))
   in
   let index = build_index ~md_docs:docs ~other_files in
-  let resolved_docs : (string * Parse.doc) list = Resolve.resolve_docs docs index in
+  let resolved_docs : (string * Cmarkit.Doc.t) list = Resolve.resolve_docs docs index in
   { vault_root; index; docs = resolved_docs; vault_meta = Cmarkit.Meta.none }
 ;;

@@ -26,16 +26,12 @@ let file_cmd : Command.t =
          | None -> file
        in
        let vault = Oystermark.Vault.of_root_path vault_root in
-       let target_doc =
+       let doc =
          List.Assoc.find vault.docs ~equal:String.equal rel_path
          |> Option.value_exn ~message:(sprintf "File %s not found in vault" rel_path)
        in
        print_string
-         (Oystermark.Html.of_doc
-            ~backend_blocks:true
-            ~safe:false
-            target_doc.frontmatter
-            target_doc.doc))
+         (Oystermark.Html.of_doc ~backend_blocks:true ~safe:false doc))
 ;;
 
 let vault_cmd : Command.t =
