@@ -24,9 +24,14 @@ let spf = Printf.sprintf
     Markdown file names are stripped of their extension.
     [dir_href_map] maps a directory name to an optional href; if [None], no anchor
     is added to the directory entry. *)
-let toc ?(dir_href_f = fun dir -> Some (dir ^ "/index")) (paths : string list) : html =
+let toc
+      ?(dir_href_f = fun dir -> Some (dir ^ "/index"))
+      ?(collapsible = false)
+      ?(collapsed_by_default = false)
+      (paths : string list)
+  : html
+  =
   let rec build_tree (entries : (string list * string) list) =
-    (* Group entries by their first path segment, sorted alphabetically *)
     let (by_head : (string * (string list * string)) list list) =
       List.filter_map entries ~f:(fun (segs, path) ->
         match segs with
@@ -35,20 +40,30 @@ let toc ?(dir_href_f = fun dir -> Some (dir ^ "/index")) (paths : string list) :
       |> List.sort ~compare:(fun (a, _) (b, _) -> String.compare a b)
       |> List.group ~break:(fun (a, _) (b, _) -> not (String.equal a b))
     in
+    let render_dir_label dir =
+      match dir_href_f dir with
+      | None -> dir
+      | Some href -> spf {|<a href="%s">%s</a>|} href dir
+    in
     let render_item = function
       | [] -> None
       | [ (name, ([], path)) ] ->
-        (* Leaf node: a single file *)
         let href = strip_md_ext path in
         Some (spf {|<li><a href="%s">%s</a></li>|} href (strip_md_ext name))
       | (dir, _) :: _ as group ->
-        (* Directory node: recurse into children *)
         let children = List.map group ~f:snd in
         let subtree = build_tree children in
+        let label = render_dir_label dir in
         let item =
-          match dir_href_f dir with
-          | None -> spf "<li>%s\n%s</li>" dir subtree
-          | Some href -> spf {|<li><a href="%s">%s</a>%s</li>|} href dir subtree
+          if collapsible
+          then (
+            let open_attr = if collapsed_by_default then "" else " open" in
+            spf
+              {|<li style="list-style: none"><details%s><summary>%s</summary>%s</details></li>|}
+              open_attr
+              label
+              subtree)
+          else spf "<li>%s\n%s</li>" label subtree
         in
         Some item
     in
@@ -85,15 +100,33 @@ let%expect_test "toc" =
     {|
     <ul>
     <li><a href="a.jpg">a.jpg</a></li>
-    <li><a href="x/index">x</a><ul>
+    <li><a href="x/index">x</a>
+    <ul>
     <li><a href="x/q">q</a></li>
-    <li><a href="y/index">y</a><ul>
+    <li><a href="y/index">y</a>
+    <ul>
     <li><a href="x/y/t">t</a></li>
     <li><a href="x/y/z">z</a></li>
     </ul></li>
     </ul></li>
     </ul>
-    |}]
+    |}];
+  print_endline (toc ~collapsible:true ~collapsed_by_default:false paths);
+  [%expect
+    {|
+      <ul>
+      <li><a href="a.jpg">a.jpg</a></li>
+      <li style="list-style: none"><details open><summary><a href="x/index">x</a></summary>
+      <ul>
+      <li><a href="x/q">q</a></li>
+      <li style="list-style: none"><details open><summary><a href="y/index">y</a></summary>
+      <ul>
+      <li><a href="x/y/t">t</a></li>
+      <li><a href="x/y/z">z</a></li>
+      </ul></details></li>
+      </ul></details></li>
+      </ul>
+      |}]
 ;;
 
 (** Extract all file paths that a resolved doc links to. *)
