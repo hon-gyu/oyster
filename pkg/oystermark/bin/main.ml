@@ -14,72 +14,28 @@ open Core
   Command.Param.both under the hood), then the function body receives all of them.
 *)
 
-let render_doc
-      ~(index : Oystermark.Vault.Index.t)
-      ~(curr_file : string)
-      (parsed : Oystermark.Parse.doc)
-  : string
-  =
-  let resolved = Oystermark.resolve ~index ~curr_file parsed.doc in
-  Oystermark.Html.of_doc ~safe:true ~frontmatter:parsed.frontmatter resolved
-;;
-
 let file_cmd : Command.t =
   Command.basic
     ~summary:"Render a single markdown file to stdout"
     (let%map_open.Command vault_root = anon ("vault-root" %: string)
      and file = anon ("file" %: string) in
      fun () ->
-       let pipeline = Oystermark.default_pipeline in
-       let all_files = Oystermark.Vault.list_files vault_root in
        let rel_path =
          match String.chop_prefix file ~prefix:(vault_root ^ "/") with
          | Some rel -> rel
          | None -> file
        in
-       (* Build vault with pipeline to get index *)
-       let other_files =
-         List.filter all_files ~f:(fun p -> not (String.is_suffix p ~suffix:".md"))
-       in
-       (* Read + parse all files for index *)
-       let parsed =
-         List.filter_map all_files ~f:(fun rp ->
-           if not (String.is_suffix rp ~suffix:".md")
-           then None
-           else (
-             let full_path = Filename.concat vault_root rp in
-             let content = In_channel.read_all full_path in
-             let { Parse.Frontmatter.yaml; body } = Parse.Frontmatter.of_string content in
-             match pipeline.on_frontmatter rp yaml with
-             | None -> None
-             | Some yaml' ->
-               let cmarkit_doc = Cmarkit.Doc.of_string ~strict:false body in
-               let doc = Cmarkit.Mapper.map_doc Parse.mapper cmarkit_doc in
-               let pdoc : Parse.doc =
-                 { doc; frontmatter = yaml'; meta = Cmarkit.Meta.none }
-               in
-               (match pipeline.on_parse rp pdoc with
-                | None -> None
-                | Some pdoc' -> Some (rp, pdoc'))))
-       in
-       let index = Oystermark.Vault.build_index ~md_docs:parsed ~other_files in
-       let vault_ctx : Oystermark.Pipeline.vault_ctx =
-         { vault_root; index; docs = parsed; vault_meta = Cmarkit.Meta.none }
-       in
+       let vault = Oystermark.Vault.of_root_path vault_root in
        let target_doc =
-         List.Assoc.find parsed ~equal:String.equal rel_path
+         List.Assoc.find vault.docs ~equal:String.equal rel_path
          |> Option.value_exn ~message:(sprintf "File %s not found in vault" rel_path)
        in
-       (* Built-in: resolve links *)
-       let mapper = Oystermark.resolution_cmarkit_mapper ~index ~curr_file:rel_path in
-       let target_doc =
-         { target_doc with doc = Cmarkit.Mapper.map_doc mapper target_doc.doc }
-       in
-       match pipeline.on_vault vault_ctx rel_path target_doc with
-       | None -> eprintf "File %s is a draft, skipping.\n" rel_path
-       | Some final ->
-         print_string
-           (Oystermark.Html.of_doc ~safe:true ~frontmatter:final.frontmatter final.doc))
+       print_string
+         (Oystermark.Html.of_doc
+            ~backend_blocks:true
+            ~safe:false
+            target_doc.frontmatter
+            target_doc.doc))
 ;;
 
 let vault_cmd : Command.t =
@@ -93,7 +49,7 @@ let vault_cmd : Command.t =
          | Some d -> d
          | None -> vault_root ^ "/_site"
        in
-       let results = Oystermark.render_vault ~safe:true vault_root in
+       let results = Oystermark.render_vault ~backend_blocks:true ~safe:false vault_root in
        List.iter results ~f:(fun (rel_path, html) ->
          let out_rel = String.chop_suffix_exn rel_path ~suffix:".md" ^ ".html" in
          let out_path = Filename.concat output_dir out_rel in
