@@ -62,8 +62,6 @@ let compose (a : t) (b : t) : t =
   }
 ;;
 
-(* {1 Frontmatter helpers} *)
-
 (* {1 Built-in pipelines} *)
 
 (** Exclude files with [draft: true] frontmatter. Apply on frontmatter stage. *)
@@ -95,4 +93,29 @@ let exclude_unpublish : t =
 (** Exclude notes that has `.draft` in stem. Apply on discover stage. *)
 let exclude_draft_from_note_name : t =
   make ~on_discover:(fun path -> not (String.is_suffix ~suffix:".draft.md" path)) ()
+;;
+
+let prepend_paragraph (content : string) : t =
+  let open Cmarkit in
+  let para : string = "<p>" ^ content ^ "</p>" in
+  let cb : Block.Code_block.t =
+    Block.Code_block.make
+      ~info_string:("=html", Meta.none)
+      (Block_line.list_of_string para)
+  in
+  let cb_block : Block.t = Block.Code_block (cb, Meta.none) in
+  let mapper : Mapper.t =
+    Mapper.make
+      ~inline_ext_default:(fun _m i -> Some i)
+      ~block:(fun _m (b : Block.t) ->
+        match b with
+        | Block.Blocks (blocks, meta) ->
+          Mapper.ret (Block.Blocks (cb_block :: blocks, meta))
+        | _ -> Mapper.default)
+      ()
+  in
+  make
+    ~on_parse:(fun _path (pdoc : Parse.doc) ->
+      Some { pdoc with doc = Mapper.map_doc mapper pdoc.doc })
+    ()
 ;;
