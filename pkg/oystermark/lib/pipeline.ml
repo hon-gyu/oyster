@@ -132,7 +132,7 @@ let%expect_test "prepend_block after_frontmatter inserts after frontmatter" =
   let pipeline = of_block_mapper block_mapper in
   let doc = Parse.of_string "---\ntitle: Hello\n---\n# Heading\n\nBody text." in
   let doc' = pipeline.on_parse "test.md" doc |> Option.value_exn in
-  print_endline (Parse.commonmark_of_cmark_doc doc');
+  print_endline (Parse.commonmark_of_doc doc');
   [%expect
     {|
     ---
@@ -152,7 +152,7 @@ let%expect_test "prepend_block after_frontmatter without frontmatter prepends no
   let pipeline = of_block_mapper block_mapper in
   let doc = Parse.of_string "# Heading\n\nBody text." in
   let doc' = pipeline.on_parse "test.md" doc |> Option.value_exn in
-  print_endline (Parse.commonmark_of_cmark_doc doc');
+  print_endline (Parse.commonmark_of_doc doc');
   [%expect
     {|
     ```=html
@@ -169,7 +169,7 @@ let%expect_test "prepend_html_code_block" =
   let pipeline = of_block_mapper block_mapper in
   let doc = Parse.of_string "Hello, world again!" in
   let doc' = pipeline.on_parse "test.md" doc |> Option.value_exn in
-  print_endline (Parse.commonmark_of_cmark_doc doc');
+  print_endline (Parse.commonmark_of_doc doc');
   [%expect
     {|
     ```=html
@@ -184,7 +184,7 @@ let%expect_test "prepend_html_code_block fires exactly once on multi-block doc" 
   let pipeline = of_block_mapper block_mapper in
   let doc = Parse.of_string "# Heading\n\nParagraph one.\n\nParagraph two." in
   let doc' = pipeline.on_parse "test.md" doc |> Option.value_exn in
-  print_endline (Parse.commonmark_of_cmark_doc doc');
+  print_endline (Parse.commonmark_of_doc doc');
   [%expect
     {|
     ```=html

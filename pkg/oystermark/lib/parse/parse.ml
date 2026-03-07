@@ -49,7 +49,7 @@ let inline_to_plain_text (inline : Cmarkit.Inline.t) : string =
   String.concat ~sep:"\n" (List.map lines ~f:(String.concat ~sep:""))
 ;;
 
-let commonmark_of_cmark_doc (doc : Cmarkit.Doc.t) : string =
+let commonmark_of_doc (doc : Cmarkit.Doc.t) : string =
   let custom =
     let inline (c : Cmarkit_renderer.context) = function
       | Wikilink.Ext_wikilink (wl, _) ->
