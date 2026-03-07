@@ -11,22 +11,89 @@ type html = string
 type doc_component = string * Parse.doc -> html
 type vault_component = Vault.t -> html
 
-(** Strip .md extension for SSG-friendly URLs. *)
 let strip_md_ext (path : string) : string =
   match String.chop_suffix path ~suffix:".md" with
   | Some p -> p
   | None -> path
 ;;
 
-(** Render a table of contents as a [<ul>] from a list of relative paths. *)
-let toc (paths : string list) : html =
-  let items =
-    List.map paths ~f:(fun path ->
-      let href = strip_md_ext path in
-      let label = Filename.chop_extension (Filename.basename path) in
-      Printf.sprintf "<li><a href=\"%s\">%s</a></li>" href label)
+let spf = Printf.sprintf
+
+(** Render a table of contents as a nested [<ul>] tree from a list of relative paths.
+    Paths are grouped by directory, producing nested lists for shared prefixes.
+    Markdown file names are stripped of their extension.
+    [dir_href_map] maps a directory name to an optional href; if [None], no anchor
+    is added to the directory entry. *)
+let toc ?(dir_href_f = fun dir -> Some (dir ^ "/index")) (paths : string list) : html =
+  let rec build_tree (entries : (string list * string) list) =
+    (* Group entries by their first path segment, sorted alphabetically *)
+    let (by_head : (string * (string list * string)) list list) =
+      List.filter_map entries ~f:(fun (segs, path) ->
+        match segs with
+        | [] -> None
+        | hd :: tl -> Some (hd, (tl, path)))
+      |> List.sort ~compare:(fun (a, _) (b, _) -> String.compare a b)
+      |> List.group ~break:(fun (a, _) (b, _) -> not (String.equal a b))
+    in
+    let render_item = function
+      | [] -> None
+      | [ (name, ([], path)) ] ->
+        (* Leaf node: a single file *)
+        let href = strip_md_ext path in
+        Some (spf {|<li><a href="%s">%s</a></li>|} href (strip_md_ext name))
+      | (dir, _) :: _ as group ->
+        (* Directory node: recurse into children *)
+        let children = List.map group ~f:snd in
+        let subtree = build_tree children in
+        let item =
+          match dir_href_f dir with
+          | None -> spf "<li>%s\n%s</li>" dir subtree
+          | Some href -> spf {|<li><a href="%s">%s</a>%s</li>|} href dir subtree
+        in
+        Some item
+    in
+    let items = List.filter_map by_head ~f:render_item in
+    let items_str = String.concat ~sep:"\n" items in
+    "<ul>\n" ^ items_str ^ "\n</ul>"
   in
-  "<ul>\n" ^ String.concat ~sep:"\n" items ^ "\n</ul>"
+  let (parts_and_path_by_entry : (string list * string) list) =
+    List.map paths ~f:(fun p -> String.split p ~on:'/', p)
+  in
+  build_tree parts_and_path_by_entry
+;;
+
+let%expect_test "toc" =
+  let paths = [ "x/y/z.md"; "x/y/t.md"; "a.jpg"; "x/q.md" ] in
+  print_endline (toc ~dir_href_f:(fun (_ : string) -> None) paths);
+  [%expect
+    {|
+    <ul>
+    <li><a href="a.jpg">a.jpg</a></li>
+    <li>x
+    <ul>
+    <li><a href="x/q">q</a></li>
+    <li>y
+    <ul>
+    <li><a href="x/y/t">t</a></li>
+    <li><a href="x/y/z">z</a></li>
+    </ul></li>
+    </ul></li>
+    </ul>
+    |}];
+  print_endline (toc paths);
+  [%expect
+    {|
+    <ul>
+    <li><a href="a.jpg">a.jpg</a></li>
+    <li><a href="x/index">x</a><ul>
+    <li><a href="x/q">q</a></li>
+    <li><a href="y/index">y</a><ul>
+    <li><a href="x/y/t">t</a></li>
+    <li><a href="x/y/z">z</a></li>
+    </ul></li>
+    </ul></li>
+    </ul>
+    |}]
 ;;
 
 (** Extract all file paths that a resolved doc links to. *)

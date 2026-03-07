@@ -1,5 +1,6 @@
 (library
  (name oystermark)
  (libraries parse vault cmarkit core tyxml yaml)
+ (inline_tests)
  (preprocess
   (pps ppx_jane ppx_string)))
