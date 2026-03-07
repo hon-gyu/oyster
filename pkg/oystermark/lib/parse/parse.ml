@@ -5,6 +5,7 @@ module Block_id = Block_id
 module Frontmatter = Frontmatter
 module Wikilink = Wikilink
 
+(** Oystermark document: a parsed cmark document with frontmatter. *)
 type doc =
   { doc : Cmarkit.Doc.t
   ; frontmatter : Yaml.value option
@@ -22,7 +23,7 @@ let mapper =
 ;;
 
 (** [of_string ?strict ?layout s] parses markdown string [s] into a {!doc}
-    with frontmatter extracted and wikilinks/block IDs resolved. *)
+    with frontmatter extracted and wikilinks/block IDs parsed. *)
 let of_string ?(strict = false) ?(layout = false) (s : string) : doc =
   let { Frontmatter.yaml; body } = Frontmatter.of_string s in
   let cmarkit_doc = Cmarkit.Doc.of_string ~strict ~layout body in
@@ -47,7 +48,7 @@ let inline_to_plain_text (inline : Cmarkit.Inline.t) : string =
   String.concat ~sep:"\n" (List.map lines ~f:(String.concat ~sep:""))
 ;;
 
-let commonmark_of_doc (doc : Cmarkit.Doc.t) : string =
+let commonmark_of_cmark_doc (doc : Cmarkit.Doc.t) : string =
   let custom =
     let inline (c : Cmarkit_renderer.context) = function
       | Wikilink.Ext_wikilink (wl, _) ->

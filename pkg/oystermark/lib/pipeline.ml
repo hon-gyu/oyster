@@ -95,27 +95,68 @@ let exclude_draft_from_note_name : t =
   make ~on_discover:(fun path -> not (String.is_suffix ~suffix:".draft.md" path)) ()
 ;;
 
-let prepend_paragraph (content : string) : t =
+let prepend_block (prefix : Cmarkit.Block.t) : Cmarkit.Block.t Cmarkit.Mapper.mapper =
   let open Cmarkit in
-  let para : string = "<p>" ^ content ^ "</p>" in
+  let fired = ref false in
+  fun _m (b : Block.t) ->
+    if !fired
+    then Mapper.default
+    else (
+      fired := true;
+      match b with
+      | Block.Blocks (blocks, meta) -> Mapper.ret (Block.Blocks (prefix :: blocks, meta))
+      | _ -> Mapper.ret (Block.Blocks ([ prefix; b ], Meta.none)))
+;;
+
+let prepend_html_code_block (content : string) : Cmarkit.Block.t Cmarkit.Mapper.mapper =
+  let open Cmarkit in
   let cb : Block.Code_block.t =
     Block.Code_block.make
       ~info_string:("=html", Meta.none)
-      (Block_line.list_of_string para)
+      (Block_line.list_of_string content)
   in
-  let cb_block : Block.t = Block.Code_block (cb, Meta.none) in
+  prepend_block (Block.Code_block (cb, Meta.none))
+;;
+
+let of_block_mapper (block_mapper : Cmarkit.Block.t Cmarkit.Mapper.mapper) : t =
+  let open Cmarkit in
   let mapper : Mapper.t =
-    Mapper.make
-      ~inline_ext_default:(fun _m i -> Some i)
-      ~block:(fun _m (b : Block.t) ->
-        match b with
-        | Block.Blocks (blocks, meta) ->
-          Mapper.ret (Block.Blocks (cb_block :: blocks, meta))
-        | _ -> Mapper.default)
-      ()
+    Mapper.make ~inline_ext_default:(fun _m i -> Some i) ~block:block_mapper ()
   in
   make
     ~on_parse:(fun _path (pdoc : Parse.doc) ->
       Some { pdoc with doc = Mapper.map_doc mapper pdoc.doc })
     ()
+;;
+
+let%expect_test "prepend_html_code_block" =
+  let block_mapper = prepend_html_code_block "<p>Hello, world!</p>" in
+  let pipeline = of_block_mapper block_mapper in
+  let pdoc = Parse.of_string "Hello, world again!" in
+  let pdoc' = pipeline.on_parse "test.md" pdoc |> Option.value_exn in
+  print_endline (Parse.commonmark_of_cmark_doc pdoc'.doc);
+  [%expect {|
+    ```=html
+    <p>Hello, world!</p>
+    ```
+    Hello, world again\!
+    |}]
+;;
+
+let%expect_test "prepend_html_code_block fires exactly once on multi-block doc" =
+  let block_mapper = prepend_html_code_block "<nav>toc</nav>" in
+  let pipeline = of_block_mapper block_mapper in
+  let pdoc = Parse.of_string "# Heading\n\nParagraph one.\n\nParagraph two." in
+  let pdoc' = pipeline.on_parse "test.md" pdoc |> Option.value_exn in
+  print_endline (Parse.commonmark_of_cmark_doc pdoc'.doc);
+  [%expect {|
+    ```=html
+    <nav>toc</nav>
+    ```
+    # Heading
+
+    Paragraph one.
+
+    Paragraph two.
+    |}]
 ;;

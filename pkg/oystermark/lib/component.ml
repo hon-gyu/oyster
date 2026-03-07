@@ -189,7 +189,7 @@ let%expect_test "toc_cmark_list" =
   let paths = [ "x/y/z.md"; "x/y/t.md"; "a.jpg"; "x/q.md" ] in
   let block = toc_cmark_list paths in
   let doc = Cmarkit.Doc.make block in
-  print_endline (Parse.commonmark_of_doc doc);
+  print_endline (Parse.commonmark_of_cmark_doc doc);
   [%expect {|
     - [[a.jpg]]
     - x
