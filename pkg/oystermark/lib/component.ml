@@ -151,11 +151,13 @@ let%expect_test "toc_html" =
 let toc_cmark_list (paths : string list) : Cmarkit.Block.t =
   let m : Cmarkit.Meta.t = Cmarkit.Meta.none in
   let text (s : string) : Cmarkit.Inline.t = Cmarkit.Inline.Text (s, m) in
-  let wikilink ~(target : string) ~(display : string option) : Cmarkit.Inline.t =
+  let wikilink ~(target : string) ~(file_path : string) ~(display : string option) : Cmarkit.Inline.t =
     let wl : Parse.Wikilink.t =
       { target = Some target; fragment = None; display = display; embed = false }
     in
-    Parse.Wikilink.Ext_wikilink (wl, m)
+    let resolved : Vault.Resolve.target = File { path = file_path } in
+    let meta : Cmarkit.Meta.t = Cmarkit.Meta.add Vault.Resolve.resolved_key resolved m in
+    Parse.Wikilink.Ext_wikilink (wl, meta)
   in
   let list_item (block : Cmarkit.Block.t) : Cmarkit.Block.List_item.t Cmarkit.node =
     Cmarkit.Block.List_item.make block, m
@@ -172,7 +174,7 @@ let toc_cmark_list (paths : string list) : Cmarkit.Block.t =
         match entry with
         | Leaf { name; path } ->
           let target : string = strip_md_ext path in
-          list_item (para (wikilink ~target ~display:None))
+          list_item (para (wikilink ~target ~file_path:path ~display:None))
         | Dir { name; children } ->
           let sub_list : Cmarkit.Block.t = render_entries children in
           let content : Cmarkit.Block.t =
