@@ -21,6 +21,7 @@ module Pipeline = Pipeline
     4. Render to HTML. *)
 let render_vault
       ?(pipeline : Pipeline.t = Pipeline.default)
+      ?(top_fm_keys_ignored = Set.of_list (module String) [ "published"; "draft" ])
       ~(backend_blocks : bool)
       ~(safe : bool)
       (vault_root : string)
@@ -47,15 +48,17 @@ let render_vault
     List.filter discovered ~f:(fun p -> not (String.is_suffix p ~suffix:".md"))
   in
   let index = Vault.build_index ~md_docs:parsed ~other_files in
-  let resolved : (string * Cmarkit.Doc.t) list = Vault.Resolve.resolve_docs parsed index in
+  let resolved : (string * Cmarkit.Doc.t) list =
+    Vault.Resolve.resolve_docs parsed index
+  in
   let vault_ctx : Vault.t =
-    { vault_root; index; docs=resolved; vault_meta = Cmarkit.Meta.none }
+    { vault_root; index; docs = resolved; vault_meta = Cmarkit.Meta.none }
   in
   (* Stage 4: Render *)
   List.filter_map resolved ~f:(fun (rel_path, doc) ->
     match pipeline.on_vault vault_ctx rel_path doc with
     | None -> None
     | Some final ->
-      let html = Html.of_doc ~backend_blocks ~safe final in
+      let html = Html.of_doc ~top_fm_keys_ignored ~backend_blocks ~safe final in
       Some (rel_path, html))
 ;;
