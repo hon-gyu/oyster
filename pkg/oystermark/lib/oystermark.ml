@@ -17,10 +17,8 @@ module Pipeline = Pipeline
     Stages:
     1. List files and dirs, apply [on_discover].
     2. Parse [.md] files only, apply [on_parse].
-    3. Build index (files + dirs), resolve links, apply [on_vault].
-       Dir entries are passed to [on_vault] with a synthetic empty doc
-       so pipelines like [dir_index] can generate index pages.
-    4. Render to HTML. *)
+    3. Build index, resolve links, apply [on_vault] to all entries
+       (docs + dirs with synthetic empty docs), then render to HTML. *)
 let render_vault
       ?(pipeline : Pipeline.t = Pipeline.default)
       ~(backend_blocks : bool)
@@ -61,24 +59,10 @@ let render_vault
   let vault_ctx : Vault.t =
     { vault_root; index; docs = resolved; vault_meta = Cmarkit.Meta.none }
   in
-  (* Pass dir entries through on_vault with synthetic empty docs *)
-  let empty_doc : Cmarkit.Doc.t = Cmarkit.Doc.empty in
-  let dir_outputs : (string * string) list =
-    List.concat_map dirs ~f:(fun dir_path ->
-      let outputs = pipeline.on_vault vault_ctx dir_path empty_doc in
-      List.filter_map outputs ~f:(fun (out_path, final) ->
-        if String.is_suffix out_path ~suffix:".md"
-        then Some (out_path, Html.of_doc ~backend_blocks ~safe final)
-        else None))
-  in
-  (* Stage 4: on_vault + Render for docs *)
-  let doc_outputs : (string * string) list =
-    List.concat_map resolved ~f:(fun (rel_path, doc) ->
-      let outputs = pipeline.on_vault vault_ctx rel_path doc in
-      List.filter_map outputs ~f:(fun (out_path, final) ->
-        if String.is_suffix out_path ~suffix:".md"
-        then Some (out_path, Html.of_doc ~backend_blocks ~safe final)
-        else None))
-  in
-  doc_outputs @ dir_outputs
+  (* Stage 4: on_vault + Render *)
+  let final_vault : Vault.t = pipeline.on_vault vault_ctx in
+  List.filter_map final_vault.docs ~f:(fun (out_path, final) ->
+    if String.is_suffix out_path ~suffix:".md"
+    then Some (out_path, Html.of_doc ~backend_blocks ~safe final)
+    else None)
 ;;

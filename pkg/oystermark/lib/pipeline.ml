@@ -1,16 +1,12 @@
 (** Processing pipeline for vault rendering.
 
     The pipeline is a record of hooks that run at successive stages of vault
-    processing.  Each hook receives exactly the data available at its stage
-    and returns a list of [(path, doc)] pairs (concat_map style):
-    - [[]] to drop the note
-    - [[(path, doc)]] to keep/transform it
-    - [[(p1, d1); (p2, d2); ...]] to expand one input into multiple outputs
+    processing.
 
     Stages (in order):
     1. {b discover} — path only, before reading.  Return [false] to skip.
-    2. {b parse} — after full parse, before index construction.
-    3. {b vault} — after indexing and link resolution; full vault context available. *)
+    2. {b parse} — per-doc concat_map after full parse, before index construction.
+    3. {b vault} — full vault transform after indexing and link resolution. *)
 
 open Core
 
@@ -18,14 +14,14 @@ open Core
 type t =
   { on_discover : string -> string list -> bool
   ; on_parse : string -> Cmarkit.Doc.t -> (string * Cmarkit.Doc.t) list
-  ; on_vault : Vault.t -> string -> Cmarkit.Doc.t -> (string * Cmarkit.Doc.t) list
+  ; on_vault : Vault.t -> Vault.t
   }
 
 (** The identity pipeline — passes everything through unchanged. *)
 let id : t =
   { on_discover = (fun _path _paths -> true)
   ; on_parse = (fun path doc -> [ path, doc ])
-  ; on_vault = (fun _ctx path doc -> [ path, doc ])
+  ; on_vault = (fun ctx -> ctx)
   }
 ;;
 
@@ -46,14 +42,25 @@ let compose (a : t) (b : t) : t =
   ; on_parse =
       (fun path doc ->
         List.concat_map (a.on_parse path doc) ~f:(fun (p', d') -> b.on_parse p' d'))
-  ; on_vault =
-      (fun ctx path doc ->
-        List.concat_map (a.on_vault ctx path doc) ~f:(fun (p', d') ->
-          b.on_vault ctx p' d'))
+  ; on_vault = (fun ctx -> b.on_vault (a.on_vault ctx))
   }
 ;;
 
 let ( >> ) a b = compose a b
+
+(** {1 Vault-stage helpers} *)
+
+(** Lift a per-doc concat_map into an [on_vault] hook. *)
+let map_each_doc
+      (f : Vault.t -> string -> Cmarkit.Doc.t -> (string * Cmarkit.Doc.t) list)
+  : Vault.t -> Vault.t
+  =
+  fun (ctx : Vault.t) ->
+  let docs' : (string * Cmarkit.Doc.t) list =
+    List.concat_map ctx.docs ~f:(fun (path, doc) -> f ctx path doc)
+  in
+  { ctx with docs = docs' }
+;;
 
 (* {1 Built-in pipelines} *)
 
@@ -195,21 +202,20 @@ let of_block_mapper (block_mapper : Cmarkit.Block.t Cmarkit.Mapper.mapper) : t =
     wikilinks (to [dir/index]) or plain text.  Set to [true] when [dir_index]
     is also in the pipeline. *)
 let home_toc ?(dir_link : bool = false) () : t =
-  let on_vault (ctx : Vault.t) (path : string) (doc : Cmarkit.Doc.t)
-    : (string * Cmarkit.Doc.t) list
-    =
-    if not (String.equal path "home.md")
-    then [ path, doc ]
-    else (
-      let toc_paths : string list =
-        List.filter_map (Vault.all_entry_paths ctx) ~f:(fun p ->
-          if String.is_suffix p ~suffix:"/" then None else Some p)
-      in
-      let toc_cmark_list = Component.toc_cmark_list ~dir_link toc_paths in
-      let block_mapper = add_block `Append toc_cmark_list in
-      let mapper = Cmarkit.Mapper.make ~block:block_mapper () in
-      let new_home = Cmarkit.Mapper.map_doc mapper doc in
-      [ path, new_home ])
+  let on_vault : Vault.t -> Vault.t =
+    map_each_doc (fun (ctx : Vault.t) (path : string) (doc : Cmarkit.Doc.t) ->
+      if not (String.equal path "home.md")
+      then [ path, doc ]
+      else (
+        let toc_paths : string list =
+          List.filter_map (Vault.all_entry_paths ctx) ~f:(fun p ->
+            if String.is_suffix p ~suffix:"/" then None else Some p)
+        in
+        let toc_cmark_list = Component.toc_cmark_list ~dir_link toc_paths in
+        let block_mapper = add_block `Append toc_cmark_list in
+        let mapper = Cmarkit.Mapper.make ~block:block_mapper () in
+        let new_home = Cmarkit.Mapper.map_doc mapper doc in
+        [ path, new_home ]))
   in
   make ~on_vault ()
 ;;
@@ -221,46 +227,44 @@ let home_toc ?(dir_link : bool = false) () : t =
     when [false] lists all descendants as a nested tree.
     Skips if [dir/index.md] already exists in the vault. *)
 let dir_index ?(immediate_only : bool = false) () : t =
-  let on_vault (ctx : Vault.t) (path : string) (doc : Cmarkit.Doc.t)
-    : (string * Cmarkit.Doc.t) list
-    =
-    if not (String.is_suffix path ~suffix:"/")
-    then [ path, doc ]
-    else (
-      let index_path = path ^ "index.md" in
-      (* Skip if an explicit index.md already exists *)
-      if List.Assoc.mem ctx.docs ~equal:String.equal index_path
-      then []
-      else (
-        let is_child (p : string) : bool =
-          String.is_prefix p ~prefix:path && not (String.equal p path)
-        in
-        let is_immediate (p : string) : bool =
-          let rel : string = String.chop_prefix_exn p ~prefix:path in
-          not (String.mem (String.rstrip ~drop:(Char.equal '/') rel) '/')
-        in
-        let all_paths : string list =
-          List.map ctx.docs ~f:fst @ ctx.index.dirs
-        in
-        (* Collect children: files as-is, dirs as "dirname" (flat leaf). *)
-        let rel_children : string list =
-          List.filter_map all_paths ~f:(fun p ->
-            if is_child p && ((not immediate_only) || is_immediate p)
-            then (
-              if String.is_suffix p ~suffix:"/"
+  let on_vault (ctx : Vault.t) : Vault.t =
+    let all_paths : string list =
+      List.map ctx.docs ~f:fst @ ctx.index.dirs
+    in
+    let new_docs : (string * Cmarkit.Doc.t) list =
+      List.filter_map ctx.index.dirs ~f:(fun (dir_path : string) ->
+        let index_path : string = dir_path ^ "index.md" in
+        (* Skip if an explicit index.md already exists *)
+        if List.Assoc.mem ctx.docs ~equal:String.equal index_path
+        then None
+        else (
+          let is_child (p : string) : bool =
+            String.is_prefix p ~prefix:dir_path && not (String.equal p dir_path)
+          in
+          let is_immediate (p : string) : bool =
+            let rel : string = String.chop_prefix_exn p ~prefix:dir_path in
+            not (String.mem (String.rstrip ~drop:(Char.equal '/') rel) '/')
+          in
+          let rel_children : string list =
+            List.filter_map all_paths ~f:(fun p ->
+              if is_child p && ((not immediate_only) || is_immediate p)
               then (
-                let dir_name : string =
-                  String.chop_suffix_exn p ~suffix:"/"
-                  |> String.chop_prefix_exn ~prefix:path
-                in
-                Some dir_name)
-              else Some (String.chop_prefix_exn p ~prefix:path))
-            else None)
-        in
-        let toc_block : Cmarkit.Block.t =
-          Component.toc_cmark_list ~path_prefix:path ~dir_link:true rel_children
-        in
-        [ index_path, Cmarkit.Doc.make toc_block ]))
+                if String.is_suffix p ~suffix:"/"
+                then (
+                  let dir_name : string =
+                    String.chop_suffix_exn p ~suffix:"/"
+                    |> String.chop_prefix_exn ~prefix:dir_path
+                  in
+                  Some dir_name)
+                else Some (String.chop_prefix_exn p ~prefix:dir_path))
+              else None)
+          in
+          let toc_block : Cmarkit.Block.t =
+            Component.toc_cmark_list ~path_prefix:dir_path ~dir_link:true rel_children
+          in
+          Some (index_path, Cmarkit.Doc.make toc_block)))
+    in
+    { ctx with docs = ctx.docs @ new_docs }
   in
   make ~on_vault ()
 ;;
