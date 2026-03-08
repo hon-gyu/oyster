@@ -7,6 +7,7 @@ type page =
   ; body : string
   ; url_path : string
   ; nav : string
+  ; sidebar : string
   }
 
 type t = page -> string
@@ -17,13 +18,16 @@ let wrap ~(css : string) (page : page) : string =
     ; page.title
     ; "</title>\n<style>\n"
     ; css
-    ; "\n</style>\n</head>\n<body>\n<main>\n"
+    ; "\n</style>\n</head>\n<body>\n<div class=\"layout\">\n\
+       <nav class=\"sidebar\">\n"
+    ; page.sidebar
+    ; "</nav>\n<main>\n"
     ; page.nav
     ; "<h1 class=\"page-title\">"
     ; page.title
     ; "</h1>\n"
     ; page.body
-    ; "</main>\n</body>\n</html>\n"
+    ; "</main>\n</div>\n</body>\n</html>\n"
     ]
 ;;
 
@@ -31,6 +35,7 @@ let none : t =
   fun page ->
   String.concat
     [ "<!DOCTYPE html>\n<html>\n<head><meta charset=\"UTF-8\"></head>\n<body>\n"
+    ; page.sidebar
     ; page.nav
     ; page.body
     ; "</body>\n</html>\n"
@@ -62,10 +67,32 @@ body {
   margin: 0;
   padding: 0;
 }
+.layout {
+  display: flex;
+  min-height: 100vh;
+}
+.sidebar {
+  width: 16rem;
+  flex-shrink: 0;
+  padding: 1.5rem 1rem;
+  border-right: 1px solid var(--border);
+  background: var(--bg-alt);
+  overflow-y: auto;
+  font-size: 0.85em;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+}
+.sidebar ul { list-style: none; padding-left: 1em; margin: 0.2em 0; }
+.sidebar > ul { padding-left: 0; }
+.sidebar a { color: var(--fg-dim); }
+.sidebar a:hover { color: var(--accent2); }
+.sidebar details > summary { cursor: pointer; }
 main {
   max-width: 48rem;
-  margin: 2rem auto;
-  padding: 0 1.5rem;
+  flex: 1;
+  margin: 0 auto;
+  padding: 2rem 1.5rem;
 }
 h1, h2, h3, h4, h5, h6 {
   color: var(--accent);
@@ -169,10 +196,32 @@ body {
   margin: 0;
   padding: 0;
 }
+.layout {
+  display: flex;
+  min-height: 100vh;
+}
+.sidebar {
+  width: 16rem;
+  flex-shrink: 0;
+  padding: 1.5rem 1rem;
+  border-right: 1px solid var(--border);
+  background: var(--bg-alt);
+  overflow-y: auto;
+  font-size: 0.85em;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+}
+.sidebar ul { list-style: none; padding-left: 1em; margin: 0.2em 0; }
+.sidebar > ul { padding-left: 0; }
+.sidebar a { color: var(--fg-dim); }
+.sidebar a:hover { color: var(--accent2); }
+.sidebar details > summary { cursor: pointer; }
 main {
   max-width: 48rem;
-  margin: 2rem auto;
-  padding: 0 1.5rem;
+  flex: 1;
+  margin: 0 auto;
+  padding: 2rem 1.5rem;
 }
 h1, h2, h3, h4, h5, h6 {
   color: var(--accent);

@@ -60,11 +60,17 @@ let build_toc_entries (paths : string list) : toc_entry list =
     is added to the directory entry. *)
 let toc_html
       ?(dir_href_f = fun dir -> Some (dir ^ "/index"))
+      ?(leaf_href_f : (string -> string) option)
       ?(collapsible = false)
       ?(collapsed_by_default = false)
       (paths : string list)
   : html
   =
+  let leaf_href (path : string) : string =
+    match leaf_href_f with
+    | Some f -> f path
+    | None -> strip_md_ext path
+  in
   let render_dir_label (dir : string) : string =
     match dir_href_f dir with
     | None -> dir
@@ -75,7 +81,7 @@ let toc_html
       List.map entries ~f:(fun entry ->
         match entry with
         | Leaf { name; path } ->
-          let href = strip_md_ext path in
+          let href = leaf_href path in
           spf {|<li><a href="%s">%s</a></li>|} href (strip_md_ext name)
         | Dir { name; children } ->
           let subtree = render_entries children in

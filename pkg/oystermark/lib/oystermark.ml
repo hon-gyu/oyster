@@ -63,6 +63,17 @@ let render_vault
   in
   (* Stage 4: on_vault + Render *)
   let final_vault : Vault.t = pipeline.on_vault vault_ctx in
+  let sidebar_paths : string list =
+    List.filter_map final_vault.docs ~f:(fun (p, _) ->
+      if String.is_suffix p ~suffix:".md" then Some p else None)
+  in
+  let sidebar : string =
+    Component.toc_html
+      ~dir_href_f:(fun dir -> Some (Html.note_url_path (dir ^ "/index.md")))
+      ~leaf_href_f:Html.file_url_path
+      ~collapsible:true
+      sidebar_paths
+  in
   List.filter_map final_vault.docs ~f:(fun (rel_path, final) ->
     if String.is_suffix rel_path ~suffix:".md"
     then (
@@ -70,7 +81,7 @@ let render_vault
       let url_path = Html.note_url_path rel_path in
       let title : string = Component.title_of_path rel_path in
       let nav : string = Component.nav_of_url_path url_path in
-      let page = Theme.{ title; body; url_path; nav } in
+      let page = Theme.{ title; body; url_path; nav; sidebar } in
       let html = theme page in
       Some (Html.note_output_path rel_path, html))
     else None)
