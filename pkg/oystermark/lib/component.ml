@@ -171,7 +171,12 @@ let toc_cmark_list
   in
   let make_leaf_wl ~(full_path : string) ~(display : string option) : Cmarkit.Inline.t =
     let target : string option = Some (strip_md_ext full_path) in
-    let resolved_target : Vault.Resolve.target = Note { path = full_path } in
+    let note_path : string =
+      if String.is_suffix full_path ~suffix:".md"
+      then full_path
+      else full_path ^ "/index.md"
+    in
+    let resolved_target : Vault.Resolve.target = Note { path = note_path } in
     Vault.Resolve.make_wikilink ~target ~fragment:None ~display ~embed:false ~resolved_target
   in
   let rec render_entries ~(prefix : string) (entries : toc_entry list) : Cmarkit.Block.t =

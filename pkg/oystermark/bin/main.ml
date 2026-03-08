@@ -54,7 +54,11 @@ let vault_cmd : Command.t =
            curr_dir ^ "/_site"
        in
        let results =
-         Oystermark.render_vault ~backend_blocks:true ~safe:false vault_root
+         Oystermark.render_vault
+           ~theme:Oystermark.Theme.default
+           ~backend_blocks:true
+           ~safe:false
+           vault_root
        in
        List.iteri results ~f:(fun i (out_rel, html) ->
          let out_path = Filename.concat output_dir out_rel in

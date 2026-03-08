@@ -11,6 +11,7 @@ module Parse = Parse
 module Vault = Vault
 module Html = Html
 module Pipeline = Pipeline
+module Theme = Theme
 
 (** Build and render a vault through the pipeline.
 
@@ -21,6 +22,7 @@ module Pipeline = Pipeline
        (docs + dirs with synthetic empty docs), then render to HTML. *)
 let render_vault
       ?(pipeline : Pipeline.t = Pipeline.default)
+      ?(theme : Theme.t = Theme.none)
       ~(backend_blocks : bool)
       ~(safe : bool)
       (vault_root : string)
@@ -63,7 +65,10 @@ let render_vault
   let final_vault : Vault.t = pipeline.on_vault vault_ctx in
   List.filter_map final_vault.docs ~f:(fun (rel_path, final) ->
     if String.is_suffix rel_path ~suffix:".md"
-    then
-      Some (Html.note_output_path rel_path, Html.of_doc ~backend_blocks ~safe final)
+    then (
+      let body = Html.of_doc ~backend_blocks ~safe final in
+      let url_path = Html.note_url_path rel_path in
+      let html = theme { body; url_path } in
+      Some (Html.note_output_path rel_path, html))
     else None)
 ;;

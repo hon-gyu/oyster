@@ -40,12 +40,17 @@ let note_output_path (rel_path : string) : string =
   else base ^ "/index.html"
 ;;
 
+(** URL path for any file: notes get pretty URLs, others get literal paths. *)
+let file_url_path (path : string) : string =
+  if String.is_suffix path ~suffix:".md" then note_url_path path else "/" ^ path
+;;
+
 (* Convert a resolved target to an href string. *)
 let target_to_href : Resolve.target -> string = function
   | Resolve.Note { path } -> note_url_path path
   | Resolve.File { path } -> "/" ^ path
-  | Resolve.Heading { path; heading; _ } -> note_url_path path ^ "#" ^ slugify heading
-  | Resolve.Block { path; block_id } -> note_url_path path ^ "#^" ^ block_id
+  | Resolve.Heading { path; heading; _ } -> file_url_path path ^ "#" ^ slugify heading
+  | Resolve.Block { path; block_id } -> file_url_path path ^ "#^" ^ block_id
   | Resolve.Curr_file -> ""
   | Resolve.Curr_heading { heading; _ } -> "#" ^ slugify heading
   | Resolve.Curr_block { block_id } -> "#^" ^ block_id
@@ -200,10 +205,5 @@ let renderer ~(backend_blocks : bool) ~(safe : bool) () : Cmarkit_renderer.t =
 ;;
 
 let of_doc ~(backend_blocks : bool) ~(safe : bool) (doc : Doc.t) : string =
-  let body = Cmarkit_renderer.doc_to_string (renderer ~backend_blocks ~safe ()) doc in
-  String.concat
-    [ "<!DOCTYPE html>\n<html>\n<head><meta charset=\"UTF-8\"></head>\n<body>\n"
-    ; body
-    ; "</body>\n</html>\n"
-    ]
+  Cmarkit_renderer.doc_to_string (renderer ~backend_blocks ~safe ()) doc
 ;;
