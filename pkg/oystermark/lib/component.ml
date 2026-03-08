@@ -171,7 +171,7 @@ let toc_cmark_list
   in
   let make_leaf_wl ~(full_path : string) ~(display : string option) : Cmarkit.Inline.t =
     let target : string option = Some (strip_md_ext full_path) in
-    let resolved_target : Vault.Resolve.target = File { path = full_path } in
+    let resolved_target : Vault.Resolve.target = Note { path = full_path } in
     Vault.Resolve.make_wikilink ~target ~fragment:None ~display ~embed:false ~resolved_target
   in
   let rec render_entries ~(prefix : string) (entries : toc_entry list) : Cmarkit.Block.t =
@@ -181,7 +181,9 @@ let toc_cmark_list
         | Leaf { name; path } ->
           let full_path : string = path_prefix ^ path in
           let display : string option =
-            if String.is_empty path_prefix then None else Some (strip_md_ext name)
+            if String.is_empty path_prefix && String.is_empty prefix
+            then None
+            else Some (strip_md_ext name)
           in
           list_item (para (make_leaf_wl ~full_path ~display))
         | Dir { name; children } ->
@@ -218,10 +220,10 @@ let%expect_test "toc_cmark_list" =
     {|
     - [[a.jpg]]
     - x
-      - [[x/q]]
+      - [[x/q|q]]
       - y
-        - [[x/y/t]]
-        - [[x/y/z]]
+        - [[x/y/t|t]]
+        - [[x/y/z|z]]
     |}]
 ;;
 
@@ -246,6 +248,7 @@ let extract_outgoing_paths (doc : Cmarkit.Doc.t) : string list =
       ~inline:(fun _f acc (i : Cmarkit.Inline.t) ->
         let target_of_meta (meta : Cmarkit.Meta.t) : string option =
           match Cmarkit.Meta.find Vault.Resolve.resolved_key meta with
+          | Some (Vault.Resolve.Note { path }) -> Some path
           | Some (Vault.Resolve.File { path }) -> Some path
           | Some (Vault.Resolve.Heading { path; _ }) -> Some path
           | Some (Vault.Resolve.Block { path; _ }) -> Some path

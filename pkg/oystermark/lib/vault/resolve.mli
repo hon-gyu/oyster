@@ -1,4 +1,5 @@
 type target =
+  | Note of { path : string }
   | File of { path : string }
   | Heading of
       { path : string

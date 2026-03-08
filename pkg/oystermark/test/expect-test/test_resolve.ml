@@ -75,6 +75,7 @@ let make_link_ref
 
 let target_to_string (t : Resolve.target) : string =
   match t with
+  | Note { path } -> sprintf "Note(%s)" path
   | File { path } -> sprintf "File(%s)" path
   | Heading { path; heading; level } -> sprintf "Heading(%s, %s, %d)" path heading level
   | Block { path; block_id } -> sprintf "Block(%s, %s)" path block_id
@@ -140,27 +141,27 @@ let%expect_test "resolve_file" =
     ┌───────────────────────┬─────────────────────────────────┬────────────────┬──────────────────────────────────────────┐
     │ name                  │ input/target                    │ input/fragment │ result                                   │
     ├───────────────────────┼─────────────────────────────────┼────────────────┼──────────────────────────────────────────┤
-    │ exact match           │ Note 1                          │ -              │ File(Note 1.md)                          │
-    │ exact with ext        │ Note 1.md                       │ -              │ File(Note 1.md)                          │
-    │ spaces in name        │ Three laws of motion            │ -              │ File(Three laws of motion.md)            │
-    │ spaces with ext       │ Three laws of motion.md         │ -              │ File(Three laws of motion.md)            │
-    │ exact path            │ dir/indir_same_name             │ -              │ File(dir/indir_same_name.md)             │
-    │ subsequence           │ Note 2                          │ -              │ File(Note 2.md)                          │
-    │ deep subseq           │ inner_dir/note_in_inner_dir     │ -              │ File(dir/inner_dir/note_in_inner_dir.md) │
-    │ partial subseq        │ dir/note_in_inner_dir           │ -              │ File(dir/inner_dir/note_in_inner_dir.md) │
-    │ full path subseq      │ dir/inner_dir/note_in_inner_dir │ -              │ File(dir/inner_dir/note_in_inner_dir.md) │
-    │ subseq from non-root  │ indir2                          │ -              │ File(dir/indir2.md)                      │
+    │ exact match           │ Note 1                          │ -              │ Note(Note 1.md)                          │
+    │ exact with ext        │ Note 1.md                       │ -              │ Note(Note 1.md)                          │
+    │ spaces in name        │ Three laws of motion            │ -              │ Note(Three laws of motion.md)            │
+    │ spaces with ext       │ Three laws of motion.md         │ -              │ Note(Three laws of motion.md)            │
+    │ exact path            │ dir/indir_same_name             │ -              │ Note(dir/indir_same_name.md)             │
+    │ subsequence           │ Note 2                          │ -              │ Note(Note 2.md)                          │
+    │ deep subseq           │ inner_dir/note_in_inner_dir     │ -              │ Note(dir/inner_dir/note_in_inner_dir.md) │
+    │ partial subseq        │ dir/note_in_inner_dir           │ -              │ Note(dir/inner_dir/note_in_inner_dir.md) │
+    │ full path subseq      │ dir/inner_dir/note_in_inner_dir │ -              │ Note(dir/inner_dir/note_in_inner_dir.md) │
+    │ subseq from non-root  │ indir2                          │ -              │ Note(dir/indir2.md)                      │
     │ asset png             │ image.png                       │ -              │ File(image.png)                          │
     │ asset txt             │ unsupported_text_file.txt       │ -              │ File(unsupported_text_file.txt)          │
     │ asset unknown ext     │ a.joiwduvqneoi                  │ -              │ File(a.joiwduvqneoi)                     │
     │ asset video           │ empty_video.mp4                 │ -              │ File(empty_video.mp4)                    │
     │ unresolved            │ nonexistent                     │ -              │ Unresolved                               │
     │ bad path              │ random/Note 1                   │ -              │ Unresolved                               │
-    │ root same name wins   │ indir_same_name                 │ -              │ File(indir_same_name.md)                 │
-    │ dir same name exact   │ dir/indir_same_name             │ -              │ File(dir/indir_same_name.md)             │
+    │ root same name wins   │ indir_same_name                 │ -              │ Note(indir_same_name.md)                 │
+    │ dir same name exact   │ dir/indir_same_name             │ -              │ Note(dir/indir_same_name.md)             │
     │ random dir unresolved │ random/note_in_inner_dir        │ -              │ Unresolved                               │
-    │ ().md                 │ ().md                           │ -              │ File(().md)                              │
-    │ ww                    │ ww                              │ -              │ File(ww.md)                              │
+    │ ().md                 │ ().md                           │ -              │ Note(().md)                              │
+    │ ww                    │ ww                              │ -              │ Note(ww.md)                              │
     └───────────────────────┴─────────────────────────────────┴────────────────┴──────────────────────────────────────────┘
     |}]
 ;;
@@ -183,12 +184,12 @@ let%expect_test "resolve_note_vs_asset_priority" =
     │ name                   │ input/target      │ input/fragment │ result                  │
     ├────────────────────────┼───────────────────┼────────────────┼─────────────────────────┤
     │ Figure1.jpg -> asset   │ Figure1.jpg       │ -              │ File(Figure1.jpg)       │
-    │ Figure1.jpg.md -> note │ Figure1.jpg.md    │ -              │ File(Figure1.jpg.md)    │
-    │ Figure1.jpg.md.md      │ Figure1.jpg.md.md │ -              │ File(Figure1.jpg.md.md) │
+    │ Figure1.jpg.md -> note │ Figure1.jpg.md    │ -              │ Note(Figure1.jpg.md)    │
+    │ Figure1.jpg.md.md      │ Figure1.jpg.md.md │ -              │ Note(Figure1.jpg.md.md) │
     │ Figure1^2.jpg -> asset │ Figure1^2.jpg     │ -              │ File(Figure1^2.jpg)     │
-    │ Something -> note      │ Something         │ -              │ File(Something.md)      │
-    │ Note 1 -> note         │ Note 1            │ -              │ File(Note 1.md)         │
-    │ Figure1 -> note        │ Figure1           │ -              │ File(Figure1.md)        │
+    │ Something -> note      │ Something         │ -              │ Note(Something.md)      │
+    │ Note 1 -> note         │ Note 1            │ -              │ Note(Note 1.md)         │
+    │ Figure1 -> note        │ Figure1           │ -              │ Note(Figure1.md)        │
     └────────────────────────┴───────────────────┴────────────────┴─────────────────────────┘
     |}]
 ;;
@@ -217,8 +218,8 @@ let%expect_test "resolve_headings_note2" =
     │ nested skip level     │ Note 2       │ H[Some level 2 title; L4]            │ Heading(Note 2.md, L4, 4)                 │
     │ L3 directly           │ Note 2       │ H[Level 3 title]                     │ Heading(Note 2.md, Level 3 title, 3)      │
     │ L4 directly           │ Note 2       │ H[L4]                                │ Heading(Note 2.md, L4, 4)                 │
-    │ random -> fallback    │ Note 2       │ H[random]                            │ File(Note 2.md)                           │
-    │ random#L3 -> fallback │ Note 2       │ H[random; Level 3 title]             │ File(Note 2.md)                           │
+    │ random -> fallback    │ Note 2       │ H[random]                            │ Note(Note 2.md)                           │
+    │ random#L3 -> fallback │ Note 2       │ H[random; Level 3 title]             │ Note(Note 2.md)                           │
     └───────────────────────┴──────────────┴──────────────────────────────────────┴───────────────────────────────────────────┘
     |}]
 ;;
@@ -246,9 +247,9 @@ let%expect_test "resolve_headings_note1" =
     │ L2 L3                        │ Note 1       │ H[L2; L3]             │ Heading(Note 1.md, L3, 3) │
     │ L2 L4                        │ Note 1       │ H[L2; L4]             │ Heading(Note 1.md, L4, 4) │
     │ L2 L3 L4                     │ Note 1       │ H[L2; L3; L4]         │ Heading(Note 1.md, L4, 4) │
-    │ L2 L4 L3 -> fallback         │ Note 1       │ H[L2; L4; L3]         │ File(Note 1.md)           │
-    │ L2 L4 Another L3 -> fallback │ Note 1       │ H[L2; L4; Another L3] │ File(Note 1.md)           │
-    │ NoSuch -> fallback           │ Note 1       │ H[NoSuch]             │ File(Note 1.md)           │
+    │ L2 L4 L3 -> fallback         │ Note 1       │ H[L2; L4; L3]         │ Note(Note 1.md)           │
+    │ L2 L4 Another L3 -> fallback │ Note 1       │ H[L2; L4; Another L3] │ Note(Note 1.md)           │
+    │ NoSuch -> fallback           │ Note 1       │ H[NoSuch]             │ Note(Note 1.md)           │
     │ heading unresolved file      │ nonexistent  │ H[L2]                 │ Unresolved                │
     └──────────────────────────────┴──────────────┴───────────────────────┴───────────────────────────┘
     |}]
@@ -271,7 +272,7 @@ let%expect_test "resolve_blocks" =
     ├─────────────────────────────┼──────────────┼────────────────┼─────────────────────────────────────┤
     │ block found                 │ Note 1       │ B[para1]       │ Block(Note 1.md, para1)             │
     │ block with hyphen           │ Note 1       │ B[block-2]     │ Block(Note 1.md, block-2)           │
-    │ block not found -> fallback │ Note 1       │ B[nope]        │ File(Note 1.md)                     │
+    │ block not found -> fallback │ Note 1       │ B[nope]        │ Note(Note 1.md)                     │
     │ block in deep file          │ deep         │ B[deep1]       │ Block(dir/inner_dir/deep.md, deep1) │
     │ block in unresolved file    │ nonexistent  │ B[x]           │ Unresolved                          │
     └─────────────────────────────┴──────────────┴────────────────┴─────────────────────────────────────┘
@@ -319,7 +320,7 @@ let%expect_test "resolve_asset_with_fragment" =
     │ name                      │ input/target │ input/fragment │ result            │
     ├───────────────────────────┼──────────────┼────────────────┼───────────────────┤
     │ Figure1.jpg#2 -> fallback │ Figure1.jpg  │ H[2]           │ File(Figure1.jpg) │
-    │ Note 2## -> empty heading │ Note 2       │ -              │ File(Note 2.md)   │
+    │ Note 2## -> empty heading │ Note 2       │ -              │ Note(Note 2.md)   │
     └───────────────────────────┴──────────────┴────────────────┴───────────────────┘
     |}]
 ;;

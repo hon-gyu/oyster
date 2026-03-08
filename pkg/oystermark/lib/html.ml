@@ -33,7 +33,8 @@ let strip_md_ext : string -> string =
 
 (* Convert a resolved target to an href string. *)
 let target_to_href : Resolve.target -> string = function
-  | Resolve.File { path } -> "/" ^ strip_md_ext path ^ "/"
+  | Resolve.Note { path } -> "/" ^ strip_md_ext path ^ "/"
+  | Resolve.File { path } -> "/" ^ path
   | Resolve.Heading { path; heading; _ } ->
     "/" ^ strip_md_ext path ^ "/#" ^ slugify heading
   | Resolve.Block { path; block_id } -> "/" ^ strip_md_ext path ^ "/#^" ^ block_id

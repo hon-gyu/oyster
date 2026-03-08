@@ -62,7 +62,7 @@ let render_vault
     { vault_root; index; docs = resolved; vault_meta = Cmarkit.Meta.none }
   in
   (* Pass dir entries through on_vault with synthetic empty docs *)
-  let empty_doc : Cmarkit.Doc.t = Cmarkit.Doc.of_string ~strict:false "" in
+  let empty_doc : Cmarkit.Doc.t = Cmarkit.Doc.empty in
   let dir_outputs : (string * string) list =
     List.concat_map dirs ~f:(fun dir_path ->
       let outputs = pipeline.on_vault vault_ctx dir_path empty_doc in

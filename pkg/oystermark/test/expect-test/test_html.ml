@@ -37,22 +37,22 @@ let render ?(curr_file = "Note 1.md") (md : string) : unit =
 
 let%expect_test "wikilink: basic file link" =
   render "[[Note 2]]";
-  [%expect {| <p><a href="Note 2">Note 2</a></p> |}]
+  [%expect {| <p><a href="/Note 2/">Note 2</a></p> |}]
 ;;
 
 let%expect_test "wikilink: with display text" =
   render "[[Note 2|click here]]";
-  [%expect {| <p><a href="Note 2">click here</a></p> |}]
+  [%expect {| <p><a href="/Note 2/">click here</a></p> |}]
 ;;
 
 let%expect_test "wikilink: with heading fragment" =
   render "[[Note 2#Some heading]]";
-  [%expect {| <p><a href="Note 2#some-heading">Note 2#Some heading</a></p> |}]
+  [%expect {| <p><a href="/Note 2/#some-heading">Note 2#Some heading</a></p> |}]
 ;;
 
 let%expect_test "wikilink: with block ref" =
   render "[[Note 1#^para1]]";
-  [%expect {| <p><a href="Note 1#^para1">Note 1#^para1</a></p> |}]
+  [%expect {| <p><a href="/Note 1/#^para1">Note 1#^para1</a></p> |}]
 ;;
 
 let%expect_test "wikilink: self-reference heading" =
@@ -72,7 +72,7 @@ let%expect_test "wikilink: unresolved" =
 
 let%expect_test "wikilink: deep path" =
   render "[[deep]]";
-  [%expect {| <p><a href="dir/deep">deep</a></p> |}]
+  [%expect {| <p><a href="/dir/deep/">deep</a></p> |}]
 ;;
 
 (* Wikilink embeds
@@ -80,33 +80,29 @@ let%expect_test "wikilink: deep path" =
 
 let%expect_test "wikilink: embed image" =
   render "![[image.png]]";
-  [%expect {| <p><img src="image.png" alt="image.png"/></p> |}]
+  [%expect {| <p><img src="/image.png" alt="image.png"/></p> |}]
 ;;
 
 let%expect_test "wikilink: embed video" =
   render "![[video.mp4]]";
   [%expect
-    {|
-    <p><video controls="controls"><source src="video.mp4"/>video.mp4</video></p>
-    |}]
+    {| <p><video controls="controls"><source src="/video.mp4"/>video.mp4</video></p> |}]
 ;;
 
 let%expect_test "wikilink: embed audio" =
   render "![[audio.mp3]]";
   [%expect
-    {|
-    <p><audio controls="controls"><source src="audio.mp3"/>audio.mp3</audio></p>
-    |}]
+    {| <p><audio controls="controls"><source src="/audio.mp3"/>audio.mp3</audio></p> |}]
 ;;
 
 let%expect_test "wikilink: embed pdf" =
   render "![[doc.pdf]]";
-  [%expect {| <p><iframe src="doc.pdf" title="doc.pdf"></iframe></p> |}]
+  [%expect {| <p><iframe src="/doc.pdf" title="doc.pdf"></iframe></p> |}]
 ;;
 
 let%expect_test "wikilink: embed with display text" =
   render "![[image.png|alt text here]]";
-  [%expect {| <p><img src="image.png" alt="alt text here"/></p> |}]
+  [%expect {| <p><img src="/image.png" alt="alt text here"/></p> |}]
 ;;
 
 let%expect_test "wikilink: embed unresolved" =
@@ -119,12 +115,12 @@ let%expect_test "wikilink: embed unresolved" =
 
 let%expect_test "md link: resolved file" =
   render "[click](Note%202)";
-  [%expect {| <p><a href="Note 2">click</a></p> |}]
+  [%expect {| <p><a href="/Note 2/">click</a></p> |}]
 ;;
 
 let%expect_test "md link: resolved with emphasis" =
   render "[**bold** link](Note%202)";
-  [%expect {| <p><a href="Note 2"><strong>bold</strong> link</a></p> |}]
+  [%expect {| <p><a href="/Note 2/"><strong>bold</strong> link</a></p> |}]
 ;;
 
 let%expect_test "md link: unresolved" =
@@ -137,7 +133,7 @@ let%expect_test "md link: unresolved" =
 
 let%expect_test "md image: resolved" =
   render "![photo](image.png)";
-  [%expect {| <p><img src="image.png" alt="photo"/></p> |}]
+  [%expect {| <p><img src="/image.png" alt="photo"/></p> |}]
 ;;
 
 (* Block IDs
@@ -158,12 +154,12 @@ let%expect_test "block-id: no block id" =
 
 let%expect_test "mixed: paragraph with wikilink and plain text" =
   render "See [[Note 2]] for details.";
-  [%expect {| <p>See <a href="Note 2">Note 2</a> for details.</p> |}]
+  [%expect {| <p>See <a href="/Note 2/">Note 2</a> for details.</p> |}]
 ;;
 
 let%expect_test "mixed: multiple wikilinks" =
   render "[[Note 1]] and [[Note 2]]";
-  [%expect {| <p><a href="Note 1">Note 1</a> and <a href="Note 2">Note 2</a></p> |}]
+  [%expect {| <p><a href="/Note 1/">Note 1</a> and <a href="/Note 2/">Note 2</a></p> |}]
 ;;
 
 let%expect_test "plain markdown renders normally" =
