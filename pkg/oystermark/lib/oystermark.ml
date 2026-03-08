@@ -27,9 +27,7 @@ let render_vault
       (vault_root : string)
   : (string * string) list
   =
-  let all_files = Vault.list_files vault_root in
-  let all_dirs = Vault.list_dirs vault_root in
-  let all_entries = all_files @ all_dirs in
+  let all_entries = Vault.list_entries vault_root in
   (* Stage 1: discover *)
   let discovered =
     List.filter all_entries ~f:(fun p -> pipeline.on_discover p all_entries)

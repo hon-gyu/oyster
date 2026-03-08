@@ -12,14 +12,10 @@ type t =
 
 let all_note_paths (vault : t) : string list = List.map vault.docs ~f:fst
 
-(** List all files in the vault (relative paths, hidden dirs excluded). *)
-let list_files (vault_root : string) : string list =
-  Index.list_files_recursive ~root:vault_root ~rel_prefix:""
-;;
-
-(** List all directories in the vault (relative paths with trailing [/]). *)
-let list_dirs (vault_root : string) : string list =
-  Index.list_dirs_recursive ~root:vault_root ~rel_prefix:""
+(** List all entries in the vault (files and directories, relative paths).
+    Directories have a trailing [/].  Hidden entries are excluded. *)
+let list_entries (vault_root : string) : string list =
+  Index.list_entries_recursive ~root:vault_root ~rel_prefix:""
 ;;
 
 (** Build an index from a list of [(rel_path, doc)] pairs
@@ -43,7 +39,10 @@ let build_index ~(md_docs : (string * Cmarkit.Doc.t) list) ~(other_files : strin
 (** Simple build: read all .md files, optionally filter, build index.
     For pipeline-aware builds, use the lower-level functions directly. *)
 let of_root_path (vault_root : string) : t =
-  let all_files = list_files vault_root in
+  let all_files =
+    List.filter (list_entries vault_root) ~f:(fun p ->
+      not (String.is_suffix p ~suffix:"/"))
+  in
   let (docs : (string * Cmarkit.Doc.t) list) =
     List.filter_map all_files ~f:(fun rel_path ->
       if String.is_suffix rel_path ~suffix:".md"
