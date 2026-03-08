@@ -208,6 +208,44 @@ let home_toc : t =
   make ~on_vault ()
 ;;
 
+(** Generate an index page for each directory entry.
+    For a dir path like [subdir/], emits [(subdir/index.md, toc_doc)] where
+    [toc_doc] is a page listing the directory's immediate children.
+    Skips if [dir/index.md] already exists in the vault. *)
+let dir_index : t =
+  let on_vault (ctx : Vault.t) (path : string) (doc : Cmarkit.Doc.t)
+    : (string * Cmarkit.Doc.t) list
+    =
+    if not (String.is_suffix path ~suffix:"/")
+    then [ path, doc ]
+    else (
+      let index_path = path ^ "index.md" in
+      (* Skip if an explicit index.md already exists *)
+      if List.Assoc.mem ctx.docs ~equal:String.equal index_path
+      then []
+      else (
+        let children : string list =
+          List.filter_map ctx.docs ~f:(fun (p, _) ->
+            if String.is_prefix p ~prefix:path
+               && (not (String.equal p path))
+               && not (String.is_suffix p ~suffix:"/")
+            then Some p
+            else None)
+        in
+        (* Strip the dir prefix so toc_cmark_list doesn't create an extra
+           nesting level, but keep full paths for wikilink resolution by
+           re-prefixing in the wikilink target/file_path. *)
+        let rel_children : string list =
+          List.map children ~f:(fun p -> String.chop_prefix_exn p ~prefix:path)
+        in
+        let toc_block : Cmarkit.Block.t =
+          Component.toc_cmark_list ~path_prefix:path rel_children
+        in
+        [ index_path, Cmarkit.Doc.make toc_block ]))
+  in
+  make ~on_vault ()
+;;
+
 let default : t =
   exclude_draft_by_note_name
   >> exclude_unpublish
