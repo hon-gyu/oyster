@@ -290,11 +290,33 @@ let dir_index ?(immediate_only : bool = false) () : t =
   make ~on_vault ()
 ;;
 
+(** Append backlinks to every note. *)
+let backlinks : t =
+  let on_vault : Vault.t -> Vault.t =
+    map_each_doc (fun (ctx : Vault.t) (path : string) (doc : Cmarkit.Doc.t) ->
+      let html : string = Component.backlinks path ctx in
+      match html with
+      | "" -> [ path, doc ]
+      | content ->
+        let block_mapper = add_html_code_block `Append content in
+        let mapper =
+          Cmarkit.Mapper.make
+            ~inline_ext_default:(fun _m i -> Some i)
+            ~block_ext_default:(fun _m b -> Some b)
+            ~block:block_mapper
+            ()
+        in
+        [ path, Cmarkit.Mapper.map_doc mapper doc ])
+  in
+  make ~on_vault ()
+;;
+
 let default : t =
   exclude_draft_by_note_name
   >> exclude_unpublish
   >> drop_keys_in_frontmatter [ "publish"; "draft" ]
   >> drop_emtpy_frontmatter
+  >> backlinks
   >> dir_index ()
   >> home_toc ~dir_link:true ()
 ;;

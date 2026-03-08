@@ -246,51 +246,90 @@ let%expect_test "toc_cmark_list with path_prefix" =
     |}]
 ;;
 
-(** Extract all file paths that a resolved doc links to. *)
-let extract_outgoing_paths (doc : Cmarkit.Doc.t) : string list =
+(** Path that a resolved target points to. *)
+let path_of_resolved (target : Vault.Resolve.target) : string option =
+  match target with
+  | Vault.Resolve.Note { path } -> Some path
+  | Vault.Resolve.File { path } -> Some path
+  | Vault.Resolve.Heading { path; _ } -> Some path
+  | Vault.Resolve.Block { path; _ } -> Some path
+  | Vault.Resolve.Curr_file | Vault.Resolve.Curr_heading _ | Vault.Resolve.Curr_block _
+  | Vault.Resolve.Unresolved -> None
+;;
+
+(** Extract all resolved outgoing links from a doc as [(target_path, link_text)] pairs. *)
+let extract_outgoing_links (doc : Cmarkit.Doc.t) : (string * string) list =
   let folder =
     Cmarkit.Folder.make
       ~inline:(fun _f acc (i : Cmarkit.Inline.t) ->
-        let target_of_meta (meta : Cmarkit.Meta.t) : string option =
-          match Cmarkit.Meta.find Vault.Resolve.resolved_key meta with
-          | Some (Vault.Resolve.Note { path }) -> Some path
-          | Some (Vault.Resolve.File { path }) -> Some path
-          | Some (Vault.Resolve.Heading { path; _ }) -> Some path
-          | Some (Vault.Resolve.Block { path; _ }) -> Some path
-          | _ -> None
-        in
         match i with
-        | Cmarkit.Inline.Link (_, meta) | Cmarkit.Inline.Image (_, meta) ->
-          (match target_of_meta meta with
-           | Some path -> Cmarkit.Folder.ret (path :: acc)
+        | Cmarkit.Inline.Link (link, meta) | Cmarkit.Inline.Image (link, meta) ->
+          (match Cmarkit.Meta.find Vault.Resolve.resolved_key meta with
+           | Some resolved ->
+             (match path_of_resolved resolved with
+              | Some path ->
+                let text : string =
+                  Parse.inline_to_plain_text (Cmarkit.Inline.Link.text link)
+                in
+                Cmarkit.Folder.ret ((path, text) :: acc)
+              | None -> Cmarkit.Folder.default)
            | None -> Cmarkit.Folder.default)
         | _ -> Cmarkit.Folder.default)
       ~inline_ext_default:(fun _f acc i ->
         match i with
-        | Parse.Wikilink.Ext_wikilink (_, meta) ->
+        | Parse.Wikilink.Ext_wikilink (wl, meta) ->
           (match Cmarkit.Meta.find Vault.Resolve.resolved_key meta with
-           | Some (Vault.Resolve.File { path }) -> path :: acc
-           | Some (Vault.Resolve.Heading { path; _ }) -> path :: acc
-           | Some (Vault.Resolve.Block { path; _ }) -> path :: acc
-           | _ -> acc)
+           | Some resolved ->
+             (match path_of_resolved resolved with
+              | Some path ->
+                let text : string = Parse.Wikilink.to_plain_text wl in
+                (path, text) :: acc
+              | None -> acc)
+           | None -> acc)
         | _ -> acc)
       ~block_ext_default:(fun _f acc _b -> acc)
       ()
   in
-  Cmarkit.Folder.fold_doc folder [] doc |> List.dedup_and_sort ~compare:String.compare
+  Cmarkit.Folder.fold_doc folder [] doc
 ;;
 
-(** Render backlinks for [rel_path]: a [<ul>] of all vault docs that link to it. *)
+(** Render backlinks for [rel_path]: links grouped by source file under
+    [<details>] elements. Each item shows the link's plain text. *)
 let backlinks (rel_path : string) : vault_component =
   fun (vault : Vault.t) ->
-  let linking_paths =
+  (* Collect (src_path, link_text list) for all docs that link to rel_path *)
+  let sources : (string * string list) list =
     List.filter_map vault.docs ~f:(fun (src_path, doc) ->
-      let targets = extract_outgoing_paths doc in
-      if List.mem targets rel_path ~equal:String.equal then Some src_path else None)
+      let links : (string * string) list = extract_outgoing_links doc in
+      let matching_texts : string list =
+        List.filter_map links ~f:(fun (target, text) ->
+          if String.equal target rel_path then Some text else None)
+      in
+      match matching_texts with
+      | [] -> None
+      | texts -> Some (src_path, texts))
+    |> List.sort ~compare:(fun (a, _) (b, _) -> String.compare a b)
   in
-  match linking_paths with
+  match sources with
   | [] -> ""
-  | paths -> toc_html (List.sort paths ~compare:String.compare)
+  | groups ->
+    let items : string list =
+      List.map groups ~f:(fun (src_path, texts) ->
+        let src_href : string = Html.note_url_path src_path in
+        let src_name : string = strip_md_ext (Filename.basename src_path) in
+        let link_items : string =
+          List.map texts ~f:(fun text -> spf "<li>%s</li>" text)
+          |> String.concat ~sep:"\n"
+        in
+        spf
+          {|<li style="list-style: none"><details><summary><a href="%s">%s</a></summary><ul>
+%s
+</ul></details></li>|}
+          src_href
+          src_name
+          link_items)
+    in
+    "<ul>\n" ^ String.concat ~sep:"\n" items ^ "\n</ul>"
 ;;
 
 
