@@ -3,7 +3,8 @@
 open Core
 
 type page =
-  { body : string
+  { title : string
+  ; body : string
   ; url_path : string
   }
 
@@ -11,9 +12,13 @@ type t = page -> string
 
 let wrap ~(css : string) (page : page) : string =
   String.concat
-    [ "<!DOCTYPE html>\n<html>\n<head>\n<meta charset=\"UTF-8\">\n<style>\n"
+    [ "<!DOCTYPE html>\n<html>\n<head>\n<meta charset=\"UTF-8\">\n<title>"
+    ; page.title
+    ; "</title>\n<style>\n"
     ; css
-    ; "\n</style>\n</head>\n<body>\n<main>\n"
+    ; "\n</style>\n</head>\n<body>\n<main>\n<h1 class=\"page-title\">"
+    ; page.title
+    ; "</h1>\n"
     ; page.body
     ; "</main>\n</body>\n</html>\n"
     ]
@@ -64,7 +69,8 @@ h1, h2, h3, h4, h5, h6 {
   margin-bottom: 0.6em;
   line-height: 1.3;
 }
-h1 { font-size: 2em; border-bottom: 1px solid var(--border); padding-bottom: 0.3em; }
+h1.page-title { font-size: 2.0em; margin-top: 0; color: var(--fg); border-bottom: none; }
+h1 { font-size: 1.8em; border-bottom: 1px solid var(--border); padding-bottom: 0.3em; }
 h2 { font-size: 1.6em; }
 h3 { font-size: 1.35em; }
 h4 { font-size: 1.2em; }
@@ -152,7 +158,8 @@ h1, h2, h3, h4, h5, h6 {
   margin-bottom: 0.6em;
   line-height: 1.3;
 }
-h1 { font-size: 2em; border-bottom: 1px solid var(--border); padding-bottom: 0.3em; }
+h1.page-title { font-size: 2.0em; margin-top: 0; color: var(--fg); border-bottom: none; }
+h1 { font-size: 1.8em; border-bottom: 1px solid var(--border); padding-bottom: 0.3em; }
 h2 { font-size: 1.6em; }
 h3 { font-size: 1.35em; }
 h4 { font-size: 1.2em; }
