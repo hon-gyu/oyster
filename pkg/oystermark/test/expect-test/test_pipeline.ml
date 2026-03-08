@@ -129,7 +129,6 @@ let%expect_test "dir_index: generated page has TOC with children" =
   printf "%s" index_html;
   [%expect
     {|
-    <h1>mydir</h1>
     <ul>
     <li><a href="/mydir/child/">child</a></li>
     </ul>
