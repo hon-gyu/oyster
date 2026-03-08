@@ -119,7 +119,18 @@ img, video, iframe { max-width: 100%; border-radius: 6px; }
 }
 .frontmatter table { margin: 0; }
 .frontmatter th { color: var(--accent); background: none; border: none; }
-.frontmatter td { border: none; }|}
+.frontmatter td { border: none; }
+.backlinks {
+  background: var(--bg-alt);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.5em 1em;
+  margin-top: 2em;
+  font-size: 0.9em;
+}
+.backlinks h2 { margin-top: 0.5em; font-size: 1.2em; }
+.backlink-context { list-style: none; margin: 0.3em 0; }
+.backlink-context p { margin: 0; }|}
 ;;
 
 let gruvbox : t =
@@ -208,7 +219,18 @@ img, video, iframe { max-width: 100%; border-radius: 6px; }
 }
 .frontmatter table { margin: 0; }
 .frontmatter th { color: var(--orange); background: none; border: none; }
-.frontmatter td { border: none; }|}
+.frontmatter td { border: none; }
+.backlinks {
+  background: var(--bg-alt);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.5em 1em;
+  margin-top: 2em;
+  font-size: 0.9em;
+}
+.backlinks h2 { margin-top: 0.5em; font-size: 1.2em; }
+.backlink-context { list-style: none; margin: 0.3em 0; }
+.backlink-context p { margin: 0; }|}
 ;;
 
 let default : t = gruvbox

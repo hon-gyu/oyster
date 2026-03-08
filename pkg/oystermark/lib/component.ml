@@ -177,7 +177,12 @@ let toc_cmark_list
       else full_path ^ "/index.md"
     in
     let resolved_target : Vault.Resolve.target = Note { path = note_path } in
-    Vault.Resolve.make_wikilink ~target ~fragment:None ~display ~embed:false ~resolved_target
+    Vault.Resolve.make_wikilink
+      ~target
+      ~fragment:None
+      ~display
+      ~embed:false
+      ~resolved_target
   in
   let rec render_entries ~(prefix : string) (entries : toc_entry list) : Cmarkit.Block.t =
     let items : Cmarkit.Block.List_item.t Cmarkit.node list =
@@ -197,15 +202,10 @@ let toc_cmark_list
           in
           let label : Cmarkit.Inline.t =
             if dir_link
-            then
-              make_leaf_wl
-                ~full_path:(path_prefix ^ dir_path)
-                ~display:(Some name)
+            then make_leaf_wl ~full_path:(path_prefix ^ dir_path) ~display:(Some name)
             else text name
           in
-          let sub_list : Cmarkit.Block.t =
-            render_entries ~prefix:dir_path children
-          in
+          let sub_list : Cmarkit.Block.t = render_entries ~prefix:dir_path children in
           let content : Cmarkit.Block.t =
             Cmarkit.Block.Blocks ([ para label; sub_list ], m)
           in
@@ -246,93 +246,6 @@ let%expect_test "toc_cmark_list with path_prefix" =
     |}]
 ;;
 
-(** Path that a resolved target points to. *)
-let path_of_resolved (target : Vault.Resolve.target) : string option =
-  match target with
-  | Vault.Resolve.Note { path } -> Some path
-  | Vault.Resolve.File { path } -> Some path
-  | Vault.Resolve.Heading { path; _ } -> Some path
-  | Vault.Resolve.Block { path; _ } -> Some path
-  | Vault.Resolve.Curr_file | Vault.Resolve.Curr_heading _ | Vault.Resolve.Curr_block _
-  | Vault.Resolve.Unresolved -> None
-;;
-
-(** Extract all resolved outgoing links from a doc as [(target_path, link_text)] pairs. *)
-let extract_outgoing_links (doc : Cmarkit.Doc.t) : (string * string) list =
-  let folder =
-    Cmarkit.Folder.make
-      ~inline:(fun _f acc (i : Cmarkit.Inline.t) ->
-        match i with
-        | Cmarkit.Inline.Link (link, meta) | Cmarkit.Inline.Image (link, meta) ->
-          (match Cmarkit.Meta.find Vault.Resolve.resolved_key meta with
-           | Some resolved ->
-             (match path_of_resolved resolved with
-              | Some path ->
-                let text : string =
-                  Parse.inline_to_plain_text (Cmarkit.Inline.Link.text link)
-                in
-                Cmarkit.Folder.ret ((path, text) :: acc)
-              | None -> Cmarkit.Folder.default)
-           | None -> Cmarkit.Folder.default)
-        | _ -> Cmarkit.Folder.default)
-      ~inline_ext_default:(fun _f acc i ->
-        match i with
-        | Parse.Wikilink.Ext_wikilink (wl, meta) ->
-          (match Cmarkit.Meta.find Vault.Resolve.resolved_key meta with
-           | Some resolved ->
-             (match path_of_resolved resolved with
-              | Some path ->
-                let text : string = Parse.Wikilink.to_plain_text wl in
-                (path, text) :: acc
-              | None -> acc)
-           | None -> acc)
-        | _ -> acc)
-      ~block_ext_default:(fun _f acc _b -> acc)
-      ()
-  in
-  Cmarkit.Folder.fold_doc folder [] doc
-;;
-
-(** Render backlinks for [rel_path]: links grouped by source file under
-    [<details>] elements. Each item shows the link's plain text. *)
-let backlinks (rel_path : string) : vault_component =
-  fun (vault : Vault.t) ->
-  (* Collect (src_path, link_text list) for all docs that link to rel_path *)
-  let sources : (string * string list) list =
-    List.filter_map vault.docs ~f:(fun (src_path, doc) ->
-      let links : (string * string) list = extract_outgoing_links doc in
-      let matching_texts : string list =
-        List.filter_map links ~f:(fun (target, text) ->
-          if String.equal target rel_path then Some text else None)
-      in
-      match matching_texts with
-      | [] -> None
-      | texts -> Some (src_path, texts))
-    |> List.sort ~compare:(fun (a, _) (b, _) -> String.compare a b)
-  in
-  match sources with
-  | [] -> ""
-  | groups ->
-    let items : string list =
-      List.map groups ~f:(fun (src_path, texts) ->
-        let src_href : string = Html.note_url_path src_path in
-        let src_name : string = strip_md_ext (Filename.basename src_path) in
-        let link_items : string =
-          List.map texts ~f:(fun text -> spf "<li>%s</li>" text)
-          |> String.concat ~sep:"\n"
-        in
-        spf
-          {|<li style="list-style: none"><details><summary><a href="%s">%s</a></summary><ul>
-%s
-</ul></details></li>|}
-          src_href
-          src_name
-          link_items)
-    in
-    "<ul>\n" ^ String.concat ~sep:"\n" items ^ "\n</ul>"
-;;
-
-
 (** Create title element for each doc based on their note name.
     Special handling:
     - for home.md, should be `Home`
@@ -351,3 +264,276 @@ let title_of_path (rel_path : string) : string =
 
 let title (ctx : Vault.t) : html list =
   List.map ctx.docs ~f:(fun (rel_path, _doc) -> title_of_path rel_path)
+;;
+
+module Backlink = struct
+  (** Path that a resolved target points to. *)
+  let path_of_resolved (target : Vault.Resolve.target) : string option =
+    match target with
+    | Vault.Resolve.Note { path } -> Some path
+    | Vault.Resolve.File { path } -> Some path
+    | Vault.Resolve.Heading { path; _ } -> Some path
+    | Vault.Resolve.Block { path; _ } -> Some path
+    | Vault.Resolve.Curr_file
+    | Vault.Resolve.Curr_heading _
+    | Vault.Resolve.Curr_block _
+    | Vault.Resolve.Unresolved -> None
+  ;;
+
+  (** Check whether an inline tree contains a resolved link to [target_path]. *)
+  let inline_links_to (target_path : string) (inline : Cmarkit.Inline.t) : bool =
+    let folder =
+      Cmarkit.Folder.make
+        ~inline:(fun _f acc (i : Cmarkit.Inline.t) ->
+          if acc
+          then Cmarkit.Folder.ret true
+          else (
+            match i with
+            | Cmarkit.Inline.Link (_, meta) | Cmarkit.Inline.Image (_, meta) ->
+              (match Cmarkit.Meta.find Vault.Resolve.resolved_key meta with
+               | Some resolved ->
+                 (match path_of_resolved resolved with
+                  | Some p when String.equal p target_path -> Cmarkit.Folder.ret true
+                  | _ -> Cmarkit.Folder.default)
+               | None -> Cmarkit.Folder.default)
+            | _ -> Cmarkit.Folder.default))
+        ~inline_ext_default:(fun _f acc i ->
+          if acc
+          then acc
+          else (
+            match i with
+            | Parse.Wikilink.Ext_wikilink (_, meta) ->
+              (match Cmarkit.Meta.find Vault.Resolve.resolved_key meta with
+               | Some resolved ->
+                 (match path_of_resolved resolved with
+                  | Some p when String.equal p target_path -> true
+                  | _ -> acc)
+               | None -> acc)
+            | _ -> acc))
+        ~block_ext_default:(fun _f acc _b -> acc)
+        ()
+    in
+    Cmarkit.Folder.fold_inline folder false inline
+  ;;
+
+  (** Check whether a block contains a resolved link to [target_path]. *)
+  let block_links_to (target_path : string) (block : Cmarkit.Block.t) : bool =
+    let folder =
+      Cmarkit.Folder.make
+        ~inline:(fun _f acc (i : Cmarkit.Inline.t) ->
+          if acc
+          then Cmarkit.Folder.ret true
+          else (
+            match i with
+            | Cmarkit.Inline.Link (_, meta) | Cmarkit.Inline.Image (_, meta) ->
+              (match Cmarkit.Meta.find Vault.Resolve.resolved_key meta with
+               | Some resolved ->
+                 (match path_of_resolved resolved with
+                  | Some p when String.equal p target_path -> Cmarkit.Folder.ret true
+                  | _ -> Cmarkit.Folder.default)
+               | None -> Cmarkit.Folder.default)
+            | _ -> Cmarkit.Folder.default))
+        ~inline_ext_default:(fun _f acc i ->
+          if acc
+          then acc
+          else (
+            match i with
+            | Parse.Wikilink.Ext_wikilink (_, meta) ->
+              (match Cmarkit.Meta.find Vault.Resolve.resolved_key meta with
+               | Some resolved ->
+                 (match path_of_resolved resolved with
+                  | Some p when String.equal p target_path -> true
+                  | _ -> acc)
+               | None -> acc)
+            | _ -> acc))
+        ~block_ext_default:(fun _f acc _b -> acc)
+        ()
+    in
+    Cmarkit.Folder.fold_block folder false block
+  ;;
+
+  (** Render a single block to HTML using the oystermark renderer. *)
+  let render_block (block : Cmarkit.Block.t) : string =
+    let doc : Cmarkit.Doc.t = Cmarkit.Doc.make block in
+    Html.of_doc ~backend_blocks:true ~safe:false doc
+  ;;
+
+  (** Extract the minimal leaf blocks from [doc] that contain a link to
+      [target_path], rendered as HTML strings. Descends into container blocks
+      (lists, block quotes, splicing) to find the innermost paragraph or heading
+      that mentions the target. *)
+  let extract_backlink_blocks (target_path : string) (doc : Cmarkit.Doc.t) : string list =
+    let rec collect (b : Cmarkit.Block.t) : string list =
+      match b with
+      | Cmarkit.Block.Paragraph (p, _meta) ->
+        let inline : Cmarkit.Inline.t = Cmarkit.Block.Paragraph.inline p in
+        if inline_links_to target_path inline then [ render_block b ] else []
+      | Cmarkit.Block.Heading (h, _meta) ->
+        let inline : Cmarkit.Inline.t = Cmarkit.Block.Heading.inline h in
+        if inline_links_to target_path inline then [ render_block b ] else []
+      | Cmarkit.Block.List (l, _meta) ->
+        let items : Cmarkit.Block.List_item.t Cmarkit.node list =
+          Cmarkit.Block.List'.items l
+        in
+        List.concat_map items ~f:(fun (item, _item_meta) ->
+          collect (Cmarkit.Block.List_item.block item))
+      | Cmarkit.Block.Block_quote (bq, _meta) ->
+        collect (Cmarkit.Block.Block_quote.block bq)
+      | Cmarkit.Block.Blocks (blocks, _meta) -> List.concat_map blocks ~f:collect
+      | _ -> []
+    in
+    collect (Cmarkit.Doc.block doc)
+  ;;
+
+  (** Render backlinks for [rel_path]: links grouped by source file under
+      [<details>] elements. Each item shows the minimum containing block
+      rendered as HTML. *)
+  let backlinks (rel_path : string) : vault_component =
+    fun (vault : Vault.t) ->
+    let sources : (string * string list) list =
+      List.filter_map vault.docs ~f:(fun (src_path, doc) ->
+        let blocks : string list = extract_backlink_blocks rel_path doc in
+        match blocks with
+        | [] -> None
+        | _ -> Some (src_path, blocks))
+      |> List.sort ~compare:(fun (a, _) (b, _) -> String.compare a b)
+    in
+    match sources with
+    | [] -> ""
+    | groups ->
+      let items : string list =
+        List.map groups ~f:(fun (src_path, blocks) ->
+          let src_href : string = Html.note_url_path src_path in
+          let src_name : string = strip_md_ext (Filename.basename src_path) in
+          let block_items : string =
+            List.map blocks ~f:(fun block_html ->
+              spf {|<li class="backlink-context">%s</li>|} block_html)
+            |> String.concat ~sep:"\n"
+          in
+          spf
+            {|<li style="list-style: none"><details open><summary><a href="%s">%s</a></summary><ul>
+  %s
+  </ul></details></li>|}
+            src_href
+            src_name
+            block_items)
+      in
+      spf
+        {|<div class="backlinks"><h2>Backlinks</h2>
+  <ul>
+  %s
+  </ul>
+  </div>|}
+        (String.concat ~sep:"\n" items)
+  ;;
+
+  module For_test = struct
+    (** Build a resolved wikilink inline pointing to [path]. *)
+    let make_test_wikilink (path : string) : Cmarkit.Inline.t =
+      Vault.Resolve.make_wikilink
+        ~target:(Some path)
+        ~fragment:None
+        ~display:None
+        ~embed:false
+        ~resolved_target:(Vault.Resolve.Note { path = path ^ ".md" })
+    ;;
+
+    (** Build a paragraph block from an inline. *)
+    let make_para (inline : Cmarkit.Inline.t) : Cmarkit.Block.t =
+      Cmarkit.Block.Paragraph (Cmarkit.Block.Paragraph.make inline, Cmarkit.Meta.none)
+    ;;
+
+    (** Build a doc from a list of blocks. *)
+    let make_doc (blocks : Cmarkit.Block.t list) : Cmarkit.Doc.t =
+      Cmarkit.Doc.make (Cmarkit.Block.Blocks (blocks, Cmarkit.Meta.none))
+    ;;
+
+    (** Build a single-item unordered list from a block. *)
+    let make_list_item (block : Cmarkit.Block.t) : Cmarkit.Block.t =
+      let item : Cmarkit.Block.List_item.t = Cmarkit.Block.List_item.make block in
+      Cmarkit.Block.List
+        ( Cmarkit.Block.List'.make (`Unordered '-') [ item, Cmarkit.Meta.none ]
+        , Cmarkit.Meta.none )
+    ;;
+
+    (** Splice inlines together with space between. *)
+    let inlines (parts : Cmarkit.Inline.t list) : Cmarkit.Inline.t =
+      Cmarkit.Inline.Inlines (parts, Cmarkit.Meta.none)
+    ;;
+
+    let text (s : string) : Cmarkit.Inline.t = Cmarkit.Inline.Text (s, Cmarkit.Meta.none)
+
+    let%expect_test "extract_backlink_blocks: paragraph with link" =
+      let wl : Cmarkit.Inline.t = make_test_wikilink "A" in
+      let para : Cmarkit.Block.t =
+        make_para (inlines [ text "see "; wl; text " here" ])
+      in
+      let doc : Cmarkit.Doc.t = make_doc [ para ] in
+      let blocks : string list = extract_backlink_blocks "A.md" doc in
+      List.iter blocks ~f:print_string;
+      [%expect {| <p>see <a href="/A/">A</a> here</p> |}]
+    ;;
+
+    let%expect_test "extract_backlink_blocks: no match" =
+      let wl : Cmarkit.Inline.t = make_test_wikilink "B" in
+      let doc : Cmarkit.Doc.t = make_doc [ make_para (inlines [ text "see "; wl ]) ] in
+      let blocks : string list = extract_backlink_blocks "A.md" doc in
+      Printf.printf "count: %d" (List.length blocks);
+      [%expect {| count: 0 |}]
+    ;;
+
+    let%expect_test "extract_backlink_blocks: list item extracts only matching paragraph" =
+      let wl : Cmarkit.Inline.t = make_test_wikilink "A" in
+      let para1 : Cmarkit.Block.t = make_para (text "unrelated text") in
+      let para2 : Cmarkit.Block.t = make_para (inlines [ text "this mentions "; wl ]) in
+      let list_block : Cmarkit.Block.t =
+        make_list_item (Cmarkit.Block.Blocks ([ para1; para2 ], Cmarkit.Meta.none))
+      in
+      let doc : Cmarkit.Doc.t = make_doc [ list_block ] in
+      let blocks : string list = extract_backlink_blocks "A.md" doc in
+      List.iter blocks ~f:print_string;
+      [%expect {| <p>this mentions <a href="/A/">A</a></p> |}]
+    ;;
+
+    let%expect_test "extract_backlink_blocks: multiple list items, only matching ones" =
+      let wl : Cmarkit.Inline.t = make_test_wikilink "A" in
+      let item1 : Cmarkit.Block.List_item.t =
+        Cmarkit.Block.List_item.make (make_para (text "no link here"))
+      in
+      let item2 : Cmarkit.Block.List_item.t =
+        Cmarkit.Block.List_item.make (make_para (inlines [ text "links to "; wl ]))
+      in
+      let item3 : Cmarkit.Block.List_item.t =
+        Cmarkit.Block.List_item.make (make_para (text "also unrelated"))
+      in
+      let list_block : Cmarkit.Block.t =
+        Cmarkit.Block.List
+          ( Cmarkit.Block.List'.make
+              (`Unordered '-')
+              [ item1, Cmarkit.Meta.none
+              ; item2, Cmarkit.Meta.none
+              ; item3, Cmarkit.Meta.none
+              ]
+          , Cmarkit.Meta.none )
+      in
+      let doc : Cmarkit.Doc.t = make_doc [ list_block ] in
+      let blocks : string list = extract_backlink_blocks "A.md" doc in
+      List.iter blocks ~f:print_string;
+      [%expect {| <p>links to <a href="/A/">A</a></p> |}]
+    ;;
+
+    let%expect_test "extract_backlink_blocks: nested blockquote" =
+      let wl : Cmarkit.Inline.t = make_test_wikilink "A" in
+      let para : Cmarkit.Block.t = make_para (inlines [ text "quoted "; wl ]) in
+      let bq : Cmarkit.Block.t =
+        Cmarkit.Block.Block_quote (Cmarkit.Block.Block_quote.make para, Cmarkit.Meta.none)
+      in
+      let doc : Cmarkit.Doc.t = make_doc [ bq ] in
+      let blocks : string list = extract_backlink_blocks "A.md" doc in
+      List.iter blocks ~f:print_string;
+      [%expect {| <p>quoted <a href="/A/">A</a></p> |}]
+    ;;
+  end
+end
+
+let backlinks = Backlink.backlinks
