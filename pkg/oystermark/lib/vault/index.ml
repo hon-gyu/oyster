@@ -14,7 +14,10 @@ type file_entry =
   ; block_ids : string list
   }
 
-type t = { files : file_entry list }
+type t =
+  { files : file_entry list
+  ; dirs : string list (** directory relative paths with trailing [/] *)
+  }
 
 (* Use Cmarkit.Folder to extract headings from a document. *)
 let extract_headings (doc : Cmarkit.Doc.t) : heading_entry list =

@@ -102,7 +102,7 @@ let%expect_test "wikilink to dir-only name is unresolved" =
 let%expect_test "dir_index: generates index page for directory" =
   let results =
     Oystermark.render_vault
-      ~pipeline:Pipeline.dir_index
+      ~pipeline:Pipeline.(dir_index ())
       ~backend_blocks:true
       ~safe:false
       dir_resolve_root
@@ -120,7 +120,7 @@ let%expect_test "dir_index: generates index page for directory" =
 let%expect_test "dir_index: generated page has TOC with children" =
   let results =
     Oystermark.render_vault
-      ~pipeline:Pipeline.dir_index
+      ~pipeline:Pipeline.(dir_index ())
       ~backend_blocks:true
       ~safe:false
       dir_resolve_root
@@ -138,7 +138,7 @@ let%expect_test "dir_index: generated page has TOC with children" =
 let%expect_test "dir_index: skips dir when index.md already exists" =
   let results =
     Oystermark.render_vault
-      ~pipeline:Pipeline.dir_index
+      ~pipeline:Pipeline.(dir_index ())
       ~backend_blocks:true
       ~safe:false
       vault_root

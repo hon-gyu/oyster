@@ -52,6 +52,7 @@ let test_index : Index.t =
       ; { rel_path = "dir/inner_dir/note_in_inner_dir.md"; headings = []; block_ids = [] }
       ; { rel_path = "dir/inner_dir/deep.md"; headings = []; block_ids = [ "deep1" ] }
       ]
+  ; dirs = []
   }
 ;;
 

@@ -10,7 +10,9 @@ type t =
   ; vault_meta : Cmarkit.Meta.t
   }
 
-let all_note_paths (vault : t) : string list = List.map vault.docs ~f:fst
+let all_entry_paths (vault : t) : string list =
+  let doc_paths : string list = List.map vault.docs ~f:fst in
+  doc_paths @ vault.index.dirs
 
 (** List all entries in the vault (files and directories, relative paths).
     Directories have a trailing [/].  Hidden entries are excluded. *)
@@ -20,7 +22,10 @@ let list_entries (vault_root : string) : string list =
 
 (** Build an index from a list of [(rel_path, doc)] pairs
     plus a list of non-md relative paths. *)
-let build_index ~(md_docs : (string * Cmarkit.Doc.t) list) ~(other_files : string list)
+let build_index
+      ~(md_docs : (string * Cmarkit.Doc.t) list)
+      ~(other_files : string list)
+      ~(dirs : string list)
   : Index.t
   =
   let md_entries =
@@ -33,7 +38,7 @@ let build_index ~(md_docs : (string * Cmarkit.Doc.t) list) ~(other_files : strin
     List.map other_files ~f:(fun rel_path ->
       ({ rel_path; headings = []; block_ids = [] } : Index.file_entry))
   in
-  { files = md_entries @ non_md }
+  { files = md_entries @ non_md; dirs }
 ;;
 
 (** Simple build: read all .md files, optionally filter, build index.
@@ -58,7 +63,7 @@ let of_root_path (vault_root : string) : t =
     List.filter all_files ~f:(fun p -> not (String.is_suffix p ~suffix:".md"))
   in
   (* Build index *)
-  let index = build_index ~md_docs:docs ~other_files in
+  let index = build_index ~md_docs:docs ~other_files ~dirs:[] in
   (* Resolve *)
   let resolved_docs : (string * Cmarkit.Doc.t) list = Resolve.resolve_docs docs index in
   { vault_root; index; docs = resolved_docs; vault_meta = Cmarkit.Meta.none }

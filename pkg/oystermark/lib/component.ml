@@ -146,14 +146,18 @@ let%expect_test "toc_html" =
 ;;
 
 (** Render a table of contents as a [Cmarkit.Block.t] unordered list from a list
-    of relative paths. Leaf entries become links; directories become plain text
-    with a nested sub-list.
+    of relative paths. Leaf entries become wikilinks; directories become nested
+    sub-lists with either plain text or wikilink labels.
 
-    [path_prefix] is prepended to each leaf's file path and wikilink target so
-    that resolution produces the correct href, while display text uses only the
-    short leaf name.  For example, [toc_cmark_list ~path_prefix:"sub/" ["a.md"]]
-    generates a wikilink targeting ["sub/a"] that displays as ["a"]. *)
-let toc_cmark_list ?(path_prefix : string = "") (paths : string list) : Cmarkit.Block.t =
+    [path_prefix] is prepended to each entry's path for wikilink resolution.
+    [dir_link] when [true] renders directory labels as wikilinks to
+    [dir/index]; when [false] renders them as plain text. *)
+let toc_cmark_list
+      ?(path_prefix : string = "")
+      ?(dir_link : bool = false)
+      (paths : string list)
+  : Cmarkit.Block.t
+  =
   let m : Cmarkit.Meta.t = Cmarkit.Meta.none in
   let text (s : string) : Cmarkit.Inline.t = Cmarkit.Inline.Text (s, m) in
   let list_item (block : Cmarkit.Block.t) : Cmarkit.Block.List_item.t Cmarkit.node =
@@ -165,36 +169,44 @@ let toc_cmark_list ?(path_prefix : string = "") (paths : string list) : Cmarkit.
   let para (inline : Cmarkit.Inline.t) : Cmarkit.Block.t =
     Cmarkit.Block.Paragraph (Cmarkit.Block.Paragraph.make inline, m)
   in
-  let rec render_entries (entries : toc_entry list) : Cmarkit.Block.t =
+  let make_leaf_wl ~(full_path : string) ~(display : string option) : Cmarkit.Inline.t =
+    let target : string option = Some (strip_md_ext full_path) in
+    let resolved_target : Vault.Resolve.target = File { path = full_path } in
+    Vault.Resolve.make_wikilink ~target ~fragment:None ~display ~embed:false ~resolved_target
+  in
+  let rec render_entries ~(prefix : string) (entries : toc_entry list) : Cmarkit.Block.t =
     let items : Cmarkit.Block.List_item.t Cmarkit.node list =
       List.map entries ~f:(fun entry ->
         match entry with
         | Leaf { name; path } ->
           let full_path : string = path_prefix ^ path in
-          let target : string option = Some (strip_md_ext full_path) in
           let display : string option =
             if String.is_empty path_prefix then None else Some (strip_md_ext name)
           in
-          let resolved_target : Vault.Resolve.target = File { path = full_path } in
-          let wl =
-            Vault.Resolve.make_wikilink
-              ~target
-              ~fragment:None
-              ~display
-              ~embed:false
-              ~resolved_target
-          in
-          list_item (para wl)
+          list_item (para (make_leaf_wl ~full_path ~display))
         | Dir { name; children } ->
-          let sub_list : Cmarkit.Block.t = render_entries children in
+          let dir_path : string =
+            if String.is_empty prefix then name else prefix ^ "/" ^ name
+          in
+          let label : Cmarkit.Inline.t =
+            if dir_link
+            then
+              make_leaf_wl
+                ~full_path:(path_prefix ^ dir_path)
+                ~display:(Some name)
+            else text name
+          in
+          let sub_list : Cmarkit.Block.t =
+            render_entries ~prefix:dir_path children
+          in
           let content : Cmarkit.Block.t =
-            Cmarkit.Block.Blocks ([ para (text name); sub_list ], m)
+            Cmarkit.Block.Blocks ([ para label; sub_list ], m)
           in
           list_item content)
     in
     ul items
   in
-  render_entries (build_toc_entries paths)
+  render_entries ~prefix:"" (build_toc_entries paths)
 ;;
 
 let%expect_test "toc_cmark_list" =

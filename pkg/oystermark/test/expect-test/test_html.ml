@@ -21,6 +21,7 @@ let test_index : Vault.Index.t =
       ; { rel_path = "doc.pdf"; headings = []; block_ids = [] }
       ; { rel_path = "dir/deep.md"; headings = []; block_ids = [ "d1" ] }
       ]
+  ; dirs = []
   }
 ;;
 

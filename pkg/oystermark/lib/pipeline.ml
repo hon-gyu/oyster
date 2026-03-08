@@ -190,16 +190,22 @@ let of_block_mapper (block_mapper : Cmarkit.Block.t Cmarkit.Mapper.mapper) : t =
   make ~on_parse:(fun path doc -> [ path, Mapper.map_doc mapper doc ]) ()
 ;;
 
-(** Add TOC to page named "home.md" *)
-let home_toc : t =
+(** Add TOC to page named "home.md".
+    [dir_link] controls whether directory entries in the TOC are rendered as
+    wikilinks (to [dir/index]) or plain text.  Set to [true] when [dir_index]
+    is also in the pipeline. *)
+let home_toc ?(dir_link : bool = false) () : t =
   let on_vault (ctx : Vault.t) (path : string) (doc : Cmarkit.Doc.t)
     : (string * Cmarkit.Doc.t) list
     =
-    let all_note_paths = Vault.all_note_paths ctx in
     if not (String.equal path "home.md")
     then [ path, doc ]
     else (
-      let toc_cmark_list = Component.toc_cmark_list all_note_paths in
+      let toc_paths : string list =
+        List.filter_map (Vault.all_entry_paths ctx) ~f:(fun p ->
+          if String.is_suffix p ~suffix:"/" then None else Some p)
+      in
+      let toc_cmark_list = Component.toc_cmark_list ~dir_link toc_paths in
       let block_mapper = add_block `Append toc_cmark_list in
       let mapper = Cmarkit.Mapper.make ~block:block_mapper () in
       let new_home = Cmarkit.Mapper.map_doc mapper doc in
@@ -210,9 +216,11 @@ let home_toc : t =
 
 (** Generate an index page for each directory entry.
     For a dir path like [subdir/], emits [(subdir/index.md, toc_doc)] where
-    [toc_doc] is a page listing the directory's immediate children.
+    [toc_doc] is a page listing the directory's children.
+    [immediate_only] when [true] lists only direct children (files and subdirs);
+    when [false] lists all descendants as a nested tree.
     Skips if [dir/index.md] already exists in the vault. *)
-let dir_index : t =
+let dir_index ?(immediate_only : bool = false) () : t =
   let on_vault (ctx : Vault.t) (path : string) (doc : Cmarkit.Doc.t)
     : (string * Cmarkit.Doc.t) list
     =
@@ -224,23 +232,33 @@ let dir_index : t =
       if List.Assoc.mem ctx.docs ~equal:String.equal index_path
       then []
       else (
-        let children : string list =
-          List.filter_map ctx.docs ~f:(fun (p, _) ->
-            if
-              String.is_prefix p ~prefix:path
-              && (not (String.equal p path))
-              && not (String.is_suffix p ~suffix:"/")
-            then Some p
+        let is_child (p : string) : bool =
+          String.is_prefix p ~prefix:path && not (String.equal p path)
+        in
+        let is_immediate (p : string) : bool =
+          let rel : string = String.chop_prefix_exn p ~prefix:path in
+          not (String.mem (String.rstrip ~drop:(Char.equal '/') rel) '/')
+        in
+        let all_paths : string list =
+          List.map ctx.docs ~f:fst @ ctx.index.dirs
+        in
+        (* Collect children: files as-is, dirs as "dirname" (flat leaf). *)
+        let rel_children : string list =
+          List.filter_map all_paths ~f:(fun p ->
+            if is_child p && ((not immediate_only) || is_immediate p)
+            then (
+              if String.is_suffix p ~suffix:"/"
+              then (
+                let dir_name : string =
+                  String.chop_suffix_exn p ~suffix:"/"
+                  |> String.chop_prefix_exn ~prefix:path
+                in
+                Some dir_name)
+              else Some (String.chop_prefix_exn p ~prefix:path))
             else None)
         in
-        (* Strip the dir prefix so toc_cmark_list doesn't create an extra
-           nesting level, but keep full paths for wikilink resolution by
-           re-prefixing in the wikilink target/file_path. *)
-        let rel_children : string list =
-          List.map children ~f:(fun p -> String.chop_prefix_exn p ~prefix:path)
-        in
         let toc_block : Cmarkit.Block.t =
-          Component.toc_cmark_list ~path_prefix:path rel_children
+          Component.toc_cmark_list ~path_prefix:path ~dir_link:true rel_children
         in
         [ index_path, Cmarkit.Doc.make toc_block ]))
   in
@@ -251,7 +269,8 @@ let default : t =
   exclude_draft_by_note_name
   >> exclude_unpublish
   >> drop_keys_in_frontmatter [ "publish"; "draft" ]
-  >> home_toc
+  >> dir_index ()
+  >> home_toc ~dir_link:true ()
 ;;
 
 let%test_module "prepend block" =
