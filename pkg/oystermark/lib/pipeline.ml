@@ -259,6 +259,14 @@ let dir_index ?(immediate_only : bool = false) () : t =
         if List.Assoc.mem ctx.docs ~equal:String.equal index_path
         then None
         else (
+          (* Skip directories that contain no notes *)
+          let has_notes : bool =
+            List.exists ctx.docs ~f:(fun (p, _) ->
+              String.is_prefix p ~prefix:dir_path && not (String.equal p dir_path))
+          in
+          if not has_notes
+          then None
+          else (
           let is_child (p : string) : bool =
             String.is_prefix p ~prefix:dir_path && not (String.equal p dir_path)
           in
@@ -283,7 +291,7 @@ let dir_index ?(immediate_only : bool = false) () : t =
           let toc_block : Cmarkit.Block.t =
             Component.toc_cmark_list ~path_prefix:dir_path ~dir_link:true rel_children
           in
-          Some (index_path, Cmarkit.Doc.make toc_block)))
+          Some (index_path, Cmarkit.Doc.make toc_block))))
     in
     { ctx with docs = ctx.docs @ new_docs }
   in
