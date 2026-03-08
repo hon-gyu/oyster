@@ -147,7 +147,12 @@ let%expect_test "toc_html" =
 
 (** Render a table of contents as a [Cmarkit.Block.t] unordered list from a list
     of relative paths. Leaf entries become links; directories become plain text
-    with a nested sub-list. *)
+    with a nested sub-list.
+
+    [path_prefix] is prepended to each leaf's file path and wikilink target so
+    that resolution produces the correct href, while display text uses only the
+    short leaf name.  For example, [toc_cmark_list ~path_prefix:"sub/" ["a.md"]]
+    generates a wikilink targeting ["sub/a"] that displays as ["a"]. *)
 let toc_cmark_list ?(path_prefix : string = "") (paths : string list) : Cmarkit.Block.t =
   let m : Cmarkit.Meta.t = Cmarkit.Meta.none in
   let text (s : string) : Cmarkit.Inline.t = Cmarkit.Inline.Text (s, m) in
