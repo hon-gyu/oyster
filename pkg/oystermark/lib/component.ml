@@ -148,7 +148,7 @@ let%expect_test "toc_html" =
 (** Render a table of contents as a [Cmarkit.Block.t] unordered list from a list
     of relative paths. Leaf entries become links; directories become plain text
     with a nested sub-list. *)
-let toc_cmark_list (paths : string list) : Cmarkit.Block.t =
+let toc_cmark_list ?(path_prefix : string = "") (paths : string list) : Cmarkit.Block.t =
   let m : Cmarkit.Meta.t = Cmarkit.Meta.none in
   let text (s : string) : Cmarkit.Inline.t = Cmarkit.Inline.Text (s, m) in
   let wikilink ~(target : string) ~(file_path : string) ~(display : string option)
@@ -175,8 +175,12 @@ let toc_cmark_list (paths : string list) : Cmarkit.Block.t =
       List.map entries ~f:(fun entry ->
         match entry with
         | Leaf { name; path } ->
-          let target : string = strip_md_ext path in
-          list_item (para (wikilink ~target ~file_path:path ~display:None))
+          let full_path : string = path_prefix ^ path in
+          let target : string = strip_md_ext full_path in
+          let display : string option =
+            if String.is_empty path_prefix then None else Some (strip_md_ext name)
+          in
+          list_item (para (wikilink ~target ~file_path:full_path ~display))
         | Dir { name; children } ->
           let sub_list : Cmarkit.Block.t = render_entries children in
           let content : Cmarkit.Block.t =
@@ -202,6 +206,20 @@ let%expect_test "toc_cmark_list" =
       - y
         - [[x/y/t]]
         - [[x/y/z]]
+    |}]
+;;
+
+let%expect_test "toc_cmark_list with path_prefix" =
+  let paths = [ "y/z.md"; "y/t.md"; "q.md" ] in
+  let block = toc_cmark_list ~path_prefix:"x/" paths in
+  let doc = Cmarkit.Doc.make block in
+  print_endline (Parse.commonmark_of_doc doc);
+  [%expect
+    {|
+    - [[x/q|q]]
+    - y
+      - [[x/y/t|t]]
+      - [[x/y/z|z]]
     |}]
 ;;
 
