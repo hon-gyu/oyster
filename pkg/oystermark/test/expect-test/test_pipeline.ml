@@ -76,3 +76,75 @@ let%expect_test "render_vault: custom pipeline can drop files" =
     subdir/note-b.md
     |}]
 ;;
+
+(* dir-resolve vault: mydir/ exists but mydir.md does not
+   ==================================================================== *)
+
+let dir_resolve_root = "../data/vault/dir-resolve"
+
+let%expect_test "wikilink to dir-only name is unresolved" =
+  let results =
+    Oystermark.render_vault
+      ~pipeline:Pipeline.id
+      ~backend_blocks:true
+      ~safe:false
+      dir_resolve_root
+  in
+  let main_html = List.Assoc.find_exn results ~equal:String.equal "main.md" in
+  printf "%s" main_html;
+  [%expect
+    {|
+    <div class="frontmatter"><table><tr><th>publish</th><td>true</td></tr></table></div>
+    <p>Link to <a href="#" class="unresolved">mydir</a> here.</p>
+    |}]
+;;
+
+let%expect_test "dir_index: generates index page for directory" =
+  let results =
+    Oystermark.render_vault
+      ~pipeline:Pipeline.dir_index
+      ~backend_blocks:true
+      ~safe:false
+      dir_resolve_root
+  in
+  let files = List.map results ~f:fst |> List.sort ~compare:String.compare in
+  List.iter files ~f:(fun f -> printf "%s\n" f);
+  [%expect
+    {|
+    main.md
+    mydir/child.md
+    mydir/index.md
+    |}]
+;;
+
+let%expect_test "dir_index: generated page has TOC with children" =
+  let results =
+    Oystermark.render_vault
+      ~pipeline:Pipeline.dir_index
+      ~backend_blocks:true
+      ~safe:false
+      dir_resolve_root
+  in
+  let index_html = List.Assoc.find_exn results ~equal:String.equal "mydir/index.md" in
+  printf "%s" index_html;
+  [%expect
+    {|
+    <h1>mydir</h1>
+    <ul>
+    <li><a href="/mydir/child/">child</a></li>
+    </ul>
+    |}]
+;;
+
+let%expect_test "dir_index: skips dir when index.md already exists" =
+  let results =
+    Oystermark.render_vault
+      ~pipeline:Pipeline.dir_index
+      ~backend_blocks:true
+      ~safe:false
+      vault_root
+  in
+  let index_html = List.Assoc.find_exn results ~equal:String.equal "subdir/index.md" in
+  printf "%s" index_html;
+  [%expect {| <h1>Sub Index</h1> |}]
+;;
