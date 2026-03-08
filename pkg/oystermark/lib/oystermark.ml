@@ -61,8 +61,9 @@ let render_vault
   in
   (* Stage 4: on_vault + Render *)
   let final_vault : Vault.t = pipeline.on_vault vault_ctx in
-  List.filter_map final_vault.docs ~f:(fun (out_path, final) ->
-    if String.is_suffix out_path ~suffix:".md"
-    then Some (out_path, Html.of_doc ~backend_blocks ~safe final)
+  List.filter_map final_vault.docs ~f:(fun (rel_path, final) ->
+    if String.is_suffix rel_path ~suffix:".md"
+    then
+      Some (Html.note_output_path rel_path, Html.of_doc ~backend_blocks ~safe final)
     else None)
 ;;

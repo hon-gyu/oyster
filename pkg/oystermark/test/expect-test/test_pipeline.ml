@@ -12,10 +12,10 @@ let%expect_test "render_vault: draft excluded" =
   List.iter files ~f:(fun f -> printf "%s\n" f);
   [%expect
     {|
-    home.md
-    subdir/index.md
-    subdir/note-a.md
-    subdir/note-b.md
+    home/index.html
+    subdir/index.html
+    subdir/note-a/index.html
+    subdir/note-b/index.html
     |}]
 ;;
 
@@ -27,7 +27,7 @@ let%expect_test "render_vault: home page" =
       ~safe:false
       vault_root
   in
-  let home_html = List.Assoc.find_exn results ~equal:String.equal "home.md" in
+  let home_html = List.Assoc.find_exn results ~equal:String.equal "home/index.html" in
   printf "%s" home_html;
   [%expect {|
     <!DOCTYPE html>
@@ -48,7 +48,7 @@ let%expect_test "render_vault: subdir index" =
       ~safe:false
       vault_root
   in
-  let index_html = List.Assoc.find_exn results ~equal:String.equal "subdir/index.md" in
+  let index_html = List.Assoc.find_exn results ~equal:String.equal "subdir/index.html" in
   printf "%s" index_html;
   [%expect {|
     <!DOCTYPE html>
@@ -69,7 +69,7 @@ let%expect_test "render_vault: regular note unchanged" =
       ~safe:false
       vault_root
   in
-  let note_html = List.Assoc.find_exn results ~equal:String.equal "subdir/note-a.md" in
+  let note_html = List.Assoc.find_exn results ~equal:String.equal "subdir/note-a/index.html" in
   printf "%s" note_html;
   [%expect {|
     <!DOCTYPE html>
@@ -94,10 +94,10 @@ let%expect_test "render_vault: custom pipeline can drop files" =
   List.iter files ~f:(fun f -> printf "%s\n" f);
   [%expect
     {|
-    secret.md
-    subdir/index.md
-    subdir/note-a.md
-    subdir/note-b.md
+    secret/index.html
+    subdir/index.html
+    subdir/note-a/index.html
+    subdir/note-b/index.html
     |}]
 ;;
 
@@ -114,7 +114,7 @@ let%expect_test "wikilink to dir-only name is unresolved" =
       ~safe:false
       dir_resolve_root
   in
-  let main_html = List.Assoc.find_exn results ~equal:String.equal "main.md" in
+  let main_html = List.Assoc.find_exn results ~equal:String.equal "main/index.html" in
   printf "%s" main_html;
   [%expect
     {|
@@ -141,9 +141,9 @@ let%expect_test "dir_index: generates index page for directory" =
   List.iter files ~f:(fun f -> printf "%s\n" f);
   [%expect
     {|
-    main.md
-    mydir/child.md
-    mydir/index.md
+    main/index.html
+    mydir/child/index.html
+    mydir/index.html
     |}]
 ;;
 
@@ -155,7 +155,7 @@ let%expect_test "dir_index: generated page has TOC with children" =
       ~safe:false
       dir_resolve_root
   in
-  let index_html = List.Assoc.find_exn results ~equal:String.equal "mydir/index.md" in
+  let index_html = List.Assoc.find_exn results ~equal:String.equal "mydir/index.html" in
   printf "%s" index_html;
   [%expect
     {|
@@ -179,7 +179,7 @@ let%expect_test "dir_index: skips dir when index.md already exists" =
       ~safe:false
       vault_root
   in
-  let index_html = List.Assoc.find_exn results ~equal:String.equal "subdir/index.md" in
+  let index_html = List.Assoc.find_exn results ~equal:String.equal "subdir/index.html" in
   printf "%s" index_html;
   [%expect {|
     <!DOCTYPE html>

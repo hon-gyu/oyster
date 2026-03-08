@@ -23,21 +23,29 @@ let slugify s =
   |> String.concat ~sep:"-"
 ;;
 
-(* Strip the .md extension from a path for SSG-friendly URLs. *)
-let strip_md_ext : string -> string =
-  fun path ->
-  match String.chop_suffix path ~suffix:".md" with
-  | Some p -> p
-  | None -> path
+(** URL path for a note: "foo/bar.md" → "/foo/bar/", "foo/index.md" → "/foo/". *)
+let note_url_path (rel_path : string) : string =
+  let base = String.chop_suffix_exn rel_path ~suffix:".md" in
+  if String.is_suffix base ~suffix:"/index"
+  then "/" ^ String.chop_suffix_exn base ~suffix:"/index" ^ "/"
+  else "/" ^ base ^ "/"
+;;
+
+(** Output file path for a note: derived from its URL path.
+    "foo/bar.md" → "foo/bar/index.html", "foo/index.md" → "foo/index.html". *)
+let note_output_path (rel_path : string) : string =
+  let base = String.chop_suffix_exn rel_path ~suffix:".md" in
+  if String.is_suffix base ~suffix:"/index"
+  then base ^ ".html"
+  else base ^ "/index.html"
 ;;
 
 (* Convert a resolved target to an href string. *)
 let target_to_href : Resolve.target -> string = function
-  | Resolve.Note { path } -> "/" ^ strip_md_ext path ^ "/"
+  | Resolve.Note { path } -> note_url_path path
   | Resolve.File { path } -> "/" ^ path
-  | Resolve.Heading { path; heading; _ } ->
-    "/" ^ strip_md_ext path ^ "/#" ^ slugify heading
-  | Resolve.Block { path; block_id } -> "/" ^ strip_md_ext path ^ "/#^" ^ block_id
+  | Resolve.Heading { path; heading; _ } -> note_url_path path ^ "#" ^ slugify heading
+  | Resolve.Block { path; block_id } -> note_url_path path ^ "#^" ^ block_id
   | Resolve.Curr_file -> ""
   | Resolve.Curr_heading { heading; _ } -> "#" ^ slugify heading
   | Resolve.Curr_block { block_id } -> "#^" ^ block_id

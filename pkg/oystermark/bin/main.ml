@@ -56,18 +56,13 @@ let vault_cmd : Command.t =
        let results =
          Oystermark.render_vault ~backend_blocks:true ~safe:false vault_root
        in
-       List.iteri results ~f:(fun i (rel_path, html) ->
-         let out_rel =
-          if String.is_suffix rel_path ~suffix:"/index.md"
-          then String.chop_suffix_exn rel_path ~suffix:".md" ^ ".html"
-          else String.chop_suffix_exn rel_path ~suffix:".md" ^ "/index.html"
-        in
+       List.iteri results ~f:(fun i (out_rel, html) ->
          let out_path = Filename.concat output_dir out_rel in
          let out_dir = Filename.dirname out_path in
          Core_unix.mkdir_p out_dir;
          Out_channel.write_all out_path ~data:html;
          if verbose
-         then printf "  %s -> %s\n" rel_path out_rel
+         then printf "  %s\n" out_rel
          else (
            let print_char c = Out_channel.output_char Out_channel.stdout c in
            if i mod 60 = 0 && i > 0 then print_char '\n';
