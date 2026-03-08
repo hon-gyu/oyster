@@ -63,15 +63,22 @@ let map_each_doc (f : Vault.t -> string -> Cmarkit.Doc.t -> (string * Cmarkit.Do
 
 (* {1 Built-in pipelines} *)
 
-(** Validate that a [.md] file does not conflict with a same-named directory.
-    e.g. [note1.md] and [note1/] would both produce [note1/index.html]. *)
+(** Validate that a [.md] file does not conflict with a same-named directory
+    that has note in it.
+    e.g. [note1.md] and [note1/] would both produce [note1/index.html].
+    if [note1/] has any note in it.
+    *)
 let validate_no_duplicates : t =
   let on_discover (path : string) (paths : string list) : bool =
     match String.chop_suffix path ~suffix:".md" with
     | None -> true
     | Some stem ->
       let dir_prefix = stem ^ "/" in
-      if List.exists paths ~f:(fun p -> String.is_prefix p ~prefix:dir_prefix)
+      let dir_has_notes : bool =
+        List.exists paths ~f:(fun p ->
+          String.is_prefix p ~prefix:dir_prefix && String.is_suffix p ~suffix:".md")
+      in
+      if dir_has_notes
       then
         failwith
           (Printf.sprintf
@@ -142,10 +149,7 @@ let drop_keys_in_frontmatter (keys : string list) : t =
 
 let drop_emtpy_frontmatter : t =
   let yaml_f : Yaml.value -> Yaml.value option = function
-    | `O fields as v ->
-      if List.is_empty fields
-      then None
-      else Some v
+    | `O fields as v -> if List.is_empty fields then None else Some v
     | `Null -> None
     | other -> Some other
   in
@@ -267,31 +271,31 @@ let dir_index ?(immediate_only : bool = false) () : t =
           if not has_notes
           then None
           else (
-          let is_child (p : string) : bool =
-            String.is_prefix p ~prefix:dir_path && not (String.equal p dir_path)
-          in
-          let is_immediate (p : string) : bool =
-            let rel : string = String.chop_prefix_exn p ~prefix:dir_path in
-            not (String.mem (String.rstrip ~drop:(Char.equal '/') rel) '/')
-          in
-          let rel_children : string list =
-            List.filter_map all_paths ~f:(fun p ->
-              if is_child p && ((not immediate_only) || is_immediate p)
-              then
-                if String.is_suffix p ~suffix:"/"
-                then (
-                  let dir_name : string =
-                    String.chop_suffix_exn p ~suffix:"/"
-                    |> String.chop_prefix_exn ~prefix:dir_path
-                  in
-                  Some dir_name)
-                else Some (String.chop_prefix_exn p ~prefix:dir_path)
-              else None)
-          in
-          let toc_block : Cmarkit.Block.t =
-            Component.toc_cmark_list ~path_prefix:dir_path ~dir_link:true rel_children
-          in
-          Some (index_path, Cmarkit.Doc.make toc_block))))
+            let is_child (p : string) : bool =
+              String.is_prefix p ~prefix:dir_path && not (String.equal p dir_path)
+            in
+            let is_immediate (p : string) : bool =
+              let rel : string = String.chop_prefix_exn p ~prefix:dir_path in
+              not (String.mem (String.rstrip ~drop:(Char.equal '/') rel) '/')
+            in
+            let rel_children : string list =
+              List.filter_map all_paths ~f:(fun p ->
+                if is_child p && ((not immediate_only) || is_immediate p)
+                then
+                  if String.is_suffix p ~suffix:"/"
+                  then (
+                    let dir_name : string =
+                      String.chop_suffix_exn p ~suffix:"/"
+                      |> String.chop_prefix_exn ~prefix:dir_path
+                    in
+                    Some dir_name)
+                  else Some (String.chop_prefix_exn p ~prefix:dir_path)
+                else None)
+            in
+            let toc_block : Cmarkit.Block.t =
+              Component.toc_cmark_list ~path_prefix:dir_path ~dir_link:true rel_children
+            in
+            Some (index_path, Cmarkit.Doc.make toc_block))))
     in
     { ctx with docs = ctx.docs @ new_docs }
   in
@@ -322,6 +326,7 @@ let backlinks : t =
 let default : t =
   exclude_draft_by_note_name
   >> exclude_unpublish
+  >> validate_no_duplicates
   >> drop_keys_in_frontmatter [ "publish"; "draft" ]
   >> drop_emtpy_frontmatter
   >> backlinks
