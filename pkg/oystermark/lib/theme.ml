@@ -78,7 +78,8 @@ h5 { font-size: 1.1em; }
 h6 { font-size: 1.05em; }
 a { color: var(--accent2); text-decoration: none; }
 a:hover { text-decoration: underline; }
-a.unresolved { color: var(--red); text-decoration: underline wavy; }
+a.unresolved { color: var(--accent2); opacity: 0.7; text-decoration: none; }
+a.unresolved:hover { text-decoration: line-through; }
 code {
   font-family: "JetBrains Mono", "Fira Code", monospace;
   background: var(--bg-alt);
@@ -178,7 +179,8 @@ h5 { font-size: 1.1em; }
 h6 { font-size: 1.05em; }
 a { color: var(--accent2); text-decoration: none; }
 a:hover { text-decoration: underline; }
-a.unresolved { color: var(--red); text-decoration: underline wavy; }
+a.unresolved { color: var(--accent2); opacity: 0.7; text-decoration: none; }
+a.unresolved:hover { text-decoration: line-through; }
 code {
   font-family: "JetBrains Mono", "Fira Code", monospace;
   background: var(--bg-alt);
