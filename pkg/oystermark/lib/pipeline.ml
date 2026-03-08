@@ -226,9 +226,10 @@ let dir_index : t =
       else (
         let children : string list =
           List.filter_map ctx.docs ~f:(fun (p, _) ->
-            if String.is_prefix p ~prefix:path
-               && (not (String.equal p path))
-               && not (String.is_suffix p ~suffix:"/")
+            if
+              String.is_prefix p ~prefix:path
+              && (not (String.equal p path))
+              && not (String.is_suffix p ~suffix:"/")
             then Some p
             else None)
         in

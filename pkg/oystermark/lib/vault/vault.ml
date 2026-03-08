@@ -39,6 +39,7 @@ let build_index ~(md_docs : (string * Cmarkit.Doc.t) list) ~(other_files : strin
 (** Simple build: read all .md files, optionally filter, build index.
     For pipeline-aware builds, use the lower-level functions directly. *)
 let of_root_path (vault_root : string) : t =
+  (* Scan files *)
   let all_files =
     List.filter (list_entries vault_root) ~f:(fun p ->
       not (String.is_suffix p ~suffix:"/"))
@@ -56,7 +57,9 @@ let of_root_path (vault_root : string) : t =
   let other_files =
     List.filter all_files ~f:(fun p -> not (String.is_suffix p ~suffix:".md"))
   in
+  (* Build index *)
   let index = build_index ~md_docs:docs ~other_files in
+  (* Resolve *)
   let resolved_docs : (string * Cmarkit.Doc.t) list = Resolve.resolve_docs docs index in
   { vault_root; index; docs = resolved_docs; vault_meta = Cmarkit.Meta.none }
 ;;

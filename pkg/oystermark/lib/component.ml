@@ -156,16 +156,6 @@ let%expect_test "toc_html" =
 let toc_cmark_list ?(path_prefix : string = "") (paths : string list) : Cmarkit.Block.t =
   let m : Cmarkit.Meta.t = Cmarkit.Meta.none in
   let text (s : string) : Cmarkit.Inline.t = Cmarkit.Inline.Text (s, m) in
-  let wikilink ~(target : string) ~(file_path : string) ~(display : string option)
-    : Cmarkit.Inline.t
-    =
-    let wl : Parse.Wikilink.t =
-      { target = Some target; fragment = None; display; embed = false }
-    in
-    let resolved : Vault.Resolve.target = File { path = file_path } in
-    let meta : Cmarkit.Meta.t = Cmarkit.Meta.add Vault.Resolve.resolved_key resolved m in
-    Parse.Wikilink.Ext_wikilink (wl, meta)
-  in
   let list_item (block : Cmarkit.Block.t) : Cmarkit.Block.List_item.t Cmarkit.node =
     Cmarkit.Block.List_item.make block, m
   in
@@ -181,11 +171,20 @@ let toc_cmark_list ?(path_prefix : string = "") (paths : string list) : Cmarkit.
         match entry with
         | Leaf { name; path } ->
           let full_path : string = path_prefix ^ path in
-          let target : string = strip_md_ext full_path in
+          let target : string option = Some (strip_md_ext full_path) in
           let display : string option =
             if String.is_empty path_prefix then None else Some (strip_md_ext name)
           in
-          list_item (para (wikilink ~target ~file_path:full_path ~display))
+          let resolved_target : Vault.Resolve.target = File { path = full_path } in
+          let wl =
+            Vault.Resolve.make_wikilink
+              ~target
+              ~fragment:None
+              ~display
+              ~embed:false
+              ~resolved_target
+          in
+          list_item (para wl)
         | Dir { name; children } ->
           let sub_list : Cmarkit.Block.t = render_entries children in
           let content : Cmarkit.Block.t =

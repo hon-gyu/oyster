@@ -24,6 +24,20 @@ type target =
 
 let resolved_key : target Cmarkit.Meta.key = Cmarkit.Meta.key ()
 
+(** Make a wikilink from an already resolved target. *)
+let make_wikilink
+      ~(target : string option)
+      ~(fragment : Parse.Wikilink.fragment option)
+      ~(display : string option)
+      ~(embed : bool)
+      ~(resolved_target : target)
+  : Cmarkit.Inline.t
+  =
+  let wl = Parse.Wikilink.{ target; fragment; display; embed } in
+  let meta = Cmarkit.Meta.add resolved_key resolved_target Cmarkit.Meta.none in
+  Parse.Wikilink.Ext_wikilink (wl, meta)
+;;
+
 (** Check if needle components form a (ordered) subsequence of haystack components. *)
 let is_path_subsequence ~(haystack : string list) ~(needle : string list) : bool =
   let hay_len = List.length haystack in
@@ -158,26 +172,27 @@ let resolution_cmarkit_mapper ~(index : Index.t) ~(curr_file : string) : Cmarkit
       match i with
       | Parse.Wikilink.Ext_wikilink (w, meta) ->
         let link_ref = Link_ref.of_wikilink w in
-        let result = resolve link_ref curr_file index in
-        let meta' = Cmarkit.Meta.add resolved_key result meta in
+        let target = resolve link_ref curr_file index in
+        let meta' = Cmarkit.Meta.add resolved_key target meta in
         Some (Parse.Wikilink.Ext_wikilink (w, meta'))
       | other -> Some other)
     ~inline:(fun _m i ->
       match i with
+      (* TODO(code-duplication) *)
       | Cmarkit.Inline.Link (link, meta) ->
         let ref_ = Cmarkit.Inline.Link.reference link in
         (match Link_ref.of_cmark_reference ref_ with
          | Some link_ref ->
-           let result = resolve link_ref curr_file index in
-           let meta' = Cmarkit.Meta.add resolved_key result meta in
+           let target = resolve link_ref curr_file index in
+           let meta' = Cmarkit.Meta.add resolved_key target meta in
            Cmarkit.Mapper.ret (Cmarkit.Inline.Link (link, meta'))
          | None -> Cmarkit.Mapper.default)
       | Cmarkit.Inline.Image (link, meta) ->
         let ref_ = Cmarkit.Inline.Link.reference link in
         (match Link_ref.of_cmark_reference ref_ with
          | Some link_ref ->
-           let result = resolve link_ref curr_file index in
-           let meta' = Cmarkit.Meta.add resolved_key result meta in
+           let target = resolve link_ref curr_file index in
+           let meta' = Cmarkit.Meta.add resolved_key target meta in
            Cmarkit.Mapper.ret (Cmarkit.Inline.Image (link, meta'))
          | None -> Cmarkit.Mapper.default)
       | _ -> Cmarkit.Mapper.default)

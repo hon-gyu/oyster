@@ -20,6 +20,15 @@ type target =
 (** Meta key for storing resolved targets in the target *)
 val resolved_key : target Cmarkit.Meta.key
 
+(** Make a wikilink from an already resolved target. *)
+val make_wikilink
+  :  target:string option
+  -> fragment:Parse.Wikilink.fragment option
+  -> display:string option
+  -> embed:bool
+  -> resolved_target:target
+  -> Cmarkit.Inline.t
+
 (** Resolve a link reference against the vault index. *)
 val resolve : Link_ref.t -> string -> Index.t -> target
 
