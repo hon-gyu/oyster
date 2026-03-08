@@ -64,7 +64,12 @@ h1, h2, h3, h4, h5, h6 {
   margin-bottom: 0.6em;
   line-height: 1.3;
 }
-h1 { border-bottom: 1px solid var(--border); padding-bottom: 0.3em; }
+h1 { font-size: 2em; border-bottom: 1px solid var(--border); padding-bottom: 0.3em; }
+h2 { font-size: 1.6em; }
+h3 { font-size: 1.35em; }
+h4 { font-size: 1.2em; }
+h5 { font-size: 1.1em; }
+h6 { font-size: 1.05em; }
 a { color: var(--accent2); text-decoration: none; }
 a:hover { text-decoration: underline; }
 a.unresolved { color: var(--red); text-decoration: underline wavy; }
@@ -147,7 +152,12 @@ h1, h2, h3, h4, h5, h6 {
   margin-bottom: 0.6em;
   line-height: 1.3;
 }
-h1 { border-bottom: 1px solid var(--border); padding-bottom: 0.3em; }
+h1 { font-size: 2em; border-bottom: 1px solid var(--border); padding-bottom: 0.3em; }
+h2 { font-size: 1.6em; }
+h3 { font-size: 1.35em; }
+h4 { font-size: 1.2em; }
+h5 { font-size: 1.1em; }
+h6 { font-size: 1.05em; }
 a { color: var(--accent2); text-decoration: none; }
 a:hover { text-decoration: underline; }
 a.unresolved { color: var(--red); text-decoration: underline wavy; }
