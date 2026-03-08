@@ -29,7 +29,15 @@ let%expect_test "render_vault: home page" =
   in
   let home_html = List.Assoc.find_exn results ~equal:String.equal "home.md" in
   printf "%s" home_html;
-  [%expect {| <h1>Home Page</h1> |}]
+  [%expect {|
+    <!DOCTYPE html>
+    <html>
+    <head><meta charset="UTF-8"></head>
+    <body>
+    <h1>Home Page</h1>
+    </body>
+    </html>
+    |}]
 ;;
 
 let%expect_test "render_vault: subdir index" =
@@ -42,7 +50,15 @@ let%expect_test "render_vault: subdir index" =
   in
   let index_html = List.Assoc.find_exn results ~equal:String.equal "subdir/index.md" in
   printf "%s" index_html;
-  [%expect {| <h1>Sub Index</h1> |}]
+  [%expect {|
+    <!DOCTYPE html>
+    <html>
+    <head><meta charset="UTF-8"></head>
+    <body>
+    <h1>Sub Index</h1>
+    </body>
+    </html>
+    |}]
 ;;
 
 let%expect_test "render_vault: regular note unchanged" =
@@ -55,7 +71,15 @@ let%expect_test "render_vault: regular note unchanged" =
   in
   let note_html = List.Assoc.find_exn results ~equal:String.equal "subdir/note-a.md" in
   printf "%s" note_html;
-  [%expect {| <h1>Note A</h1> |}]
+  [%expect {|
+    <!DOCTYPE html>
+    <html>
+    <head><meta charset="UTF-8"></head>
+    <body>
+    <h1>Note A</h1>
+    </body>
+    </html>
+    |}]
 ;;
 
 let%expect_test "render_vault: custom pipeline can drop files" =
@@ -94,8 +118,14 @@ let%expect_test "wikilink to dir-only name is unresolved" =
   printf "%s" main_html;
   [%expect
     {|
+    <!DOCTYPE html>
+    <html>
+    <head><meta charset="UTF-8"></head>
+    <body>
     <div class="frontmatter"><table><tr><th>publish</th><td>true</td></tr></table></div>
     <p>Link to <a href="#" class="unresolved">mydir</a> here.</p>
+    </body>
+    </html>
     |}]
 ;;
 
@@ -129,9 +159,15 @@ let%expect_test "dir_index: generated page has TOC with children" =
   printf "%s" index_html;
   [%expect
     {|
+    <!DOCTYPE html>
+    <html>
+    <head><meta charset="UTF-8"></head>
+    <body>
     <ul>
     <li><a href="/mydir/child/">child</a></li>
     </ul>
+    </body>
+    </html>
     |}]
 ;;
 
@@ -145,5 +181,13 @@ let%expect_test "dir_index: skips dir when index.md already exists" =
   in
   let index_html = List.Assoc.find_exn results ~equal:String.equal "subdir/index.md" in
   printf "%s" index_html;
-  [%expect {| <h1>Sub Index</h1> |}]
+  [%expect {|
+    <!DOCTYPE html>
+    <html>
+    <head><meta charset="UTF-8"></head>
+    <body>
+    <h1>Sub Index</h1>
+    </body>
+    </html>
+    |}]
 ;;

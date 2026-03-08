@@ -192,5 +192,10 @@ let renderer ~(backend_blocks : bool) ~(safe : bool) () : Cmarkit_renderer.t =
 ;;
 
 let of_doc ~(backend_blocks : bool) ~(safe : bool) (doc : Doc.t) : string =
-  Cmarkit_renderer.doc_to_string (renderer ~backend_blocks ~safe ()) doc
+  let body = Cmarkit_renderer.doc_to_string (renderer ~backend_blocks ~safe ()) doc in
+  String.concat
+    [ "<!DOCTYPE html>\n<html>\n<head><meta charset=\"UTF-8\"></head>\n<body>\n"
+    ; body
+    ; "</body>\n</html>\n"
+    ]
 ;;
