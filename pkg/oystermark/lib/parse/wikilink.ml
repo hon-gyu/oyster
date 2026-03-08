@@ -97,8 +97,8 @@ let make ~(embed : bool) (content : string) : t =
   (* Split on first unescaped | *)
   let ref_part, display =
     match String.lsplit2 content ~on:'|' with
-    | Some (r, d) -> r, Some d
-    | None -> content, None
+    | Some (r, d) -> String.strip r, Some (String.strip d)
+    | None -> String.strip content, None
   in
   (* Split on first # *)
   let target, fragment =
