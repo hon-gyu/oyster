@@ -51,8 +51,7 @@ let ( >> ) a b = compose a b
 (** {1 Vault-stage helpers} *)
 
 (** Lift a per-doc concat_map into an [on_vault] hook. *)
-let map_each_doc
-      (f : Vault.t -> string -> Cmarkit.Doc.t -> (string * Cmarkit.Doc.t) list)
+let map_each_doc (f : Vault.t -> string -> Cmarkit.Doc.t -> (string * Cmarkit.Doc.t) list)
   : Vault.t -> Vault.t
   =
   fun (ctx : Vault.t) ->
@@ -119,12 +118,36 @@ let exclude_unpublish : t =
 ;;
 
 let drop_keys_in_frontmatter (keys : string list) : t =
-  let yaml_f : Yaml.value -> Yaml.value = function
+  let yaml_f : Yaml.value -> Yaml.value option = function
     | `O fields ->
-      `O
-        (List.filter_map fields ~f:(fun (k, v) ->
-           if List.mem keys k ~equal:String.equal then None else Some (k, v)))
-    | other -> other
+      Some
+        (`O
+            (List.filter_map fields ~f:(fun (k, v) ->
+               if List.mem keys k ~equal:String.equal then None else Some (k, v))))
+    | other -> Some other
+  in
+  make
+    ~on_parse:(fun path doc ->
+      let b_mapper = Parse.Frontmatter.make_block_mapper yaml_f in
+      let mapper =
+        Cmarkit.Mapper.make
+          ~inline_ext_default:(fun _m i -> Some i)
+          ~block_ext_default:(fun _m b -> Some b)
+          ~block:b_mapper
+          ()
+      in
+      [ path, Cmarkit.Mapper.map_doc mapper doc ])
+    ()
+;;
+
+let drop_emtpy_frontmatter : t =
+  let yaml_f : Yaml.value -> Yaml.value option = function
+    | `O fields as v ->
+      if List.is_empty fields
+      then None
+      else Some v
+    | `Null -> None
+    | other -> Some other
   in
   make
     ~on_parse:(fun path doc ->
@@ -228,9 +251,7 @@ let home_toc ?(dir_link : bool = false) () : t =
     Skips if [dir/index.md] already exists in the vault. *)
 let dir_index ?(immediate_only : bool = false) () : t =
   let on_vault (ctx : Vault.t) : Vault.t =
-    let all_paths : string list =
-      List.map ctx.docs ~f:fst @ ctx.index.dirs
-    in
+    let all_paths : string list = List.map ctx.docs ~f:fst @ ctx.index.dirs in
     let new_docs : (string * Cmarkit.Doc.t) list =
       List.filter_map ctx.index.dirs ~f:(fun (dir_path : string) ->
         let index_path : string = dir_path ^ "index.md" in
@@ -248,7 +269,7 @@ let dir_index ?(immediate_only : bool = false) () : t =
           let rel_children : string list =
             List.filter_map all_paths ~f:(fun p ->
               if is_child p && ((not immediate_only) || is_immediate p)
-              then (
+              then
                 if String.is_suffix p ~suffix:"/"
                 then (
                   let dir_name : string =
@@ -256,7 +277,7 @@ let dir_index ?(immediate_only : bool = false) () : t =
                     |> String.chop_prefix_exn ~prefix:dir_path
                   in
                   Some dir_name)
-                else Some (String.chop_prefix_exn p ~prefix:dir_path))
+                else Some (String.chop_prefix_exn p ~prefix:dir_path)
               else None)
           in
           let toc_block : Cmarkit.Block.t =
@@ -273,6 +294,7 @@ let default : t =
   exclude_draft_by_note_name
   >> exclude_unpublish
   >> drop_keys_in_frontmatter [ "publish"; "draft" ]
+  >> drop_emtpy_frontmatter
   >> dir_index ()
   >> home_toc ~dir_link:true ()
 ;;
