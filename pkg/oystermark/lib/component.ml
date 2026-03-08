@@ -536,4 +536,39 @@ module Backlink = struct
   end
 end
 
+(** Generate breadcrumb navigation HTML for a page given its URL path.
+    Always includes a Home link. Adds intermediate directory links as ancestors.
+    Does not include the current page itself.
+    Example: url_path="/foo/bar/" → Home / foo *)
+let nav_of_url_path ?(home_path = "home.md") (url_path : string) : html =
+  let sep : string = {|<span class="sep">/</span>|} in
+  let home_href = Html.note_url_path home_path in
+  let home : string = {%string|<a href="%{home_href}">Home</a>|} in
+  match url_path with
+  | "/" -> ""
+  | p when String.equal p home_href -> ""
+  | _ ->
+    let trimmed : string =
+      url_path
+      |> String.chop_prefix_exn ~prefix:"/"
+      |> String.chop_suffix_exn ~suffix:"/"
+    in
+    let parts : string list =
+      String.split trimmed ~on:'/'
+      |> List.filter ~f:(fun s -> not (String.is_empty s))
+    in
+    (* Drop the last segment (the current page) *)
+    let ancestors : string list = List.take parts (List.length parts - 1) in
+    let crumbs : string list =
+      List.mapi ancestors ~f:(fun i name ->
+        let href : string =
+          "/" ^ String.concat ~sep:"/" (List.take parts (i + 1)) ^ "/"
+        in
+        spf {|<a href="%s">%s</a>|} href name)
+    in
+    spf
+      {|<nav class="breadcrumb">%s</nav>|}
+      (String.concat ~sep (home :: crumbs))
+;;
+
 let backlinks = Backlink.backlinks

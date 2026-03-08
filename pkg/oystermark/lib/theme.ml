@@ -6,6 +6,7 @@ type page =
   { title : string
   ; body : string
   ; url_path : string
+  ; nav : string
   }
 
 type t = page -> string
@@ -16,7 +17,9 @@ let wrap ~(css : string) (page : page) : string =
     ; page.title
     ; "</title>\n<style>\n"
     ; css
-    ; "\n</style>\n</head>\n<body>\n<main>\n<h1 class=\"page-title\">"
+    ; "\n</style>\n</head>\n<body>\n<main>\n"
+    ; page.nav
+    ; "<h1 class=\"page-title\">"
     ; page.title
     ; "</h1>\n"
     ; page.body
@@ -28,6 +31,7 @@ let none : t =
   fun page ->
   String.concat
     [ "<!DOCTYPE html>\n<html>\n<head><meta charset=\"UTF-8\"></head>\n<body>\n"
+    ; page.nav
     ; page.body
     ; "</body>\n</html>\n"
     ]
@@ -131,7 +135,11 @@ img, video, iframe { max-width: 100%; border-radius: 6px; }
 }
 .backlinks h2 { margin-top: 0.5em; font-size: 1.2em; }
 .backlink-context { list-style: none; margin: 0.3em 0; }
-.backlink-context p { margin: 0; }|}
+.backlink-context p { margin: 0; }
+nav.breadcrumb { font-size: 0.85em; color: var(--fg-dim); margin-bottom: 0.5em; }
+nav.breadcrumb a { color: var(--fg-dim); }
+nav.breadcrumb a:hover { color: var(--accent2); }
+nav.breadcrumb .sep { margin: 0 0.3em; }|}
 ;;
 
 let gruvbox : t =
@@ -232,7 +240,11 @@ img, video, iframe { max-width: 100%; border-radius: 6px; }
 }
 .backlinks h2 { margin-top: 0.5em; font-size: 1.2em; }
 .backlink-context { list-style: none; margin: 0.3em 0; }
-.backlink-context p { margin: 0; }|}
+.backlink-context p { margin: 0; }
+nav.breadcrumb { font-size: 0.85em; color: var(--fg-dim); margin-bottom: 0.5em; }
+nav.breadcrumb a { color: var(--fg-dim); }
+nav.breadcrumb a:hover { color: var(--accent2); }
+nav.breadcrumb .sep { margin: 0 0.3em; }|}
 ;;
 
 let default : t = gruvbox

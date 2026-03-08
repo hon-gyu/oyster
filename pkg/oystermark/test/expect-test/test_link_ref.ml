@@ -95,7 +95,7 @@ let%expect_test "wikilink_link_refs" =
     ├───────────────────────┼─────────────────────────────────────────────┼─────────────────────────────────────────────────────────────────────┤
     │ basic note            │ [[Three laws of motion]]                    │ ((target ("Three laws of motion")) (fragment ()))                   │
     │ with ext              │ [[Three laws of motion.md]]                 │ ((target ("Three laws of motion.md")) (fragment ()))                │
-    │ with pipe             │ [[Note 2 | Note two]]                       │ ((target ("Note 2 ")) (fragment ()))                                │
+    │ with pipe             │ [[Note 2 | Note two]]                       │ ((target ("Note 2")) (fragment ()))                                 │
     │ self heading          │ [[#Level 3 title]]                          │ ((target ()) (fragment ((Heading ("Level 3 title")))))              │
     │ cross heading         │ [[Note 2#Some level 2 title]]               │ ((target ("Note 2")) (fragment ((Heading ("Some level 2 title"))))) │
     │ nested heading        │ [[Note 2#Some level 2 title#Level 3 title]] │ ((target ("Note 2"))                                                │
@@ -107,8 +107,8 @@ let%expect_test "wikilink_link_refs" =
     │ hash collapse         │ [[###L2#L4]]                                │ ((target ()) (fragment ((Heading (L2 L4)))))                        │
     │ hash collapse 2       │ [[##L2######L4]]                            │ ((target ()) (fragment ((Heading (L2 L4)))))                        │
     │ hash collapse invalid │ [[##L2#####L4#L3]]                          │ ((target ()) (fragment ((Heading (L2 L4 L3)))))                     │
-    │ pipe + heading        │ [[#L2 | #L4]]                               │ ((target ()) (fragment ((Heading ("L2 ")))))                        │
-    │ multi pipe            │ [[Note 2 | 2 | 3]]                          │ ((target ("Note 2 ")) (fragment ()))                                │
+    │ pipe + heading        │ [[#L2 | #L4]]                               │ ((target ()) (fragment ((Heading (L2)))))                           │
+    │ multi pipe            │ [[Note 2 | 2 | 3]]                          │ ((target ("Note 2")) (fragment ()))                                 │
     │ asset jpg             │ [[Figure1.jpg]]                             │ ((target (Figure1.jpg)) (fragment ()))                              │
     │ asset with hash       │ [[Figure1.jpg#2]]                           │ ((target (Figure1.jpg)) (fragment ((Heading (2)))))                 │
     │ asset .md suffix      │ [[Figure1.jpg.md]]                          │ ((target (Figure1.jpg.md)) (fragment ()))                           │

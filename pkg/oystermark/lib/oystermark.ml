@@ -69,7 +69,8 @@ let render_vault
       let body = Html.of_doc ~backend_blocks ~safe final in
       let url_path = Html.note_url_path rel_path in
       let title : string = Component.title_of_path rel_path in
-      let page = Theme.{ title; body; url_path } in
+      let nav : string = Component.nav_of_url_path url_path in
+      let page = Theme.{ title; body; url_path; nav } in
       let html = theme page in
       Some (Html.note_output_path rel_path, html))
     else None)

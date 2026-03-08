@@ -55,7 +55,7 @@ let%expect_test "render_vault: subdir index" =
     <html>
     <head><meta charset="UTF-8"></head>
     <body>
-    <h1>Sub Index</h1>
+    <nav class="breadcrumb"><a href="/home/">Home</a></nav><h1>Sub Index</h1>
     </body>
     </html>
     |}]
@@ -76,7 +76,7 @@ let%expect_test "render_vault: regular note unchanged" =
     <html>
     <head><meta charset="UTF-8"></head>
     <body>
-    <h1>Note A</h1>
+    <nav class="breadcrumb"><a href="/home/">Home</a><span class="sep">/</span><a href="/subdir/">subdir</a></nav><h1>Note A</h1>
     </body>
     </html>
     |}]
@@ -122,7 +122,7 @@ let%expect_test "wikilink to dir-only name is unresolved" =
     <html>
     <head><meta charset="UTF-8"></head>
     <body>
-    <div class="frontmatter"><table><tr><th>publish</th><td>true</td></tr></table></div>
+    <nav class="breadcrumb"><a href="/home/">Home</a></nav><div class="frontmatter"><table><tr><th>publish</th><td>true</td></tr></table></div>
     <p>Link to <a href="#" class="unresolved">mydir</a> here.</p>
     </body>
     </html>
@@ -163,7 +163,7 @@ let%expect_test "dir_index: generated page has TOC with children" =
     <html>
     <head><meta charset="UTF-8"></head>
     <body>
-    <ul>
+    <nav class="breadcrumb"><a href="/home/">Home</a></nav><ul>
     <li><a href="/mydir/child/">child</a></li>
     </ul>
     </body>
@@ -186,7 +186,7 @@ let%expect_test "dir_index: skips dir when index.md already exists" =
     <html>
     <head><meta charset="UTF-8"></head>
     <body>
-    <h1>Sub Index</h1>
+    <nav class="breadcrumb"><a href="/home/">Home</a></nav><h1>Sub Index</h1>
     </body>
     </html>
     |}]
