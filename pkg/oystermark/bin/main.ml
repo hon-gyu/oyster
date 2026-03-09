@@ -56,10 +56,10 @@ let vault_cmd : Command.t =
     ~summary:"Render all markdown files in a vault to HTML"
     (let%map_open.Command (vault_root : string) = anon ("vault-root" %: string)
      and (output_dir : string option) = anon (maybe ("output-dir" %: string))
-     and (verbose : bool) = flag "verbose" no_arg ~doc:"Print progress messages"
+     and (verbose : bool) = flag "--verbose" no_arg ~doc:"Print progress messages"
      and (theme_name : string option) =
        flag
-         "theme"
+         "--theme"
          (optional string)
          ~doc:
            "NAME Theme to use (tokyonight, gruvbox, atom-one-dark, atom-one-light, \
