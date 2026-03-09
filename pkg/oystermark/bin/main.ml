@@ -96,8 +96,7 @@ let vault_cmd : Command.t =
        (* Copy non-markdown assets (images, etc.) to the output directory *)
        let all_entries = Oystermark.Vault.list_entries vault_root in
        let is_asset (p : string) : bool =
-         (not (String.is_suffix p ~suffix:".md"))
-         && not (String.is_suffix p ~suffix:"/")
+         (not (String.is_suffix p ~suffix:".md")) && not (String.is_suffix p ~suffix:"/")
        in
        List.iter all_entries ~f:(fun rel_path ->
          if is_asset rel_path
