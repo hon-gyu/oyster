@@ -80,6 +80,7 @@ let render_vault
       let url_path = Html.note_url_path rel_path in
       let title : string = Component.title_of_path rel_path in
       let nav : string = Component.nav_of_url_path url_path in
+      let sidebar : string = if String.equal rel_path "home.md" then "" else sidebar in
       let page = Theme.{ title; body; url_path; nav; sidebar } in
       let html = theme page in
       Some (Html.note_output_path rel_path, html))
