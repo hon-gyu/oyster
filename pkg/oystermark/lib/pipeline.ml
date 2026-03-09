@@ -330,8 +330,8 @@ let default : t =
   >> drop_keys_in_frontmatter [ "publish"; "draft" ]
   >> drop_emtpy_frontmatter
   >> backlinks
-  >> dir_index ()
   >> home_toc ~dir_link:true ()
+  >> dir_index ()
 ;;
 
 let%test_module "prepend block" =
