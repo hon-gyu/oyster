@@ -39,13 +39,38 @@ let file_cmd : Command.t =
        else print_string (Oystermark.Html.of_doc ~backend_blocks:true ~safe:false doc))
 ;;
 
+let theme_of_string (s : string) : Oystermark.Theme.t =
+  match s with
+  | "tokyonight" -> Oystermark.Theme.tokyonight
+  | "gruvbox" -> Oystermark.Theme.gruvbox
+  | "atom-one-dark" -> Oystermark.Theme.atom_one_dark
+  | "atom-one-light" -> Oystermark.Theme.atom_one_light
+  | "bluloco-dark" -> Oystermark.Theme.bluloco_dark
+  | "bluloco-light" -> Oystermark.Theme.bluloco_light
+  | "none" -> Oystermark.Theme.none
+  | other -> failwithf "Unknown theme: %s" other ()
+;;
+
 let vault_cmd : Command.t =
   Command.basic
     ~summary:"Render all markdown files in a vault to HTML"
     (let%map_open.Command (vault_root : string) = anon ("vault-root" %: string)
      and (output_dir : string option) = anon (maybe ("output-dir" %: string))
-     and (verbose : bool) = flag "verbose" no_arg ~doc:"Print progress messages" in
+     and (verbose : bool) = flag "verbose" no_arg ~doc:"Print progress messages"
+     and (theme_name : string option) =
+       flag
+         "theme"
+         (optional string)
+         ~doc:
+           "NAME Theme to use (tokyonight, gruvbox, atom-one-dark, atom-one-light, \
+            bluloco-dark, bluloco-light, none). Default: gruvbox"
+     in
      fun () ->
+       let theme : Oystermark.Theme.t =
+         match theme_name with
+         | Some name -> theme_of_string name
+         | None -> Oystermark.Theme.default
+       in
        let output_dir : string =
          match output_dir with
          | Some d -> d
@@ -54,11 +79,7 @@ let vault_cmd : Command.t =
            curr_dir ^ "/_site"
        in
        let results =
-         Oystermark.render_vault
-           ~theme:Oystermark.Theme.default
-           ~backend_blocks:true
-           ~safe:false
-           vault_root
+         Oystermark.render_vault ~theme ~backend_blocks:true ~safe:false vault_root
        in
        List.iteri results ~f:(fun i (out_rel, html) ->
          let out_path = Filename.concat output_dir out_rel in
