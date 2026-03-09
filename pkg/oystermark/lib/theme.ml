@@ -67,7 +67,7 @@ footer {
   min-height: calc(100vh - 3rem);
 }
 .sidebar {
-  width: 10rem;
+  width: 8rem;
   flex-shrink: 0;
   padding: 1.5rem 1rem;
   background: var(--bg);
@@ -84,7 +84,8 @@ footer {
   width: 1px;
   flex-shrink: 0;
   cursor: col-resize;
-  background: var(--border);
+  /* background: var(--border); */
+  background: var(--bg);
   position: relative;
   transition: width 0.15s, background 0.15s;
 }
@@ -268,6 +269,74 @@ let gruvbox_colors : colors =
   }
 ;;
 
+let atom_one_dark_colors : colors =
+  { bg = "#282c34"
+  ; bg_alt = "#21252b"
+  ; fg = "#abb2bf"
+  ; fg_dim = "#5c6370"
+  ; accent = "#61afef"
+  ; accent2 = "#c678dd"
+  ; green = "#98c379"
+  ; orange = "#d19a66"
+  ; red = "#e06c75"
+  ; border = "#3e4452"
+  ; blockquote_accent = "var(--accent)"
+  ; frontmatter_label = "var(--accent)"
+  }
+;;
+
+let atom_one_light_colors : colors =
+  { bg = "#fafafa"
+  ; bg_alt = "#f0f0f0"
+  ; fg = "#383a42"
+  ; fg_dim = "#a0a1a7"
+  ; accent = "#4078f2"
+  ; accent2 = "#a626a4"
+  ; green = "#50a14f"
+  ; orange = "#c18401"
+  ; red = "#e45649"
+  ; border = "#d3d3d3"
+  ; blockquote_accent = "var(--accent)"
+  ; frontmatter_label = "var(--accent)"
+  }
+;;
+
+let bluloco_dark_colors : colors =
+  { bg = "#282c34"
+  ; bg_alt = "#21252b"
+  ; fg = "#abb2bf"
+  ; fg_dim = "#636d83"
+  ; accent = "#3691ff"
+  ; accent2 = "#ce9887"
+  ; green = "#3fc56b"
+  ; orange = "#f9c859"
+  ; red = "#ff6480"
+  ; border = "#3b4048"
+  ; blockquote_accent = "var(--accent)"
+  ; frontmatter_label = "var(--accent)"
+  }
+;;
+
+let bluloco_light_colors : colors =
+  { bg = "#f9f9f9"
+  ; bg_alt = "#ededec"
+  ; fg = "#383a42"
+  ; fg_dim = "#a0a1a7"
+  ; accent = "#275fe4"
+  ; accent2 = "#7c4dff"
+  ; green = "#23974a"
+  ; orange = "#df631c"
+  ; red = "#d52753"
+  ; border = "#d3d3d3"
+  ; blockquote_accent = "var(--accent)"
+  ; frontmatter_label = "var(--accent)"
+  }
+;;
+
 let tokyonight : t = of_colors tokyonight_colors
 let gruvbox : t = of_colors gruvbox_colors
+let atom_one_dark : t = of_colors atom_one_dark_colors
+let atom_one_light : t = of_colors atom_one_light_colors
+let bluloco_dark : t = of_colors bluloco_dark_colors
+let bluloco_light : t = of_colors bluloco_light_colors
 let default : t = gruvbox
