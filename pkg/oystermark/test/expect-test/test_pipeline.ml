@@ -29,7 +29,8 @@ let%expect_test "render_vault: home page" =
   in
   let home_html = List.Assoc.find_exn results ~equal:String.equal "home/index.html" in
   printf "%s" home_html;
-  [%expect {|
+  [%expect
+    {|
     <!DOCTYPE html>
     <html>
     <head><meta charset="UTF-8"></head>
@@ -58,7 +59,8 @@ let%expect_test "render_vault: subdir index" =
   in
   let index_html = List.Assoc.find_exn results ~equal:String.equal "subdir/index.html" in
   printf "%s" index_html;
-  [%expect {|
+  [%expect
+    {|
     <!DOCTYPE html>
     <html>
     <head><meta charset="UTF-8"></head>
@@ -85,9 +87,12 @@ let%expect_test "render_vault: regular note unchanged" =
       ~safe:false
       vault_root
   in
-  let note_html = List.Assoc.find_exn results ~equal:String.equal "subdir/note-a/index.html" in
+  let note_html =
+    List.Assoc.find_exn results ~equal:String.equal "subdir/note-a/index.html"
+  in
   printf "%s" note_html;
-  [%expect {|
+  [%expect
+    {|
     <!DOCTYPE html>
     <html>
     <head><meta charset="UTF-8"></head>
@@ -216,7 +221,8 @@ let%expect_test "dir_index: skips dir when index.md already exists" =
   in
   let index_html = List.Assoc.find_exn results ~equal:String.equal "subdir/index.html" in
   printf "%s" index_html;
-  [%expect {|
+  [%expect
+    {|
     <!DOCTYPE html>
     <html>
     <head><meta charset="UTF-8"></head>

@@ -154,9 +154,7 @@ let resolve (link_ref : Link_ref.t) (curr_file : string) (index : Index.t) : tar
      | None -> Unresolved
      | Some file ->
        let file_or_note (path : string) : target =
-         if String.is_suffix path ~suffix:".md"
-         then Note { path }
-         else File { path }
+         if String.is_suffix path ~suffix:".md" then Note { path } else File { path }
        in
        (match link_ref.fragment with
         | None -> file_or_note file.rel_path

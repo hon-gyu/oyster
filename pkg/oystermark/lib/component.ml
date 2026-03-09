@@ -555,13 +555,10 @@ let nav_of_url_path ?(home_path = "home.md") (url_path : string) : html =
   | p when String.equal p home_href -> ""
   | _ ->
     let trimmed : string =
-      url_path
-      |> String.chop_prefix_exn ~prefix:"/"
-      |> String.chop_suffix_exn ~suffix:"/"
+      url_path |> String.chop_prefix_exn ~prefix:"/" |> String.chop_suffix_exn ~suffix:"/"
     in
     let parts : string list =
-      String.split trimmed ~on:'/'
-      |> List.filter ~f:(fun s -> not (String.is_empty s))
+      String.split trimmed ~on:'/' |> List.filter ~f:(fun s -> not (String.is_empty s))
     in
     (* Drop the last segment (the current page) *)
     let ancestors : string list = List.take parts (List.length parts - 1) in
@@ -572,9 +569,7 @@ let nav_of_url_path ?(home_path = "home.md") (url_path : string) : html =
         in
         spf {|<a href="%s">%s</a>|} href name)
     in
-    spf
-      {|<nav class="breadcrumb">%s</nav>|}
-      (String.concat ~sep (home :: crumbs))
+    spf {|<nav class="breadcrumb">%s</nav>|} (String.concat ~sep (home :: crumbs))
 ;;
 
 let backlinks = Backlink.backlinks

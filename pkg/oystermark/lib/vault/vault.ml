@@ -13,6 +13,7 @@ type t =
 let all_entry_paths (vault : t) : string list =
   let doc_paths : string list = List.map vault.docs ~f:fst in
   doc_paths @ vault.index.dirs
+;;
 
 (** List all entries in the vault (files and directories, relative paths).
     Directories have a trailing [/].  Hidden entries are excluded. *)

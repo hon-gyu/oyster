@@ -35,9 +35,7 @@ let note_url_path (rel_path : string) : string =
     "foo/bar.md" → "foo/bar/index.html", "foo/index.md" → "foo/index.html". *)
 let note_output_path (rel_path : string) : string =
   let base = String.chop_suffix_exn rel_path ~suffix:".md" in
-  if String.is_suffix base ~suffix:"/index"
-  then base ^ ".html"
-  else base ^ "/index.html"
+  if String.is_suffix base ~suffix:"/index" then base ^ ".html" else base ^ "/index.html"
 ;;
 
 (** URL path for any file: notes get pretty URLs, others get literal paths. *)

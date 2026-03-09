@@ -47,9 +47,7 @@ let render_vault
       else [])
   in
   (* Stage 3: Build index, resolve links *)
-  let md_docs =
-    List.filter parsed ~f:(fun (p, _) -> String.is_suffix p ~suffix:".md")
-  in
+  let md_docs = List.filter parsed ~f:(fun (p, _) -> String.is_suffix p ~suffix:".md") in
   let other_files =
     List.filter discovered ~f:(fun p ->
       (not (String.is_suffix p ~suffix:".md")) && not (is_dir p))
