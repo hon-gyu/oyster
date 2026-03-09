@@ -121,7 +121,7 @@ footer {
 main {
   max-width: 48rem;
   flex: 1;
-  margin: 0 auto;
+  margin: 0 auto 0 2rem;
   padding: 2rem 1.5rem;
 }
 h1, h2, h3, h4, h5, h6 {
@@ -271,7 +271,7 @@ footer {
 main {
   max-width: 48rem;
   flex: 1;
-  margin: 0 auto;
+  margin: 0 auto 0 2rem;
   padding: 2rem 1.5rem;
 }
 h1, h2, h3, h4, h5, h6 {
