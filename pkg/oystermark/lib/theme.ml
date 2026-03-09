@@ -93,7 +93,7 @@ footer {
   min-height: calc(100vh - 3rem);
 }
 .sidebar {
-  width: 12rem;
+  width: 10rem;
   flex-shrink: 0;
   padding: 1.5rem 1rem;
   background: var(--bg);
@@ -107,24 +107,17 @@ footer {
 .sidebar a:hover { color: var(--accent2); }
 .sidebar details > summary { cursor: pointer; }
 .sidebar-handle {
-  width: 6px;
+  width: 1px;
   flex-shrink: 0;
   cursor: col-resize;
   background: var(--border);
-  transition: background 0.15s;
+  position: relative;
+  transition: width 0.15s, background 0.15s;
 }
-.sidebar-handle:hover { background: var(--accent); }
+.sidebar-handle:hover { width: 10px; background: var(--accent); }
 .sidebar-collapsed .sidebar { width: 0; padding: 0; overflow: hidden; }
-.sidebar-collapsed .sidebar-handle::after {
-  content: "\25B6";
-  position: absolute;
-  top: 50%;
-  left: -3px;
-  transform: translateY(-50%);
-  font-size: 0.6em;
-  color: var(--fg-dim);
-}
-.sidebar-handle { position: relative; }
+.sidebar-collapsed .sidebar-handle { width: 6px; cursor: pointer; }
+.sidebar-collapsed .sidebar-handle:hover { width: 8px; }
 main {
   max-width: 48rem;
   flex: 1;
@@ -250,7 +243,7 @@ footer {
   min-height: calc(100vh - 3rem);
 }
 .sidebar {
-  width: 12rem;
+  width: 10rem;
   flex-shrink: 0;
   padding: 1.5rem 1rem;
   background: var(--bg);
@@ -264,24 +257,17 @@ footer {
 .sidebar a:hover { color: var(--accent2); }
 .sidebar details > summary { cursor: pointer; }
 .sidebar-handle {
-  width: 6px;
+  width: 1px;
   flex-shrink: 0;
   cursor: col-resize;
   background: var(--border);
-  transition: background 0.15s;
+  position: relative;
+  transition: width 0.15s, background 0.15s;
 }
-.sidebar-handle:hover { background: var(--accent); }
+.sidebar-handle:hover { width: 10px; background: var(--accent); }
 .sidebar-collapsed .sidebar { width: 0; padding: 0; overflow: hidden; }
-.sidebar-collapsed .sidebar-handle::after {
-  content: "\25B6";
-  position: absolute;
-  top: 50%;
-  left: -3px;
-  transform: translateY(-50%);
-  font-size: 0.6em;
-  color: var(--fg-dim);
-}
-.sidebar-handle { position: relative; }
+.sidebar-collapsed .sidebar-handle { width: 6px; cursor: pointer; }
+.sidebar-collapsed .sidebar-handle:hover { width: 8px; }
 main {
   max-width: 48rem;
   flex: 1;
