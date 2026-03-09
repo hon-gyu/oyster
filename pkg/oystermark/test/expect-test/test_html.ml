@@ -80,7 +80,7 @@ let%expect_test "wikilink: deep path" =
 
 let%expect_test "wikilink: embed image" =
   render "![[image.png]]";
-  [%expect {| <p><img src="/image.png" alt="image.png"/></p> |}]
+  [%expect {| <p><a href="/image.png"><img src="/image.png" alt="image.png"/></a></p> |}]
 ;;
 
 let%expect_test "wikilink: embed video" =
@@ -102,7 +102,7 @@ let%expect_test "wikilink: embed pdf" =
 
 let%expect_test "wikilink: embed with display text" =
   render "![[image.png|alt text here]]";
-  [%expect {| <p><img src="/image.png" alt="alt text here"/></p> |}]
+  [%expect {| <p><a href="/image.png"><img src="/image.png" alt="alt text here"/></a></p> |}]
 ;;
 
 let%expect_test "wikilink: embed unresolved" =
@@ -133,7 +133,7 @@ let%expect_test "md link: unresolved" =
 
 let%expect_test "md image: resolved" =
   render "![photo](image.png)";
-  [%expect {| <p><img src="/image.png" alt="photo"/></p> |}]
+  [%expect {| <p><a href="/image.png"><img src="/image.png" alt="photo"/></a></p> |}]
 ;;
 
 (* Block IDs
@@ -168,5 +168,76 @@ let%expect_test "plain markdown renders normally" =
     {|
     <h1>Hello</h1>
     <p>A paragraph with <strong>bold</strong> and <em>italic</em>.</p>
+    |}]
+;;
+
+(* Callouts
+   ==================================================================== *)
+
+let%expect_test "callout: basic" =
+  render "> [!info] My Title\n> Body text here.";
+  [%expect {|
+    <div class="callout" data-callout="info">
+    <div class="callout-title">My Title</div>
+    <div class="callout-content">
+    <p>Body text here.</p>
+    </div>
+    </div>
+    |}]
+;;
+
+let%expect_test "callout: default title" =
+  render "> [!tip]\n> Some content.";
+  [%expect {|
+    <div class="callout" data-callout="tip">
+    <div class="callout-title">Tip</div>
+    <div class="callout-content">
+    <p>Some content.</p>
+    </div>
+    </div>
+    |}]
+;;
+
+let%expect_test "callout: foldable closed" =
+  render "> [!faq]- Are callouts foldable?\n> Yes they are.";
+  [%expect {|
+    <details class="callout" data-callout="faq">
+    <summary class="callout-title">Are callouts foldable?</summary>
+    <div class="callout-content">
+    <p>Yes they are.</p>
+    </div>
+    </details>
+    |}]
+;;
+
+let%expect_test "callout: foldable open" =
+  render "> [!note]+ Expanded\n> Content here.";
+  [%expect {|
+    <details class="callout" data-callout="note" open>
+    <summary class="callout-title">Expanded</summary>
+    <div class="callout-content">
+    <p>Content here.</p>
+    </div>
+    </details>
+    |}]
+;;
+
+let%expect_test "callout: title only" =
+  render "> [!tip] Title only callout";
+  [%expect {|
+    <div class="callout" data-callout="tip">
+    <div class="callout-title">Title only callout</div>
+    <div class="callout-content">
+    </div>
+    </div>
+    |}]
+;;
+
+let%expect_test "callout: not a callout" =
+  render "> Just a normal blockquote.";
+  [%expect {|
+    <blockquote>
+    <p>Just a normal blockquote.</p>
+    </blockquote>
     |}]
 ;;

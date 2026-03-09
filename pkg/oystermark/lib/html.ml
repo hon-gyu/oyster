@@ -8,6 +8,7 @@ open Cmarkit
 module C = Cmarkit_renderer.Context
 module Resolve = Vault.Resolve
 module Block_id = Parse.Block_id
+module Callout = Parse.Callout
 module Wikilink = Parse.Wikilink
 module H = Tyxml.Html
 
@@ -209,7 +210,41 @@ let inline (c : Cmarkit_renderer.context) : Inline.t -> bool = function
 
 (** Render a paragraph with block-id. The ^blockid text stays visible
     (it's part of the inline content). We add an id to the <p> for linking. *)
+let render_callout (c : Cmarkit_renderer.context) (bq : Block.Block_quote.t)
+      (callout : Callout.t) : unit
+  =
+  let body = Block.Block_quote.block bq in
+  match callout.fold with
+  | None ->
+    C.string c
+      (sprintf "<div class=\"callout\" data-callout=\"%s\">\n" callout.kind);
+    C.string c
+      (sprintf "<div class=\"callout-title\">%s</div>\n" callout.title);
+    C.string c "<div class=\"callout-content\">\n";
+    C.block c body;
+    C.string c "</div>\n</div>\n"
+  | Some fold ->
+    let open_attr =
+      match fold with
+      | Callout.Foldable_open -> " open"
+      | Callout.Foldable_closed -> ""
+    in
+    C.string c
+      (sprintf "<details class=\"callout\" data-callout=\"%s\"%s>\n" callout.kind open_attr);
+    C.string c
+      (sprintf "<summary class=\"callout-title\">%s</summary>\n" callout.title);
+    C.string c "<div class=\"callout-content\">\n";
+    C.block c body;
+    C.string c "</div>\n</details>\n"
+;;
+
 let block (c : Cmarkit_renderer.context) : Block.t -> bool = function
+  | Block.Block_quote (bq, meta) ->
+    (match Meta.find Callout.meta_key meta with
+     | Some callout ->
+       render_callout c bq callout;
+       true
+     | None -> false)
   | Block.Paragraph (p, meta) ->
     (match Meta.find Block_id.meta_key meta with
      | Some (block_id : Block_id.t) ->

@@ -2,16 +2,24 @@
 
 open Core
 module Block_id = Block_id
+module Callout = Callout
 module Frontmatter = Frontmatter
 module Wikilink = Wikilink
 
 (** The mapper that transforms a cmarkit Doc, parsing wikilinks in inline
     text nodes and tag block identifiers at paragraph ends to meta. *)
+let map_block (mapper : Cmarkit.Mapper.t) (block : Cmarkit.Block.t)
+  : Cmarkit.Block.t Cmarkit.Mapper.result
+  =
+  match Callout.map_callout mapper block with
+  | `Map _ as result -> result
+  | `Default -> Block_id.tag_block_id_meta mapper block
+
 let mapper =
   Cmarkit.Mapper.make
     ~inline_ext_default:(fun _m i -> Some i)
     ~inline:Wikilink.parse
-    ~block:Block_id.tag_block_id_meta
+    ~block:map_block
     ()
 ;;
 

@@ -35,15 +35,7 @@ let%expect_test "render_vault: home page" =
     <html>
     <head><meta charset="UTF-8"></head>
     <body>
-    <nav class="breadcrumb"><a href="/home/">Home</a></nav><ul>
-    <li><a href="/home/">home</a></li>
-    <li><a href="/secret/">secret</a></li>
-    <li style="list-style: none"><details><summary><a href="/subdir/">subdir</a></summary><ul>
-    <li><a href="/subdir/">index</a></li>
-    <li><a href="/subdir/note-a/">note-a</a></li>
-    <li><a href="/subdir/note-b/">note-b</a></li>
-    </ul></details></li>
-    </ul><h1>Home Page</h1>
+    <nav class="breadcrumb"><a href="/home/">Home</a></nav><h1>Home Page</h1>
     </body>
     </html>
     |}]
