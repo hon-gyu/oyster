@@ -3,4 +3,4 @@
  (libraries cmarkit core yaml)
  (inline_tests)
  (preprocess
-  (pps ppx_jane)))
+  (pps ppx_jane ppx_quick_test)))
