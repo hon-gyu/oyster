@@ -552,7 +552,6 @@ let nav_of_url_path ?(home_path = "home.md") (url_path : string) : html =
   let home : string = {%string|<a href="%{home_href}">Home</a>|} in
   match url_path with
   | "/" -> ""
-  | p when String.equal p home_href -> ""
   | _ ->
     let trimmed : string =
       url_path |> String.chop_prefix_exn ~prefix:"/" |> String.chop_suffix_exn ~suffix:"/"
