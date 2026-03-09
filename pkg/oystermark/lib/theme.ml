@@ -130,6 +130,8 @@ pre {
   overflow-x: auto;
 }
 pre code { background: none; padding: 0; }
+pre code.hljs { background: transparent; padding: 0; }
+.katex-display { overflow-x: auto; overflow-y: hidden; }
 blockquote {
   border-left: 3px solid %{c.blockquote_accent};
   margin-left: 0;
@@ -181,9 +183,14 @@ let wrap ~(css : string) (page : page) : string =
 <head>
 <meta charset="UTF-8">
 <title>%{page.title}</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
 <style>
 %{css}
 </style>
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
 </head>
 <body>
 <header>
@@ -197,6 +204,20 @@ let wrap ~(css : string) (page : page) : string =
 %{page.body}</main>
 </div>
 <footer></footer>
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+  hljs.highlightAll();
+  renderMathInElement(document.body, {
+    delimiters: [
+      {left: "$$", right: "$$", display: true},
+      {left: "$", right: "$", display: false},
+      {left: "\\(", right: "\\)", display: false},
+      {left: "\\[", right: "\\]", display: true}
+    ],
+    throwOnError: false
+  });
+});
+</script>
 </body>
 </html>
 |}
