@@ -85,6 +85,19 @@ let media_type_of_href (href : string) : [> `Audio | `Iframe | `Image | `Link | 
   else `Link
 ;;
 
+(** Parse an Obsidian image dimension spec: "100x145" → Some (100, Some 145),
+    "100" → Some (100, None), anything else → None. *)
+let parse_image_dims (s : string) : (int * int option) option =
+  let s = String.strip s in
+  match String.lsplit2 s ~on:'x' with
+  | Some (w, h) ->
+    (try Some (Int.of_string (String.strip w), Some (Int.of_string (String.strip h))) with
+     | _ -> None)
+  | None ->
+    (try Some (Int.of_string s, None) with
+     | _ -> None)
+;;
+
 (* Render a wikilink as HTML. Handles embed=true for media content. *)
 let render_wikilink (c : Cmarkit_renderer.context) (w : Wikilink.t) (meta : Meta.t) : unit
   =
@@ -100,7 +113,14 @@ let render_wikilink (c : Cmarkit_renderer.context) (w : Wikilink.t) (meta : Meta
     let s =
       match media_type_of_href href with
       | `Image ->
-        let img = H.img ~src:href ~alt:display () in
+        let dim_attrs, alt =
+          match parse_image_dims display with
+          | Some (iw, Some ih) ->
+            [ H.a_width iw; H.a_height ih ], wikilink_default_display w
+          | Some (iw, None) -> [ H.a_width iw ], wikilink_default_display w
+          | None -> [], display
+        in
+        let img = H.img ~src:href ~alt ~a:dim_attrs () in
         elt_to_string (H.a ~a:[ H.a_href href ] [ img ])
       | `Video ->
         elt_to_string
@@ -165,8 +185,14 @@ let render_image (c : Cmarkit_renderer.context) (l : Inline.Link.t) (meta : Meta
       | _ -> ()
     in
     extract_text (Inline.Link.text l);
-    let alt = Buffer.contents buf in
-    let img = H.img ~src:href ~alt () in
+    let raw_alt = Buffer.contents buf in
+    let dim_attrs, alt =
+      match parse_image_dims raw_alt with
+      | Some (iw, Some ih) -> [ H.a_width iw; H.a_height ih ], ""
+      | Some (iw, None) -> [ H.a_width iw ], ""
+      | None -> [], raw_alt
+    in
+    let img = H.img ~src:href ~alt ~a:dim_attrs () in
     C.string c (elt_to_string (H.a ~a:[ H.a_href href ] [ img ]));
     true
   | None -> false
