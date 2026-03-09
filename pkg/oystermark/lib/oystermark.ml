@@ -72,6 +72,7 @@ let render_vault
       ~dir_href_f:(fun dir -> Some (Html.note_url_path (dir ^ "/index.md")))
       ~leaf_href_f:Html.file_url_path
       ~collapsible:true
+      ~collapsed_by_default:true
       sidebar_paths
   in
   List.filter_map final_vault.docs ~f:(fun (rel_path, final) ->

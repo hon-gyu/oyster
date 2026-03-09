@@ -18,16 +18,25 @@ let wrap ~(css : string) (page : page) : string =
     ; page.title
     ; "</title>\n<style>\n"
     ; css
-    ; "\n</style>\n</head>\n<body>\n<div class=\"layout\">\n\
-       <nav class=\"sidebar\">\n"
-    ; page.sidebar
-    ; "</nav>\n<main>\n"
+    ; "\n</style>\n</head>\n<body>\n\
+       <header>\n"
     ; page.nav
-    ; "<h1 class=\"page-title\">"
+    ; "</header>\n\
+       <div class=\"layout\">\n\
+       <aside class=\"sidebar\">\n"
+    ; page.sidebar
+    ; "</aside>\n\
+       <div class=\"sidebar-handle\" \
+       onclick=\"document.body.classList.toggle('sidebar-collapsed')\" \
+       aria-label=\"Toggle sidebar\"></div>\n\
+       <main>\n\
+       <h1 class=\"page-title\">"
     ; page.title
     ; "</h1>\n"
     ; page.body
-    ; "</main>\n</div>\n</body>\n</html>\n"
+    ; "</main>\n</div>\n\
+       <footer></footer>\n\
+       </body>\n</html>\n"
     ]
 ;;
 
@@ -35,8 +44,8 @@ let none : t =
   fun page ->
   String.concat
     [ "<!DOCTYPE html>\n<html>\n<head><meta charset=\"UTF-8\"></head>\n<body>\n"
-    ; page.sidebar
     ; page.nav
+    ; page.sidebar
     ; page.body
     ; "</body>\n</html>\n"
     ]
@@ -67,27 +76,55 @@ body {
   margin: 0;
   padding: 0;
 }
+header {
+  border-bottom: 1px solid var(--border);
+  padding: 0.5rem 1.5rem;
+  background: var(--bg);
+}
+footer {
+  border-top: 1px solid var(--border);
+  padding: 0.5rem 1.5rem;
+  background: var(--bg);
+  font-size: 0.85em;
+  color: var(--fg-dim);
+}
 .layout {
   display: flex;
-  min-height: 100vh;
+  min-height: calc(100vh - 3rem);
 }
 .sidebar {
-  width: 16rem;
+  width: 12rem;
   flex-shrink: 0;
   padding: 1.5rem 1rem;
-  border-right: 1px solid var(--border);
-  background: var(--bg-alt);
+  background: var(--bg);
   overflow-y: auto;
   font-size: 0.85em;
-  position: sticky;
-  top: 0;
-  height: 100vh;
+  transition: width 0.2s, padding 0.2s;
 }
 .sidebar ul { list-style: none; padding-left: 1em; margin: 0.2em 0; }
 .sidebar > ul { padding-left: 0; }
 .sidebar a { color: var(--fg-dim); }
 .sidebar a:hover { color: var(--accent2); }
 .sidebar details > summary { cursor: pointer; }
+.sidebar-handle {
+  width: 6px;
+  flex-shrink: 0;
+  cursor: col-resize;
+  background: var(--border);
+  transition: background 0.15s;
+}
+.sidebar-handle:hover { background: var(--accent); }
+.sidebar-collapsed .sidebar { width: 0; padding: 0; overflow: hidden; }
+.sidebar-collapsed .sidebar-handle::after {
+  content: "\25B6";
+  position: absolute;
+  top: 50%;
+  left: -3px;
+  transform: translateY(-50%);
+  font-size: 0.6em;
+  color: var(--fg-dim);
+}
+.sidebar-handle { position: relative; }
 main {
   max-width: 48rem;
   flex: 1;
@@ -196,27 +233,55 @@ body {
   margin: 0;
   padding: 0;
 }
+header {
+  border-bottom: 1px solid var(--border);
+  padding: 0.5rem 1.5rem;
+  background: var(--bg);
+}
+footer {
+  border-top: 1px solid var(--border);
+  padding: 0.5rem 1.5rem;
+  background: var(--bg);
+  font-size: 0.85em;
+  color: var(--fg-dim);
+}
 .layout {
   display: flex;
-  min-height: 100vh;
+  min-height: calc(100vh - 3rem);
 }
 .sidebar {
-  width: 16rem;
+  width: 12rem;
   flex-shrink: 0;
   padding: 1.5rem 1rem;
-  border-right: 1px solid var(--border);
-  background: var(--bg-alt);
+  background: var(--bg);
   overflow-y: auto;
   font-size: 0.85em;
-  position: sticky;
-  top: 0;
-  height: 100vh;
+  transition: width 0.2s, padding 0.2s;
 }
 .sidebar ul { list-style: none; padding-left: 1em; margin: 0.2em 0; }
 .sidebar > ul { padding-left: 0; }
 .sidebar a { color: var(--fg-dim); }
 .sidebar a:hover { color: var(--accent2); }
 .sidebar details > summary { cursor: pointer; }
+.sidebar-handle {
+  width: 6px;
+  flex-shrink: 0;
+  cursor: col-resize;
+  background: var(--border);
+  transition: background 0.15s;
+}
+.sidebar-handle:hover { background: var(--accent); }
+.sidebar-collapsed .sidebar { width: 0; padding: 0; overflow: hidden; }
+.sidebar-collapsed .sidebar-handle::after {
+  content: "\25B6";
+  position: absolute;
+  top: 50%;
+  left: -3px;
+  transform: translateY(-50%);
+  font-size: 0.6em;
+  color: var(--fg-dim);
+}
+.sidebar-handle { position: relative; }
 main {
   max-width: 48rem;
   flex: 1;
