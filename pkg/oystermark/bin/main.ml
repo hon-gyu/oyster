@@ -92,7 +92,22 @@ let vault_cmd : Command.t =
            let print_char c = Out_channel.output_char Out_channel.stdout c in
            if i mod 60 = 0 && i > 0 then print_char '\n';
            print_char '.';
-           Out_channel.flush Out_channel.stdout)))
+           Out_channel.flush Out_channel.stdout));
+       (* Copy non-markdown assets (images, etc.) to the output directory *)
+       let all_entries = Oystermark.Vault.list_entries vault_root in
+       let is_asset (p : string) : bool =
+         (not (String.is_suffix p ~suffix:".md"))
+         && not (String.is_suffix p ~suffix:"/")
+       in
+       List.iter all_entries ~f:(fun rel_path ->
+         if is_asset rel_path
+         then (
+           let src = Filename.concat vault_root rel_path in
+           let dst = Filename.concat output_dir rel_path in
+           let dst_dir = Filename.dirname dst in
+           Core_unix.mkdir_p dst_dir;
+           let content = In_channel.read_all src in
+           Out_channel.write_all dst ~data:content)))
 ;;
 
 let () =

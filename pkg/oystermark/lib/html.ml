@@ -99,7 +99,9 @@ let render_wikilink (c : Cmarkit_renderer.context) (w : Wikilink.t) (meta : Meta
   then (
     let s =
       match media_type_of_href href with
-      | `Image -> elt_to_string (H.img ~src:href ~alt:display ())
+      | `Image ->
+        let img = H.img ~src:href ~alt:display () in
+        elt_to_string (H.a ~a:[ H.a_href href ] [ img ])
       | `Video ->
         elt_to_string
           (H.video
@@ -164,7 +166,8 @@ let render_image (c : Cmarkit_renderer.context) (l : Inline.Link.t) (meta : Meta
     in
     extract_text (Inline.Link.text l);
     let alt = Buffer.contents buf in
-    C.string c (elt_to_string (H.img ~src:href ~alt ()));
+    let img = H.img ~src:href ~alt () in
+    C.string c (elt_to_string (H.a ~a:[ H.a_href href ] [ img ]));
     true
   | None -> false
 ;;

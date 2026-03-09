@@ -339,4 +339,4 @@ let atom_one_dark : t = of_colors atom_one_dark_colors
 let atom_one_light : t = of_colors atom_one_light_colors
 let bluloco_dark : t = of_colors bluloco_dark_colors
 let bluloco_light : t = of_colors bluloco_light_colors
-let default : t = gruvbox
+let default : t = bluloco_dark
