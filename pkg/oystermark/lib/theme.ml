@@ -172,7 +172,7 @@ img, video, iframe { max-width: 100%; border-radius: 6px; }
 .backlinks h2 { margin-top: 0.5em; font-size: 1.2em; }
 .backlink-context { list-style: none; margin: 0.3em 0; }
 .backlink-context p { margin: 0; }
-nav.breadcrumb { font-size: 1em; color: var(--fg-dim); margin-bottom: 0.5em; }
+nav.breadcrumb { font-size: 1em; color: var(--fg-dim); margin: 0.25em; }
 nav.breadcrumb a { color: var(--fg-dim); }
 nav.breadcrumb a:hover { color: var(--accent2); }
 nav.breadcrumb .sep { margin: 0 0.3em; }
