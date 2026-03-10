@@ -1,7 +1,102 @@
 (** Obsidian callout extension.
 
     Transforms blockquotes whose first line matches [\[!type\]] into callout
-    metadata attached to the block_quote's {!Cmarkit.Meta.t}. *)
+    metadata attached to the block_quote's {!Cmarkit.Meta.t}.
+
+    {1 Syntax}
+
+    {v
+> [!type] Optional title
+> Body content (markdown)
+    v}
+
+    {ul
+    {- {b Type identifier}: case-insensitive, e.g. [note], [tip], [warning].}
+    {- {b Fold indicator}: optional [+] or [-] after the type, before the title.
+       {ul
+       {- [+] — expanded by default (foldable)}
+       {- [-] — collapsed by default (foldable)}
+       {- absent — not foldable}}}
+    {- {b Title}: optional text after the type/fold indicator. Defaults to the
+       type in title case.}
+    {- {b Body}: remaining blockquote content. May be empty (title-only callout).}
+    {- Nested callouts: a callout body may contain another blockquote that is
+       itself a callout.}}
+
+    {1 Parsing}
+
+    First line regex: [\[!([a-zA-Z_-]+)\]([+-])?\s*(.*\)]
+
+    {ul
+    {- Group 1: type identifier}
+    {- Group 2: fold indicator (optional)}
+    {- Group 3: title text (optional, rest of line)}}
+
+    Parsing is performed by {!parse_header}. The block mapper
+    {!map_callout} detects callout syntax in
+    {!Cmarkit.Block.Block_quote} nodes and attaches {!t} to the
+    blockquote's {!Cmarkit.Meta.t} via {!meta_key}.
+
+    {1 Data types}
+
+    A callout's foldability is represented by {!fold}:
+
+    {ul
+    {- {!Foldable_open} — expanded by default}
+    {- {!Foldable_closed} — collapsed by default}}
+
+    The callout metadata is {!t}:
+
+    {ul
+    {- [kind] — lowercased type identifier (e.g. ["info"], ["tip"])}
+    {- [fold] — [None] means not foldable, [Some _] selects the initial state}
+    {- [title] — explicit title text, or the kind in title case}}
+
+    {1 HTML output}
+
+    Non-foldable callouts render as:
+
+    {v
+<div class="callout" data-callout="info">
+  <div class="callout-title">Title here</div>
+  <div class="callout-content">
+    <!-- rendered body markdown -->
+  </div>
+</div>
+    v}
+
+    Foldable callouts use [<details>] / [<summary>]:
+
+    {v
+<details class="callout" data-callout="faq" open>
+  <summary class="callout-title">Title</summary>
+  <div class="callout-content">...</div>
+</details>
+    v}
+
+    {ul
+    {- [open] attribute present when fold = {!Foldable_open}}
+    {- [open] attribute absent when fold = {!Foldable_closed}}}
+
+    {1 Supported types}
+
+    The following type identifiers are styled. Aliases share the same style.
+    Any unsupported type defaults to the [note] style.
+
+    {ul
+    {- [note]}
+    {- [abstract] / [summary] / [tldr]}
+    {- [info]}
+    {- [todo]}
+    {- [tip] / [hint] / [important]}
+    {- [success] / [check] / [done]}
+    {- [question] / [help] / [faq]}
+    {- [warning] / [caution] / [attention]}
+    {- [failure] / [fail] / [missing]}
+    {- [danger] / [error]}
+    {- [bug]}
+    {- [example]}
+    {- [quote] / [cite]}} *)
 
 open Core
 
