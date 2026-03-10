@@ -9,6 +9,7 @@ type target =
       { path : string
       ; heading : string
       ; level : int
+      ; ordinal : int
       }
   | Block of
       { path : string
@@ -18,6 +19,7 @@ type target =
   | Curr_heading of
       { heading : string
       ; level : int
+      ; ordinal : int
       }
   | Curr_block of { block_id : string }
   | Unresolved
@@ -139,7 +141,7 @@ let resolve (link_ref : Link_ref.t) (curr_file : string) (index : Index.t) : tar
        (match current_entry with
         | Some entry ->
           (match resolve_headings entry.headings hs with
-           | Some h -> Curr_heading { heading = h.text; level = h.level }
+           | Some h -> Curr_heading { heading = h.text; level = h.level; ordinal = h.ordinal }
            | None -> Curr_file)
         | None -> Curr_file)
      | Some (Link_ref.Block_ref bid) ->
@@ -160,7 +162,13 @@ let resolve (link_ref : Link_ref.t) (curr_file : string) (index : Index.t) : tar
         | None -> file_or_note file.rel_path
         | Some (Link_ref.Heading hs) ->
           (match resolve_headings file.headings hs with
-           | Some h -> Heading { path = file.rel_path; heading = h.text; level = h.level }
+           | Some h ->
+             Heading
+               { path = file.rel_path
+               ; heading = h.text
+               ; level = h.level
+               ; ordinal = h.ordinal
+               }
            | None -> file_or_note file.rel_path)
         | Some (Link_ref.Block_ref bid) ->
           if List.exists file.block_ids ~f:(String.equal bid)

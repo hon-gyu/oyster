@@ -5,6 +5,7 @@ type target =
       { path : string
       ; heading : string
       ; level : int
+      ; ordinal : int
       }
   | Block of
       { path : string
@@ -14,6 +15,7 @@ type target =
   | Curr_heading of
       { heading : string
       ; level : int
+      ; ordinal : int
       }
   | Curr_block of { block_id : string }
   | Unresolved

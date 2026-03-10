@@ -6,6 +6,8 @@ open Parse
 type heading_entry =
   { text : string
   ; level : int
+  ; ordinal : int
+  (** 0-based position among all headings in document order. *)
   }
 
 type file_entry =
@@ -29,7 +31,8 @@ let extract_headings (doc : Cmarkit.Doc.t) : heading_entry list =
           let level = Cmarkit.Block.Heading.level h in
           let inline = Cmarkit.Block.Heading.inline h in
           let text = inline_to_plain_text inline in
-          Cmarkit.Folder.ret (acc @ [ { text; level } ])
+          let ordinal = List.length acc in
+          Cmarkit.Folder.ret (acc @ [ { text; level; ordinal } ])
         | _ -> Cmarkit.Folder.default)
       ~inline_ext_default:(fun _f acc _i -> acc)
       ~block_ext_default:(fun _f acc _b -> acc)
