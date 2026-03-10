@@ -255,7 +255,13 @@ let home_toc ?(dir_link : bool = false) () : t =
     Skips if [dir/index.md] already exists in the vault. *)
 let dir_index ?(immediate_only : bool = false) () : t =
   let on_vault (ctx : Vault.t) : Vault.t =
-    let all_paths : string list = List.map ctx.docs ~f:fst @ ctx.index.dirs in
+    let doc_paths : string list = List.map ctx.docs ~f:fst in
+    let non_empty_dirs : string list =
+      List.filter ctx.index.dirs ~f:(fun (dir_path : string) ->
+        List.exists ctx.docs ~f:(fun (p, _) ->
+          String.is_prefix p ~prefix:dir_path && not (String.equal p dir_path)))
+    in
+    let all_paths : string list = doc_paths @ non_empty_dirs in
     let new_docs : (string * Cmarkit.Doc.t) list =
       List.filter_map ctx.index.dirs ~f:(fun (dir_path : string) ->
         let index_path : string = dir_path ^ "index.md" in
