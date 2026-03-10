@@ -164,3 +164,16 @@ Nested embeds are processed recursively until max depth is reached.
 ← B contains ![[C]]
 ← All resolved up to depth 5
 ```
+
+
+## Cycle detection
+
+Embedding: Behavioral Spec
+
+What it does
+
+- ![[NOTE]] — transclude the full body of NOTE (no frontmatter) inline into the
+current document
+- ![[NOTE#heading]] — transclude the section under that heading
+- ![[NOTE#^blockid]] — transclude just that block
+- ![[image.png]] — embed as <img> (already understood, different case)
