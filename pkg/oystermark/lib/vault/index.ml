@@ -6,8 +6,7 @@ open Parse
 type heading_entry =
   { text : string
   ; level : int
-  ; ordinal : int
-  (** 0-based position among all headings in document order. *)
+  ; ordinal : int (** 0-based position among all headings in document order. *)
   }
 
 type file_entry =

@@ -141,7 +141,8 @@ let resolve (link_ref : Link_ref.t) (curr_file : string) (index : Index.t) : tar
        (match current_entry with
         | Some entry ->
           (match resolve_headings entry.headings hs with
-           | Some h -> Curr_heading { heading = h.text; level = h.level; ordinal = h.ordinal }
+           | Some h ->
+             Curr_heading { heading = h.text; level = h.level; ordinal = h.ordinal }
            | None -> Curr_file)
         | None -> Curr_file)
      | Some (Link_ref.Block_ref bid) ->

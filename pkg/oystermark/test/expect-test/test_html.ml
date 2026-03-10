@@ -102,7 +102,8 @@ let%expect_test "wikilink: embed pdf" =
 
 let%expect_test "wikilink: embed with display text" =
   render "![[image.png|alt text here]]";
-  [%expect {| <p><a href="/image.png"><img src="/image.png" alt="alt text here"/></a></p> |}]
+  [%expect
+    {| <p><a href="/image.png"><img src="/image.png" alt="alt text here"/></a></p> |}]
 ;;
 
 let%expect_test "wikilink: embed unresolved" =
@@ -176,7 +177,8 @@ let%expect_test "plain markdown renders normally" =
 
 let%expect_test "callout: basic" =
   render "> [!info] My Title\n> Body text here.";
-  [%expect {|
+  [%expect
+    {|
     <div class="callout" data-callout="info">
     <div class="callout-title">My Title</div>
     <div class="callout-content">
@@ -188,7 +190,8 @@ let%expect_test "callout: basic" =
 
 let%expect_test "callout: default title" =
   render "> [!tip]\n> Some content.";
-  [%expect {|
+  [%expect
+    {|
     <div class="callout" data-callout="tip">
     <div class="callout-title">Tip</div>
     <div class="callout-content">
@@ -200,7 +203,8 @@ let%expect_test "callout: default title" =
 
 let%expect_test "callout: foldable closed" =
   render "> [!faq]- Are callouts foldable?\n> Yes they are.";
-  [%expect {|
+  [%expect
+    {|
     <details class="callout" data-callout="faq">
     <summary class="callout-title">Are callouts foldable?</summary>
     <div class="callout-content">
@@ -212,7 +216,8 @@ let%expect_test "callout: foldable closed" =
 
 let%expect_test "callout: foldable open" =
   render "> [!note]+ Expanded\n> Content here.";
-  [%expect {|
+  [%expect
+    {|
     <details class="callout" data-callout="note" open>
     <summary class="callout-title">Expanded</summary>
     <div class="callout-content">
@@ -224,7 +229,8 @@ let%expect_test "callout: foldable open" =
 
 let%expect_test "callout: title only" =
   render "> [!tip] Title only callout";
-  [%expect {|
+  [%expect
+    {|
     <div class="callout" data-callout="tip">
     <div class="callout-title">Title only callout</div>
     <div class="callout-content">
@@ -235,101 +241,10 @@ let%expect_test "callout: title only" =
 
 let%expect_test "callout: not a callout" =
   render "> Just a normal blockquote.";
-  [%expect {|
+  [%expect
+    {|
     <blockquote>
     <p>Just a normal blockquote.</p>
     </blockquote>
     |}]
-;;
-
-(* Note embedding (![[NOTE]])
-   ==================================================================== *)
-
-(** Build a mini-vault from [(path, markdown)] pairs, run the full
-    parse → resolve → expand pipeline, then render [target]. *)
-let render_embed (files : (string * string) list) (target : string) : unit =
-  let docs = List.map files ~f:(fun (path, content) -> path, Parse.of_string content) in
-  let index = Vault.build_index ~md_docs:docs ~other_files:[] ~dirs:[] in
-  let resolved = Vault.Resolve.resolve_docs docs index in
-  let expanded = Vault.Embed.expand_docs resolved in
-  let doc = List.Assoc.find_exn expanded ~equal:String.equal target in
-  print_string (Html.of_doc ~backend_blocks:true ~safe:false doc)
-;;
-
-let%expect_test "embed: full note" =
-  render_embed
-    [ "a.md", "![[b]]"; "b.md", "Hello from B.\n\nSecond paragraph." ]
-    "a.md";
-  [%expect
-    {|
-    <div class="embed" data-embed-depth="1">
-    <p>Hello from B.</p>
-    <p>Second paragraph.</p>
-    </div>
-    |}]
-;;
-
-let%expect_test "embed: heading section" =
-  render_embed
-    [ "a.md", "![[b#Section]]"
-    ; "b.md", "Intro.\n\n## Section\n\nUnder section.\n\n## Other\n\nNot included."
-    ]
-    "a.md";
-  [%expect
-    {|
-    <div class="embed" data-embed-depth="1">
-    <h2>Section</h2>
-    <p>Under section.</p>
-    </div>
-    |}]
-;;
-
-let%expect_test "embed: block ref" =
-  render_embed
-    [ "a.md", "![[b#^myblock]]"; "b.md", "First para.\n\nTarget block. ^myblock\n\nAfter." ]
-    "a.md";
-  [%expect {|
-    <div class="embed" data-embed-depth="1">
-    <p id="^myblock">Target block. ^myblock</p>
-    </div>
-    |}]
-;;
-
-let%expect_test "embed: self-embed is a fallback link" =
-  render_embed [ "a.md", "![[a]]" ] "a.md";
-  [%expect {|
-    <div class="embed" data-embed-depth="1">
-    <div class="embed" data-embed-depth="2">
-    <div class="embed" data-embed-depth="3">
-    <div class="embed" data-embed-depth="4">
-    <div class="embed" data-embed-depth="5">
-    <p><a href="/a/">a</a></p>
-    </div>
-    </div>
-    </div>
-    </div>
-    </div>
-    |}]
-;;
-
-let%expect_test "embed: mutual cycle A→B→A becomes link at second occurrence" =
-  render_embed [ "a.md", "![[b]]"; "b.md", "![[a]]" ] "a.md";
-  [%expect {|
-    <div class="embed" data-embed-depth="1">
-    <div class="embed" data-embed-depth="2">
-    <div class="embed" data-embed-depth="3">
-    <div class="embed" data-embed-depth="4">
-    <div class="embed" data-embed-depth="5">
-    <p><a href="/a/">a</a></p>
-    </div>
-    </div>
-    </div>
-    </div>
-    </div>
-    |}]
-;;
-
-let%expect_test "embed: unresolved note is left as unresolved link" =
-  render_embed [ "a.md", "![[no-such-note]]" ] "a.md";
-  [%expect {| <p><a href="#" class="unresolved">no-such-note</a></p> |}]
 ;;

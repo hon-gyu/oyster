@@ -143,9 +143,7 @@ let parse_header (s : string) : (t * int) option =
           then String.strip (String.sub s ~pos:after_fold ~len:(len - after_fold))
           else ""
         in
-        let title =
-          if String.is_empty rest then String.capitalize kind else rest
-        in
+        let title = if String.is_empty rest then String.capitalize kind else rest in
         Some ({ kind; fold; title }, len)))
 ;;
 
@@ -177,9 +175,7 @@ let strip_header_from_inline (inline : Cmarkit.Inline.t) (end_pos : int)
   let rec strip = function
     | Cmarkit.Inline.Text (s, meta) ->
       let rest = String.strip (String.drop_prefix s end_pos) in
-      if String.is_empty rest
-      then None
-      else Some (Cmarkit.Inline.Text (rest, meta))
+      if String.is_empty rest then None else Some (Cmarkit.Inline.Text (rest, meta))
     | Cmarkit.Inline.Inlines (inlines, meta) ->
       (match inlines with
        | first :: tail ->
@@ -231,7 +227,9 @@ let recompose_block
   | true, [ single ] -> single
   | true, _ -> Cmarkit.Block.Blocks (rest, Cmarkit.Meta.none)
   | false, [] -> Cmarkit.Block.Paragraph (para, para_meta)
-  | false, _ -> Cmarkit.Block.Blocks (Cmarkit.Block.Paragraph (para, para_meta) :: rest, Cmarkit.Meta.none)
+  | false, _ ->
+    Cmarkit.Block.Blocks
+      (Cmarkit.Block.Paragraph (para, para_meta) :: rest, Cmarkit.Meta.none)
 ;;
 
 (** Block mapper: detects callout syntax in blockquotes and attaches
@@ -273,7 +271,8 @@ let%expect_test "parse_header basic" =
   test "[!tip]";
   [%expect {| ((kind tip) (fold ()) (title Tip)) @ 6 |}];
   test "[!faq]- Are callouts foldable?";
-  [%expect {| ((kind faq) (fold (Foldable_closed)) (title "Are callouts foldable?")) @ 30 |}];
+  [%expect
+    {| ((kind faq) (fold (Foldable_closed)) (title "Are callouts foldable?")) @ 30 |}];
   test "[!note]+ Expanded";
   [%expect {| ((kind note) (fold (Foldable_open)) (title Expanded)) @ 17 |}];
   test "[!WARNING] Watch out";

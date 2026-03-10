@@ -14,6 +14,7 @@ let map_block (mapper : Cmarkit.Mapper.t) (block : Cmarkit.Block.t)
   match Callout.map_callout mapper block with
   | `Map _ as result -> result
   | `Default -> Block_id.tag_block_id_meta mapper block
+;;
 
 let mapper =
   Cmarkit.Mapper.make
