@@ -12,22 +12,22 @@ let test_index : Index.t =
   { files =
       [ { rel_path = "Note 1.md"
         ; headings =
-            [ { text = "Level 3 title"; level = 3 }
-            ; { text = "Level 4 title"; level = 4 }
-            ; { text = "Example (level 3)"; level = 3 }
-            ; { text = "L2"; level = 2 }
-            ; { text = "L3"; level = 3 }
-            ; { text = "L4"; level = 4 }
-            ; { text = "Another L3"; level = 3 }
+            [ { text = "Level 3 title"; level = 3; ordinal = 0 }
+            ; { text = "Level 4 title"; level = 4; ordinal = 1 }
+            ; { text = "Example (level 3)"; level = 3; ordinal = 2 }
+            ; { text = "L2"; level = 2; ordinal = 3 }
+            ; { text = "L3"; level = 3; ordinal = 4 }
+            ; { text = "L4"; level = 4; ordinal = 5 }
+            ; { text = "Another L3"; level = 3; ordinal = 6 }
             ]
         ; block_ids = [ "para1"; "block-2" ]
         }
       ; { rel_path = "Note 2.md"
         ; headings =
-            [ { text = "Some level 2 title"; level = 2 }
-            ; { text = "L4"; level = 4 }
-            ; { text = "Level 3 title"; level = 3 }
-            ; { text = "Another level 2 title"; level = 2 }
+            [ { text = "Some level 2 title"; level = 2; ordinal = 0 }
+            ; { text = "L4"; level = 4; ordinal = 1 }
+            ; { text = "Level 3 title"; level = 3; ordinal = 2 }
+            ; { text = "Another level 2 title"; level = 2; ordinal = 3 }
             ]
         ; block_ids = []
         }
@@ -77,10 +77,12 @@ let target_to_string (t : Resolve.target) : string =
   match t with
   | Note { path } -> sprintf "Note(%s)" path
   | File { path } -> sprintf "File(%s)" path
-  | Heading { path; heading; level } -> sprintf "Heading(%s, %s, %d)" path heading level
+  | Heading { path; heading; level; ordinal } ->
+    sprintf "Heading(%s, %s, %d, #%d)" path heading level ordinal
   | Block { path; block_id } -> sprintf "Block(%s, %s)" path block_id
   | Curr_file -> "Curr_file"
-  | Curr_heading { heading; level } -> sprintf "Curr_heading(%s, %d)" heading level
+  | Curr_heading { heading; level; ordinal } ->
+    sprintf "Curr_heading(%s, %d, #%d)" heading level ordinal
   | Curr_block { block_id } -> sprintf "Curr_block(%s)" block_id
   | Unresolved -> "Unresolved"
 ;;
@@ -210,17 +212,17 @@ let%expect_test "resolve_headings_note2" =
   resolve_and_print cases;
   [%expect
     {|
-    ┌───────────────────────┬──────────────┬──────────────────────────────────────┬───────────────────────────────────────────┐
-    │ name                  │ input/target │ input/fragment                       │ result                                    │
-    ├───────────────────────┼──────────────┼──────────────────────────────────────┼───────────────────────────────────────────┤
-    │ single heading        │ Note 2       │ H[Some level 2 title]                │ Heading(Note 2.md, Some level 2 title, 2) │
-    │ nested heading        │ Note 2       │ H[Some level 2 title; Level 3 title] │ Heading(Note 2.md, Level 3 title, 3)      │
-    │ nested skip level     │ Note 2       │ H[Some level 2 title; L4]            │ Heading(Note 2.md, L4, 4)                 │
-    │ L3 directly           │ Note 2       │ H[Level 3 title]                     │ Heading(Note 2.md, Level 3 title, 3)      │
-    │ L4 directly           │ Note 2       │ H[L4]                                │ Heading(Note 2.md, L4, 4)                 │
-    │ random -> fallback    │ Note 2       │ H[random]                            │ Note(Note 2.md)                           │
-    │ random#L3 -> fallback │ Note 2       │ H[random; Level 3 title]             │ Note(Note 2.md)                           │
-    └───────────────────────┴──────────────┴──────────────────────────────────────┴───────────────────────────────────────────┘
+    ┌───────────────────────┬──────────────┬──────────────────────────────────────┬───────────────────────────────────────────────┐
+    │ name                  │ input/target │ input/fragment                       │ result                                        │
+    ├───────────────────────┼──────────────┼──────────────────────────────────────┼───────────────────────────────────────────────┤
+    │ single heading        │ Note 2       │ H[Some level 2 title]                │ Heading(Note 2.md, Some level 2 title, 2, #0) │
+    │ nested heading        │ Note 2       │ H[Some level 2 title; Level 3 title] │ Heading(Note 2.md, Level 3 title, 3, #2)      │
+    │ nested skip level     │ Note 2       │ H[Some level 2 title; L4]            │ Heading(Note 2.md, L4, 4, #1)                 │
+    │ L3 directly           │ Note 2       │ H[Level 3 title]                     │ Heading(Note 2.md, Level 3 title, 3, #2)      │
+    │ L4 directly           │ Note 2       │ H[L4]                                │ Heading(Note 2.md, L4, 4, #1)                 │
+    │ random -> fallback    │ Note 2       │ H[random]                            │ Note(Note 2.md)                               │
+    │ random#L3 -> fallback │ Note 2       │ H[random; Level 3 title]             │ Note(Note 2.md)                               │
+    └───────────────────────┴──────────────┴──────────────────────────────────────┴───────────────────────────────────────────────┘
     |}]
 ;;
 
@@ -240,18 +242,18 @@ let%expect_test "resolve_headings_note1" =
   resolve_and_print cases;
   [%expect
     {|
-    ┌──────────────────────────────┬──────────────┬───────────────────────┬───────────────────────────┐
-    │ name                         │ input/target │ input/fragment        │ result                    │
-    ├──────────────────────────────┼──────────────┼───────────────────────┼───────────────────────────┤
-    │ L2                           │ Note 1       │ H[L2]                 │ Heading(Note 1.md, L2, 2) │
-    │ L2 L3                        │ Note 1       │ H[L2; L3]             │ Heading(Note 1.md, L3, 3) │
-    │ L2 L4                        │ Note 1       │ H[L2; L4]             │ Heading(Note 1.md, L4, 4) │
-    │ L2 L3 L4                     │ Note 1       │ H[L2; L3; L4]         │ Heading(Note 1.md, L4, 4) │
-    │ L2 L4 L3 -> fallback         │ Note 1       │ H[L2; L4; L3]         │ Note(Note 1.md)           │
-    │ L2 L4 Another L3 -> fallback │ Note 1       │ H[L2; L4; Another L3] │ Note(Note 1.md)           │
-    │ NoSuch -> fallback           │ Note 1       │ H[NoSuch]             │ Note(Note 1.md)           │
-    │ heading unresolved file      │ nonexistent  │ H[L2]                 │ Unresolved                │
-    └──────────────────────────────┴──────────────┴───────────────────────┴───────────────────────────┘
+    ┌──────────────────────────────┬──────────────┬───────────────────────┬───────────────────────────────┐
+    │ name                         │ input/target │ input/fragment        │ result                        │
+    ├──────────────────────────────┼──────────────┼───────────────────────┼───────────────────────────────┤
+    │ L2                           │ Note 1       │ H[L2]                 │ Heading(Note 1.md, L2, 2, #3) │
+    │ L2 L3                        │ Note 1       │ H[L2; L3]             │ Heading(Note 1.md, L3, 3, #4) │
+    │ L2 L4                        │ Note 1       │ H[L2; L4]             │ Heading(Note 1.md, L4, 4, #5) │
+    │ L2 L3 L4                     │ Note 1       │ H[L2; L3; L4]         │ Heading(Note 1.md, L4, 4, #5) │
+    │ L2 L4 L3 -> fallback         │ Note 1       │ H[L2; L4; L3]         │ Note(Note 1.md)               │
+    │ L2 L4 Another L3 -> fallback │ Note 1       │ H[L2; L4; Another L3] │ Note(Note 1.md)               │
+    │ NoSuch -> fallback           │ Note 1       │ H[NoSuch]             │ Note(Note 1.md)               │
+    │ heading unresolved file      │ nonexistent  │ H[L2]                 │ Unresolved                    │
+    └──────────────────────────────┴──────────────┴───────────────────────┴───────────────────────────────┘
     |}]
 ;;
 
@@ -293,17 +295,17 @@ let%expect_test "resolve_self_references" =
   resolve_and_print cases;
   [%expect
     {|
-    ┌─────────────────────────┬──────────────┬────────────────┬─────────────────────┐
-    │ name                    │ input/target │ input/fragment │ result              │
-    ├─────────────────────────┼──────────────┼────────────────┼─────────────────────┤
-    │ [[]] -> curr file       │ -            │ -              │ Curr_file           │
-    │ [[#L2]]                 │ -            │ H[L2]          │ Curr_heading(L2, 2) │
-    │ [[#L2#L3]]              │ -            │ H[L2; L3]      │ Curr_heading(L3, 3) │
-    │ [[#^para1]]             │ -            │ B[para1]       │ Curr_block(para1)   │
-    │ [[#NoSuch]] -> fallback │ -            │ H[NoSuch]      │ Curr_file           │
-    │ [[#^nope]] -> fallback  │ -            │ B[nope]        │ Curr_file           │
-    │ [[#]] empty heading     │ -            │ -              │ Curr_file           │
-    └─────────────────────────┴──────────────┴────────────────┴─────────────────────┘
+    ┌─────────────────────────┬──────────────┬────────────────┬─────────────────────────┐
+    │ name                    │ input/target │ input/fragment │ result                  │
+    ├─────────────────────────┼──────────────┼────────────────┼─────────────────────────┤
+    │ [[]] -> curr file       │ -            │ -              │ Curr_file               │
+    │ [[#L2]]                 │ -            │ H[L2]          │ Curr_heading(L2, 2, #3) │
+    │ [[#L2#L3]]              │ -            │ H[L2; L3]      │ Curr_heading(L3, 3, #4) │
+    │ [[#^para1]]             │ -            │ B[para1]       │ Curr_block(para1)       │
+    │ [[#NoSuch]] -> fallback │ -            │ H[NoSuch]      │ Curr_file               │
+    │ [[#^nope]] -> fallback  │ -            │ B[nope]        │ Curr_file               │
+    │ [[#]] empty heading     │ -            │ -              │ Curr_file               │
+    └─────────────────────────┴──────────────┴────────────────┴─────────────────────────┘
     |}]
 ;;
 

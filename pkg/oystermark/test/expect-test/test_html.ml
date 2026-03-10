@@ -5,14 +5,14 @@ let test_index : Vault.Index.t =
   { files =
       [ { rel_path = "Note 1.md"
         ; headings =
-            [ { text = "Level 3 title"; level = 3 }
-            ; { text = "L2"; level = 2 }
-            ; { text = "L3"; level = 3 }
+            [ { text = "Level 3 title"; level = 3; ordinal = 0 }
+            ; { text = "L2"; level = 2; ordinal = 1 }
+            ; { text = "L3"; level = 3; ordinal = 2 }
             ]
         ; block_ids = [ "para1"; "block-2" ]
         }
       ; { rel_path = "Note 2.md"
-        ; headings = [ { text = "Some heading"; level = 2 } ]
+        ; headings = [ { text = "Some heading"; level = 2; ordinal = 0 } ]
         ; block_ids = []
         }
       ; { rel_path = "image.png"; headings = []; block_ids = [] }
@@ -262,8 +262,10 @@ let%expect_test "embed: full note" =
     "a.md";
   [%expect
     {|
+    <div class="embed" data-embed-depth="1">
     <p>Hello from B.</p>
     <p>Second paragraph.</p>
+    </div>
     |}]
 ;;
 
@@ -275,8 +277,10 @@ let%expect_test "embed: heading section" =
     "a.md";
   [%expect
     {|
+    <div class="embed" data-embed-depth="1">
     <h2>Section</h2>
     <p>Under section.</p>
+    </div>
     |}]
 ;;
 
@@ -284,17 +288,45 @@ let%expect_test "embed: block ref" =
   render_embed
     [ "a.md", "![[b#^myblock]]"; "b.md", "First para.\n\nTarget block. ^myblock\n\nAfter." ]
     "a.md";
-  [%expect {| <p id="^myblock">Target block. ^myblock</p> |}]
+  [%expect {|
+    <div class="embed" data-embed-depth="1">
+    <p id="^myblock">Target block. ^myblock</p>
+    </div>
+    |}]
 ;;
 
 let%expect_test "embed: self-embed is a fallback link" =
   render_embed [ "a.md", "![[a]]" ] "a.md";
-  [%expect {| <p><a href="/a/">a</a></p> |}]
+  [%expect {|
+    <div class="embed" data-embed-depth="1">
+    <div class="embed" data-embed-depth="2">
+    <div class="embed" data-embed-depth="3">
+    <div class="embed" data-embed-depth="4">
+    <div class="embed" data-embed-depth="5">
+    <p><a href="/a/">a</a></p>
+    </div>
+    </div>
+    </div>
+    </div>
+    </div>
+    |}]
 ;;
 
 let%expect_test "embed: mutual cycle A→B→A becomes link at second occurrence" =
   render_embed [ "a.md", "![[b]]"; "b.md", "![[a]]" ] "a.md";
-  [%expect {| <p><a href="/a/">a</a></p> |}]
+  [%expect {|
+    <div class="embed" data-embed-depth="1">
+    <div class="embed" data-embed-depth="2">
+    <div class="embed" data-embed-depth="3">
+    <div class="embed" data-embed-depth="4">
+    <div class="embed" data-embed-depth="5">
+    <p><a href="/a/">a</a></p>
+    </div>
+    </div>
+    </div>
+    </div>
+    </div>
+    |}]
 ;;
 
 let%expect_test "embed: unresolved note is left as unresolved link" =

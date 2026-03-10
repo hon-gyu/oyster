@@ -7,6 +7,7 @@ open Core
 open Cmarkit
 module C = Cmarkit_renderer.Context
 module Resolve = Vault.Resolve
+module Embed = Vault.Embed
 module Block_id = Parse.Block_id
 module Callout = Parse.Callout
 module Wikilink = Parse.Wikilink
@@ -257,6 +258,14 @@ let block (c : Cmarkit_renderer.context) : Block.t -> bool = function
   | Parse.Frontmatter.Frontmatter y ->
     C.string c (Parse.Frontmatter.to_html (Some y));
     true
+  | Block.Blocks (blocks, meta) ->
+    (match Meta.find Embed.embed_meta_key meta with
+     | None -> false
+     | Some { depth; _ } ->
+       C.string c (sprintf "<div class=\"embed\" data-embed-depth=\"%d\">\n" depth);
+       List.iter blocks ~f:(C.block c);
+       C.string c "</div>\n";
+       true)
   | _ -> false
 ;;
 
