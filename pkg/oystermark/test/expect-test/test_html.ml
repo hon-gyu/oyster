@@ -241,3 +241,63 @@ let%expect_test "callout: not a callout" =
     </blockquote>
     |}]
 ;;
+
+(* Note embedding (![[NOTE]])
+   ==================================================================== *)
+
+(** Build a mini-vault from [(path, markdown)] pairs, run the full
+    parse → resolve → expand pipeline, then render [target]. *)
+let render_embed (files : (string * string) list) (target : string) : unit =
+  let docs = List.map files ~f:(fun (path, content) -> path, Parse.of_string content) in
+  let index = Vault.build_index ~md_docs:docs ~other_files:[] ~dirs:[] in
+  let resolved = Vault.Resolve.resolve_docs docs index in
+  let expanded = Vault.Embed.expand_docs resolved in
+  let doc = List.Assoc.find_exn expanded ~equal:String.equal target in
+  print_string (Html.of_doc ~backend_blocks:true ~safe:false doc)
+;;
+
+let%expect_test "embed: full note" =
+  render_embed
+    [ "a.md", "![[b]]"; "b.md", "Hello from B.\n\nSecond paragraph." ]
+    "a.md";
+  [%expect
+    {|
+    <p>Hello from B.</p>
+    <p>Second paragraph.</p>
+    |}]
+;;
+
+let%expect_test "embed: heading section" =
+  render_embed
+    [ "a.md", "![[b#Section]]"
+    ; "b.md", "Intro.\n\n## Section\n\nUnder section.\n\n## Other\n\nNot included."
+    ]
+    "a.md";
+  [%expect
+    {|
+    <h2>Section</h2>
+    <p>Under section.</p>
+    |}]
+;;
+
+let%expect_test "embed: block ref" =
+  render_embed
+    [ "a.md", "![[b#^myblock]]"; "b.md", "First para.\n\nTarget block. ^myblock\n\nAfter." ]
+    "a.md";
+  [%expect {| <p id="^myblock">Target block. ^myblock</p> |}]
+;;
+
+let%expect_test "embed: self-embed is a fallback link" =
+  render_embed [ "a.md", "![[a]]" ] "a.md";
+  [%expect {| <p><a href="/a/">a</a></p> |}]
+;;
+
+let%expect_test "embed: mutual cycle A→B→A becomes link at second occurrence" =
+  render_embed [ "a.md", "![[b]]"; "b.md", "![[a]]" ] "a.md";
+  [%expect {| <p><a href="/a/">a</a></p> |}]
+;;
+
+let%expect_test "embed: unresolved note is left as unresolved link" =
+  render_embed [ "a.md", "![[no-such-note]]" ] "a.md";
+  [%expect {| <p><a href="#" class="unresolved">no-such-note</a></p> |}]
+;;

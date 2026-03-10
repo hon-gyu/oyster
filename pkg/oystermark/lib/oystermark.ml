@@ -56,8 +56,10 @@ let render_vault
   let resolved : (string * Cmarkit.Doc.t) list =
     Vault.Resolve.resolve_docs md_docs index
   in
+  (* Expand note embeds after resolution *)
+  let expanded : (string * Cmarkit.Doc.t) list = Vault.Embed.expand_docs resolved in
   let vault_ctx : Vault.t =
-    { vault_root; index; docs = resolved; vault_meta = Cmarkit.Meta.none }
+    { vault_root; index; docs = expanded; vault_meta = Cmarkit.Meta.none }
   in
   (* Stage 4: on_vault + Render *)
   let final_vault : Vault.t = pipeline.on_vault vault_ctx in

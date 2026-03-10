@@ -1,6 +1,7 @@
 module Index = Index
 module Link_ref = Link_ref
 module Resolve = Resolve
+module Embed = Embed
 open Core
 
 type t =
@@ -67,5 +68,7 @@ let of_root_path (vault_root : string) : t =
   let index = build_index ~md_docs:docs ~other_files ~dirs:[] in
   (* Resolve *)
   let resolved_docs : (string * Cmarkit.Doc.t) list = Resolve.resolve_docs docs index in
-  { vault_root; index; docs = resolved_docs; vault_meta = Cmarkit.Meta.none }
+  (* Expand note embeds *)
+  let expanded_docs : (string * Cmarkit.Doc.t) list = Embed.expand_docs resolved_docs in
+  { vault_root; index; docs = expanded_docs; vault_meta = Cmarkit.Meta.none }
 ;;
