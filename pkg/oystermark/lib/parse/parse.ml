@@ -6,6 +6,7 @@ module Callout = Callout
 module Frontmatter = Frontmatter
 module Heading_slug = Heading_slug
 module Wikilink = Wikilink
+module Extract = Extract
 
 (** Render inlines to plain text, losing their markdown syntax. Used in rendering
     heading to plain text. *)
@@ -40,8 +41,7 @@ let make_mapper () : Cmarkit.Mapper.t =
     | Cmarkit.Block.Heading (h, meta) ->
       let orig_inline = Cmarkit.Block.Heading.inline h in
       let mapped_inline =
-        Cmarkit.Mapper.map_inline mapper orig_inline
-        |> Option.value ~default:orig_inline
+        Cmarkit.Mapper.map_inline mapper orig_inline |> Option.value ~default:orig_inline
       in
       let text = inline_to_plain_text mapped_inline in
       let slug = Heading_slug.dedup_slug slug_seen text in
@@ -103,4 +103,49 @@ let commonmark_of_doc (doc : Cmarkit.Doc.t) : string =
   let default = Cmarkit_commonmark.renderer () in
   let r = Cmarkit_renderer.compose default custom in
   Cmarkit_renderer.doc_to_string r doc
+;;
+
+let%expect_test "get_heading_section" =
+  let make_block s : Cmarkit.Block.t =
+    let doc = of_string s in
+    Cmarkit.Doc.block doc
+  in
+  let block =
+    make_block
+      {|\
+# Heading 1
+## Heading 2
+### Heading 3
+#### Heading 4
+##### Heading 5
+###### Heading 6
+# Heading 7
+## Heading 8
+### Heading 9
+## Heading 10
+#### Heading 11
+### Heading 12|}
+  in
+  let heading_id = "heading-1" in
+  let extracted = Extract.get_heading_section [ block ] heading_id in
+  print_endline
+    (commonmark_of_doc
+       (Cmarkit.Doc.make (Cmarkit.Block.Blocks (extracted, Cmarkit.Meta.none))));
+  [%expect {|
+    # Heading 1
+    ## Heading 2
+    ### Heading 3
+    #### Heading 4
+    ##### Heading 5
+    ###### Heading 6
+    |}];
+  let heading_id = "heading-8" in
+  let extracted = Extract.get_heading_section [ block ] heading_id in
+  print_endline
+    (commonmark_of_doc
+       (Cmarkit.Doc.make (Cmarkit.Block.Blocks (extracted, Cmarkit.Meta.none))));
+  [%expect {|
+    ## Heading 8
+    ### Heading 9
+    |}]
 ;;
