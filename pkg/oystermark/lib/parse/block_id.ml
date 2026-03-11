@@ -1,11 +1,31 @@
-(** Obsidian block identifier types and detection. *)
+(** Obsidian caret block identifier
+
+  ```markdown
+  (* Inline at end of paragraph *)
+  Some paragraph text ^blockid
+
+  (* Inline at end of list item *)
+  - List item text ^blockid
+
+  (* Separate line after block - references previous block *)
+  | Table |
+  | ----- |
+  | Cell  |
+
+  ^tableid
+
+  (* Inline in nested list *)
+  - Parent item ^parentid
+      - Child item ^childid
+  ```
+*)
 open Core
 
 open Cmarkit
 
-(** The type for block identifiers (without the [^] prefix). *)
+(** The type for block identifiers *)
 type t =
-  { id : string
+  { id : string (** without the [^] prefix *)
   ; byte_pos : int
     (** The byte position of the start of the block identifier in the inline text. *)
   }

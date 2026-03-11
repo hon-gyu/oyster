@@ -8,6 +8,10 @@ module Heading_slug = Heading_slug
 module Wikilink = Wikilink
 module Extract = Extract
 
+type block_id =
+  | Caret of Block_id.t
+  | Heading of string
+
 (** Render inlines to plain text, losing their markdown syntax. Used in rendering
     heading to plain text. *)
 let inline_to_plain_text (inline : Cmarkit.Inline.t) : string =
@@ -131,7 +135,8 @@ let%expect_test "get_heading_section" =
   print_endline
     (commonmark_of_doc
        (Cmarkit.Doc.make (Cmarkit.Block.Blocks (extracted, Cmarkit.Meta.none))));
-  [%expect {|
+  [%expect
+    {|
     # Heading 1
     ## Heading 2
     ### Heading 3
@@ -144,8 +149,46 @@ let%expect_test "get_heading_section" =
   print_endline
     (commonmark_of_doc
        (Cmarkit.Doc.make (Cmarkit.Block.Blocks (extracted, Cmarkit.Meta.none))));
-  [%expect {|
+  [%expect
+    {|
     ## Heading 8
     ### Heading 9
     |}]
+;;
+
+let%expect_test "get_block_by_caret_id" =
+  let render_block (block : Cmarkit.Block.t option) : unit =
+    match block with
+    | None -> print_endline "<none>"
+    | Some b -> print_endline (commonmark_of_doc (Cmarkit.Doc.make b))
+  in
+  (* Case 1: inline block ID at end of paragraph *)
+  let doc1 =
+    of_string
+      {|\
+First paragraph.
+
+Second paragraph text ^abc123|}
+  in
+  render_block (Extract.get_block_by_caret_id [ Cmarkit.Doc.block doc1 ] "abc123");
+  [%expect {| Second paragraph text ^abc123 |}];
+
+  (* Case 2: standalone block ID referencing previous block (blockquote) *)
+  let doc2 =
+    of_string
+      {|\
+> A blockquote here.
+
+^bq001
+|}
+  in
+  render_block (Extract.get_block_by_caret_id [ Cmarkit.Doc.block doc2 ] "bq001");
+  [%expect {| > A blockquote here. |}];
+
+  (* Case 3: not found *)
+  let doc3 = of_string {|
+Some text ^exists
+|} in
+  render_block (Extract.get_block_by_caret_id [ Cmarkit.Doc.block doc3 ] "nope");
+  [%expect {| <none> |}]
 ;;

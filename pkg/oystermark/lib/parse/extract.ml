@@ -47,3 +47,34 @@ let get_heading_section (blocks : Cmarkit.Block.t list) (heading_id : string)
   | None -> []
   | Some (heading, level, rest) -> heading :: collect level [] rest
 ;;
+
+(** Extract the block that {!Block_id.t} points to.
+
+    Two cases:
+    - {b Inline}: the [^id] appears at the end of a paragraph with other content
+      ([byte_pos > 0]). The paragraph itself is the target.
+    - {b Standalone}: the [^id] is the entire paragraph ([byte_pos = 0]).
+      It references the previous non-blank block. *)
+let get_block_by_caret_id (blocks : Cmarkit.Block.t list) (id : string)
+  : Cmarkit.Block.t option
+  =
+  let blocks = flatten blocks in
+  let rec search (prev : Cmarkit.Block.t option) : Cmarkit.Block.t list -> Cmarkit.Block.t option
+    = function
+    | [] -> None
+    | block :: rest ->
+      (match block with
+       | Cmarkit.Block.Paragraph (_p, meta) ->
+         (match Cmarkit.Meta.find Block_id.meta_key meta with
+          | Some (block_id : Block_id.t) when String.equal block_id.id id ->
+            if block_id.byte_pos > 0
+            then (* Inline: the paragraph itself is the target *)
+              Some block
+            else (* Standalone: references the previous block *)
+              prev
+          | _ -> search (Some block) rest)
+       | Cmarkit.Block.Blank_line _ -> search prev rest
+       | _ -> search (Some block) rest)
+  in
+  search None blocks
+;;
