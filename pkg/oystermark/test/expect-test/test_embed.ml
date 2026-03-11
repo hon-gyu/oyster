@@ -37,7 +37,7 @@ let%expect_test "heading section" =
   [%expect
     {|
     <div class="embed" data-embed-depth="1">
-    <h2>Sec</h2>
+    <h2 id="sec">Sec</h2>
     <p>Content.</p>
     </div>
     |}]

@@ -9,7 +9,7 @@ type target =
       { path : string
       ; heading : string
       ; level : int
-      ; ordinal : int
+      ; slug : string
       }
   | Block of
       { path : string
@@ -19,7 +19,7 @@ type target =
   | Curr_heading of
       { heading : string
       ; level : int
-      ; ordinal : int
+      ; slug : string
       }
   | Curr_block of { block_id : string }
   | Unresolved
@@ -142,7 +142,7 @@ let resolve (link_ref : Link_ref.t) (curr_file : string) (index : Index.t) : tar
         | Some entry ->
           (match resolve_headings entry.headings hs with
            | Some h ->
-             Curr_heading { heading = h.text; level = h.level; ordinal = h.ordinal }
+             Curr_heading { heading = h.text; level = h.level; slug = h.slug }
            | None -> Curr_file)
         | None -> Curr_file)
      | Some (Link_ref.Block_ref bid) ->
@@ -168,7 +168,7 @@ let resolve (link_ref : Link_ref.t) (curr_file : string) (index : Index.t) : tar
                { path = file.rel_path
                ; heading = h.text
                ; level = h.level
-               ; ordinal = h.ordinal
+               ; slug = h.slug
                }
            | None -> file_or_note file.rel_path)
         | Some (Link_ref.Block_ref bid) ->

@@ -61,22 +61,24 @@ let fallback_block (wl : Parse.Wikilink.t) (meta : Cmarkit.Meta.t) : Cmarkit.Blo
   Cmarkit.Block.Paragraph (p, Cmarkit.Meta.none)
 ;;
 
-(** Collect the section starting at the heading with [ordinal] (0-based
-    position among all headings in the document), up to (but not including) the
-    next heading of equal or lesser level.  Returns [] when the heading is not
-    found. *)
-let get_heading_section (blocks : Cmarkit.Block.t list) ~(ordinal : int)
+(** Collect the section starting at the heading with the given [slug],
+    up to (but not including) the next heading of equal or lesser level.
+    Slugs are computed on-the-fly using the same algorithm as {!Index.dedup_slug},
+    so they match the index.  Returns [] when no heading matches. *)
+let get_heading_section (blocks : Cmarkit.Block.t list) ~(slug : string)
   : Cmarkit.Block.t list
   =
-  let heading_idx = ref 0 in
+  let seen = Hashtbl.create (module String) in
   let rec find_start : Cmarkit.Block.t list -> Cmarkit.Block.t list = function
     | [] -> []
     | (Cmarkit.Block.Heading (h, _) as b) :: rest ->
-      if !heading_idx = ordinal
+      let text =
+        Parse.inline_to_plain_text (Cmarkit.Block.Heading.inline h)
+      in
+      let h_slug = Index.dedup_slug seen text in
+      if String.equal h_slug slug
       then b :: collect_section (Cmarkit.Block.Heading.level h) rest
-      else (
-        Int.incr heading_idx;
-        find_start rest)
+      else find_start rest
     | _ :: rest -> find_start rest
   and collect_section (stop_level : int) : Cmarkit.Block.t list -> Cmarkit.Block.t list
     = function
@@ -149,8 +151,8 @@ and expand_doc
     | Some Resolve.Curr_file | Some (Resolve.Curr_heading _) | Some (Resolve.Curr_block _)
       -> embed "" wl meta (fun _ -> [])
     | Some (Resolve.Note { path }) -> embed path wl meta (fun blocks -> blocks)
-    | Some (Resolve.Heading { path; ordinal; _ }) ->
-      embed path wl meta (fun blocks -> get_heading_section blocks ~ordinal)
+    | Some (Resolve.Heading { path; slug; _ }) ->
+      embed path wl meta (fun blocks -> get_heading_section blocks ~slug)
     | Some (Resolve.Block { path; block_id }) ->
       embed path wl meta (fun blocks -> Option.to_list (get_block_by_id blocks block_id))
   in
@@ -196,7 +198,7 @@ module For_test = struct
     print_endline (Parse.commonmark_of_doc doc)
 end
 
-let%expect_test "get_heading_section: by ordinal" =
+let%expect_test "get_heading_section: by slug" =
   let blocks =
     For_test.parse_blocks {|\
 Intro.
@@ -213,7 +215,7 @@ Under B.
 
 Deep.|}
   in
-  For_test.print_blocks (get_heading_section blocks ~ordinal:1);
+  For_test.print_blocks (get_heading_section blocks ~slug:"b");
   [%expect
     {|
     ## B
@@ -226,13 +228,13 @@ Deep.|}
     |}]
 ;;
 
-let%expect_test "get_heading_section: ordinal out of range" =
+let%expect_test "get_heading_section: slug not found" =
   let blocks = For_test.parse_blocks {|\
 ## Only heading
 
 Content.
 |} in
-  For_test.print_blocks (get_heading_section blocks ~ordinal:5);
+  For_test.print_blocks (get_heading_section blocks ~slug:"nonexistent");
   [%expect {| |}]
 ;;
 
@@ -246,7 +248,7 @@ A content.
 
 B content.
 |}in
-  For_test.print_blocks (get_heading_section blocks ~ordinal:0);
+  For_test.print_blocks (get_heading_section blocks ~slug:"a");
   [%expect
     {|
     ## A

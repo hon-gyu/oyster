@@ -5,14 +5,14 @@ let test_index : Vault.Index.t =
   { files =
       [ { rel_path = "Note 1.md"
         ; headings =
-            [ { text = "Level 3 title"; level = 3; ordinal = 0 }
-            ; { text = "L2"; level = 2; ordinal = 1 }
-            ; { text = "L3"; level = 3; ordinal = 2 }
+            [ { text = "Level 3 title"; level = 3; slug = "level-3-title" }
+            ; { text = "L2"; level = 2; slug = "l2" }
+            ; { text = "L3"; level = 3; slug = "l3" }
             ]
         ; block_ids = [ "para1"; "block-2" ]
         }
       ; { rel_path = "Note 2.md"
-        ; headings = [ { text = "Some heading"; level = 2; ordinal = 0 } ]
+        ; headings = [ { text = "Some heading"; level = 2; slug = "some-heading" } ]
         ; block_ids = []
         }
       ; { rel_path = "image.png"; headings = []; block_ids = [] }
@@ -167,7 +167,7 @@ let%expect_test "plain markdown renders normally" =
   render "# Hello\n\nA paragraph with **bold** and *italic*.";
   [%expect
     {|
-    <h1>Hello</h1>
+    <h1 id="hello">Hello</h1>
     <p>A paragraph with <strong>bold</strong> and <em>italic</em>.</p>
     |}]
 ;;

@@ -35,7 +35,7 @@ let%expect_test "render_vault: home page" =
     <html>
     <head><meta charset="UTF-8"></head>
     <body>
-    <nav class="breadcrumb"><a href="/home/">Home</a></nav><h1>Home Page</h1>
+    <nav class="breadcrumb"><a href="/home/">Home</a></nav><h1 id="home-page">Home Page</h1>
     </body>
     </html>
     |}]
@@ -65,7 +65,7 @@ let%expect_test "render_vault: subdir index" =
     <li><a href="/subdir/note-a/">note-a</a></li>
     <li><a href="/subdir/note-b/">note-b</a></li>
     </ul></details></li>
-    </ul><h1>Sub Index</h1>
+    </ul><h1 id="sub-index">Sub Index</h1>
     </body>
     </html>
     |}]
@@ -97,7 +97,7 @@ let%expect_test "render_vault: regular note unchanged" =
     <li><a href="/subdir/note-a/">note-a</a></li>
     <li><a href="/subdir/note-b/">note-b</a></li>
     </ul></details></li>
-    </ul><h1>Note A</h1>
+    </ul><h1 id="note-a">Note A</h1>
     </body>
     </html>
     |}]
@@ -227,7 +227,7 @@ let%expect_test "dir_index: skips dir when index.md already exists" =
     <li><a href="/subdir/note-a/">note-a</a></li>
     <li><a href="/subdir/note-b/">note-b</a></li>
     </ul></details></li>
-    </ul><h1>Sub Index</h1>
+    </ul><h1 id="sub-index">Sub Index</h1>
     </body>
     </html>
     |}]

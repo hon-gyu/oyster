@@ -6,7 +6,7 @@ open Parse
 type heading_entry =
   { text : string
   ; level : int
-  ; ordinal : int (** 0-based position among all headings in document order. *)
+  ; slug : string (** GitHub-style anchor: lowercase, punctuation stripped, deduped with [-1], [-2], etc. *)
   }
 
 type file_entry =
@@ -20,6 +20,25 @@ type t =
   ; dirs : string list (** directory relative paths with trailing [/] *)
   }
 
+(** GitHub-style slug: lowercase, non-alphanum to [-], collapse runs, strip edges. *)
+let slugify (s : string) : string =
+  s
+  |> String.lowercase
+  |> String.map ~f:(fun c ->
+    if Char.is_alphanum c || Char.equal c '-' || Char.equal c '_' then c else '-')
+  |> String.split ~on:'-'
+  |> List.filter ~f:(fun s -> not (String.is_empty s))
+  |> String.concat ~sep:"-"
+;;
+
+(** Compute a deduplicated slug. [seen] tracks base slug → count. *)
+let dedup_slug (seen : (string, int) Hashtbl.t) (text : string) : string =
+  let base : string = slugify text in
+  let count : int = Hashtbl.find seen base |> Option.value ~default:0 in
+  Hashtbl.set seen ~key:base ~data:(count + 1);
+  if count = 0 then base else sprintf "%s-%d" base count
+;;
+
 (* Use Cmarkit.Folder to extract headings from a document. *)
 let extract_headings (doc : Cmarkit.Doc.t) : heading_entry list =
   let folder =
@@ -30,14 +49,17 @@ let extract_headings (doc : Cmarkit.Doc.t) : heading_entry list =
           let level = Cmarkit.Block.Heading.level h in
           let inline = Cmarkit.Block.Heading.inline h in
           let text = inline_to_plain_text inline in
-          let ordinal = List.length acc in
-          Cmarkit.Folder.ret (acc @ [ { text; level; ordinal } ])
+          Cmarkit.Folder.ret (acc @ [ (text, level) ])
         | _ -> Cmarkit.Folder.default)
       ~inline_ext_default:(fun _f acc _i -> acc)
       ~block_ext_default:(fun _f acc _b -> acc)
       ()
   in
-  Cmarkit.Folder.fold_doc folder [] doc
+  let raw : (string * int) list = Cmarkit.Folder.fold_doc folder [] doc in
+  let seen = Hashtbl.create (module String) in
+  List.map raw ~f:(fun (text, level) ->
+    let slug = dedup_slug seen text in
+    { text; level; slug })
 ;;
 
 (* Use Cmarkit.Folder to extract block IDs from a document. *)
@@ -101,14 +123,14 @@ let%expect_test "extract_headings" =
   let doc = Cmarkit.Doc.of_string ~strict:false md in
   let headings = extract_headings doc in
   List.iter headings ~f:(fun (h : heading_entry) ->
-    Printf.printf "H%d: %s\n" h.level h.text);
+    Printf.printf "H%d: %s [%s]\n" h.level h.text h.slug);
   [%expect
     {|
-    H1: Title
-    H2: Chapter 1
-    H3: Section 1.1
-    H2: Chapter 2
-    H4: Deep
+    H1: Title [title]
+    H2: Chapter 1 [chapter-1]
+    H3: Section 1.1 [section-1-1]
+    H2: Chapter 2 [chapter-2]
+    H4: Deep [deep]
     |}]
 ;;
 

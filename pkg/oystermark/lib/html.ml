@@ -15,16 +15,6 @@ module H = Tyxml.Html
 
 let elt_to_string (e : 'a H.elt) : string = Format.asprintf "%a" (H.pp_elt ()) e
 
-let slugify s =
-  s
-  |> String.lowercase
-  |> String.map ~f:(fun c ->
-    if Char.is_alphanum c || Char.equal c '-' || Char.equal c '_' then c else '-')
-  |> String.split ~on:'-'
-  |> List.filter ~f:(fun s -> not (String.is_empty s))
-  |> String.concat ~sep:"-"
-;;
-
 (** URL path for a note: "foo/bar.md" → "/foo/bar/", "foo/index.md" → "/foo/". *)
 let note_url_path (rel_path : string) : string =
   let base = String.chop_suffix_exn rel_path ~suffix:".md" in
@@ -49,10 +39,10 @@ let file_url_path (path : string) : string =
 let target_to_href : Resolve.target -> string = function
   | Resolve.Note { path } -> note_url_path path
   | Resolve.File { path } -> "/" ^ path
-  | Resolve.Heading { path; heading; _ } -> file_url_path path ^ "#" ^ slugify heading
+  | Resolve.Heading { path; slug; _ } -> file_url_path path ^ "#" ^ slug
   | Resolve.Block { path; block_id } -> file_url_path path ^ "#^" ^ block_id
   | Resolve.Curr_file -> ""
-  | Resolve.Curr_heading { heading; _ } -> "#" ^ slugify heading
+  | Resolve.Curr_heading { slug; _ } -> "#" ^ slug
   | Resolve.Curr_block { block_id } -> "#^" ^ block_id
   | Resolve.Unresolved -> "#"
 ;;
@@ -243,37 +233,47 @@ let render_callout
     C.string c "</div>\n</details>\n"
 ;;
 
-let block (c : Cmarkit_renderer.context) : Block.t -> bool = function
-  | Block.Block_quote (bq, meta) ->
-    (match Meta.find Callout.meta_key meta with
-     | Some callout ->
-       render_callout c bq callout;
-       true
-     | None -> false)
-  | Block.Paragraph (p, meta) ->
-    (match Meta.find Block_id.meta_key meta with
-     | Some (block_id : Block_id.t) ->
-       let id = "^" ^ block_id.id in
-       C.string c (Format.asprintf "<p id=\"%s\">" id);
-       C.inline c (Block.Paragraph.inline p);
-       C.string c "</p>\n";
-       true
-     | None -> false)
-  | Parse.Frontmatter.Frontmatter y ->
-    C.string c (Parse.Frontmatter.to_html (Some y));
-    true
-  | Block.Blocks (blocks, meta) ->
-    (match Meta.find Embed.embed_meta_key meta with
-     | None -> false
-     | Some { depth; _ } ->
-       C.string c (sprintf "<div class=\"embed\" data-embed-depth=\"%d\">\n" depth);
-       List.iter blocks ~f:(C.block c);
-       C.string c "</div>\n";
-       true)
-  | _ -> false
-;;
+module Index = Vault.Index
 
 let renderer ~(backend_blocks : bool) ~(safe : bool) () : Cmarkit_renderer.t =
+  let slug_seen = Hashtbl.create (module String) in
+  let block (c : Cmarkit_renderer.context) : Block.t -> bool = function
+    | Block.Heading (h, _meta) ->
+      let text = Parse.inline_to_plain_text (Block.Heading.inline h) in
+      let slug = Index.dedup_slug slug_seen text in
+      let level = Block.Heading.level h in
+      C.string c (sprintf "<h%d id=\"%s\">" level slug);
+      C.inline c (Block.Heading.inline h);
+      C.string c (sprintf "</h%d>\n" level);
+      true
+    | Block.Block_quote (bq, meta) ->
+      (match Meta.find Callout.meta_key meta with
+       | Some callout ->
+         render_callout c bq callout;
+         true
+       | None -> false)
+    | Block.Paragraph (p, meta) ->
+      (match Meta.find Block_id.meta_key meta with
+       | Some (block_id : Block_id.t) ->
+         let id = "^" ^ block_id.id in
+         C.string c (Format.asprintf "<p id=\"%s\">" id);
+         C.inline c (Block.Paragraph.inline p);
+         C.string c "</p>\n";
+         true
+       | None -> false)
+    | Parse.Frontmatter.Frontmatter y ->
+      C.string c (Parse.Frontmatter.to_html (Some y));
+      true
+    | Block.Blocks (blocks, meta) ->
+      (match Meta.find Embed.embed_meta_key meta with
+       | None -> false
+       | Some { depth; _ } ->
+         C.string c (sprintf "<div class=\"embed\" data-embed-depth=\"%d\">\n" depth);
+         List.iter blocks ~f:(C.block c);
+         C.string c "</div>\n";
+         true)
+    | _ -> false
+  in
   let custom = Cmarkit_renderer.make ~inline ~block () in
   let default = Cmarkit_html.renderer ~backend_blocks ~safe () in
   Cmarkit_renderer.compose default custom
