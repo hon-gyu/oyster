@@ -38,23 +38,15 @@ let doc_blocks (doc : Cmarkit.Doc.t) : Cmarkit.Block.t list =
   | other -> [ other ]
 ;;
 
-(** If [inline] is a single embed wikilink — ignoring surrounding
-    whitespace-only {!Cmarkit.Inline.Text} nodes — return it. *)
+(** If [inline] is a single embed wikilink, return it.  cmarkit wraps a
+    paragraph's inline content in [Inlines([...], _)] — we unwrap that. *)
 let extract_single_embed (inline : Cmarkit.Inline.t)
   : (Parse.Wikilink.t * Cmarkit.Meta.t) option
   =
-  let is_blank : Cmarkit.Inline.t -> bool = function
-    | Cmarkit.Inline.Text (s, _) -> String.is_empty (String.strip s)
-    | _ -> false
-  in
-  let items =
-    match inline with
-    | Cmarkit.Inline.Inlines (items, _) -> items
-    | single -> [ single ]
-  in
-  let significant = List.filter items ~f:(fun i -> not (is_blank i)) in
-  match significant with
-  | [ Parse.Wikilink.Ext_wikilink (w, meta) ] when w.embed -> Some (w, meta)
+  match inline with
+  | Parse.Wikilink.Ext_wikilink (w, meta) when w.embed -> Some (w, meta)
+  | Cmarkit.Inline.Inlines ([ Parse.Wikilink.Ext_wikilink (w, meta) ], _) when w.embed ->
+    Some (w, meta)
   | _ -> None
 ;;
 
