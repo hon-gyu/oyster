@@ -58,23 +58,56 @@ let get_heading_section (blocks : Cmarkit.Block.t list) (heading_id : string)
 let get_block_by_caret_id (blocks : Cmarkit.Block.t list) (id : string)
   : Cmarkit.Block.t option
   =
-  let blocks = flatten blocks in
-  let rec search (prev : Cmarkit.Block.t option) : Cmarkit.Block.t list -> Cmarkit.Block.t option
-    = function
+  let open Cmarkit in
+  let has_matching_id (meta : Meta.t) : bool =
+    match Meta.find Block_id.meta_key meta with
+    | Some (block_id : Block_id.t) -> String.equal block_id.id id
+    | None -> false
+  in
+  (* A standalone [^id] paragraph is one whose entire inline content is just
+     the block identifier — a single [Text] node starting with [^]. *)
+  let is_standalone_id_paragraph (p : Block.Paragraph.t) : bool =
+    match Block.Paragraph.inline p with
+    | Inline.Text (s, _meta) -> String.is_prefix s ~prefix:"^"
+    | _ -> false
+  in
+  (* Search a flat list of blocks, tracking the previous non-blank block
+     for standalone [^id] references. *)
+  let rec search (prev : Block.t option) (blocks : Block.t list) : Block.t option =
+    match blocks with
     | [] -> None
     | block :: rest ->
       (match block with
-       | Cmarkit.Block.Paragraph (_p, meta) ->
-         (match Cmarkit.Meta.find Block_id.meta_key meta with
-          | Some (block_id : Block_id.t) when String.equal block_id.id id ->
-            if block_id.byte_pos > 0
-            then (* Inline: the paragraph itself is the target *)
-              Some block
-            else (* Standalone: references the previous block *)
+       | Block.Paragraph (p, meta) ->
+         (match has_matching_id meta with
+          | true ->
+            if is_standalone_id_paragraph p
+            then (* Standalone: references the previous block *)
               prev
-          | _ -> search (Some block) rest)
-       | Cmarkit.Block.Blank_line _ -> search prev rest
+            else (* Inline: the paragraph itself is the target *)
+              Some block
+          | false -> search (Some block) rest)
+       | Block.Blank_line _ -> search prev rest
+       | Block.List (l, _meta) ->
+         (* Recurse into list items *)
+         let items : Block.List_item.t node list = Block.List'.items l in
+         (match search_items items with
+          | Some _ as found -> found
+          | None -> search (Some block) rest)
+       | Block.Block_quote (bq, _meta) ->
+         let inner : Block.t = Block.Block_quote.block bq in
+         (match search None (flatten [ inner ]) with
+          | Some _ as found -> found
+          | None -> search (Some block) rest)
        | _ -> search (Some block) rest)
+  and search_items (items : Block.List_item.t node list) : Block.t option =
+    match items with
+    | [] -> None
+    | (item, _meta) :: rest ->
+      let inner : Block.t = Block.List_item.block item in
+      (match search None (flatten [ inner ]) with
+       | Some _ as found -> found
+       | None -> search_items rest)
   in
-  search None blocks
+  search None (flatten blocks)
 ;;

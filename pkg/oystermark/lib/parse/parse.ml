@@ -190,5 +190,38 @@ Second paragraph text ^abc123|}
 Some text ^exists
 |} in
   render_block (Extract.get_block_by_caret_id [ Cmarkit.Doc.block doc3 ] "nope");
-  [%expect {| <none> |}]
+  [%expect {| <none> |}];
+
+  (* Case 4: standalone block ID referencing previous list *)
+  let doc4 =
+    of_string
+      {|
+- Item one
+- Item two
+
+^lst001
+|}
+  in
+  render_block (Extract.get_block_by_caret_id [ Cmarkit.Doc.block doc4 ] "lst001");
+  [%expect {|
+    - Item one
+    - Item two
+    |}];
+
+  (* Case 5: block ID inside a list item *)
+  let doc5 =
+    of_string
+      {|
+- a nested list ^firstline
+    - item
+      ^inneritem
+|}
+  in
+  render_block (Extract.get_block_by_caret_id [ Cmarkit.Doc.block doc5 ] "firstline");
+  [%expect {| a nested list ^firstline |}];
+  render_block (Extract.get_block_by_caret_id [ Cmarkit.Doc.block doc5 ] "inneritem");
+  [%expect {|
+    item
+    ^inneritem
+    |}]
 ;;
