@@ -196,55 +196,91 @@ let expand_docs ?(max_depth = 5) (docs : (string * Cmarkit.Doc.t) list)
 module For_test = struct
   let parse_blocks (md : string) : Cmarkit.Block.t list = doc_blocks (Parse.of_string md)
 
-  let print_block : Cmarkit.Block.t -> unit = function
-    | Cmarkit.Block.Heading (h, _) ->
-      printf
-        "h%d: %s\n"
-        (Cmarkit.Block.Heading.level h)
-        (Parse.inline_to_plain_text (Cmarkit.Block.Heading.inline h))
-    | Cmarkit.Block.Paragraph (p, _) ->
-      printf "p: %s\n" (Parse.inline_to_plain_text (Cmarkit.Block.Paragraph.inline p))
-    | _ -> ()
-  ;;
+  let doc_of_blocks (blocks : Cmarkit.Block.t list) : Cmarkit.Doc.t =
+    Cmarkit.Doc.make (Cmarkit.Block.Blocks (blocks, Cmarkit.Meta.none))
+
+  let print_blocks (blocks : Cmarkit.Block.t list) : unit =
+    let doc = doc_of_blocks blocks in
+    print_endline (Parse.commonmark_of_doc doc)
 end
 
 let%expect_test "get_heading_section: by ordinal" =
   let blocks =
-    For_test.parse_blocks "Intro.\n\n## A\n\nUnder A.\n\n## B\n\nUnder B.\n\n### B.1\n\nDeep."
+    For_test.parse_blocks {|\
+Intro.
+
+## A
+
+Under A.
+
+## B
+
+Under B.
+
+### B.1
+
+Deep.|}
   in
-  List.iter (get_heading_section blocks ~ordinal:1) ~f:For_test.print_block;
+  For_test.print_blocks (get_heading_section blocks ~ordinal:1);
   [%expect
     {|
-    h2: B
-    p: Under B.
-    h3: B.1
-    p: Deep.
+    ## B
+
+    Under B.
+
+    ### B.1
+
+    Deep.
     |}]
 ;;
 
 let%expect_test "get_heading_section: ordinal out of range" =
-  let blocks = For_test.parse_blocks "## Only heading\n\nContent." in
-  printf "%d blocks\n" (List.length (get_heading_section blocks ~ordinal:5));
-  [%expect {| 0 blocks |}]
+  let blocks = For_test.parse_blocks {|\
+## Only heading
+
+Content.
+|} in
+  For_test.print_blocks (get_heading_section blocks ~ordinal:5);
+  [%expect {| |}]
 ;;
 
 let%expect_test "get_heading_section: stops at same-level heading" =
-  let blocks = For_test.parse_blocks "## A\n\nA content.\n\n## B\n\nB content." in
-  List.iter (get_heading_section blocks ~ordinal:0) ~f:For_test.print_block;
+  let blocks = For_test.parse_blocks {|
+## A
+
+A content.
+
+## B
+
+B content.
+|}in
+  For_test.print_blocks (get_heading_section blocks ~ordinal:0);
   [%expect
     {|
-    h2: A
-    p: A content.
+    ## A
+
+    A content.
     |}]
 ;;
 
 let%expect_test "find_block_by_id: found" =
-  let blocks = For_test.parse_blocks "First.\n\nTarget. ^myid\n\nAfter." in
+  let blocks = For_test.parse_blocks {|\
+First.
+
+Target. ^myid
+
+After.
+|} in
   (match get_block_by_id blocks "myid" with
-   | Some (Cmarkit.Block.Paragraph (p, _)) ->
-     printf "found: %s\n" (Parse.inline_to_plain_text (Cmarkit.Block.Paragraph.inline p))
+   | Some b ->
+     print_endline "found: \n";
+     For_test.print_blocks [b]
    | _ -> printf "not found\n");
-  [%expect {| found: Target. ^myid |}]
+  [%expect {|
+    found:
+
+    Target. ^myid
+    |}]
 ;;
 
 let%expect_test "find_block_by_id: not found" =
