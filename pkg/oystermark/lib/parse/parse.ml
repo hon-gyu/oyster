@@ -4,6 +4,7 @@ open Core
 module Block_id = Block_id
 module Callout = Callout
 module Frontmatter = Frontmatter
+module Heading_slug = Heading_slug
 module Wikilink = Wikilink
 
 (** The mapper that transforms a cmarkit Doc, parsing wikilinks in inline
@@ -24,23 +25,6 @@ let mapper =
     ()
 ;;
 
-(** [of_string ?strict ?layout s] parses markdown string [s] into a
-    {!Cmarkit.Doc.t} with frontmatter embedded as a {!Frontmatter.Frontmatter}
-    block and wikilinks/block IDs parsed. *)
-let of_string ?(strict = false) ?(layout = false) (s : string) : Cmarkit.Doc.t =
-  let open Cmarkit in
-  let yaml_opt, body = Frontmatter.of_string s in
-  let cmarkit_doc = Doc.of_string ~strict ~layout body in
-  let body_doc = Mapper.map_doc mapper cmarkit_doc in
-  match yaml_opt, Doc.block body_doc with
-  | None, _ -> body_doc
-  | Some yaml, Block.Blocks (blocks, meta) ->
-    let blocks' = Frontmatter.Frontmatter yaml :: blocks in
-    Doc.make (Block.Blocks (blocks', meta))
-  | Some yaml, other ->
-    Doc.make (Block.Blocks ([ Frontmatter.Frontmatter yaml; other ], Meta.none))
-;;
-
 (** Render inlines to plain text, losing their markdown syntax. Used in rendering
     heading to plain text. *)
 let inline_to_plain_text (inline : Cmarkit.Inline.t) : string =
@@ -56,6 +40,43 @@ let inline_to_plain_text (inline : Cmarkit.Inline.t) : string =
       inline
   in
   String.concat ~sep:"\n" (List.map lines ~f:(String.concat ~sep:""))
+;;
+
+(** Create a mapper that stamps deduplicated heading slugs onto heading block meta.
+    Must be applied after the main mapper (so wikilinks in headings are parsed). *)
+let heading_slug_mapper () : Cmarkit.Mapper.t =
+  let seen = Hashtbl.create (module String) in
+  Cmarkit.Mapper.make
+    ~inline_ext_default:(fun _m i -> Some i)
+    ~block_ext_default:(fun _m b -> Some b)
+    ~block:(fun _mapper block ->
+      match block with
+      | Cmarkit.Block.Heading (h, meta) ->
+        let text = inline_to_plain_text (Cmarkit.Block.Heading.inline h) in
+        let slug = Heading_slug.dedup_slug seen text in
+        let meta' = Cmarkit.Meta.add Heading_slug.meta_key slug meta in
+        Cmarkit.Mapper.ret (Cmarkit.Block.Heading (h, meta'))
+      | _ -> Cmarkit.Mapper.default)
+    ()
+;;
+
+(** [of_string ?strict ?layout s] parses markdown string [s] into a
+    {!Cmarkit.Doc.t} with frontmatter embedded as a {!Frontmatter.Frontmatter}
+    block and wikilinks/block IDs parsed. Heading slugs are stamped onto
+    heading block metadata. *)
+let of_string ?(strict = false) ?(layout = false) (s : string) : Cmarkit.Doc.t =
+  let open Cmarkit in
+  let yaml_opt, body = Frontmatter.of_string s in
+  let cmarkit_doc = Doc.of_string ~strict ~layout body in
+  let body_doc = Mapper.map_doc mapper cmarkit_doc in
+  let body_doc = Mapper.map_doc (heading_slug_mapper ()) body_doc in
+  match yaml_opt, Doc.block body_doc with
+  | None, _ -> body_doc
+  | Some yaml, Block.Blocks (blocks, meta) ->
+    let blocks' = Frontmatter.Frontmatter yaml :: blocks in
+    Doc.make (Block.Blocks (blocks', meta))
+  | Some yaml, other ->
+    Doc.make (Block.Blocks ([ Frontmatter.Frontmatter yaml; other ], Meta.none))
 ;;
 
 let commonmark_of_doc (doc : Cmarkit.Doc.t) : string =

@@ -233,47 +233,48 @@ let render_callout
     C.string c "</div>\n</details>\n"
 ;;
 
-module Index = Vault.Index
+module Heading_slug = Parse.Heading_slug
+
+let block (c : Cmarkit_renderer.context) : Block.t -> bool = function
+  | Block.Heading (h, meta) ->
+    (match Meta.find Heading_slug.meta_key meta with
+     | Some slug ->
+       let level = Block.Heading.level h in
+       C.string c (sprintf "<h%d id=\"%s\">" level slug);
+       C.inline c (Block.Heading.inline h);
+       C.string c (sprintf "</h%d>\n" level);
+       true
+     | None -> false)
+  | Block.Block_quote (bq, meta) ->
+    (match Meta.find Callout.meta_key meta with
+     | Some callout ->
+       render_callout c bq callout;
+       true
+     | None -> false)
+  | Block.Paragraph (p, meta) ->
+    (match Meta.find Block_id.meta_key meta with
+     | Some (block_id : Block_id.t) ->
+       let id = "^" ^ block_id.id in
+       C.string c (Format.asprintf "<p id=\"%s\">" id);
+       C.inline c (Block.Paragraph.inline p);
+       C.string c "</p>\n";
+       true
+     | None -> false)
+  | Parse.Frontmatter.Frontmatter y ->
+    C.string c (Parse.Frontmatter.to_html (Some y));
+    true
+  | Block.Blocks (blocks, meta) ->
+    (match Meta.find Embed.embed_meta_key meta with
+     | None -> false
+     | Some { depth; _ } ->
+       C.string c (sprintf "<div class=\"embed\" data-embed-depth=\"%d\">\n" depth);
+       List.iter blocks ~f:(C.block c);
+       C.string c "</div>\n";
+       true)
+  | _ -> false
+;;
 
 let renderer ~(backend_blocks : bool) ~(safe : bool) () : Cmarkit_renderer.t =
-  let slug_seen = Hashtbl.create (module String) in
-  let block (c : Cmarkit_renderer.context) : Block.t -> bool = function
-    | Block.Heading (h, _meta) ->
-      let text = Parse.inline_to_plain_text (Block.Heading.inline h) in
-      let slug = Index.dedup_slug slug_seen text in
-      let level = Block.Heading.level h in
-      C.string c (sprintf "<h%d id=\"%s\">" level slug);
-      C.inline c (Block.Heading.inline h);
-      C.string c (sprintf "</h%d>\n" level);
-      true
-    | Block.Block_quote (bq, meta) ->
-      (match Meta.find Callout.meta_key meta with
-       | Some callout ->
-         render_callout c bq callout;
-         true
-       | None -> false)
-    | Block.Paragraph (p, meta) ->
-      (match Meta.find Block_id.meta_key meta with
-       | Some (block_id : Block_id.t) ->
-         let id = "^" ^ block_id.id in
-         C.string c (Format.asprintf "<p id=\"%s\">" id);
-         C.inline c (Block.Paragraph.inline p);
-         C.string c "</p>\n";
-         true
-       | None -> false)
-    | Parse.Frontmatter.Frontmatter y ->
-      C.string c (Parse.Frontmatter.to_html (Some y));
-      true
-    | Block.Blocks (blocks, meta) ->
-      (match Meta.find Embed.embed_meta_key meta with
-       | None -> false
-       | Some { depth; _ } ->
-         C.string c (sprintf "<div class=\"embed\" data-embed-depth=\"%d\">\n" depth);
-         List.iter blocks ~f:(C.block c);
-         C.string c "</div>\n";
-         true)
-    | _ -> false
-  in
   let custom = Cmarkit_renderer.make ~inline ~block () in
   let default = Cmarkit_html.renderer ~backend_blocks ~safe () in
   Cmarkit_renderer.compose default custom

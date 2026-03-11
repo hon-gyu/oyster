@@ -63,20 +63,16 @@ let fallback_block (wl : Parse.Wikilink.t) (meta : Cmarkit.Meta.t) : Cmarkit.Blo
 
 (** Collect the section starting at the heading with the given [slug],
     up to (but not including) the next heading of equal or lesser level.
-    Slugs are computed on-the-fly using the same algorithm as {!Index.dedup_slug},
-    so they match the index.  Returns [] when no heading matches. *)
+    Reads slugs from heading block meta (stamped during parsing).
+    Returns [] when no heading matches. *)
 let get_heading_section (blocks : Cmarkit.Block.t list) ~(slug : string)
   : Cmarkit.Block.t list
   =
-  let seen = Hashtbl.create (module String) in
   let rec find_start : Cmarkit.Block.t list -> Cmarkit.Block.t list = function
     | [] -> []
-    | (Cmarkit.Block.Heading (h, _) as b) :: rest ->
-      let text =
-        Parse.inline_to_plain_text (Cmarkit.Block.Heading.inline h)
-      in
-      let h_slug = Index.dedup_slug seen text in
-      if String.equal h_slug slug
+    | (Cmarkit.Block.Heading (h, meta) as b) :: rest ->
+      let h_slug = Cmarkit.Meta.find Parse.Heading_slug.meta_key meta in
+      if Option.equal String.equal h_slug (Some slug)
       then b :: collect_section (Cmarkit.Block.Heading.level h) rest
       else find_start rest
     | _ :: rest -> find_start rest
