@@ -2,7 +2,10 @@
 
     This is a post-resolution, pre-render transformation. Each paragraph
     containing a single embed wikilink is replaced by a [Block.Blocks] whose
-    meta carries {!embed_meta} — standard cmarkit blocks, no custom extension.
+    meta carries {!embed_meta}.
+
+    - rule: an embed can only be expanded if it's in a container block that has no other children or blank children only
+    - future TODO: we allow embed Inline.t to violate the above rule. But at the moment we have no way to specify whether an embed is Inline.t or Block.t
 
     Depth limiting: embedding is allowed up to [max_depth] levels deep.
     When [embed_depth >= max_depth] the wikilink is replaced with a plain
@@ -50,6 +53,27 @@ let extract_single_embed (inline : Cmarkit.Inline.t)
   | _ -> None
 ;;
 
+(** Test whether a block is an embed-expandable paragraph: a paragraph
+    containing a single embed wikilink, where every sibling in [siblings]
+    is either a blank line or absent.  An embed can only replace a paragraph
+    that is effectively the sole content of its container. *)
+let is_expandable_embed_paragraph
+      (block : Cmarkit.Block.t)
+      ~(siblings : Cmarkit.Block.t list)
+  : (Parse.Wikilink.t * Cmarkit.Meta.t) option
+  =
+  let all_siblings_blank : bool =
+    List.for_all siblings ~f:(fun b ->
+      match b with
+      | Cmarkit.Block.Blank_line _ -> true
+      | b' -> phys_equal b' block)
+  in
+  match block with
+  | Cmarkit.Block.Paragraph (p, _) when all_siblings_blank ->
+    extract_single_embed (Cmarkit.Block.Paragraph.inline p)
+  | _ -> None
+;;
+
 (** A fallback paragraph that renders the embed as a plain link (used when
     [embed_depth >= max_depth] or when the target cannot be resolved to a note). *)
 let fallback_block (wl : Parse.Wikilink.t) (meta : Cmarkit.Meta.t) : Cmarkit.Block.t =
@@ -59,44 +83,6 @@ let fallback_block (wl : Parse.Wikilink.t) (meta : Cmarkit.Meta.t) : Cmarkit.Blo
       (Cmarkit.Inline.Inlines ([ link_inline ], Cmarkit.Meta.none))
   in
   Cmarkit.Block.Paragraph (p, Cmarkit.Meta.none)
-;;
-
-(** Collect the section starting at the heading with the given [slug],
-    up to (but not including) the next heading of equal or lesser level.
-    Reads slugs from heading block meta (stamped during parsing).
-    Returns [] when no heading matches. *)
-let get_heading_section (blocks : Cmarkit.Block.t list) ~(slug : string)
-  : Cmarkit.Block.t list
-  =
-  let rec find_start : Cmarkit.Block.t list -> Cmarkit.Block.t list = function
-    | [] -> []
-    | (Cmarkit.Block.Heading (h, meta) as b) :: rest ->
-      let h_slug = Cmarkit.Meta.find Parse.Heading_slug.meta_key meta in
-      if Option.equal String.equal h_slug (Some slug)
-      then b :: collect_section (Cmarkit.Block.Heading.level h) rest
-      else find_start rest
-    | _ :: rest -> find_start rest
-  and collect_section (stop_level : int) : Cmarkit.Block.t list -> Cmarkit.Block.t list
-    = function
-    | [] -> []
-    | Cmarkit.Block.Heading (h, _) :: _ when Cmarkit.Block.Heading.level h <= stop_level
-      -> []
-    | b :: rest -> b :: collect_section stop_level rest
-  in
-  find_start blocks
-;;
-
-(** Find the (first) block in [blocks] whose {!Parse.Block_id} meta matches
-    [block_id]. Only {!Cmarkit.Block.Paragraph} nodes carry block-ID metadata. *)
-let get_block_by_id (blocks : Cmarkit.Block.t list) (block_id : string)
-  : Cmarkit.Block.t option
-  =
-  List.find blocks ~f:(function
-    | Cmarkit.Block.Paragraph (_, meta) ->
-      (match Cmarkit.Meta.find Parse.Block_id.meta_key meta with
-       | Some (bid : Parse.Block_id.t) -> String.equal bid.id block_id
-       | None -> false)
-    | _ -> false)
 ;;
 
 (** Check depth limit, look up [path], recursively expand, then wrap in a
@@ -140,17 +126,43 @@ and expand_doc
       (doc : Cmarkit.Doc.t)
   : Cmarkit.Doc.t
   =
-  let try_embed (wl : Parse.Wikilink.t) (meta : Cmarkit.Meta.t) : Cmarkit.Block.t option =
+  let try_embed
+        (wl : Parse.Wikilink.t)
+        (meta : Cmarkit.Meta.t)
+        ~(curr_doc : Cmarkit.Doc.t)
+    : Cmarkit.Block.t option
+    =
+    let embed_self (extract : Cmarkit.Block.t list -> Cmarkit.Block.t list)
+      : Cmarkit.Block.t option
+      =
+      if embed_depth >= max_depth
+      then Some (fallback_block wl meta)
+      else (
+        let new_depth = embed_depth + 1 in
+        let blocks = extract (doc_blocks curr_doc) in
+        let block_meta =
+          Cmarkit.Meta.add
+            embed_meta_key
+            { depth = new_depth; source_path = "" }
+            Cmarkit.Meta.none
+        in
+        Some (Cmarkit.Block.Blocks (blocks, block_meta)))
+    in
     let embed = embed_note ~embed_depth ~max_depth docs_tbl in
     match Cmarkit.Meta.find Resolve.resolved_key meta with
     | None | Some Resolve.Unresolved | Some (Resolve.File _) -> None
-    | Some Resolve.Curr_file | Some (Resolve.Curr_heading _) | Some (Resolve.Curr_block _)
-      -> embed "" wl meta (fun _ -> [])
+    | Some Resolve.Curr_file -> embed_self (fun blocks -> blocks)
+    | Some (Resolve.Curr_heading { slug; _ }) ->
+      embed_self (fun blocks -> Parse.Extract.get_heading_section blocks slug)
+    | Some (Resolve.Curr_block { block_id }) ->
+      embed_self (fun blocks ->
+        Option.to_list (Parse.Extract.get_block_by_caret_id blocks block_id))
     | Some (Resolve.Note { path }) -> embed path wl meta (fun blocks -> blocks)
     | Some (Resolve.Heading { path; slug; _ }) ->
-      embed path wl meta (fun blocks -> get_heading_section blocks ~slug)
+      embed path wl meta (fun blocks -> Parse.Extract.get_heading_section blocks slug)
     | Some (Resolve.Block { path; block_id }) ->
-      embed path wl meta (fun blocks -> Option.to_list (get_block_by_id blocks block_id))
+      embed path wl meta (fun blocks ->
+        Option.to_list (Parse.Extract.get_block_by_caret_id blocks block_id))
   in
   let mapper =
     Cmarkit.Mapper.make
@@ -162,7 +174,7 @@ and expand_doc
           (match extract_single_embed (Cmarkit.Block.Paragraph.inline p) with
            | None -> Cmarkit.Mapper.default
            | Some (wl, meta) ->
-             (match try_embed wl meta with
+             (match try_embed wl meta ~curr_doc:doc with
               | Some spliced -> Cmarkit.Mapper.ret spliced
               | None -> Cmarkit.Mapper.default))
         | _ -> Cmarkit.Mapper.default)
@@ -182,101 +194,62 @@ let expand_docs ?(max_depth = 5) (docs : (string * Cmarkit.Doc.t) list)
     rel_path, expand_doc ~embed_depth:0 ~max_depth docs_tbl doc)
 ;;
 
-
 module For_test = struct
   let parse_blocks (md : string) : Cmarkit.Block.t list = doc_blocks (Parse.of_string md)
 
   let doc_of_blocks (blocks : Cmarkit.Block.t list) : Cmarkit.Doc.t =
     Cmarkit.Doc.make (Cmarkit.Block.Blocks (blocks, Cmarkit.Meta.none))
+  ;;
 
   let print_blocks (blocks : Cmarkit.Block.t list) : unit =
     let doc = doc_of_blocks blocks in
     print_endline (Parse.commonmark_of_doc doc)
+  ;;
 end
 
-let%expect_test "get_heading_section: by slug" =
-  let blocks =
-    For_test.parse_blocks {|\
-Intro.
+let%expect_test "is_expandable_embed_paragraph: sole embed paragraph" =
+  let doc = Parse.of_string "![[target]]" in
+  let blocks = For_test.parse_blocks "![[target]]" in
+  ignore doc;
+  let block = List.hd_exn blocks in
+  let result = is_expandable_embed_paragraph block ~siblings:blocks in
+  printf "%b\n" (Option.is_some result);
+  [%expect {| true |}]
+;;
 
-## A
+let%expect_test "is_expandable_embed_paragraph: embed mixed with text" =
+  let blocks = For_test.parse_blocks "See ![[target]] here." in
+  let block = List.hd_exn blocks in
+  let result = is_expandable_embed_paragraph block ~siblings:blocks in
+  printf "%b\n" (Option.is_some result);
+  [%expect {| false |}]
+;;
 
-Under A.
-
-## B
-
-Under B.
-
-### B.1
-
-Deep.|}
+let%expect_test "is_expandable_embed_paragraph: embed with blank siblings only" =
+  let blocks = For_test.parse_blocks "\n![[target]]\n" in
+  let block =
+    List.find_exn blocks ~f:(fun b ->
+      match b with
+      | Cmarkit.Block.Paragraph _ -> true
+      | _ -> false)
   in
-  For_test.print_blocks (get_heading_section blocks ~slug:"b");
-  [%expect
-    {|
-    ## B
-
-    Under B.
-
-    ### B.1
-
-    Deep.
-    |}]
+  let result = is_expandable_embed_paragraph block ~siblings:blocks in
+  printf "%b\n" (Option.is_some result);
+  [%expect {| true |}]
 ;;
 
-let%expect_test "get_heading_section: slug not found" =
-  let blocks = For_test.parse_blocks {|\
-## Only heading
-
-Content.
-|} in
-  For_test.print_blocks (get_heading_section blocks ~slug:"nonexistent");
-  [%expect {| |}]
+let%expect_test "is_expandable_embed_paragraph: non-embed wikilink" =
+  let blocks = For_test.parse_blocks "[[target]]" in
+  let block = List.hd_exn blocks in
+  let result = is_expandable_embed_paragraph block ~siblings:blocks in
+  printf "%b\n" (Option.is_some result);
+  [%expect {| false |}]
 ;;
 
-let%expect_test "get_heading_section: stops at same-level heading" =
-  let blocks = For_test.parse_blocks {|
-## A
-
-A content.
-
-## B
-
-B content.
-|}in
-  For_test.print_blocks (get_heading_section blocks ~slug:"a");
-  [%expect
-    {|
-    ## A
-
-    A content.
-    |}]
-;;
-
-let%expect_test "find_block_by_id: found" =
-  let blocks = For_test.parse_blocks {|\
-First.
-
-Target. ^myid
-
-After.
-|} in
-  (match get_block_by_id blocks "myid" with
-   | Some b ->
-     print_endline "found: \n";
-     For_test.print_blocks [b]
-   | _ -> printf "not found\n");
-  [%expect {|
-    found:
-
-    Target. ^myid
-    |}]
-;;
-
-let%expect_test "find_block_by_id: not found" =
-  let blocks = For_test.parse_blocks "No block ids here.\n\nNor here." in
-  (match get_block_by_id blocks "nope" with
-   | Some _ -> printf "found\n"
-   | None -> printf "not found\n");
-  [%expect {| not found |}]
+let%expect_test "is_expandable_embed_paragraph: embed among other blocks" =
+  let blocks = For_test.parse_blocks "Some text.\n\n![[target]]\n\nMore text." in
+  let embed_block = List.nth_exn blocks 1 in
+  let result = is_expandable_embed_paragraph embed_block ~siblings:blocks in
+  printf "%b\n" (Option.is_some result);
+  [%expect {| false |}]
 ;;
