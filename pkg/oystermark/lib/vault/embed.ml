@@ -98,7 +98,7 @@ let get_heading_section (blocks : Cmarkit.Block.t list) ~(ordinal : int)
 
 (** Find the (first) block in [blocks] whose {!Parse.Block_id} meta matches
     [block_id]. Only {!Cmarkit.Block.Paragraph} nodes carry block-ID metadata. *)
-let find_block_by_id (blocks : Cmarkit.Block.t list) (block_id : string)
+let get_block_by_id (blocks : Cmarkit.Block.t list) (block_id : string)
   : Cmarkit.Block.t option
   =
   List.find blocks ~f:(function
@@ -160,7 +160,7 @@ and expand_doc
     | Some (Resolve.Heading { path; ordinal; _ }) ->
       embed path wl meta (fun blocks -> get_heading_section blocks ~ordinal)
     | Some (Resolve.Block { path; block_id }) ->
-      embed path wl meta (fun blocks -> Option.to_list (find_block_by_id blocks block_id))
+      embed path wl meta (fun blocks -> Option.to_list (get_block_by_id blocks block_id))
   in
   let mapper =
     Cmarkit.Mapper.make
@@ -192,27 +192,27 @@ let expand_docs ?(max_depth = 5) (docs : (string * Cmarkit.Doc.t) list)
     rel_path, expand_doc ~embed_depth:0 ~max_depth docs_tbl doc)
 ;;
 
-(* Unit tests for block extraction helpers.  Integration tests for the full
-   embed pipeline live in test/expect-test/test_embed.ml. *)
 
-let parse_blocks_ (md : string) : Cmarkit.Block.t list = doc_blocks (Parse.of_string md)
+module For_test = struct
+  let parse_blocks (md : string) : Cmarkit.Block.t list = doc_blocks (Parse.of_string md)
 
-let print_block : Cmarkit.Block.t -> unit = function
-  | Cmarkit.Block.Heading (h, _) ->
-    printf
-      "h%d: %s\n"
-      (Cmarkit.Block.Heading.level h)
-      (Parse.inline_to_plain_text (Cmarkit.Block.Heading.inline h))
-  | Cmarkit.Block.Paragraph (p, _) ->
-    printf "p: %s\n" (Parse.inline_to_plain_text (Cmarkit.Block.Paragraph.inline p))
-  | _ -> ()
-;;
+  let print_block : Cmarkit.Block.t -> unit = function
+    | Cmarkit.Block.Heading (h, _) ->
+      printf
+        "h%d: %s\n"
+        (Cmarkit.Block.Heading.level h)
+        (Parse.inline_to_plain_text (Cmarkit.Block.Heading.inline h))
+    | Cmarkit.Block.Paragraph (p, _) ->
+      printf "p: %s\n" (Parse.inline_to_plain_text (Cmarkit.Block.Paragraph.inline p))
+    | _ -> ()
+  ;;
+end
 
 let%expect_test "get_heading_section: by ordinal" =
   let blocks =
-    parse_blocks_ "Intro.\n\n## A\n\nUnder A.\n\n## B\n\nUnder B.\n\n### B.1\n\nDeep."
+    For_test.parse_blocks "Intro.\n\n## A\n\nUnder A.\n\n## B\n\nUnder B.\n\n### B.1\n\nDeep."
   in
-  List.iter (get_heading_section blocks ~ordinal:1) ~f:print_block;
+  List.iter (get_heading_section blocks ~ordinal:1) ~f:For_test.print_block;
   [%expect
     {|
     h2: B
@@ -223,14 +223,14 @@ let%expect_test "get_heading_section: by ordinal" =
 ;;
 
 let%expect_test "get_heading_section: ordinal out of range" =
-  let blocks = parse_blocks_ "## Only heading\n\nContent." in
+  let blocks = For_test.parse_blocks "## Only heading\n\nContent." in
   printf "%d blocks\n" (List.length (get_heading_section blocks ~ordinal:5));
   [%expect {| 0 blocks |}]
 ;;
 
 let%expect_test "get_heading_section: stops at same-level heading" =
-  let blocks = parse_blocks_ "## A\n\nA content.\n\n## B\n\nB content." in
-  List.iter (get_heading_section blocks ~ordinal:0) ~f:print_block;
+  let blocks = For_test.parse_blocks "## A\n\nA content.\n\n## B\n\nB content." in
+  List.iter (get_heading_section blocks ~ordinal:0) ~f:For_test.print_block;
   [%expect
     {|
     h2: A
@@ -239,8 +239,8 @@ let%expect_test "get_heading_section: stops at same-level heading" =
 ;;
 
 let%expect_test "find_block_by_id: found" =
-  let blocks = parse_blocks_ "First.\n\nTarget. ^myid\n\nAfter." in
-  (match find_block_by_id blocks "myid" with
+  let blocks = For_test.parse_blocks "First.\n\nTarget. ^myid\n\nAfter." in
+  (match get_block_by_id blocks "myid" with
    | Some (Cmarkit.Block.Paragraph (p, _)) ->
      printf "found: %s\n" (Parse.inline_to_plain_text (Cmarkit.Block.Paragraph.inline p))
    | _ -> printf "not found\n");
@@ -248,8 +248,8 @@ let%expect_test "find_block_by_id: found" =
 ;;
 
 let%expect_test "find_block_by_id: not found" =
-  let blocks = parse_blocks_ "No block ids here.\n\nNor here." in
-  (match find_block_by_id blocks "nope" with
+  let blocks = For_test.parse_blocks "No block ids here.\n\nNor here." in
+  (match get_block_by_id blocks "nope" with
    | Some _ -> printf "found\n"
    | None -> printf "not found\n");
   [%expect {| not found |}]
