@@ -159,3 +159,67 @@ let%expect_test "self-reference: embed current file" =
     </div>
     |}]
 ;;
+
+(* ── Markdown image embeds ─────────────────────────────────────────── *)
+
+let%expect_test "image embed: full note via ![](b.md)" =
+  render [ "a.md", "![](b.md)"; "b.md", "Hello.\n\nWorld." ] "a.md";
+  [%expect
+    {|
+    <div class="embed" data-embed-depth="1">
+    <p>Hello.</p>
+    <p>World.</p>
+    </div>
+    |}]
+;;
+
+let%expect_test "image embed: heading section via ![](b.md#Sec)" =
+  render
+    [ "a.md", "![](b.md#Sec)"
+    ; "b.md", "Intro.\n\n## Sec\n\nContent.\n\n## Other\n\nNot this."
+    ]
+    "a.md";
+  [%expect
+    {|
+    <div class="embed" data-embed-depth="1">
+    <h2 id="sec">Sec</h2>
+    <p>Content.</p>
+    </div>
+    |}]
+;;
+
+let%expect_test "image embed: block ref via ![](b.md#^myblock)" =
+  render
+    [ "a.md", "![](b.md#^myblock)"; "b.md", "First.\n\nTarget. ^myblock\n\nAfter." ]
+    "a.md";
+  [%expect
+    {|
+    <div class="embed" data-embed-depth="1">
+    <p id="^myblock">Target. ^myblock</p>
+    </div>
+    |}]
+;;
+
+let%expect_test "image embed: max_depth=0 keeps original image" =
+  render ~max_depth:0 [ "a.md", "![](b.md)"; "b.md", "Should not appear." ] "a.md";
+  [%expect {| <p><a href="/b/"><img src="/b/" alt=""/></a></p> |}]
+;;
+
+let%expect_test "image embed: non-note file is NOT expanded" =
+  render [ "a.md", "![photo](img.png)" ] "a.md";
+  [%expect {| <p><a href="#"><img src="#" alt="photo"/></a></p> |}]
+;;
+
+let%expect_test "image embed: nested — image inside wikilink embed" =
+  render
+    [ "a.md", "![[b]]"; "b.md", "![](c.md)"; "c.md", "Inner content." ]
+    "a.md";
+  [%expect
+    {|
+    <div class="embed" data-embed-depth="1">
+    <div class="embed" data-embed-depth="2">
+    <p>Inner content.</p>
+    </div>
+    </div>
+    |}]
+;;

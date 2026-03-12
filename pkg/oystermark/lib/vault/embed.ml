@@ -1,27 +1,41 @@
-(** Note embedding: expand [![[NOTE]]] wikilinks as AST transclusion.
+(** Note embedding: expand embed wikilinks and markdown image links as AST
+    transclusion.
 
-    For media embedding, see {!Html}
+    Supported embed sources:
+    - {b Wikilink embeds}: [!\[\[NOTE\]\]] syntax (parsed as {!Parse.Wikilink.t}
+      with [embed = true]).
+    - {b Markdown image embeds}: [!\[alt\](note.md)] syntax. Only expanded when
+      the image's resolved target is a note (i.e. a [.md] file). Non-note
+      images (e.g. PNG, JPG) are left untouched for the HTML renderer.
+
+    For media embedding (non-note images, audio, video), see {!Html}.
 
     This is a post-resolution, pre-render transformation. Each paragraph
-    containing a single embed wikilink is replaced by a [Block.Blocks] whose
+    containing a single embed source is replaced by a [Block.Blocks] whose
     meta carries {!embed_meta}.
 
-    - rule: an embed can only be expanded if it's in a container block that has no other children or blank children only
-    - future TODO: we allow embed Inline.t to violate the above rule. But at the moment we have no way to specify whether an embed is Inline.t or Block.t
+    Frontmatter is never embedded: {!doc_blocks} strips it before extraction.
+
+    - rule: an embed can only be expanded if it's in a container block that
+      has no other children or blank children only
+    - future TODO: we allow embed Inline.t to violate the above rule. But at
+      the moment we have no way to specify whether an embed is Inline.t or
+      Block.t
 
     Depth limiting: embedding is allowed up to [max_depth] levels deep.
     When [embed_depth >= max_depth] the wikilink is replaced with a plain
-    fallback link instead. *)
+    fallback link instead; image embeds are left as-is. *)
 
 open Core
 
 
 module type Spec = sig
-  (** Frontmatter will not be embedded.  *)
+  (** Frontmatter will not be embedded: {!doc_blocks} strips it before
+      extraction. *)
   val frontmatter_unembeddable : unit
+
   (** From expanded blocks, we can restore the original embedding syntax,
-      up to the difference between wikilink and commonmark inline link.
-  *)
+      up to the difference between wikilink and commonmark inline link. *)
   val reverse_embed : unit
 end
 
@@ -65,6 +79,27 @@ let extract_single_embed (inline : Cmarkit.Inline.t)
   | _ -> None
 ;;
 
+(** If [inline] is a single markdown image whose resolved target is a note
+    (i.e. [.md] file), return its metadata. Non-note images (PNG, etc.) return
+    [None] so the HTML renderer handles them instead. *)
+let extract_single_image_embed (inline : Cmarkit.Inline.t)
+  : Cmarkit.Meta.t option
+  =
+  let check (i : Cmarkit.Inline.t) : Cmarkit.Meta.t option =
+    match i with
+    | Cmarkit.Inline.Image (_, meta) ->
+      (match Cmarkit.Meta.find Resolve.resolved_key meta with
+       | Some (Resolve.Note _ | Resolve.Heading _ | Resolve.Block _
+              | Resolve.Curr_file | Resolve.Curr_heading _ | Resolve.Curr_block _) ->
+         Some meta
+       | _ -> None)
+    | _ -> None
+  in
+  match inline with
+  | Cmarkit.Inline.Inlines ([ i ], _) -> check i
+  | i -> check i
+;;
+
 (** Test whether a block is an embed-expandable paragraph: a paragraph
     containing a single embed wikilink, where every sibling in [siblings]
     is either a blank line or absent.  An embed can only replace a paragraph
@@ -102,8 +137,8 @@ let fallback_block (wl : Parse.Wikilink.t) (meta : Cmarkit.Meta.t) : Cmarkit.Blo
     This is the workhorse for cross-file transclusion. It handles:
 
     1. {b Depth guard} — if [embed_depth >= max_depth], the embed is replaced
-       with a {!fallback_block} (a plain link paragraph) to prevent infinite
-       recursion in cyclic references (e.g. A embeds B which embeds A).
+       with [depth_fallback] to prevent infinite recursion in cyclic
+       references (e.g. A embeds B which embeds A).
 
     2. {b Lookup} — finds the target document by [path] in [docs_tbl].
        Returns [None] if the path is missing (unresolved embed).
@@ -125,14 +160,13 @@ let fallback_block (wl : Parse.Wikilink.t) (meta : Cmarkit.Meta.t) : Cmarkit.Blo
     @param embed_depth Current transclusion nesting level. 0 for the root
       document, incremented by 1 each time we descend into an embed.
     @param max_depth Inclusive depth limit. When [embed_depth >= max_depth],
-      the embed is replaced with a fallback link instead of expanding.
+      the embed is replaced with [depth_fallback] instead of expanding.
+    @param depth_fallback The block to substitute when depth is exceeded.
+      For wikilink embeds this is a {!fallback_block} (plain link); for
+      image embeds this is the original paragraph (keeping the image as-is).
     @param docs_tbl All parsed vault documents keyed by vault-relative path
       (e.g. ["notes/foo.md"]). Shared across the entire expansion pass.
     @param path Vault-relative path of the target note to embed.
-    @param wl The parsed wikilink that triggered this embed. Retained so
-      we can produce a {!fallback_block} if depth is exceeded.
-    @param meta The wikilink node's metadata, carrying the {!Resolve.resolved_key}
-      and any source-location info from parsing.
     @param extract A selector that narrows the target's blocks to the
       desired subset. Called on the target's top-level blocks after
       recursive expansion.
@@ -141,21 +175,22 @@ let fallback_block (wl : Parse.Wikilink.t) (meta : Cmarkit.Meta.t) : Cmarkit.Blo
 let rec embed_note
           ~(embed_depth : int)
           ~(max_depth : int)
+          ~(depth_fallback : Cmarkit.Block.t)
           (docs_tbl : (string, Cmarkit.Doc.t) Hashtbl.t)
           (path : string)
-          (wl : Parse.Wikilink.t)
-          (meta : Cmarkit.Meta.t)
           (extract : Cmarkit.Block.t list -> Cmarkit.Block.t list)
   : Cmarkit.Block.t option
   =
   if embed_depth >= max_depth
-  then Some (fallback_block wl meta)
+  then Some depth_fallback
   else (
     match Hashtbl.find docs_tbl path with
     | None -> None
     | Some target_doc ->
       let new_depth = embed_depth + 1 in
-      let expanded = expand_doc ~embed_depth:new_depth ~max_depth docs_tbl target_doc in
+      let expanded =
+        expand_doc ~embed_depth:new_depth ~max_depth ~curr_path:path docs_tbl target_doc
+      in
       let blocks = extract (doc_blocks expanded) in
       let block_meta =
         Cmarkit.Meta.add
@@ -169,15 +204,17 @@ let rec embed_note
     transcluded content.
 
     This is mutually recursive with {!embed_note}: [expand_doc] finds embed
-    wikilinks in the AST, and [embed_note] fetches + recursively expands the
-    target document, incrementing [embed_depth] at each level.
+    wikilinks and image links in the AST, and [embed_note] fetches +
+    recursively expands the target document, incrementing [embed_depth] at
+    each level.
 
     {b How it works:}
 
     A cmarkit [Mapper] traverses every block in the document. For each
     [Paragraph], we check whether its inline content is a single embed
-    wikilink (via {!extract_single_embed}). If so, [try_embed] dispatches
-    on the resolved target (stamped by the resolution pass):
+    wikilink (via {!extract_single_embed}) or a single image link pointing
+    to a note (via {!extract_single_image_embed}). If so, [try_embed]
+    dispatches on the resolved target (stamped by the resolution pass):
 
     - {b Cross-file} targets ([Note], [Heading], [Block]) delegate to
       {!embed_note}, which looks up the target in [docs_tbl], recursively
@@ -192,13 +229,15 @@ let rec embed_note
     - {b Non-embeddable} targets ([None], [Unresolved], [File]) return
       [None], leaving the paragraph unchanged.
 
-    Non-paragraph blocks and paragraphs without a sole embed wikilink pass
+    Non-paragraph blocks and paragraphs without a sole embed source pass
     through untouched.
 
     @param embed_depth Current transclusion nesting level. 0 when called from
       {!expand_docs} on the root document; >0 when called recursively from
       {!embed_note} to expand a target document's own embeds.
     @param max_depth Inclusive depth limit, passed through to {!embed_note}.
+    @param curr_path Vault-relative path of the document being expanded.
+      Stored in {!embed_meta} for self-reference embeds.
     @param docs_tbl Shared vault-wide document table, passed through to
       {!embed_note} for cross-file lookups.
     @param doc The document whose embed wikilinks should be expanded. For
@@ -206,13 +245,18 @@ let rec embed_note
 and expand_doc
       ~(embed_depth : int)
       ~(max_depth : int)
+      ~(curr_path : string)
       (docs_tbl : (string, Cmarkit.Doc.t) Hashtbl.t)
       (doc : Cmarkit.Doc.t)
   : Cmarkit.Doc.t
   =
+  (** Dispatch an embed based on the resolved target in [meta].
+      [depth_fallback] is the block to use when [embed_depth >= max_depth]:
+      for wikilinks this is a {!fallback_block}, for images it is the
+      original paragraph. *)
   let try_embed
-        (wl : Parse.Wikilink.t)
         (meta : Cmarkit.Meta.t)
+        ~(depth_fallback : Cmarkit.Block.t)
         ~(curr_doc : Cmarkit.Doc.t)
     : Cmarkit.Block.t option
     =
@@ -224,20 +268,24 @@ and expand_doc
       : Cmarkit.Block.t option
       =
       if embed_depth >= max_depth
-      then Some (fallback_block wl meta)
+      then Some depth_fallback
       else (
         let new_depth = embed_depth + 1 in
-        let blocks = extract (doc_blocks curr_doc) in
+        let blocks_to_embed = extract (doc_blocks curr_doc) in
         let block_meta =
           Cmarkit.Meta.add
             embed_meta_key
-            { depth = new_depth; source_path = "" }
+            { depth = new_depth; source_path = curr_path }
             Cmarkit.Meta.none
         in
-        Some (Cmarkit.Block.Blocks (blocks, block_meta)))
+        Some (Cmarkit.Block.Blocks (blocks_to_embed, block_meta)))
     in
     (* Cross-file embedding: delegates to embed_note for lookup + recursion. *)
-    let embed = embed_note ~embed_depth ~max_depth docs_tbl in
+    let embed (path : string) (extract : Cmarkit.Block.t list -> Cmarkit.Block.t list)
+      : Cmarkit.Block.t option
+      =
+      embed_note ~embed_depth ~max_depth ~depth_fallback docs_tbl path extract
+    in
     match Cmarkit.Meta.find Resolve.resolved_key meta with
     (* Non-embeddable: no target, unresolved, or non-markdown file *)
     | None | Some Resolve.Unresolved | Some (Resolve.File _) -> None
@@ -249,15 +297,15 @@ and expand_doc
       embed_self (fun blocks ->
         Option.to_list (Parse.Extract.get_block_by_caret_id blocks block_id))
     (* Cross-file references: look up in vault and recursively expand *)
-    | Some (Resolve.Note { path }) -> embed path wl meta (fun blocks -> blocks)
+    | Some (Resolve.Note { path }) -> embed path (fun blocks -> blocks)
     | Some (Resolve.Heading { path; slug; _ }) ->
-      embed path wl meta (fun blocks -> Parse.Extract.get_heading_section blocks slug)
+      embed path (fun blocks -> Parse.Extract.get_heading_section blocks slug)
     | Some (Resolve.Block { path; block_id }) ->
-      embed path wl meta (fun blocks ->
+      embed path (fun blocks ->
         Option.to_list (Parse.Extract.get_block_by_caret_id blocks block_id))
   in
-  (* The mapper only acts on Paragraph blocks — other block types cannot
-     contain embed wikilinks at the top level. *)
+  (* The mapper acts on Paragraph blocks, checking for embed wikilinks first,
+     then for image links pointing to notes. *)
   let mapper =
     Cmarkit.Mapper.make
       ~block_ext_default:(fun _m b -> Some b)
@@ -265,11 +313,19 @@ and expand_doc
       ~block:(fun _mapper block ->
         match block with
         | Cmarkit.Block.Paragraph (p, _) ->
-          (match extract_single_embed (Cmarkit.Block.Paragraph.inline p) with
-           | None -> Cmarkit.Mapper.default
-           | Some (wl, meta) ->
-             (match try_embed wl meta ~curr_doc:doc with
+          let inline = Cmarkit.Block.Paragraph.inline p in
+          (match extract_single_embed inline with
+           | Some (wl, wl_meta) ->
+             let depth_fallback = fallback_block wl wl_meta in
+             (match try_embed wl_meta ~depth_fallback ~curr_doc:doc with
               | Some spliced -> Cmarkit.Mapper.ret spliced
+              | None -> Cmarkit.Mapper.default)
+           | None ->
+             (match extract_single_image_embed inline with
+              | Some meta ->
+                (match try_embed meta ~depth_fallback:block ~curr_doc:doc with
+                 | Some spliced -> Cmarkit.Mapper.ret spliced
+                 | None -> Cmarkit.Mapper.default)
               | None -> Cmarkit.Mapper.default))
         | _ -> Cmarkit.Mapper.default)
       ()
@@ -277,15 +333,16 @@ and expand_doc
   Cmarkit.Mapper.map_doc mapper doc
 ;;
 
-(** Expand all embed wikilinks in a list of resolved docs.
+(** Expand all embed wikilinks and image links in a list of resolved docs.
     [max_depth] (default 5) controls how many transclusion levels are allowed
-    before falling back to a plain link. *)
+    before falling back to a plain link (wikilinks) or keeping the original
+    image (image links). *)
 let expand_docs ?(max_depth = 5) (docs : (string * Cmarkit.Doc.t) list)
   : (string * Cmarkit.Doc.t) list
   =
   let docs_tbl = Hashtbl.of_alist_exn (module String) docs in
   List.map docs ~f:(fun (rel_path, doc) ->
-    rel_path, expand_doc ~embed_depth:0 ~max_depth docs_tbl doc)
+    rel_path, expand_doc ~embed_depth:0 ~max_depth ~curr_path:rel_path docs_tbl doc)
 ;;
 
 module For_test = struct
@@ -302,9 +359,7 @@ module For_test = struct
 end
 
 let%expect_test "is_expandable_embed_paragraph: sole embed paragraph" =
-  let doc = Parse.of_string "![[target]]" in
   let blocks = For_test.parse_blocks "![[target]]" in
-  ignore doc;
   let block = List.hd_exn blocks in
   let result = is_expandable_embed_paragraph block ~siblings:blocks in
   printf "%b\n" (Option.is_some result);
