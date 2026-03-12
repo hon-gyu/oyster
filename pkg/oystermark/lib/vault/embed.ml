@@ -1,5 +1,7 @@
 (** Note embedding: expand [![[NOTE]]] wikilinks as AST transclusion.
 
+    For media embedding, see {!Html}
+
     This is a post-resolution, pre-render transformation. Each paragraph
     containing a single embed wikilink is replaced by a [Block.Blocks] whose
     meta carries {!embed_meta}.
@@ -12,6 +14,16 @@
     fallback link instead. *)
 
 open Core
+
+
+module type Spec = sig
+  (** Frontmatter will not be embedded.  *)
+  val frontmatter_unembeddable : unit
+  (** From expanded blocks, we can restore the original embedding syntax,
+      up to the difference between wikilink and commonmark inline link.
+  *)
+  val reverse_embed : unit
+end
 
 (** Metadata attached to the {!Cmarkit.Block.Blocks} node that wraps
     transcluded content. Consumers (e.g. the HTML renderer) can use this to
@@ -110,6 +122,20 @@ let fallback_block (wl : Parse.Wikilink.t) (meta : Cmarkit.Meta.t) : Cmarkit.Blo
        node tagged with {!embed_meta} (depth + source path), which the HTML
        renderer uses to emit [<div class="embed" data-embed-depth="N">].
 
+    @param embed_depth Current transclusion nesting level. 0 for the root
+      document, incremented by 1 each time we descend into an embed.
+    @param max_depth Inclusive depth limit. When [embed_depth >= max_depth],
+      the embed is replaced with a fallback link instead of expanding.
+    @param docs_tbl All parsed vault documents keyed by vault-relative path
+      (e.g. ["notes/foo.md"]). Shared across the entire expansion pass.
+    @param path Vault-relative path of the target note to embed.
+    @param wl The parsed wikilink that triggered this embed. Retained so
+      we can produce a {!fallback_block} if depth is exceeded.
+    @param meta The wikilink node's metadata, carrying the {!Resolve.resolved_key}
+      and any source-location info from parsing.
+    @param extract A selector that narrows the target's blocks to the
+      desired subset. Called on the target's top-level blocks after
+      recursive expansion.
     @return [Some block] with the wrapped transclusion, or [None] if [path]
     was not found in [docs_tbl]. *)
 let rec embed_note
@@ -167,7 +193,16 @@ let rec embed_note
       [None], leaving the paragraph unchanged.
 
     Non-paragraph blocks and paragraphs without a sole embed wikilink pass
-    through untouched. *)
+    through untouched.
+
+    @param embed_depth Current transclusion nesting level. 0 when called from
+      {!expand_docs} on the root document; >0 when called recursively from
+      {!embed_note} to expand a target document's own embeds.
+    @param max_depth Inclusive depth limit, passed through to {!embed_note}.
+    @param docs_tbl Shared vault-wide document table, passed through to
+      {!embed_note} for cross-file lookups.
+    @param doc The document whose embed wikilinks should be expanded. For
+      self-references, this is also the source of the extracted blocks. *)
 and expand_doc
       ~(embed_depth : int)
       ~(max_depth : int)
