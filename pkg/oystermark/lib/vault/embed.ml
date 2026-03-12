@@ -85,9 +85,33 @@ let fallback_block (wl : Parse.Wikilink.t) (meta : Cmarkit.Meta.t) : Cmarkit.Blo
   Cmarkit.Block.Paragraph (p, Cmarkit.Meta.none)
 ;;
 
-(** Check depth limit, look up [path], recursively expand, then wrap in a
-    [Block.Blocks] tagged with {!embed_meta}.  [extract] selects the subset of
-    blocks (full note, heading section, or single block). *)
+(** Embed a note (or part of a note) from another file in the vault.
+
+    This is the workhorse for cross-file transclusion. It handles:
+
+    1. {b Depth guard} — if [embed_depth >= max_depth], the embed is replaced
+       with a {!fallback_block} (a plain link paragraph) to prevent infinite
+       recursion in cyclic references (e.g. A embeds B which embeds A).
+
+    2. {b Lookup} — finds the target document by [path] in [docs_tbl].
+       Returns [None] if the path is missing (unresolved embed).
+
+    3. {b Recursive expansion} — before extracting blocks from the target,
+       the target document itself is expanded at [embed_depth + 1] so that
+       nested embeds within the target are also resolved (up to [max_depth]).
+
+    4. {b Extraction} — the [extract] callback selects which blocks from the
+       expanded target to include:
+       - Full note: [fun blocks -> blocks]
+       - Heading section: [fun blocks -> Extract.get_heading_section blocks slug]
+       - Single block: [fun blocks -> Option.to_list (Extract.get_block_by_caret_id ...)]
+
+    5. {b Wrapping} — the extracted blocks are wrapped in a [Block.Blocks]
+       node tagged with {!embed_meta} (depth + source path), which the HTML
+       renderer uses to emit [<div class="embed" data-embed-depth="N">].
+
+    @return [Some block] with the wrapped transclusion, or [None] if [path]
+    was not found in [docs_tbl]. *)
 let rec embed_note
           ~(embed_depth : int)
           ~(max_depth : int)
@@ -115,10 +139,35 @@ let rec embed_note
       in
       Some (Cmarkit.Block.Blocks (blocks, block_meta)))
 
-(** Expand embed wikilinks in [doc].
-    [embed_depth] is the current transclusion depth (0 for the root doc).
-    [max_depth] is the inclusive limit: at [embed_depth >= max_depth] embeds
-    become fallback links instead. *)
+(** Walk a single document's AST and replace embed paragraphs with
+    transcluded content.
+
+    This is mutually recursive with {!embed_note}: [expand_doc] finds embed
+    wikilinks in the AST, and [embed_note] fetches + recursively expands the
+    target document, incrementing [embed_depth] at each level.
+
+    {b How it works:}
+
+    A cmarkit [Mapper] traverses every block in the document. For each
+    [Paragraph], we check whether its inline content is a single embed
+    wikilink (via {!extract_single_embed}). If so, [try_embed] dispatches
+    on the resolved target (stamped by the resolution pass):
+
+    - {b Cross-file} targets ([Note], [Heading], [Block]) delegate to
+      {!embed_note}, which looks up the target in [docs_tbl], recursively
+      expands it, and extracts the requested portion.
+
+    - {b Self-reference} targets ([Curr_file], [Curr_heading], [Curr_block])
+      use [embed_self], which extracts directly from [curr_doc]'s blocks
+      without recursive expansion (to avoid infinite loops — the depth guard
+      still applies). Unlike cross-file embeds, self-references don't need a
+      [docs_tbl] lookup since the document is already in hand.
+
+    - {b Non-embeddable} targets ([None], [Unresolved], [File]) return
+      [None], leaving the paragraph unchanged.
+
+    Non-paragraph blocks and paragraphs without a sole embed wikilink pass
+    through untouched. *)
 and expand_doc
       ~(embed_depth : int)
       ~(max_depth : int)
@@ -132,6 +181,10 @@ and expand_doc
         ~(curr_doc : Cmarkit.Doc.t)
     : Cmarkit.Block.t option
     =
+    (* Self-reference embedding: extracts from the current document directly.
+       Does not recursively expand the current doc (that would loop), but the
+       depth guard still prevents unbounded nesting when a self-embed is
+       encountered during recursive expansion of another note. *)
     let embed_self (extract : Cmarkit.Block.t list -> Cmarkit.Block.t list)
       : Cmarkit.Block.t option
       =
@@ -148,15 +201,19 @@ and expand_doc
         in
         Some (Cmarkit.Block.Blocks (blocks, block_meta)))
     in
+    (* Cross-file embedding: delegates to embed_note for lookup + recursion. *)
     let embed = embed_note ~embed_depth ~max_depth docs_tbl in
     match Cmarkit.Meta.find Resolve.resolved_key meta with
+    (* Non-embeddable: no target, unresolved, or non-markdown file *)
     | None | Some Resolve.Unresolved | Some (Resolve.File _) -> None
+    (* Self-references: extract from current doc *)
     | Some Resolve.Curr_file -> embed_self (fun blocks -> blocks)
     | Some (Resolve.Curr_heading { slug; _ }) ->
       embed_self (fun blocks -> Parse.Extract.get_heading_section blocks slug)
     | Some (Resolve.Curr_block { block_id }) ->
       embed_self (fun blocks ->
         Option.to_list (Parse.Extract.get_block_by_caret_id blocks block_id))
+    (* Cross-file references: look up in vault and recursively expand *)
     | Some (Resolve.Note { path }) -> embed path wl meta (fun blocks -> blocks)
     | Some (Resolve.Heading { path; slug; _ }) ->
       embed path wl meta (fun blocks -> Parse.Extract.get_heading_section blocks slug)
@@ -164,6 +221,8 @@ and expand_doc
       embed path wl meta (fun blocks ->
         Option.to_list (Parse.Extract.get_block_by_caret_id blocks block_id))
   in
+  (* The mapper only acts on Paragraph blocks — other block types cannot
+     contain embed wikilinks at the top level. *)
   let mapper =
     Cmarkit.Mapper.make
       ~block_ext_default:(fun _m b -> Some b)
