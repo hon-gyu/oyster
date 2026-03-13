@@ -261,7 +261,8 @@ let block (c : Cmarkit_renderer.context) : Block.t -> bool = function
        true
      | None -> false)
   | Parse.Frontmatter.Frontmatter y ->
-    C.string c (Parse.Frontmatter.to_html (Some y));
+    let inner = Parse.Frontmatter.to_html (Some y) in
+    C.string c (sprintf "<div class=\"frontmatter\">%s</div>\n" inner);
     true
   | Block.Blocks (blocks, meta) ->
     (match Meta.find Embed.embed_meta_key meta with
