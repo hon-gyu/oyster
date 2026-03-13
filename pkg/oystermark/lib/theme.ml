@@ -148,6 +148,39 @@ th, td {
 th { background: var(--bg-alt); }
 hr { border: none; border-top: 1px solid var(--border); margin: 2em 0; }
 img, video, iframe { max-width: 100%; border-radius: 6px; }
+/* Lightbox */
+.lightbox {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(0,0,0,0.3);
+  align-items: center;
+  justify-content: center;
+  cursor: zoom-out;
+}
+.lightbox.active { display: flex; }
+.lightbox img {
+  max-width: 90vw;
+  max-height: 90vh;
+  border-radius: 6px;
+  cursor: default;
+}
+.lightbox-close {
+  position: fixed;
+  top: 1rem;
+  right: 1rem;
+  background: none;
+  border: none;
+  color: #fff;
+  font-size: 2rem;
+  cursor: pointer;
+  z-index: 1001;
+  line-height: 1;
+  padding: 0.25em 0.5em;
+  opacity: 0.7;
+}
+.lightbox-close:hover { opacity: 1; }
 .frontmatter {
   background: var(--bg-alt);
   border: 1px solid var(--border);
@@ -363,10 +396,35 @@ let wrap ~(css : string) (page : page) : string =
 %{page.body}</main>
 </div>
 <footer></footer>
+<div class="lightbox" id="lightbox">
+<button class="lightbox-close" aria-label="Close">&times;</button>
+<img id="lightbox-img" src="" alt="">
+</div>
 <script>
 document.addEventListener("DOMContentLoaded", function() {
-  hljs.highlightAll();
-  renderMathInElement(document.body, {
+  /* Lightbox — runs first so it's not blocked by CDN script failures */
+  var lb = document.getElementById("lightbox");
+  var lbImg = document.getElementById("lightbox-img");
+  document.querySelectorAll("main a > img, main a > video").forEach(function(img) {
+    var link = img.closest("a");
+    if (!link) return;
+    link.addEventListener("click", function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      lbImg.src = img.src || link.href;
+      lbImg.alt = img.alt || "";
+      lb.classList.add("active");
+    });
+  });
+  lb.addEventListener("click", function(e) {
+    if (e.target !== lbImg) lb.classList.remove("active");
+  });
+  document.addEventListener("keydown", function(e) {
+    if (e.key === "Escape") lb.classList.remove("active");
+  });
+  /* Syntax highlighting & math */
+  if (typeof hljs !== "undefined") hljs.highlightAll();
+  if (typeof renderMathInElement !== "undefined") renderMathInElement(document.body, {
     delimiters: [
       {left: "$$", right: "$$", display: true},
       {left: "$", right: "$", display: false},
