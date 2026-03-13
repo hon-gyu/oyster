@@ -12,7 +12,6 @@ module Vault = Vault
 module Html = Html
 module Pipeline = Pipeline
 module Theme = Theme
-module Css = Css
 
 (** Build and render a vault through the pipeline.
 

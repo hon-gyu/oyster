@@ -97,7 +97,7 @@ let rec value_to_html (v : Yaml.value) : string =
 let to_html (fm : Yaml.value option) : string =
   match fm with
   | None | Some `Null -> ""
-  | Some v -> value_to_html v
+  | Some v -> "<div class=\"frontmatter\">" ^ value_to_html v ^ "</div>\n"
 ;;
 
 (** Extract the frontmatter value from a doc's top-level block, if present. *)

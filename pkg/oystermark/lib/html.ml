@@ -129,15 +129,14 @@ let render_wikilink (c : Cmarkit_renderer.context) (w : Wikilink.t) (meta : Meta
         (* Unknown embed type: render as a link *)
         let attrs =
           H.a_href href
-          :: (if is_unresolved meta then [ H.a_class [ Css.unresolved ] ] else [])
+          :: (if is_unresolved meta then [ H.a_class [ "unresolved" ] ] else [])
         in
         elt_to_string (H.a ~a:attrs [ H.txt display ])
     in
     C.string c s)
   else (
     let attrs =
-      H.a_href href
-      :: (if is_unresolved meta then [ H.a_class [ Css.unresolved ] ] else [])
+      H.a_href href :: (if is_unresolved meta then [ H.a_class [ "unresolved" ] ] else [])
     in
     C.string c (elt_to_string (H.a ~a:attrs [ H.txt display ])))
 ;;
@@ -150,8 +149,7 @@ let render_link (c : Cmarkit_renderer.context) (l : Inline.Link.t) (meta : Meta.
   | Some target ->
     let href = target_to_href target in
     let attrs =
-      H.a_href href
-      :: (if is_unresolved meta then [ H.a_class [ Css.unresolved ] ] else [])
+      H.a_href href :: (if is_unresolved meta then [ H.a_class [ "unresolved" ] ] else [])
     in
     (* Render inline children to a sub-buffer *)
     let buf = Buffer.create 128 in
@@ -212,11 +210,9 @@ let render_callout
   let body = Block.Block_quote.block bq in
   match callout.fold with
   | None ->
-    C.string
-      c
-      (sprintf "<div class=\"%s\" data-callout=\"%s\">\n" Css.callout callout.kind);
-    C.string c (sprintf "<div class=\"%s\">%s</div>\n" Css.callout_title callout.title);
-    C.string c (sprintf "<div class=\"%s\">\n" Css.callout_content);
+    C.string c (sprintf "<div class=\"callout\" data-callout=\"%s\">\n" callout.kind);
+    C.string c (sprintf "<div class=\"callout-title\">%s</div>\n" callout.title);
+    C.string c "<div class=\"callout-content\">\n";
     C.block c body;
     C.string c "</div>\n</div>\n"
   | Some fold ->
@@ -228,14 +224,11 @@ let render_callout
     C.string
       c
       (sprintf
-         "<details class=\"%s\" data-callout=\"%s\"%s>\n"
-         Css.callout
+         "<details class=\"callout\" data-callout=\"%s\"%s>\n"
          callout.kind
          open_attr);
-    C.string
-      c
-      (sprintf "<summary class=\"%s\">%s</summary>\n" Css.callout_title callout.title);
-    C.string c (sprintf "<div class=\"%s\">\n" Css.callout_content);
+    C.string c (sprintf "<summary class=\"callout-title\">%s</summary>\n" callout.title);
+    C.string c "<div class=\"callout-content\">\n";
     C.block c body;
     C.string c "</div>\n</details>\n"
 ;;
@@ -268,14 +261,13 @@ let block (c : Cmarkit_renderer.context) : Block.t -> bool = function
        true
      | None -> false)
   | Parse.Frontmatter.Frontmatter y ->
-    let inner = Parse.Frontmatter.to_html (Some y) in
-    C.string c (sprintf "<div class=\"%s\">%s</div>\n" Css.frontmatter inner);
+    C.string c (Parse.Frontmatter.to_html (Some y));
     true
   | Block.Blocks (blocks, meta) ->
     (match Meta.find Embed.embed_meta_key meta with
      | None -> false
      | Some { depth; _ } ->
-       C.string c (sprintf "<div class=\"%s\" data-embed-depth=\"%d\">\n" Css.embed depth);
+       C.string c (sprintf "<div class=\"embed\" data-embed-depth=\"%d\">\n" depth);
        List.iter blocks ~f:(C.block c);
        C.string c "</div>\n";
        true)

@@ -413,7 +413,7 @@ module Backlink = struct
           let src_name : string = strip_md_ext (Filename.basename src_path) in
           let block_items : string =
             List.map blocks ~f:(fun block_html ->
-              spf {|<li class="%s">%s</li>|} Css.backlink_context block_html)
+              spf {|<li class="backlink-context">%s</li>|} block_html)
             |> String.concat ~sep:"\n"
           in
           spf
@@ -425,12 +425,11 @@ module Backlink = struct
             block_items)
       in
       spf
-        {|<div class="%s"><h2>Backlinks</h2>
+        {|<div class="backlinks"><h2>Backlinks</h2>
   <ul>
   %s
   </ul>
   </div>|}
-        Css.backlinks
         (String.concat ~sep:"\n" items)
   ;;
 
@@ -548,7 +547,7 @@ end
     Does not include the current page itself.
     Example: url_path="/foo/bar/" → Home / foo *)
 let nav_of_url_path ?(home_path = "home.md") (url_path : string) : html =
-  let sep : string = spf {|<span class="%s">/</span>|} Css.sep in
+  let sep : string = {|<span class="sep">/</span>|} in
   let home_href = Html.note_url_path home_path in
   let home : string = {%string|<a href="%{home_href}">Home</a>|} in
   match url_path with
@@ -569,7 +568,7 @@ let nav_of_url_path ?(home_path = "home.md") (url_path : string) : html =
         in
         spf {|<a href="%s">%s</a>|} href name)
     in
-    spf {|<nav class="%s">%s</nav>|} Css.breadcrumb (String.concat ~sep (home :: crumbs))
+    spf {|<nav class="breadcrumb">%s</nav>|} (String.concat ~sep (home :: crumbs))
 ;;
 
 let backlinks = Backlink.backlinks
