@@ -28,7 +28,6 @@
 
 open Core
 
-
 module type Spec = sig
   (** Frontmatter will not be embedded: {!doc_blocks} strips it before
       extraction. *)
@@ -74,9 +73,9 @@ let non_fm_blocks (doc : Cmarkit.Doc.t) : Cmarkit.Block.t list =
 (** The two kinds of inline that can trigger block-level transclusion. *)
 type embed_source =
   | Wikilink_embed of Parse.Wikilink.t * Cmarkit.Meta.t
-      (** [!\[\[NOTE\]\]] — carries the wikilink for {!fallback_block}. *)
+  (** [!\[\[NOTE\]\]] — carries the wikilink for {!fallback_block}. *)
   | Image_embed of Cmarkit.Meta.t
-      (** [!\[alt\](note.md)] — only when the resolved target is a note. *)
+  (** [!\[alt\](note.md)] — only when the resolved target is a note. *)
 
 (** If [inline] is a single embed source (embed wikilink or image link
     pointing to a note), return the classified source.  cmarkit wraps a
@@ -88,9 +87,13 @@ let extract_embed_source (inline : Cmarkit.Inline.t) : embed_source option =
       Some (Wikilink_embed (w, meta))
     | Cmarkit.Inline.Image (_, meta) ->
       (match Cmarkit.Meta.find Resolve.resolved_key meta with
-       | Some (Resolve.Note _ | Resolve.Heading _ | Resolve.Block _
-              | Resolve.Curr_file | Resolve.Curr_heading _ | Resolve.Curr_block _) ->
-         Some (Image_embed meta)
+       | Some
+           ( Resolve.Note _
+           | Resolve.Heading _
+           | Resolve.Block _
+           | Resolve.Curr_file
+           | Resolve.Curr_heading _
+           | Resolve.Curr_block _ ) -> Some (Image_embed meta)
        | _ -> None)
     | _ -> None
   in
@@ -250,10 +253,10 @@ and expand_doc
       (doc : Cmarkit.Doc.t)
   : Cmarkit.Doc.t
   =
-  (** Dispatch an embed based on the resolved target in [meta].
-      [depth_fallback] is the block to use when [embed_depth >= max_depth]:
-      for wikilinks this is a {!fallback_block}, for images it is the
-      original paragraph. *)
+  (* Dispatch an embed based on the resolved target in [meta].
+     [depth_fallback] is the block to use when [embed_depth >= max_depth]:
+     for wikilinks this is a {!fallback_block}, for images it is the
+     original paragraph. *)
   let try_embed
         (meta : Cmarkit.Meta.t)
         ~(depth_fallback : Cmarkit.Block.t)
@@ -295,31 +298,21 @@ and expand_doc
     (* Non-embeddable: no target, unresolved, or non-markdown file *)
     | None | Some Resolve.Unresolved | Some (Resolve.File _) -> None
     (* Self-references: extract from current doc *)
-    | Some Resolve.Curr_file ->
-      embed_self ~fragment:None (fun blocks -> blocks)
+    | Some Resolve.Curr_file -> embed_self ~fragment:None (fun blocks -> blocks)
     | Some (Resolve.Curr_heading { heading; slug; _ }) ->
-      embed_self
-        ~fragment:(Some (Parse.Wikilink.Heading [ heading ]))
-        (fun blocks -> Parse.Extract.get_heading_section blocks slug)
+      embed_self ~fragment:(Some (Parse.Wikilink.Heading [ heading ])) (fun blocks ->
+        Parse.Extract.get_heading_section blocks slug)
     | Some (Resolve.Curr_block { block_id }) ->
-      embed_self
-        ~fragment:(Some (Parse.Wikilink.Block_ref block_id))
-        (fun blocks ->
-          Option.to_list (Parse.Extract.get_block_by_caret_id blocks block_id))
+      embed_self ~fragment:(Some (Parse.Wikilink.Block_ref block_id)) (fun blocks ->
+        Option.to_list (Parse.Extract.get_block_by_caret_id blocks block_id))
     (* Cross-file references: look up in vault and recursively expand *)
-    | Some (Resolve.Note { path }) ->
-      embed ~fragment:None path (fun blocks -> blocks)
+    | Some (Resolve.Note { path }) -> embed ~fragment:None path (fun blocks -> blocks)
     | Some (Resolve.Heading { path; heading; slug; _ }) ->
-      embed
-        ~fragment:(Some (Parse.Wikilink.Heading [ heading ]))
-        path
-        (fun blocks -> Parse.Extract.get_heading_section blocks slug)
+      embed ~fragment:(Some (Parse.Wikilink.Heading [ heading ])) path (fun blocks ->
+        Parse.Extract.get_heading_section blocks slug)
     | Some (Resolve.Block { path; block_id }) ->
-      embed
-        ~fragment:(Some (Parse.Wikilink.Block_ref block_id))
-        path
-        (fun blocks ->
-          Option.to_list (Parse.Extract.get_block_by_caret_id blocks block_id))
+      embed ~fragment:(Some (Parse.Wikilink.Block_ref block_id)) path (fun blocks ->
+        Option.to_list (Parse.Extract.get_block_by_caret_id blocks block_id))
   in
   (* The mapper acts on Paragraph blocks, checking for embed wikilinks and
      image links pointing to notes. *)
@@ -390,9 +383,7 @@ let reverse_embed_doc (doc : Cmarkit.Doc.t) : Cmarkit.Doc.t =
              let wl : Parse.Wikilink.t =
                { target; fragment; display = None; embed = true }
              in
-             let inline =
-               Parse.Wikilink.Ext_wikilink (wl, Cmarkit.Meta.none)
-             in
+             let inline = Parse.Wikilink.Ext_wikilink (wl, Cmarkit.Meta.none) in
              let p =
                Cmarkit.Block.Paragraph.make
                  (Cmarkit.Inline.Inlines ([ inline ], Cmarkit.Meta.none))
@@ -405,7 +396,9 @@ let reverse_embed_doc (doc : Cmarkit.Doc.t) : Cmarkit.Doc.t =
 ;;
 
 module For_test = struct
-  let parse_blocks (md : string) : Cmarkit.Block.t list = non_fm_blocks (Parse.of_string md)
+  let parse_blocks (md : string) : Cmarkit.Block.t list =
+    non_fm_blocks (Parse.of_string md)
+  ;;
 
   let doc_of_blocks (blocks : Cmarkit.Block.t list) : Cmarkit.Doc.t =
     Cmarkit.Doc.make (Cmarkit.Block.Blocks (blocks, Cmarkit.Meta.none))

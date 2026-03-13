@@ -2,5 +2,7 @@
  (name oystermark)
  (libraries parse vault cmarkit core tyxml yaml)
  (inline_tests)
+ (preprocessor_deps
+  (file static/theme.css))
  (preprocess
-  (pps ppx_jane ppx_string)))
+  (pps ppx_jane ppx_string ppx_blob)))
