@@ -199,8 +199,6 @@ let inline (c : Cmarkit_renderer.context) : Inline.t -> bool = function
   | _ -> false
 ;;
 
-(** Render a paragraph with block-id. The ^blockid text stays visible
-    (it's part of the inline content). We add an id to the <p> for linking. *)
 let render_callout
       (c : Cmarkit_renderer.context)
       (bq : Block.Block_quote.t)
@@ -252,6 +250,8 @@ let block (c : Cmarkit_renderer.context) : Block.t -> bool = function
        true
      | None -> false)
   | Block.Paragraph (p, meta) ->
+    (* Render a paragraph with block-id. The ^blockid text stays visible
+        (it's part of the inline content). We add an id to the <p> for linking. *)
     (match Meta.find Block_id.meta_key meta with
      | Some (block_id : Block_id.t) ->
        let id = "^" ^ block_id.id in
