@@ -141,8 +141,7 @@ let resolve (link_ref : Link_ref.t) (curr_file : string) (index : Index.t) : tar
        (match current_entry with
         | Some entry ->
           (match resolve_headings entry.headings hs with
-           | Some h ->
-             Curr_heading { heading = h.text; level = h.level; slug = h.slug }
+           | Some h -> Curr_heading { heading = h.text; level = h.level; slug = h.slug }
            | None -> Curr_file)
         | None -> Curr_file)
      | Some (Link_ref.Block_ref bid) ->
@@ -165,11 +164,7 @@ let resolve (link_ref : Link_ref.t) (curr_file : string) (index : Index.t) : tar
           (match resolve_headings file.headings hs with
            | Some h ->
              Heading
-               { path = file.rel_path
-               ; heading = h.text
-               ; level = h.level
-               ; slug = h.slug
-               }
+               { path = file.rel_path; heading = h.text; level = h.level; slug = h.slug }
            | None -> file_or_note file.rel_path)
         | Some (Link_ref.Block_ref bid) ->
           if List.exists file.block_ids ~f:(String.equal bid)

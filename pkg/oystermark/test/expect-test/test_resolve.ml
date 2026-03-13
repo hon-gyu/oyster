@@ -27,7 +27,10 @@ let test_index : Index.t =
             [ { text = "Some level 2 title"; level = 2; slug = "some-level-2-title" }
             ; { text = "L4"; level = 4; slug = "l4" }
             ; { text = "Level 3 title"; level = 3; slug = "level-3-title" }
-            ; { text = "Another level 2 title"; level = 2; slug = "another-level-2-title" }
+            ; { text = "Another level 2 title"
+              ; level = 2
+              ; slug = "another-level-2-title"
+              }
             ]
         ; block_ids = []
         }

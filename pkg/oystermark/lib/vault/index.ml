@@ -6,7 +6,8 @@ open Parse
 type heading_entry =
   { text : string
   ; level : int
-  ; slug : string (** GitHub-style anchor: lowercase, punctuation stripped, deduped with [-1], [-2], etc. *)
+  ; slug : string
+    (** GitHub-style anchor: lowercase, punctuation stripped, deduped with [-1], [-2], etc. *)
   }
 
 type file_entry =

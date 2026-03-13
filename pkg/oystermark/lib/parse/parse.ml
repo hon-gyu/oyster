@@ -172,7 +172,6 @@ Second paragraph text ^abc123|}
   in
   render_block (Extract.get_block_by_caret_id [ Cmarkit.Doc.block doc1 ] "abc123");
   [%expect {| Second paragraph text ^abc123 |}];
-
   (* Case 2: standalone block ID referencing previous block (blockquote) *)
   let doc2 =
     of_string
@@ -184,14 +183,15 @@ Second paragraph text ^abc123|}
   in
   render_block (Extract.get_block_by_caret_id [ Cmarkit.Doc.block doc2 ] "bq001");
   [%expect {| > A blockquote here. |}];
-
   (* Case 3: not found *)
-  let doc3 = of_string {|
+  let doc3 =
+    of_string
+      {|
 Some text ^exists
-|} in
+|}
+  in
   render_block (Extract.get_block_by_caret_id [ Cmarkit.Doc.block doc3 ] "nope");
   [%expect {| <none> |}];
-
   (* Case 4: standalone block ID referencing previous list *)
   let doc4 =
     of_string
@@ -203,11 +203,11 @@ Some text ^exists
 |}
   in
   render_block (Extract.get_block_by_caret_id [ Cmarkit.Doc.block doc4 ] "lst001");
-  [%expect {|
+  [%expect
+    {|
     - Item one
     - Item two
     |}];
-
   (* Case 5: block ID inside a list item *)
   let doc5 =
     of_string
@@ -220,7 +220,8 @@ Some text ^exists
   render_block (Extract.get_block_by_caret_id [ Cmarkit.Doc.block doc5 ] "firstline");
   [%expect {| a nested list ^firstline |}];
   render_block (Extract.get_block_by_caret_id [ Cmarkit.Doc.block doc5 ] "inneritem");
-  [%expect {|
+  [%expect
+    {|
     item
     ^inneritem
     |}]

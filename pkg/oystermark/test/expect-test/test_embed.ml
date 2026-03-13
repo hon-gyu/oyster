@@ -123,7 +123,8 @@ let%expect_test "self-reference: embed current heading" =
     ~max_depth:2
     [ "a.md", "## Intro\n\nSome text.\n\n## Section\n\nContent.\n\n![[#Intro]]" ]
     "a.md";
-  [%expect {|
+  [%expect
+    {|
     <h2 id="intro">Intro</h2>
     <p>Some text.</p>
     <h2 id="section">Section</h2>
@@ -140,7 +141,8 @@ let%expect_test "self-reference: embed current block" =
     ~max_depth:2
     [ "a.md", "Target paragraph. ^myid\n\nOther text.\n\n![[#^myid]]" ]
     "a.md";
-  [%expect {|
+  [%expect
+    {|
     <p id="^myid">Target paragraph. ^myid</p>
     <p>Other text.</p>
     <div class="embed" data-embed-depth="1">
@@ -151,7 +153,8 @@ let%expect_test "self-reference: embed current block" =
 
 let%expect_test "self-reference: embed current file" =
   render ~max_depth:2 [ "a.md", "Hello.\n\n![[]]" ] "a.md";
-  [%expect {|
+  [%expect
+    {|
     <p>Hello.</p>
     <div class="embed" data-embed-depth="1">
     <p>Hello.</p>
@@ -211,9 +214,7 @@ let%expect_test "image embed: non-note file is NOT expanded" =
 ;;
 
 let%expect_test "image embed: nested — image inside wikilink embed" =
-  render
-    [ "a.md", "![[b]]"; "b.md", "![](c.md)"; "c.md", "Inner content." ]
-    "a.md";
+  render [ "a.md", "![[b]]"; "b.md", "![](c.md)"; "c.md", "Inner content." ] "a.md";
   [%expect
     {|
     <div class="embed" data-embed-depth="1">
@@ -227,10 +228,7 @@ let%expect_test "image embed: nested — image inside wikilink embed" =
 (* ── reverse_embed ─────────────────────────────────────────────────── *)
 
 (** Expand then reverse: the reversed doc should reproduce the embed syntax. *)
-let render_reversed
-      ?(max_depth = 5)
-      (files : (string * string) list)
-      (target : string)
+let render_reversed ?(max_depth = 5) (files : (string * string) list) (target : string)
   : unit
   =
   let docs = List.map files ~f:(fun (path, content) -> path, Parse.of_string content) in
@@ -265,7 +263,8 @@ let%expect_test "reverse_embed: block ref" =
 
 let%expect_test "reverse_embed: self-reference produces explicit path" =
   render_reversed ~max_depth:2 [ "a.md", "Hello.\n\n![[]]" ] "a.md";
-  [%expect {|
+  [%expect
+    {|
     Hello.
 
     ![[a]]

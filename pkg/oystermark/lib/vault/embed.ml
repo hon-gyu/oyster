@@ -60,7 +60,7 @@ let embed_meta_key : embed_meta Cmarkit.Meta.key = Cmarkit.Meta.key ()
     When the doc's top block is a [Block.Blocks] carrying {!embed_meta}, the
     wrapper is preserved so that downstream consumers (rendering, further
     embedding) see the transclusion boundary. *)
-let doc_blocks (doc : Cmarkit.Doc.t) : Cmarkit.Block.t list =
+let non_fm_blocks (doc : Cmarkit.Doc.t) : Cmarkit.Block.t list =
   match Cmarkit.Doc.block doc with
   | Cmarkit.Block.Blocks (_, meta) as b
     when Option.is_some (Cmarkit.Meta.find embed_meta_key meta) -> [ b ]
@@ -191,7 +191,7 @@ let rec embed_note
       let expanded =
         expand_doc ~embed_depth:new_depth ~max_depth ~curr_path:path docs_tbl target_doc
       in
-      let blocks = extract (doc_blocks expanded) in
+      let blocks = extract (non_fm_blocks expanded) in
       let block_meta =
         Cmarkit.Meta.add
           embed_meta_key
@@ -273,7 +273,7 @@ and expand_doc
       then Some depth_fallback
       else (
         let new_depth = embed_depth + 1 in
-        let blocks_to_embed = extract (doc_blocks curr_doc) in
+        let blocks_to_embed = extract (non_fm_blocks curr_doc) in
         let block_meta =
           Cmarkit.Meta.add
             embed_meta_key
@@ -405,7 +405,7 @@ let reverse_embed_doc (doc : Cmarkit.Doc.t) : Cmarkit.Doc.t =
 ;;
 
 module For_test = struct
-  let parse_blocks (md : string) : Cmarkit.Block.t list = doc_blocks (Parse.of_string md)
+  let parse_blocks (md : string) : Cmarkit.Block.t list = non_fm_blocks (Parse.of_string md)
 
   let doc_of_blocks (blocks : Cmarkit.Block.t list) : Cmarkit.Doc.t =
     Cmarkit.Doc.make (Cmarkit.Block.Blocks (blocks, Cmarkit.Meta.none))
