@@ -33,7 +33,7 @@ let to_commonmark (wl : t) : string =
    | Some (Heading frag) ->
      Buffer.add_string buf "#";
      Buffer.add_string buf (String.concat ~sep:"#" frag)
-   | Some (Block_ref frag) -> Buffer.add_string buf ("^" ^ frag));
+   | Some (Block_ref frag) -> Buffer.add_string buf ("#^" ^ frag));
   (* Display *)
   (match wl.display with
    | None -> ()
@@ -61,7 +61,7 @@ let%expect_test "to_commonmark" =
     }
   in
   print_endline (to_commonmark wl);
-  [%expect {| [[foo^block-id|quux]] |}]
+  [%expect {| [[foo#^block-id|quux]] |}]
 ;;
 
 (** Inline extension constructor for wikilinks. *)
