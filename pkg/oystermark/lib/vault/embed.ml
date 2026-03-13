@@ -41,13 +41,17 @@ end
 
 (** Metadata attached to the {!Cmarkit.Block.Blocks} node that wraps
     transcluded content. Consumers (e.g. the HTML renderer) can use this to
-    style embedded blocks differently. *)
+    style embedded blocks differently, and {!reverse_embed_doc} uses it to
+    reconstruct the original embed syntax. *)
 type embed_meta =
   { depth : int
     (** Transclusion depth: 1 for a direct embed, 2 for an embed within an
       embed, etc. *)
   ; source_path : string
     (** Vault-relative path of the note whose blocks were transcluded. *)
+  ; fragment : Parse.Wikilink.fragment option
+    (** The heading or block-ref fragment, if the embed targeted a sub-section
+        rather than the full note. *)
   }
 
 let embed_meta_key : embed_meta Cmarkit.Meta.key = Cmarkit.Meta.key ()
@@ -67,47 +71,42 @@ let doc_blocks (doc : Cmarkit.Doc.t) : Cmarkit.Block.t list =
   | other -> [ other ]
 ;;
 
-(** If [inline] is a single embed wikilink, return it.  cmarkit wraps a
-    paragraph's inline content in [Inlines([...], _)] — we unwrap that. *)
-let extract_single_embed (inline : Cmarkit.Inline.t)
-  : (Parse.Wikilink.t * Cmarkit.Meta.t) option
-  =
-  match inline with
-  | Parse.Wikilink.Ext_wikilink (w, meta) when w.embed -> Some (w, meta)
-  | Cmarkit.Inline.Inlines ([ Parse.Wikilink.Ext_wikilink (w, meta) ], _) when w.embed ->
-    Some (w, meta)
-  | _ -> None
-;;
+(** The two kinds of inline that can trigger block-level transclusion. *)
+type embed_source =
+  | Wikilink_embed of Parse.Wikilink.t * Cmarkit.Meta.t
+      (** [!\[\[NOTE\]\]] — carries the wikilink for {!fallback_block}. *)
+  | Image_embed of Cmarkit.Meta.t
+      (** [!\[alt\](note.md)] — only when the resolved target is a note. *)
 
-(** If [inline] is a single markdown image whose resolved target is a note
-    (i.e. [.md] file), return its metadata. Non-note images (PNG, etc.) return
-    [None] so the HTML renderer handles them instead. *)
-let extract_single_image_embed (inline : Cmarkit.Inline.t)
-  : Cmarkit.Meta.t option
-  =
-  let check (i : Cmarkit.Inline.t) : Cmarkit.Meta.t option =
+(** If [inline] is a single embed source (embed wikilink or image link
+    pointing to a note), return the classified source.  cmarkit wraps a
+    paragraph's inline content in [Inlines(\[...\], _)] — we unwrap that. *)
+let extract_embed_source (inline : Cmarkit.Inline.t) : embed_source option =
+  let check_one (i : Cmarkit.Inline.t) : embed_source option =
     match i with
+    | Parse.Wikilink.Ext_wikilink (w, meta) when w.embed ->
+      Some (Wikilink_embed (w, meta))
     | Cmarkit.Inline.Image (_, meta) ->
       (match Cmarkit.Meta.find Resolve.resolved_key meta with
        | Some (Resolve.Note _ | Resolve.Heading _ | Resolve.Block _
               | Resolve.Curr_file | Resolve.Curr_heading _ | Resolve.Curr_block _) ->
-         Some meta
+         Some (Image_embed meta)
        | _ -> None)
     | _ -> None
   in
   match inline with
-  | Cmarkit.Inline.Inlines ([ i ], _) -> check i
-  | i -> check i
+  | Cmarkit.Inline.Inlines ([ i ], _) -> check_one i
+  | i -> check_one i
 ;;
 
 (** Test whether a block is an embed-expandable paragraph: a paragraph
-    containing a single embed wikilink, where every sibling in [siblings]
-    is either a blank line or absent.  An embed can only replace a paragraph
-    that is effectively the sole content of its container. *)
+    containing a single embed source (wikilink or image), where every sibling
+    in [siblings] is either a blank line or absent.  An embed can only replace
+    a paragraph that is effectively the sole content of its container. *)
 let is_expandable_embed_paragraph
       (block : Cmarkit.Block.t)
       ~(siblings : Cmarkit.Block.t list)
-  : (Parse.Wikilink.t * Cmarkit.Meta.t) option
+  : embed_source option
   =
   let all_siblings_blank : bool =
     List.for_all siblings ~f:(fun b ->
@@ -117,7 +116,7 @@ let is_expandable_embed_paragraph
   in
   match block with
   | Cmarkit.Block.Paragraph (p, _) when all_siblings_blank ->
-    extract_single_embed (Cmarkit.Block.Paragraph.inline p)
+    extract_embed_source (Cmarkit.Block.Paragraph.inline p)
   | _ -> None
 ;;
 
@@ -176,6 +175,7 @@ let rec embed_note
           ~(embed_depth : int)
           ~(max_depth : int)
           ~(depth_fallback : Cmarkit.Block.t)
+          ~(fragment : Parse.Wikilink.fragment option)
           (docs_tbl : (string, Cmarkit.Doc.t) Hashtbl.t)
           (path : string)
           (extract : Cmarkit.Block.t list -> Cmarkit.Block.t list)
@@ -195,7 +195,7 @@ let rec embed_note
       let block_meta =
         Cmarkit.Meta.add
           embed_meta_key
-          { depth = new_depth; source_path = path }
+          { depth = new_depth; source_path = path; fragment }
           Cmarkit.Meta.none
       in
       Some (Cmarkit.Block.Blocks (blocks, block_meta)))
@@ -264,7 +264,9 @@ and expand_doc
        Does not recursively expand the current doc (that would loop), but the
        depth guard still prevents unbounded nesting when a self-embed is
        encountered during recursive expansion of another note. *)
-    let embed_self (extract : Cmarkit.Block.t list -> Cmarkit.Block.t list)
+    let embed_self
+          ~(fragment : Parse.Wikilink.fragment option)
+          (extract : Cmarkit.Block.t list -> Cmarkit.Block.t list)
       : Cmarkit.Block.t option
       =
       if embed_depth >= max_depth
@@ -275,37 +277,52 @@ and expand_doc
         let block_meta =
           Cmarkit.Meta.add
             embed_meta_key
-            { depth = new_depth; source_path = curr_path }
+            { depth = new_depth; source_path = curr_path; fragment }
             Cmarkit.Meta.none
         in
         Some (Cmarkit.Block.Blocks (blocks_to_embed, block_meta)))
     in
     (* Cross-file embedding: delegates to embed_note for lookup + recursion. *)
-    let embed (path : string) (extract : Cmarkit.Block.t list -> Cmarkit.Block.t list)
+    let embed
+          ~(fragment : Parse.Wikilink.fragment option)
+          (path : string)
+          (extract : Cmarkit.Block.t list -> Cmarkit.Block.t list)
       : Cmarkit.Block.t option
       =
-      embed_note ~embed_depth ~max_depth ~depth_fallback docs_tbl path extract
+      embed_note ~embed_depth ~max_depth ~depth_fallback ~fragment docs_tbl path extract
     in
     match Cmarkit.Meta.find Resolve.resolved_key meta with
     (* Non-embeddable: no target, unresolved, or non-markdown file *)
     | None | Some Resolve.Unresolved | Some (Resolve.File _) -> None
     (* Self-references: extract from current doc *)
-    | Some Resolve.Curr_file -> embed_self (fun blocks -> blocks)
-    | Some (Resolve.Curr_heading { slug; _ }) ->
-      embed_self (fun blocks -> Parse.Extract.get_heading_section blocks slug)
+    | Some Resolve.Curr_file ->
+      embed_self ~fragment:None (fun blocks -> blocks)
+    | Some (Resolve.Curr_heading { heading; slug; _ }) ->
+      embed_self
+        ~fragment:(Some (Parse.Wikilink.Heading [ heading ]))
+        (fun blocks -> Parse.Extract.get_heading_section blocks slug)
     | Some (Resolve.Curr_block { block_id }) ->
-      embed_self (fun blocks ->
-        Option.to_list (Parse.Extract.get_block_by_caret_id blocks block_id))
+      embed_self
+        ~fragment:(Some (Parse.Wikilink.Block_ref block_id))
+        (fun blocks ->
+          Option.to_list (Parse.Extract.get_block_by_caret_id blocks block_id))
     (* Cross-file references: look up in vault and recursively expand *)
-    | Some (Resolve.Note { path }) -> embed path (fun blocks -> blocks)
-    | Some (Resolve.Heading { path; slug; _ }) ->
-      embed path (fun blocks -> Parse.Extract.get_heading_section blocks slug)
+    | Some (Resolve.Note { path }) ->
+      embed ~fragment:None path (fun blocks -> blocks)
+    | Some (Resolve.Heading { path; heading; slug; _ }) ->
+      embed
+        ~fragment:(Some (Parse.Wikilink.Heading [ heading ]))
+        path
+        (fun blocks -> Parse.Extract.get_heading_section blocks slug)
     | Some (Resolve.Block { path; block_id }) ->
-      embed path (fun blocks ->
-        Option.to_list (Parse.Extract.get_block_by_caret_id blocks block_id))
+      embed
+        ~fragment:(Some (Parse.Wikilink.Block_ref block_id))
+        path
+        (fun blocks ->
+          Option.to_list (Parse.Extract.get_block_by_caret_id blocks block_id))
   in
-  (* The mapper acts on Paragraph blocks, checking for embed wikilinks first,
-     then for image links pointing to notes. *)
+  (* The mapper acts on Paragraph blocks, checking for embed wikilinks and
+     image links pointing to notes. *)
   let mapper =
     Cmarkit.Mapper.make
       ~block_ext_default:(fun _m b -> Some b)
@@ -313,19 +330,16 @@ and expand_doc
       ~block:(fun _mapper block ->
         match block with
         | Cmarkit.Block.Paragraph (p, _) ->
-          let inline = Cmarkit.Block.Paragraph.inline p in
-          (match extract_single_embed inline with
-           | Some (wl, wl_meta) ->
-             let depth_fallback = fallback_block wl wl_meta in
-             (match try_embed wl_meta ~depth_fallback ~curr_doc:doc with
+          (match extract_embed_source (Cmarkit.Block.Paragraph.inline p) with
+           | None -> Cmarkit.Mapper.default
+           | Some source ->
+             let meta, depth_fallback =
+               match source with
+               | Wikilink_embed (wl, wl_meta) -> wl_meta, fallback_block wl wl_meta
+               | Image_embed meta -> meta, block
+             in
+             (match try_embed meta ~depth_fallback ~curr_doc:doc with
               | Some spliced -> Cmarkit.Mapper.ret spliced
-              | None -> Cmarkit.Mapper.default)
-           | None ->
-             (match extract_single_image_embed inline with
-              | Some meta ->
-                (match try_embed meta ~depth_fallback:block ~curr_doc:doc with
-                 | Some spliced -> Cmarkit.Mapper.ret spliced
-                 | None -> Cmarkit.Mapper.default)
               | None -> Cmarkit.Mapper.default))
         | _ -> Cmarkit.Mapper.default)
       ()
@@ -343,6 +357,51 @@ let expand_docs ?(max_depth = 5) (docs : (string * Cmarkit.Doc.t) list)
   let docs_tbl = Hashtbl.of_alist_exn (module String) docs in
   List.map docs ~f:(fun (rel_path, doc) ->
     rel_path, expand_doc ~embed_depth:0 ~max_depth ~curr_path:rel_path docs_tbl doc)
+;;
+
+(** Reverse transclusion: replace each [Block.Blocks] carrying {!embed_meta}
+    with a paragraph containing an embed wikilink [!\[\[source_path#fragment\]\]].
+
+    This restores the original embedding syntax (up to the difference between
+    wikilink and commonmark inline link, as noted in {!Spec.reverse_embed}).
+
+    The [.md] extension is stripped from [source_path] to produce idiomatic
+    wikilink targets.  Nested embeds are reversed recursively — innermost
+    first, since the mapper walks depth-first. *)
+let reverse_embed_doc (doc : Cmarkit.Doc.t) : Cmarkit.Doc.t =
+  let strip_md (path : string) : string =
+    match String.chop_suffix path ~suffix:".md" with
+    | Some s -> s
+    | None -> path
+  in
+  let mapper =
+    Cmarkit.Mapper.make
+      ~block_ext_default:(fun _m b -> Some b)
+      ~inline_ext_default:(fun _m i -> Some i)
+      ~block:(fun _mapper block ->
+        match block with
+        | Cmarkit.Block.Blocks (_, meta) ->
+          (match Cmarkit.Meta.find embed_meta_key meta with
+           | None -> Cmarkit.Mapper.default
+           | Some { source_path; fragment; _ } ->
+             let target =
+               if String.is_empty source_path then None else Some (strip_md source_path)
+             in
+             let wl : Parse.Wikilink.t =
+               { target; fragment; display = None; embed = true }
+             in
+             let inline =
+               Parse.Wikilink.Ext_wikilink (wl, Cmarkit.Meta.none)
+             in
+             let p =
+               Cmarkit.Block.Paragraph.make
+                 (Cmarkit.Inline.Inlines ([ inline ], Cmarkit.Meta.none))
+             in
+             Cmarkit.Mapper.ret (Cmarkit.Block.Paragraph (p, Cmarkit.Meta.none)))
+        | _ -> Cmarkit.Mapper.default)
+      ()
+  in
+  Cmarkit.Mapper.map_doc mapper doc
 ;;
 
 module For_test = struct

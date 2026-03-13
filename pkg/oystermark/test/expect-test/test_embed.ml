@@ -223,3 +223,63 @@ let%expect_test "image embed: nested — image inside wikilink embed" =
     </div>
     |}]
 ;;
+
+(* ── reverse_embed ─────────────────────────────────────────────────── *)
+
+(** Expand then reverse: the reversed doc should reproduce the embed syntax. *)
+let render_reversed
+      ?(max_depth = 5)
+      (files : (string * string) list)
+      (target : string)
+  : unit
+  =
+  let docs = List.map files ~f:(fun (path, content) -> path, Parse.of_string content) in
+  let index = Vault.build_index ~md_docs:docs ~other_files:[] ~dirs:[] in
+  let resolved = Vault.Resolve.resolve_docs docs index in
+  let expanded = Vault.Embed.expand_docs ~max_depth resolved in
+  let doc = List.Assoc.find_exn expanded ~equal:String.equal target in
+  let reversed = Vault.Embed.reverse_embed_doc doc in
+  print_string (Parse.commonmark_of_doc reversed)
+;;
+
+let%expect_test "reverse_embed: full note" =
+  render_reversed [ "a.md", "![[b]]"; "b.md", "Hello." ] "a.md";
+  [%expect {| ![[b]] |}]
+;;
+
+let%expect_test "reverse_embed: heading section" =
+  render_reversed
+    [ "a.md", "![[b#Sec]]"
+    ; "b.md", "Intro.\n\n## Sec\n\nContent.\n\n## Other\n\nNot this."
+    ]
+    "a.md";
+  [%expect {| ![[b#Sec]] |}]
+;;
+
+let%expect_test "reverse_embed: block ref" =
+  render_reversed
+    [ "a.md", "![[b#^myblock]]"; "b.md", "First.\n\nTarget. ^myblock\n\nAfter." ]
+    "a.md";
+  [%expect {| ![[b#^myblock]] |}]
+;;
+
+let%expect_test "reverse_embed: self-reference produces explicit path" =
+  render_reversed ~max_depth:2 [ "a.md", "Hello.\n\n![[]]" ] "a.md";
+  [%expect {|
+    Hello.
+
+    ![[a]]
+    |}]
+;;
+
+let%expect_test "reverse_embed: nested embeds reversed recursively" =
+  render_reversed
+    [ "a.md", "![[b]]"; "b.md", "B text.\n\n![[c]]"; "c.md", "C text." ]
+    "a.md";
+  [%expect {| ![[b]] |}]
+;;
+
+let%expect_test "reverse_embed: image embed reversed to wikilink" =
+  render_reversed [ "a.md", "![](b.md)"; "b.md", "Hello." ] "a.md";
+  [%expect {| ![[b]] |}]
+;;
