@@ -40,7 +40,7 @@ let file_cmd : Command.t =
          | Some rel -> rel
          | None -> file
        in
-       let vault = Oystermark.Vault.of_root_path vault_root in
+       let vault = Vault.of_root_path vault_root in
        let doc =
          List.Assoc.find vault.docs ~equal:String.equal rel_path
          |> Option.value_exn ~message:(sprintf "File %s not found in vault" rel_path)
@@ -49,11 +49,11 @@ let file_cmd : Command.t =
        then
          Out_channel.write_all
            (Filename.concat (Option.value_exn output_dir) "index.html")
-           ~data:(Oystermark.Html.of_doc ~backend_blocks:true ~safe:false doc)
-       else print_string (Oystermark.Html.of_doc ~backend_blocks:true ~safe:false doc))
+           ~data:(Html.of_doc ~backend_blocks:true ~safe:false doc)
+       else print_string (Html.of_doc ~backend_blocks:true ~safe:false doc))
 ;;
 
-let theme_of_string (s : string) : Oystermark.Theme.t =
+let theme_of_string (s : string) : Theme.t =
   Theme.of_name (Config.theme_of_string s)
 ;;
 
@@ -91,7 +91,7 @@ let vault_cmd : Command.t =
      in
      fun () ->
        (* ::: config-resolving *)
-       let config : Oystermark.Config.t =
+       let config : Config.t =
          match config_file, config_yaml with
          | Some _, Some _ -> failwith "Cannot provide both --config and --config-yaml"
          | Some path, None -> Config.of_file path
@@ -116,7 +116,7 @@ let vault_cmd : Command.t =
        let css_snippet_contents : string list =
          List.map config.css_snippets ~f:In_channel.read_all
        in
-       let theme : Oystermark.Theme.t =
+       let theme : Theme.t =
          Theme.of_name ~css_snippets:css_snippet_contents config.theme
        in
        (* ::: *)
@@ -127,11 +127,11 @@ let vault_cmd : Command.t =
            let curr_dir = Sys_unix.getcwd () in
            curr_dir ^ "/_site"
        in
-       let pipeline : Oystermark.Pipeline.t =
+       let pipeline : Pipeline.t =
          pipeline_of_profile config.pipeline_profile
        in
        let results =
-         Oystermark.render_vault
+         render_vault
            ~pipeline
            ~theme
            ~backend_blocks:true
@@ -151,7 +151,7 @@ let vault_cmd : Command.t =
            print_char '.';
            Out_channel.flush Out_channel.stdout));
        (* Copy non-markdown assets (images, etc.) to the output directory *)
-       let all_entries = Oystermark.Vault.list_entries vault_root in
+       let all_entries = Vault.list_entries vault_root in
        let is_asset (p : string) : bool =
          (not (String.is_suffix p ~suffix:".md")) && not (String.is_suffix p ~suffix:"/")
        in
