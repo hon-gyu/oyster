@@ -18,6 +18,7 @@ jobs:
         with:
           ocaml-compiler: "5.4"
           dune-cache: true
+          opam-pin: false
       - run: opam install . --deps-only
       - run: opam install ocamlformat
       - run: opam exec -- dune fmt
@@ -34,5 +35,6 @@ jobs:
         with:
           ocaml-compiler: "5.4"
           dune-cache: true
+          opam-pin: false
       - run: opam install . --deps-only --with-doc --with-test
       - run: opam exec -- dune build @doc-private
