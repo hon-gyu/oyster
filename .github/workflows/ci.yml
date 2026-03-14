@@ -15,6 +15,7 @@ jobs:
       - uses: ocaml/setup-ocaml@v3
         with:
           ocaml-compiler: "5.4"
+      - run: opam install . --deps-only
       - run: opam install ocamlformat
       - run: opam exec -- dune fmt
       - run: git diff --exit-code
