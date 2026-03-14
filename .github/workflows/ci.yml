@@ -12,6 +12,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: true
       - uses: ocaml/setup-ocaml@v3
         with:
           ocaml-compiler: "5.4"
@@ -26,6 +28,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: true
       - uses: ocaml/setup-ocaml@v3
         with:
           ocaml-compiler: "5.4"
