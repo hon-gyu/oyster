@@ -1,0 +1,13 @@
+(rule
+  (mode (promote (until-clean)))
+  (alias ai-doc)
+  (action
+    (with-stdout-to CLAUDE.md
+      (progn
+        (cat CLAUDE.md.template)
+        (echo "\n")
+        (cat pkg/oystermark/doc/index.mld)
+      )
+    )
+  )
+)
