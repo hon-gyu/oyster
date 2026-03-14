@@ -4,9 +4,6 @@ module Index = Vault.Index
 module Link_ref = Vault.Link_ref
 module Resolve = Vault.Resolve
 
-(* Resolve tests
-   ==================================================================== *)
-
 (* Vault index modelled after the tt vault to cover behaviors documented in Note 1.md. *)
 let test_index : Index.t =
   { files =
