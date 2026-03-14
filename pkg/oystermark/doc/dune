@@ -1,0 +1,26 @@
+(executable
+  (name note_toc)
+  (libraries shexp.process core))
+
+(rule
+  ; (mode (promote (until-clean)))
+  (action
+    (with-stdout-to index.mld.2of2
+      (run ./note_toc.exe)
+    )
+  )
+)
+
+(rule
+  (mode (promote (until-clean)))
+  (action
+    (with-stdout-to index.mld
+      (progn
+        (cat index.mld.1of2)
+        (cat index.mld.2of2)
+      )
+    )
+  )
+)
+
+(documentation)
