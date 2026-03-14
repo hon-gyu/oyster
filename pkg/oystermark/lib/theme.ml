@@ -119,7 +119,9 @@ document.addEventListener("DOMContentLoaded", function() {
 |}
 ;;
 
-let of_colors (colors : colors) : t = wrap ~css:(css_of_colors colors)
+let of_colors ?(extra_css : string = "") (colors : colors) : t =
+  wrap ~css:(css_of_colors colors ^ extra_css)
+;;
 
 let none : t =
   fun page ->
@@ -230,11 +232,15 @@ let bluloco_light_colors : colors =
 
 let default : t = of_colors bluloco_dark_colors
 
-let of_name = function
-  | Config.Tokyonight -> of_colors tokyonight_colors
-  | Config.Gruvbox -> of_colors gruvbox_colors
-  | Config.Atom_one_light -> of_colors atom_one_light_colors
-  | Config.Atom_one_dark -> of_colors atom_one_dark_colors
-  | Config.Bluloco_light -> of_colors bluloco_light_colors
-  | Config.Bluloco_dark -> of_colors bluloco_dark_colors
+let of_name ?(css_snippets : string list = []) (theme : Config.theme) =
+  let extra_css = String.concat css_snippets in
+  let of_colors' = of_colors ~extra_css in
+  match theme with
+  | Config.Tokyonight -> of_colors' tokyonight_colors
+  | Config.Gruvbox -> of_colors' gruvbox_colors
+  | Config.Atom_one_light -> of_colors' atom_one_light_colors
+  | Config.Atom_one_dark -> of_colors' atom_one_dark_colors
+  | Config.Bluloco_light -> of_colors' bluloco_light_colors
+  | Config.Bluloco_dark -> of_colors' bluloco_dark_colors
   | Config.No_theme -> none
+;;

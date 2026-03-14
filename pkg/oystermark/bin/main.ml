@@ -22,6 +22,8 @@ module type Spec = sig
       - If either config file or config string is provided, individual flags are ignored.
       - If both config file and config string are provided, an error is raised.
       - If no config is provided, the default config is used and individual flags applied on top.
+      - It's normal that for a specific config, the format used by the flag is
+        different from the format used in the yaml.
   *)
   val config : unit
 end
@@ -76,6 +78,7 @@ let vault_cmd : Command.t =
        flag "--config-yaml" (optional string) ~doc:"YAML Inline YAML config string"
      in
      fun () ->
+      (* ::: config-resolving *)
        let config : Oystermark.Config.t =
          match config_file, config_yaml with
          | Some _, Some _ -> failwith "Cannot provide both --config and --config-yaml"
@@ -93,7 +96,13 @@ let vault_cmd : Command.t =
                 | snippets -> snippets)
            }
        in
-       let theme : Oystermark.Theme.t = Theme.of_name config.theme in
+       let css_snippet_contents : string list =
+         List.map config.css_snippets ~f:In_channel.read_all
+       in
+       let theme : Oystermark.Theme.t =
+         Theme.of_name ~css_snippets:css_snippet_contents config.theme
+       in
+       (* ::: *)
        let output_dir : string =
          match output_dir with
          | Some d -> d

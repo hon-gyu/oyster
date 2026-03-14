@@ -13,9 +13,10 @@ let theme_of_string = function
   | "atom_one_light" | "atom-one-light" -> Atom_one_light
   | "atom_one_dark" | "atom-one-dark" -> Atom_one_dark
   | "bluloco_light" | "bluloco-light" -> Bluloco_light
-  | "bluloco_dark"  | "bluloco-dark"  -> Bluloco_dark
+  | "bluloco_dark" | "bluloco-dark" -> Bluloco_dark
   | "no_theme" | "none" -> No_theme
   | _ -> failwith "Invalid theme"
+;;
 
 let theme_to_string = function
   | Tokyonight -> "tokyonight"
@@ -25,13 +26,14 @@ let theme_to_string = function
   | Bluloco_light -> "bluloco_light"
   | Bluloco_dark -> "bluloco_dark"
   | No_theme -> "no_theme"
+;;
 
-type t = {
-  theme: theme;
-  css_snippets: string list;
-}
+type t =
+  { theme : theme
+  ; css_snippets : string list
+  }
 
-let default : t = {theme = Bluloco_dark; css_snippets = []}
+let default : t = { theme = Bluloco_dark; css_snippets = [] }
 
 let of_yaml_value (v : Yaml.value) : t =
   match v with
@@ -47,11 +49,11 @@ let of_yaml_value (v : Yaml.value) : t =
       | Some (`A items) ->
         List.map
           (fun (v : Yaml.value) ->
-            match v with
-            | `String s -> s
-            | _ -> failwith "config: each css_snippet must be a string")
+             match v with
+             | `String s -> s
+             | _ -> failwith "config: each css_snippet must be a string")
           items
-      | Some (`Null) | None -> default.css_snippets
+      | Some `Null | None -> default.css_snippets
       | Some _ -> failwith "config: 'css_snippets' must be a list"
     in
     { theme; css_snippets }
