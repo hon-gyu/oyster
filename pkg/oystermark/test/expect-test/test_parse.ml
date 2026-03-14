@@ -25,7 +25,10 @@ let rec pp_inline = function
       (pp_textloc m)
       (List.map is ~f:pp_inline |> String.concat ~sep:", ")
   | Wikilink.Ext_wikilink (w, m) ->
-    Printf.sprintf "Wikilink(%s @%s)" (Wikilink.sexp_of_t w |> Sexp.to_string_hum) (pp_textloc m)
+    Printf.sprintf
+      "Wikilink(%s @%s)"
+      (Wikilink.sexp_of_t w |> Sexp.to_string_hum)
+      (pp_textloc m)
   | _ -> "?"
 ;;
 
@@ -189,8 +192,7 @@ let%expect_test "block_id" =
     ]
   in
   let rows =
-    List.map block_id_cases ~f:(fun (name, input) ->
-      name, input, Block_id.make_opt input)
+    List.map block_id_cases ~f:(fun (name, input) -> name, input, Block_id.make_opt input)
   in
   print_string (Ascii_table.to_string_noattr cols rows);
   [%expect

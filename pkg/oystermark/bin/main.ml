@@ -53,9 +53,7 @@ let file_cmd : Command.t =
        else print_string (Html.of_doc ~backend_blocks:true ~safe:false doc))
 ;;
 
-let theme_of_string (s : string) : Theme.t =
-  Theme.of_name (Config.theme_of_string s)
-;;
+let theme_of_string (s : string) : Theme.t = Theme.of_name (Config.theme_of_string s)
 
 let pipeline_of_profile (p : Config.pipeline_profile) : Pipeline.t =
   match p with
@@ -127,16 +125,9 @@ let vault_cmd : Command.t =
            let curr_dir = Sys_unix.getcwd () in
            curr_dir ^ "/_site"
        in
-       let pipeline : Pipeline.t =
-         pipeline_of_profile config.pipeline_profile
-       in
+       let pipeline : Pipeline.t = pipeline_of_profile config.pipeline_profile in
        let results =
-         render_vault
-           ~pipeline
-           ~theme
-           ~backend_blocks:true
-           ~safe:false
-           vault_root
+         render_vault ~pipeline ~theme ~backend_blocks:true ~safe:false vault_root
        in
        List.iteri results ~f:(fun i (out_rel, html) ->
          let out_path = Filename.concat output_dir out_rel in
