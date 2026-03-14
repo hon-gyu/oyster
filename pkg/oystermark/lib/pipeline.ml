@@ -330,7 +330,8 @@ let backlinks : t =
 ;;
 
 let default : t =
-  exclude_draft_by_note_name
+  id
+  >> exclude_draft_by_note_name
   >> exclude_unpublish
   >> validate_no_duplicates
   >> drop_keys_in_frontmatter [ "publish"; "draft" ]
@@ -339,6 +340,11 @@ let default : t =
   >> home_toc ~dir_link:true ()
   >> dir_index ()
 ;;
+
+let basic : t = id >> backlinks
+
+(* Test
+==================== *)
 
 let%test_module "prepend block" =
   (module struct

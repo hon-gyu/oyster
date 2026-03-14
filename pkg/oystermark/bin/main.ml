@@ -57,6 +57,13 @@ let theme_of_string (s : string) : Oystermark.Theme.t =
   Theme.of_name (Config.theme_of_string s)
 ;;
 
+let pipeline_of_profile (p : Config.pipeline_profile) : Pipeline.t =
+  match p with
+  | Default -> Pipeline.default
+  | Basic -> Pipeline.basic
+  | None_profile -> Pipeline.id
+;;
+
 let vault_cmd : Command.t =
   Command.basic
     ~summary:"Render all markdown files in a vault to HTML"
@@ -76,9 +83,14 @@ let vault_cmd : Command.t =
        flag "--config" (optional string) ~doc:"PATH Path to a YAML config file"
      and (config_yaml : string option) =
        flag "--config-yaml" (optional string) ~doc:"YAML Inline YAML config string"
+     and (pipeline_profile : string option) =
+       flag
+         "--pipeline"
+         (optional string)
+         ~doc:"NAME Pipeline profile (default, basic, none). Default: default"
      in
      fun () ->
-      (* ::: config-resolving *)
+       (* ::: config-resolving *)
        let config : Oystermark.Config.t =
          match config_file, config_yaml with
          | Some _, Some _ -> failwith "Cannot provide both --config and --config-yaml"
@@ -94,6 +106,11 @@ let vault_cmd : Command.t =
                (match css_snippets with
                 | [] -> Config.default.css_snippets
                 | snippets -> snippets)
+           ; pipeline_profile =
+               Option.value_map
+                 pipeline_profile
+                 ~default:Config.default.pipeline_profile
+                 ~f:Config.pipeline_profile_of_string
            }
        in
        let css_snippet_contents : string list =
@@ -110,8 +127,16 @@ let vault_cmd : Command.t =
            let curr_dir = Sys_unix.getcwd () in
            curr_dir ^ "/_site"
        in
+       let pipeline : Oystermark.Pipeline.t =
+         pipeline_of_profile config.pipeline_profile
+       in
        let results =
-         Oystermark.render_vault ~theme ~backend_blocks:true ~safe:false vault_root
+         Oystermark.render_vault
+           ~pipeline
+           ~theme
+           ~backend_blocks:true
+           ~safe:false
+           vault_root
        in
        List.iteri results ~f:(fun i (out_rel, html) ->
          let out_path = Filename.concat output_dir out_rel in
