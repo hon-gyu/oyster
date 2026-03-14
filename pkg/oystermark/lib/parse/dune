@@ -1,0 +1,7 @@
+(library
+ (name parse)
+ (public_name oystermark.parse)
+ (libraries cmarkit core yaml)
+ (inline_tests)
+ (preprocess
+  (pps ppx_jane ppx_string ppx_quick_test)))

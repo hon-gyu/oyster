@@ -1,0 +1,7 @@
+(library
+ (name vault)
+ (public_name oystermark.vault)
+ (libraries parse cmarkit core core_unix.sys_unix)
+ (inline_tests)
+ (preprocess
+  (pps ppx_jane ppx_string ppx_quick_test)))
