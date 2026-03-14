@@ -18,6 +18,6 @@ let () =
      in
      List'.fold_left files ~init:(return ()) ~f:(fun acc file ->
        acc
-       >> printf "- {!page-note/%s}\n" (Filename.chop_extension (Filename.basename file)))
+       >> printf "- {!page-\"%s\"}\n" (Filename.chop_extension (Filename.basename file)))
     )
 ;;
