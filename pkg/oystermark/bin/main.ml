@@ -15,6 +15,17 @@ open Oystermark
   Command.Param.both under the hood), then the function body receives all of them.
 *)
 
+(** Documentation-only specification  *)
+module type Spec = sig
+  (** - For all configs in {!Config.t}, there should be an individual flag.
+      - User can provide config using a config file or a config string.
+      - If either config file or config string is provided, individual flags are ignored.
+      - If both config file and config string are provided, an error is raised.
+      - If no config is provided, the default config is used and individual flags applied on top.
+  *)
+  val config : unit
+end
+
 let file_cmd : Command.t =
   Command.basic
     ~summary:"Render a single markdown file to stdout"
@@ -56,16 +67,33 @@ let vault_cmd : Command.t =
          (optional string)
          ~doc:
            "NAME Theme to use (tokyonight, gruvbox, atom-one-dark, atom-one-light, \
-            bluloco-dark, bluloco-light, none). Default: gruvbox"
-     and (css_snippets : string list) = anon (sequence ("css-snippet" %: string))
-     and (config_file : string option) = anon (maybe ("config-file" %: string))
+            bluloco-dark, bluloco-light, none). Default: bluloco-dark"
+     and (css_snippets : string list) =
+       flag "--css-snippet" (listed string) ~doc:"PATH CSS snippet file to include"
+     and (config_file : string option) =
+       flag "--config" (optional string) ~doc:"PATH Path to a YAML config file"
+     and (config_yaml : string option) =
+       flag "--config-yaml" (optional string) ~doc:"YAML Inline YAML config string"
      in
      fun () ->
-       let theme : Oystermark.Theme.t =
-         match theme with
-         | Some name -> theme_of_string name
-         | None -> Oystermark.Theme.default
+       let config : Oystermark.Config.t =
+         match config_file, config_yaml with
+         | Some _, Some _ -> failwith "Cannot provide both --config and --config-yaml"
+         | Some path, None -> Config.of_file path
+         | None, Some yaml -> Config.of_yaml_string yaml
+         | None, None ->
+           { theme =
+               Option.value_map
+                 theme
+                 ~default:Config.default.theme
+                 ~f:Config.theme_of_string
+           ; css_snippets =
+               (match css_snippets with
+                | [] -> Config.default.css_snippets
+                | snippets -> snippets)
+           }
        in
+       let theme : Oystermark.Theme.t = Theme.of_name config.theme in
        let output_dir : string =
          match output_dir with
          | Some d -> d
