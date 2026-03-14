@@ -28,8 +28,14 @@
   core_unix
   tyxml
   yaml
-  (shexp :with-doc-only)
-  (odoc :with-doc-only))
+  ppx_jane
+  ppx_string
+  ppx_blob
+  ppx_quick_test
+  (textutils :with-test)
+  (ppx_expect :with-test)
+  (shexp :with-doc)
+  (odoc :with-doc))
  (tags
   ("add topics" "to describe" your project)))
 
