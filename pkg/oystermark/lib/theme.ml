@@ -228,10 +228,13 @@ let bluloco_light_colors : colors =
   }
 ;;
 
-let tokyonight : t = of_colors tokyonight_colors
-let gruvbox : t = of_colors gruvbox_colors
-let atom_one_dark : t = of_colors atom_one_dark_colors
-let atom_one_light : t = of_colors atom_one_light_colors
-let bluloco_dark : t = of_colors bluloco_dark_colors
-let bluloco_light : t = of_colors bluloco_light_colors
-let default : t = bluloco_dark
+let default : t = of_colors bluloco_dark_colors
+
+let of_name = function
+  | Config.Tokyonight -> of_colors tokyonight_colors
+  | Config.Gruvbox -> of_colors gruvbox_colors
+  | Config.Atom_one_light -> of_colors atom_one_light_colors
+  | Config.Atom_one_dark -> of_colors atom_one_dark_colors
+  | Config.Bluloco_light -> of_colors bluloco_light_colors
+  | Config.Bluloco_dark -> of_colors bluloco_dark_colors
+  | Config.No_theme -> none

@@ -1,4 +1,5 @@
 open Core
+open Oystermark
 
 (* NOTE:
 
@@ -40,15 +41,7 @@ let file_cmd : Command.t =
 ;;
 
 let theme_of_string (s : string) : Oystermark.Theme.t =
-  match s with
-  | "tokyonight" -> Oystermark.Theme.tokyonight
-  | "gruvbox" -> Oystermark.Theme.gruvbox
-  | "atom-one-dark" -> Oystermark.Theme.atom_one_dark
-  | "atom-one-light" -> Oystermark.Theme.atom_one_light
-  | "bluloco-dark" -> Oystermark.Theme.bluloco_dark
-  | "bluloco-light" -> Oystermark.Theme.bluloco_light
-  | "none" -> Oystermark.Theme.none
-  | other -> failwithf "Unknown theme: %s" other ()
+  Theme.of_name (Config.theme_of_string s)
 ;;
 
 let vault_cmd : Command.t =
@@ -57,17 +50,19 @@ let vault_cmd : Command.t =
     (let%map_open.Command (vault_root : string) = anon ("vault-root" %: string)
      and (output_dir : string option) = anon (maybe ("output-dir" %: string))
      and (verbose : bool) = flag "--verbose" no_arg ~doc:"Print progress messages"
-     and (theme_name : string option) =
+     and (theme : string option) =
        flag
          "--theme"
          (optional string)
          ~doc:
            "NAME Theme to use (tokyonight, gruvbox, atom-one-dark, atom-one-light, \
             bluloco-dark, bluloco-light, none). Default: gruvbox"
+     and (css_snippets : string list) = anon (sequence ("css-snippet" %: string))
+     and (config_file : string option) = anon (maybe ("config-file" %: string))
      in
      fun () ->
        let theme : Oystermark.Theme.t =
-         match theme_name with
+         match theme with
          | Some name -> theme_of_string name
          | None -> Oystermark.Theme.default
        in
