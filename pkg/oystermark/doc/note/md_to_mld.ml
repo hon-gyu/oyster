@@ -12,9 +12,5 @@ let () =
   in
   let open Shexp_process in
   let open Shexp_process.Infix in
-  eval
-    (printf "{0 %s}\n" title
-     >> printf "{v\n"
-     >> run "cat" [md]
-     >> printf "v}\n")
+  eval (printf "{0 %s}\n" title >> printf "{v\n" >> run "cat" [ md ] >> printf "v}\n")
 ;;

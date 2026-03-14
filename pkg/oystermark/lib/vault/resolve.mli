@@ -19,6 +19,7 @@ type target =
       }
   | Curr_block of { block_id : string }
   | Unresolved
+[@@deriving sexp]
 
 (** Meta key for storing resolved targets in the target *)
 val resolved_key : target Cmarkit.Meta.key

@@ -11,6 +11,7 @@ open Cmarkit
 type fragment =
   | Heading of string list (** e.g. [["H1"; "H2"]] for [[Note#H1#H2]] *)
   | Block_ref of string (** e.g. ["blockid"] for [[Note#^blockid]] *)
+[@@deriving sexp, equal]
 
 type t =
   { target : string option
@@ -18,6 +19,7 @@ type t =
   ; display : string option
   ; embed : bool
   }
+[@@deriving sexp, equal]
 
 (** Render wikilink back to markdown syntax. *)
 let to_commonmark (wl : t) : string =
@@ -112,8 +114,6 @@ let make ~(embed : bool) (content : string) : t =
   in
   { target; fragment; display; embed }
 ;;
-
-(* TODO(future): a roundtrip PBT *)
 
 (* Find the index of substring [needle] in [haystack] starting at [from]. *)
 let find_substring (haystack : string) ~(needle : string) ~(from : int) : int option =
@@ -256,4 +256,78 @@ let%expect_test "wikilink to plain text" =
   in
   print_endline (to_plain_text wl);
   [%expect {| quux |}]
+;;
+
+let%test_module "roundtrip: make (content_of (to_commonmark wl)) = wl" =
+  (module struct
+    (** Characters that are safe in wikilink target/display/heading strings
+        (no delimiters that would break parsing). *)
+    let gen_safe_string : string Quickcheck.Generator.t =
+      let open Quickcheck.Generator in
+      let safe_char =
+        Char.gen_print
+        |> filter ~f:(fun c ->
+          not (Char.equal c '#' || Char.equal c '|' || Char.is_whitespace c))
+      in
+      Let_syntax.(
+        let%bind len = Int.gen_uniform_incl 1 20 in
+        String.gen_with_length len safe_char)
+      |> filter ~f:(fun s ->
+        not
+          (String.is_substring s ~substring:"[[" || String.is_substring s ~substring:"]]"))
+    ;;
+
+    let gen_block_id : string Quickcheck.Generator.t =
+      let open Quickcheck.Generator in
+      let alphanum = Char.gen_alphanum in
+      let body_char = Quickcheck.Generator.union [ Char.gen_alphanum; return '-' ] in
+      Let_syntax.(
+        let%bind first = alphanum in
+        let%bind rest_len = Int.gen_uniform_incl 0 10 in
+        let%map rest = String.gen_with_length rest_len body_char in
+        String.of_char first ^ rest)
+    ;;
+
+    let gen_fragment : fragment Quickcheck.Generator.t =
+      let open Quickcheck.Generator in
+      union
+        [ Let_syntax.(
+            let%map headings =
+              List.gen_non_empty
+                (gen_safe_string
+                 |> filter ~f:(fun s -> not (String.is_prefix s ~prefix:"^")))
+            in
+            Heading headings)
+        ; Let_syntax.(
+            let%map id = gen_block_id in
+            Block_ref id)
+        ]
+    ;;
+
+    let quickcheck_generator : t Quickcheck.Generator.t =
+      let open Quickcheck.Generator in
+      Let_syntax.(
+        let%bind target = Option.quickcheck_generator gen_safe_string in
+        let%bind fragment = Option.quickcheck_generator gen_fragment in
+        let%bind display = Option.quickcheck_generator gen_safe_string in
+        let%map embed = Bool.quickcheck_generator in
+        { target; fragment; display; embed })
+    ;;
+
+    let quickcheck_shrinker : t Quickcheck.Shrinker.t = Base_quickcheck.Shrinker.atomic
+
+    let%quick_test "roundtrip: make (content_of (to_commonmark wl)) = wl" =
+      fun (wl : (t[@generator quickcheck_generator])) ->
+      let cm = to_commonmark wl in
+      (* Strip [[ ]] or ![[ ]] *)
+      let content =
+        if wl.embed
+        then String.drop_prefix (String.drop_suffix cm 2) 3
+        else String.drop_prefix (String.drop_suffix cm 2) 2
+      in
+      let parsed = make ~embed:wl.embed content in
+      if not (equal wl parsed)
+      then Error.raise_s [%message "roundtrip failed" ~expect:(wl : t) ~got:(parsed : t)]
+    ;;
+  end)
 ;;

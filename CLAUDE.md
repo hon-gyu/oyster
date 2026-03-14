@@ -1,6 +1,5 @@
 The following content is excerpted from pkg/oystermark/doc/index.mld
 
-
 {0 oystermark index}
 
 {1 Library oystermark}

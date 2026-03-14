@@ -29,17 +29,6 @@ let extract_link_refs (doc : Cmarkit.Doc.t) : Link_ref.t list =
   Cmarkit.Folder.fold_doc folder [] doc
 ;;
 
-let pp_link_ref (lr : Link_ref.t) =
-  let t = Option.value ~default:"-" lr.target in
-  let f =
-    match lr.fragment with
-    | None -> "-"
-    | Some (Heading hs) -> "H[" ^ String.concat ~sep:"; " hs ^ "]"
-    | Some (Block_ref s) -> "B[" ^ s ^ "]"
-  in
-  sprintf "(%s, %s)" t f
-;;
-
 let pp_link_ref (lr : Link_ref.t) = Link_ref.sexp_of_t lr |> Sexp.to_string_hum
 
 (** Parse a single inline markdown snippet and return the first Link_ref extracted. *)
