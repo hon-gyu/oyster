@@ -1,10 +1,13 @@
+(include_subdirs qualified)
+
 (library
  (name oystermark)
- (libraries parse vault cmarkit core tyxml yaml)
+ (public_name oystermark)
+ (libraries cmarkit core core_unix core_unix.sys_unix tyxml yaml)
  (inline_tests)
  (preprocessor_deps
   (file static/theme.css))
  (preprocess
-  (pps ppx_jane ppx_string ppx_blob)))
+  (pps ppx_jane ppx_string ppx_blob ppx_quick_test)))
 
 (documentation)

@@ -1,6 +1,6 @@
-(lang dune 3.20)
+(lang dune 3.21)
 
-(name ooyster)
+(name oystermark)
 
 (generate_opam_files true)
 
@@ -16,8 +16,7 @@
 (documentation https://url/to/documentation)
 
 (package
- (name ooyster)
- (allow_empty)
+ (name oystermark)
  (synopsis "A short synopsis")
  (description "A longer description")
  (depends ocaml)

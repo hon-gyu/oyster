@@ -1,6 +1,0 @@
-(library
- (name vault)
- (libraries parse cmarkit core core_unix core_unix.sys_unix)
- (inline_tests)
- (preprocess
-  (pps ppx_expect ppx_sexp_conv)))
