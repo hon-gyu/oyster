@@ -1,1 +1,36 @@
 {0 Development}
+
+{1 Testing}
+
+{2 Principles}
+
+{ol
+    {- {b Sexp over helpers.}
+       Test helpers make test failure hard to debug.
+       Prefer [@@deriving sexp] on types and print with [Sexp.to_string_hum]
+       rather than writing custom [pp_*] pretty-printers.
+       {b Exception:} [Ascii_table] helpers are encouraged for tabular test cases
+       where side-by-side comparison aids review.}
+
+    {- {b Spec ↔ test cross-referencing.}
+       We like bidirectional map between specification and tests.}
+
+    {- {b Property-based testing (PBT).}
+       Use Jane Street [Quickcheck] (via [ppx_quick_test]) for invariant-heavy code.
+       Good candidates:
+       {ul
+           {- Roundtrip properties, e.g. [make (content_of (to_commonmark wl)) = wl]
+              (see {!Parse.Wikilink}).}
+           {- Resolution idempotence: resolving an already-resolved vault is a no-op.}
+           {- Slug uniqueness within a document.}
+           {- Embed expansion always terminates within [max_depth].}
+       }
+       Write focused generators that avoid delimiter characters ([#], [|], [\[\[]], [\]\] ])
+       so that generated values stay in the canonical domain of the function under test.
+       See {!Parse.Wikilink} for an example.}
+
+    {- {b Trace-based testing.}
+       Where feasible, instrument functions with [trace] to capture intermediate
+       states (e.g. resolution candidates considered, embed recursion path).
+       This lets tests assert on {e internal} correctness, not just input/output.}
+}
