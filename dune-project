@@ -19,7 +19,23 @@
  (name oystermark)
  (synopsis "A short synopsis")
  (description "A longer description")
- (depends ocaml)
+ (depends
+  ocaml
+  (dune
+   (>= 3.21))
+  cmarkit
+  core
+  core_unix
+  tyxml
+  yaml
+  ppx_jane
+  ppx_string
+  ppx_blob
+  ppx_quick_test
+  (textutils :with-test)
+  (ppx_expect :with-test)
+  (shexp :with-doc)
+  (odoc :with-doc))
  (tags
   ("add topics" "to describe" your project)))
 

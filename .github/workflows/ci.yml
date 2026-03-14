@@ -12,9 +12,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: true
       - uses: ocaml/setup-ocaml@v3
         with:
           ocaml-compiler: "5.4"
+          dune-cache: true
+          opam-pin: false
+      - run: opam install . --deps-only
       - run: opam install ocamlformat
       - run: opam exec -- dune fmt
       - run: git diff --exit-code
@@ -24,8 +29,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: true
       - uses: ocaml/setup-ocaml@v3
         with:
           ocaml-compiler: "5.4"
-      - run: opam install . --deps-only --with-doc
+          dune-cache: true
+          opam-pin: false
+      - run: opam install . --deps-only --with-doc --with-test
       - run: opam exec -- dune build @doc-private
