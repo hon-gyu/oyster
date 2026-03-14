@@ -6,3 +6,5 @@
   (file static/theme.css))
  (preprocess
   (pps ppx_jane ppx_string ppx_blob)))
+
+(documentation)

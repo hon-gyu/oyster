@@ -1,14 +1,14 @@
 (** Obsidian callout extension.
 
     Transforms blockquotes whose first line matches [\[!type\]] into callout
-    metadata attached to the block_quote's {!Cmarkit.Meta.t}.
+    metadata attached to the block_quote's [Cmarkit.Meta.t].
 
     {1 Syntax}
 
-    {v
+{v
 > [!type] Optional title
 > Body content (markdown)
-    v}
+v}
 
     {ul
     {- {b Type identifier}: case-insensitive, e.g. [note], [tip], [warning].}
@@ -34,12 +34,12 @@
 
     Parsing is performed by {!parse_header}. The block mapper
     {!map_callout} detects callout syntax in
-    {!Cmarkit.Block.Block_quote} nodes and attaches {!t} to the
-    blockquote's {!Cmarkit.Meta.t} via {!meta_key}.
+    [Cmarkit.Block.Block_quote] nodes and attaches {!t} to the
+    blockquote's [Cmarkit.Meta.t] via {!meta_key}.
 
     {1 Data types}
 
-    A callout's foldability is represented by {!fold}:
+    A callout's foldability is represented by {!type-fold}:
 
     {ul
     {- {!Foldable_open} — expanded by default}
@@ -56,23 +56,23 @@
 
     Non-foldable callouts render as:
 
-    {v
+{v
 <div class="callout" data-callout="info">
   <div class="callout-title">Title here</div>
   <div class="callout-content">
     <!-- rendered body markdown -->
   </div>
 </div>
-    v}
+v}
 
     Foldable callouts use [<details>] / [<summary>]:
 
-    {v
+{v
 <details class="callout" data-callout="faq" open>
   <summary class="callout-title">Title</summary>
   <div class="callout-content">...</div>
 </details>
-    v}
+v}
 
     {ul
     {- [open] attribute present when fold = {!Foldable_open}}

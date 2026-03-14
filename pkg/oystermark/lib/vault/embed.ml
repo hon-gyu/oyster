@@ -8,13 +8,13 @@
       the image's resolved target is a note (i.e. a [.md] file). Non-note
       images (e.g. PNG, JPG) are left untouched for the HTML renderer.
 
-    For media embedding (non-note images, audio, video), see {!Html}.
+    For media embedding (non-note images, audio, video), see [Html].
 
     This is a post-resolution, pre-render transformation. Each paragraph
     containing a single embed source is replaced by a [Block.Blocks] whose
     meta carries {!embed_meta}.
 
-    Frontmatter is never embedded: {!doc_blocks} strips it before extraction.
+    Frontmatter is never embedded: {!non_fm_blocks} strips it before extraction.
 
     - rule: an embed can only be expanded if it's in a container block that
       has no other children or blank children only
@@ -29,7 +29,7 @@
 open Core
 
 module type Spec = sig
-  (** Frontmatter will not be embedded: {!doc_blocks} strips it before
+  (** Frontmatter will not be embedded: {!non_fm_blocks} strips it before
       extraction. *)
   val frontmatter_unembeddable : unit
 
@@ -38,7 +38,7 @@ module type Spec = sig
   val reverse_embed : unit
 end
 
-(** Metadata attached to the {!Cmarkit.Block.Blocks} node that wraps
+(** Metadata attached to the [Cmarkit.Block.Blocks] node that wraps
     transcluded content. Consumers (e.g. the HTML renderer) can use this to
     style embedded blocks differently, and {!reverse_embed_doc} uses it to
     reconstruct the original embed syntax. *)
@@ -215,8 +215,8 @@ let rec embed_note
 
     A cmarkit [Mapper] traverses every block in the document. For each
     [Paragraph], we check whether its inline content is a single embed
-    wikilink (via {!extract_single_embed}) or a single image link pointing
-    to a note (via {!extract_single_image_embed}). If so, [try_embed]
+    wikilink (via {!extract_embed_source}) or a single image link pointing
+    to a note (also via {!extract_embed_source}). If so, [try_embed]
     dispatches on the resolved target (stamped by the resolution pass):
 
     - {b Cross-file} targets ([Note], [Heading], [Block]) delegate to

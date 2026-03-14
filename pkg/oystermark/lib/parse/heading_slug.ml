@@ -1,6 +1,6 @@
 (** Heading slug generation: GitHub-style anchors with deduplication.
 
-    Slugs are stamped onto heading blocks' {!Cmarkit.Meta.t} during parsing,
+    Slugs are stamped onto heading blocks' [Cmarkit.Meta.t] during parsing,
     providing a single source of truth for heading identifiers. *)
 
 open Core

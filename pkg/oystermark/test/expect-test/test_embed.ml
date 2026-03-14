@@ -1,7 +1,7 @@
 (** Integration tests for note embedding (![[NOTE]]).
 
     Tests the full pipeline: parse → resolve → expand → render HTML.
-    Uses {!Html.of_doc} for rendering — no custom test helpers. *)
+    Uses [Html.of_doc] for rendering — no custom test helpers. *)
 
 open! Core
 open Oystermark

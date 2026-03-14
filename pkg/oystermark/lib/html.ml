@@ -1,6 +1,6 @@
 (** HTML renderer for oystermark documents.
 
-    Extends {!Cmarkit_html.renderer} to handle wikilinks, resolved link targets,
+    Extends [Cmarkit_html.renderer] to handle wikilinks, resolved link targets,
     and block IDs. Uses tyxml for type-safe HTML construction of custom elements. *)
 
 open Core

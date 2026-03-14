@@ -1,9 +1,8 @@
 (** Add Obsidian-style wikilinks extension to Cmarkit.
 
-A wikilink looks like [[Note#^blockid|display text]] or [[Note#Heading1#Heading2|display text]].
+A wikilink looks like [ [[Note#^blockid|display text]] ] or [ [[Note#Heading1#Heading2|display text]] ].
 
-When there's a [!] before the [[, the content is embedded.
-*)
+When there's a [!] before the \[\[, the content is embedded. *)
 
 open Core
 open Cmarkit
@@ -137,11 +136,10 @@ let is_escaped s pos = pos > 0 && Char.equal (String.get s (pos - 1)) '\\'
 
 (** Inline mapper that recognises wikilinks inside [Text] nodes.
 
-    Intended for use as the [~inline] callback of {!Cmarkit.Mapper.make}.
-    Scans the text for [[…]] (and ![[![…]]) delimiters, splitting it into a
+    Intended for use as the [~inline] callback of [Cmarkit.Mapper.make].
+    Scans the text for \[\[…\]\] (and !\[\[…\]\]) delimiters, splitting it into a
     list of plain [Text] and [Ext_wikilink] nodes spliced via [Inlines].
-
-    Returns [Mapper.default] for non-[Text] nodes or when no [[…]] is present,
+    Returns [Mapper.default] for non-[Text] nodes or when no \[\[…\]\] is present,
     so the mapper falls through to its default behaviour. *)
 let parse (_mapper : Mapper.t) (i : Inline.t) : Inline.t Mapper.result =
   match i with

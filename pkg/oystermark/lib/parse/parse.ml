@@ -71,7 +71,7 @@ let make_mapper () : Cmarkit.Mapper.t =
 ;;
 
 (** [of_string ?strict ?layout s] parses markdown string [s] into a
-    {!Cmarkit.Doc.t} with frontmatter embedded as a {!Frontmatter.Frontmatter}
+    [Cmarkit.Doc.t] with frontmatter embedded as a {!Frontmatter.Frontmatter}
     block and wikilinks/block IDs parsed. Heading slugs are stamped onto
     heading block metadata. *)
 let of_string ?(strict = false) ?(layout = false) (s : string) : Cmarkit.Doc.t =

@@ -1,8 +1,8 @@
 (** UI components.
 
   Usage:
-  - Used by {Pipeline} to add components as HTML blocks using [backend_block].
-  - Used in {Vault.render_vault}'s last step to render non-body content (WIP).
+  - Used by {!Pipeline} to add components as HTML blocks using [backend_block].
+  - Used in {!Oystermark.render_vault}'s last step to render non-body content (WIP).
 *)
 
 open Core
