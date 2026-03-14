@@ -1,0 +1,38 @@
+# attribute
+
+```python {#my-id .my-class key="value"}
+print("hello")
+```
+- `#id` — sets an HTML id, useful for linking/referencing
+- `.class` — adds a CSS class
+- `key="value"` — arbitrary key-value pairs passed to the output format
+
+
+## Unified Attribute Syntax
+```markdown
+## My Section {#custom-id .unnumbered}
+
+![Alt text](image.png){width=50% #fig-1}
+
+[link text](url){target="_blank" .external}
+```
+
+
+## The Three Entry Types
+1. ID — prefixed with #, at most one per element
+```
+{#my-id}
+```
+Maps to id="my-id" in HTML, \label{my-id} in LaTeX.
+
+2. Classes — prefixed with ., multiple allowed
+```
+{.foo .bar .baz}
+```
+Maps to class="foo bar baz" in HTML.
+
+3. Key-value pairs — arbitrary attributes
+```
+{key="value" another=value}
+```
+Quotes are optional if the value has no spaces. Maps to HTML attributes, or gets interpreted by Pandoc filters/writers specially.
