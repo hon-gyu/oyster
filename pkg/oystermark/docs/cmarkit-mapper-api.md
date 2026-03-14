@@ -6,7 +6,7 @@ here's a comprehensive understanding of the Mapper API:
 1. Mapper.t Type
 
 From
-ooyster/pkg/cmarkit/src/cmarkit.mli
+cmarkit/src/cmarkit.mli
 (line 1470):
 type t
 (** The type for abstract syntax tree mappers. *)
@@ -18,7 +18,7 @@ inline and block elements.
 2. Mapper.result Type
 
 From
-ooyster/pkg/cmarkit/src/cmarkit.mli
+cmarkit/src/cmarkit.mli
 (lines 1455-1457):
 type 'a result =
 [ `Default (** Do the default map. *) | `Map of 'a filter_map ]
@@ -37,7 +37,7 @@ the node)
 3. Mapper.default and Mapper.ret
 
 From
-ooyster/pkg/cmarkit/src/cmarkit.mli
+cmarkit/src/cmarkit.mli
 (lines 1459-1466):
 val default : 'a result
 (** [default] is [`Default]. *)
@@ -57,7 +57,7 @@ to explicitly return a mapped version of the node
 4. Inline Mapper Signature
 
 From
-ooyster/pkg/cmarkit/src/cmarkit.mli
+cmarkit/src/cmarkit.mli
 (lines 1473-1482):
 type 'a map = t -> 'a -> 'a filter_map
 (** The type for maps on values of type ['a]. *)
@@ -81,7 +81,7 @@ This is a function that:
 5. Inline.Inlines Type
 
 From
-ooyster/pkg/cmarkit/src/cmarkit.mli
+cmarkit/src/cmarkit.mli
 (lines 817-829):
 type t +=
 | Autolink of Autolink.t node
@@ -114,7 +114,7 @@ val empty : t
 7. Mapper.make Signature
 
 From
-ooyster/pkg/cmarkit/src/cmarkit.mli
+cmarkit/src/cmarkit.mli
 (lines 1484-1497):
 val make :
   ?inline_ext_default:Inline.t map -> ?block_ext_default:Block.t map ->

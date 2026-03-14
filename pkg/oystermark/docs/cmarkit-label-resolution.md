@@ -1,6 +1,6 @@
 # Cmarkit Label Resolution
 
-Reference: `pkg/cmarkit/src/cmarkit.mli`, around line 425-522.
+Reference: `cmarkit/src/cmarkit.mli`, around line 425-522.
 
 ## Overview
 
