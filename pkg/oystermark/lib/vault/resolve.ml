@@ -23,7 +23,7 @@ type target =
       }
   | Curr_block of { block_id : string }
   | Unresolved
-[@@derving sexp]
+[@@deriving sexp]
 
 let resolved_key : target Cmarkit.Meta.key = Cmarkit.Meta.key ()
 

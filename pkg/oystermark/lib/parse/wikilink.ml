@@ -11,6 +11,7 @@ open Cmarkit
 type fragment =
   | Heading of string list (** e.g. [["H1"; "H2"]] for [[Note#H1#H2]] *)
   | Block_ref of string (** e.g. ["blockid"] for [[Note#^blockid]] *)
+[@@deriving sexp]
 
 type t =
   { target : string option
@@ -18,6 +19,7 @@ type t =
   ; display : string option
   ; embed : bool
   }
+[@@deriving sexp]
 
 (** Render wikilink back to markdown syntax. *)
 let to_commonmark (wl : t) : string =

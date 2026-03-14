@@ -6,22 +6,6 @@ module Block_id = Parse.Block_id
 (* Pretty-printing helpers
 -------------------- *)
 
-let pp_fragment : Wikilink.fragment -> string = function
-  | Wikilink.Heading hs -> "Heading [" ^ String.concat ~sep:"; " hs ^ "]"
-  | Wikilink.Block_ref s -> "Block_ref " ^ s
-;;
-
-let pp_wikilink (w : Wikilink.t) =
-  let parts =
-    [ (if w.embed then "embed" else "link")
-    ; "target=" ^ Option.value ~default:"-" w.target
-    ; "frag=" ^ Option.value_map ~default:"-" ~f:pp_fragment w.fragment
-    ; "display=" ^ Option.value ~default:"-" w.display
-    ]
-  in
-  String.concat ~sep:" " parts
-;;
-
 let pp_textloc (meta : Cmarkit.Meta.t) =
   let loc = Cmarkit.Meta.textloc meta in
   if Cmarkit.Textloc.is_none loc
@@ -41,13 +25,8 @@ let rec pp_inline = function
       (pp_textloc m)
       (List.map is ~f:pp_inline |> String.concat ~sep:", ")
   | Wikilink.Ext_wikilink (w, m) ->
-    Printf.sprintf "Wikilink(%s @%s)" (pp_wikilink w) (pp_textloc m)
+    Printf.sprintf "Wikilink(%s @%s)" (Wikilink.sexp_of_t w |> Sexp.to_string_hum) (pp_textloc m)
   | _ -> "?"
-;;
-
-let pp_block_id_result = function
-  | None -> "-"
-  | Some (bid : Block_id.t) -> Printf.sprintf "(byte_pos=%d, %S)" bid.byte_pos bid.id
 ;;
 
 (* Expect tests
@@ -76,46 +55,44 @@ let wikilink_cases =
 
 let%expect_test "parse_content" =
   let cols =
-    [ Ascii_table.Column.create "name" (fun (n, _, _, _, _) -> n)
-    ; Ascii_table.Column.create "input" (fun (_, i, _, _, _) -> i)
-    ; Ascii_table.Column.create "target" (fun (_, _, t, _, _) -> t)
-    ; Ascii_table.Column.create "frag" (fun (_, _, _, f, _) -> f)
-    ; Ascii_table.Column.create "display" (fun (_, _, _, _, d) -> d)
+    [ Ascii_table.Column.create "name" (fun (n, _, _) -> n)
+    ; Ascii_table.Column.create "input" (fun (_, i, _) -> i)
+    ; Ascii_table.Column.create "result" (fun (_, _, w) ->
+        Wikilink.sexp_of_t w |> Sexp.to_string_hum)
     ]
   in
   let rows =
     List.map wikilink_cases ~f:(fun (name, input) ->
       let w = Wikilink.make ~embed:false input in
-      ( name
-      , input
-      , Option.value ~default:"-" w.target
-      , Option.value_map ~default:"-" ~f:pp_fragment w.fragment
-      , Option.value ~default:"-" w.display ))
+      name, input, w)
   in
-  print_string (Ascii_table.to_string_noattr cols rows ~limit_width_to:120);
+  print_string (Ascii_table.to_string_noattr cols rows ~limit_width_to:150);
   [%expect
     {|
-    ┌──────────────────────┬──────────────────┬──────────┬────────────────────────┬─────────────┐
-    │ name                 │ input            │ target   │ frag                   │ display     │
-    ├──────────────────────┼──────────────────┼──────────┼────────────────────────┼─────────────┤
-    │ basic note           │ Note             │ Note     │ -                      │ -           │
-    │ note with ext        │ Note.md          │ Note.md  │ -                      │ -           │
-    │ dir path             │ dir/Note         │ dir/Note │ -                      │ -           │
-    │ display text         │ Note|custom text │ Note     │ -                      │ custom text │
-    │ heading              │ Note#Heading     │ Note     │ Heading [Heading]      │ -           │
-    │ nested heading       │ Note#H1#H2       │ Note     │ Heading [H1; H2]       │ -           │
-    │ current note heading │ #Heading         │ -        │ Heading [Heading]      │ -           │
-    │ block ref            │ Note#^blockid    │ Note     │ Block_ref blockid      │ -           │
-    │ block ref hyphen     │ Note#^block-id   │ Note     │ Block_ref block-id     │ -           │
-    │ invalid block_id _   │ Note#^block_id   │ Note     │ Heading [^block_id]    │ -           │
-    │ block ref current    │ #^blockid        │ -        │ Block_ref blockid      │ -           │
-    │ heading + display    │ #H1#H2|text      │ -        │ Heading [H1; H2]       │ text        │
-    │ embed                │ Note             │ Note     │ -                      │ -           │
-    │ hash collapse        │ ##A###B          │ -        │ Heading [A; B]         │ -           │
-    │ heading then ^block  │ Note#H1#^blockid │ Note     │ Heading [H1; ^blockid] │ -           │
-    │ empty target #       │ #                │ -        │ -                      │ -           │
-    │ empty target         │                  │ -        │ -                      │ -           │
-    └──────────────────────┴──────────────────┴──────────┴────────────────────────┴─────────────┘
+    ┌──────────────────────┬──────────────────┬───────────────────────────────────────────────────────────────────────────────┐
+    │ name                 │ input            │ result                                                                        │
+    ├──────────────────────┼──────────────────┼───────────────────────────────────────────────────────────────────────────────┤
+    │ basic note           │ Note             │ ((target (Note)) (fragment ()) (display ()) (embed false))                    │
+    │ note with ext        │ Note.md          │ ((target (Note.md)) (fragment ()) (display ()) (embed false))                 │
+    │ dir path             │ dir/Note         │ ((target (dir/Note)) (fragment ()) (display ()) (embed false))                │
+    │ display text         │ Note|custom text │ ((target (Note)) (fragment ()) (display ("custom text")) (embed false))       │
+    │ heading              │ Note#Heading     │ ((target (Note)) (fragment ((Heading (Heading)))) (display ()) (embed false)) │
+    │ nested heading       │ Note#H1#H2       │ ((target (Note)) (fragment ((Heading (H1 H2)))) (display ()) (embed false))   │
+    │ current note heading │ #Heading         │ ((target ()) (fragment ((Heading (Heading)))) (display ()) (embed false))     │
+    │ block ref            │ Note#^blockid    │ ((target (Note)) (fragment ((Block_ref blockid))) (display ()) (embed false)) │
+    │ block ref hyphen     │ Note#^block-id   │ ((target (Note)) (fragment ((Block_ref block-id))) (display ())               │
+    │                      │                  │  (embed false))                                                               │
+    │ invalid block_id _   │ Note#^block_id   │ ((target (Note)) (fragment ((Heading (^block_id)))) (display ())              │
+    │                      │                  │  (embed false))                                                               │
+    │ block ref current    │ #^blockid        │ ((target ()) (fragment ((Block_ref blockid))) (display ()) (embed false))     │
+    │ heading + display    │ #H1#H2|text      │ ((target ()) (fragment ((Heading (H1 H2)))) (display (text)) (embed false))   │
+    │ embed                │ Note             │ ((target (Note)) (fragment ()) (display ()) (embed false))                    │
+    │ hash collapse        │ ##A###B          │ ((target ()) (fragment ((Heading (A B)))) (display ()) (embed false))         │
+    │ heading then ^block  │ Note#H1#^blockid │ ((target (Note)) (fragment ((Heading (H1 ^blockid)))) (display ())            │
+    │                      │                  │  (embed false))                                                               │
+    │ empty target #       │ #                │ ((target ()) (fragment ()) (display ()) (embed false))                        │
+    │ empty target         │                  │ ((target ()) (fragment ()) (display ()) (embed false))                        │
+    └──────────────────────┴──────────────────┴───────────────────────────────────────────────────────────────────────────────┘
     |}]
 ;;
 
@@ -172,18 +149,20 @@ let%expect_test "parse" =
     │ name         │ input                        │ nodes                                                                                    │
     ├──────────────┼──────────────────────────────┼──────────────────────────────────────────────────────────────────────────────────────────┤
     │ no wikilinks │ hello world                  │ Default                                                                                  │
-    │ single       │ before [[Note]] after        │ Inlines(@0..20)[Text(before  @0..6), Wikilink(link target=Note frag=- display=- @7..14), │
-    │              │                              │  Text( after @15..20)]                                                                   │
-    │ multiple     │ [[A]] and [[B]]              │ Inlines(@0..14)[Wikilink(link target=A frag=- display=- @0..4), Text( and  @5..9), Wikil │
-    │              │                              │ ink(link target=B frag=- display=- @10..14)]                                             │
-    │ embed        │ ![[image.png]]               │ Inlines(@0..13)[Wikilink(embed target=image.png frag=- display=- @0..13)]                │
+    │ single       │ before [[Note]] after        │ Inlines(@0..20)[Text(before  @0..6), Wikilink(((target (Note)) (fragment ()) (display () │
+    │              │                              │ ) (embed false)) @7..14), Text( after @15..20)]                                          │
+    │ multiple     │ [[A]] and [[B]]              │ Inlines(@0..14)[Wikilink(((target (A)) (fragment ()) (display ()) (embed false)) @0..4), │
+    │              │                              │  Text( and  @5..9), Wikilink(((target (B)) (fragment ()) (display ()) (embed false)) @10 │
+    │              │                              │ ..14)]                                                                                   │
+    │ embed        │ ![[image.png]]               │ Inlines(@0..13)[Wikilink(((target (image.png)) (fragment ()) (display ()) (embed true))  │
+    │              │                              │ @0..13)]                                                                                 │
     │ unclosed     │ [[unclosed                   │ Inlines(@0..9)[Text([[unclosed @0..9)]                                                   │
-    │ adjacent     │ [[A]][[B]]                   │ Inlines(@0..9)[Wikilink(link target=A frag=- display=- @0..4), Wikilink(link target=B fr │
-    │              │                              │ ag=- display=- @5..9)]                                                                   │
-    │ with display │ see [[Note|click here]] done │ Inlines(@0..27)[Text(see  @0..3), Wikilink(link target=Note frag=- display=click here @4 │
-    │              │                              │ ..22), Text( done @23..27)]                                                              │
-    │ block ref    │ go to [[#^abc-1]]            │ Inlines(@0..16)[Text(go to  @0..5), Wikilink(link target=- frag=Block_ref abc-1 display= │
-    │              │                              │ - @6..16)]                                                                               │
+    │ adjacent     │ [[A]][[B]]                   │ Inlines(@0..9)[Wikilink(((target (A)) (fragment ()) (display ()) (embed false)) @0..4),  │
+    │              │                              │ Wikilink(((target (B)) (fragment ()) (display ()) (embed false)) @5..9)]                 │
+    │ with display │ see [[Note|click here]] done │ Inlines(@0..27)[Text(see  @0..3), Wikilink(((target (Note)) (fragment ()) (display ("cli │
+    │              │                              │ ck here")) (embed false)) @4..22), Text( done @23..27)]                                  │
+    │ block ref    │ go to [[#^abc-1]]            │ Inlines(@0..16)[Text(go to  @0..5), Wikilink(((target ()) (fragment ((Block_ref abc-1))) │
+    │              │                              │  (display ()) (embed false)) @6..16)]                                                    │
     └──────────────┴──────────────────────────────┴──────────────────────────────────────────────────────────────────────────────────────────┘
     |}]
 ;;
@@ -204,28 +183,29 @@ let%expect_test "block_id" =
   let cols =
     [ Ascii_table.Column.create "name" (fun (n, _, _) -> n)
     ; Ascii_table.Column.create "input" (fun (_, i, _) -> i)
-    ; Ascii_table.Column.create "(byte_pos, id)" (fun (_, _, r) -> r)
+    ; Ascii_table.Column.create "result" (fun (_, _, r) ->
+        Option.value_map r ~default:"-" ~f:(fun bid ->
+          Block_id.sexp_of_t bid |> Sexp.to_string_hum))
     ]
   in
   let rows =
     List.map block_id_cases ~f:(fun (name, input) ->
-      let result = pp_block_id_result (Block_id.make_opt input) in
-      name, input, result)
+      name, input, Block_id.make_opt input)
   in
   print_string (Ascii_table.to_string_noattr cols rows);
   [%expect
     {|
-    ┌───────────────────┬────────────────────┬──────────────────────────┐
-    │ name              │ input              │ (byte_pos, id)           │
-    ├───────────────────┼────────────────────┼──────────────────────────┤
-    │ basic             │ Some text ^blockid │ (byte_pos=10, "blockid") │
-    │ with hyphen       │ Text ^block-id     │ (byte_pos=5, "block-id") │
-    │ no block id       │ Just text          │ -                        │
-    │ invalid _         │ Text ^block_id     │ -                        │
-    │ at start          │ ^blockid           │ (byte_pos=0, "blockid")  │
-    │ trailing space    │ Text ^blockid      │ (byte_pos=5, "blockid")  │
-    │ no space before ^ │ Text^blockid       │ (byte_pos=4, "blockid")  │
-    │ multiple ^        │ a ^x ^final1       │ (byte_pos=5, "final1")   │
-    └───────────────────┴────────────────────┴──────────────────────────┘
+    ┌───────────────────┬────────────────────┬──────────────────────────────┐
+    │ name              │ input              │ result                       │
+    ├───────────────────┼────────────────────┼──────────────────────────────┤
+    │ basic             │ Some text ^blockid │ ((id blockid) (byte_pos 10)) │
+    │ with hyphen       │ Text ^block-id     │ ((id block-id) (byte_pos 5)) │
+    │ no block id       │ Just text          │ -                            │
+    │ invalid _         │ Text ^block_id     │ -                            │
+    │ at start          │ ^blockid           │ ((id blockid) (byte_pos 0))  │
+    │ trailing space    │ Text ^blockid      │ ((id blockid) (byte_pos 5))  │
+    │ no space before ^ │ Text^blockid       │ ((id blockid) (byte_pos 4))  │
+    │ multiple ^        │ a ^x ^final1       │ ((id final1) (byte_pos 5))   │
+    └───────────────────┴────────────────────┴──────────────────────────────┘
     |}]
 ;;

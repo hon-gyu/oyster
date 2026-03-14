@@ -29,6 +29,7 @@ type t =
   ; byte_pos : int
     (** The byte position of the start of the block identifier in the inline text. *)
   }
+[@@deriving sexp]
 
 let meta_key : t Cmarkit.Meta.key = Cmarkit.Meta.key ()
 
