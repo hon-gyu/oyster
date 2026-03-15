@@ -1,0 +1,16 @@
+(documentation)
+
+(rule
+ (mode
+  (promote (until-clean)))
+ (alias doc)
+ (deps
+  (:exe ../md_to_mld.exe)
+  (:md ../../../../specification/pandoc/attribute.md)
+ )
+ (action
+  (progn
+   (with-stdout-to
+    pandoc-attribute.mld
+    (run %{exe} %{md}))
+   )))
