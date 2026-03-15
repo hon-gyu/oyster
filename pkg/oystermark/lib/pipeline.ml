@@ -329,6 +329,8 @@ let backlinks : t =
   make ~on_vault ()
 ;;
 
+let jupytext : t = make ~on_parse:Jupytext.on_parse ()
+
 let default : t =
   id
   >> exclude_draft_by_note_name
