@@ -2,6 +2,8 @@
     Implements {!page-"pandoc-attribute"}
 
     Attribute will be attached to the code block if it can be parsed out.
+
+    Note: we didn't really consider the number of spaces between cmark info string and attribute.
 *)
 open Core
 
@@ -33,7 +35,7 @@ let of_string_or_error (s : string) : (t, Error.t) result =
   let ids = List.filter items ~f:(fun s -> String.is_prefix s ~prefix:"#") in
   if List.length ids > 1
   then (
-    let msg = sprintf "too many ids: %s" (String.concat ~sep:" " items) in
+    let msg = sprintf "Too many ids: %s" (String.concat ~sep:" " ids) in
     err_msg := Some msg);
   let id = List.hd ids in
   (* class *)
@@ -74,19 +76,50 @@ let tag_cb_attr_meta (mapper : Mapper.t) (b : Block.t) : Block.t Mapper.result =
      | Some (info, _) ->
        (match String.lsplit2 ~on:' ' (String.strip info) with
         | Some (lang, attr_str) ->
-          (match of_string_or_error attr_str with
-           | Ok attr ->
-             let new_meta = cb_meta |> Meta.add meta_key { info; attribute = attr } in
-             Mapper.ret (Cmarkit.Block.Code_block (cb, new_meta))
-           | Error _ -> Mapper.default)
+          let attr_str' = String.strip attr_str in
+          (* Check starting and ending brackets *)
+          if
+            (not (String.is_prefix attr_str' ~prefix:"{"))
+            || not (String.is_suffix attr_str' ~suffix:"}")
+          then Mapper.default
+          else (
+            let attr_str'' =
+              String.sub attr_str' ~pos:1 ~len:(String.length attr_str' - 2)
+            in
+            match of_string_or_error attr_str'' with
+            | Ok attr ->
+              let new_meta = cb_meta |> Meta.add meta_key { info; attribute = attr } in
+              Mapper.ret (Cmarkit.Block.Code_block (cb, new_meta))
+            | Error _ -> Mapper.default)
         | None -> Mapper.default))
   | _ -> Mapper.default
 ;;
 
-let%test_module "Attribute" =
+let%test_module "parse attribute" =
   (module struct
-    (* let sexp_of_block (b : Block.t) : Sexp.t =
-        let (meta : Meta.t) = Block.meta b in
- *)
-  end
-)
+    let parse (s : string) : unit =
+      let info = of_string_or_error s in
+      print_s @@ Or_error.sexp_of_t sexp_of_t info
+    ;;
+
+    let%expect_test "good" =
+      parse {|#myid .class_a .class_b key1=val1 key2="val2"|};
+      [%expect
+        {|
+        (Ok
+         ((id (#myid)) (classes (.class_a .class_b))
+          (kvs ((key1 val1) (key2 "\"val2\"")))))
+        |}];
+    ;;
+
+    let%expect_test "invalid attribute: multiple ids" =
+      parse {|#myid #myid2 .class_a .class_b key1=val1 key2="val2"|};
+      [%expect {| (Error "Too many ids: #myid #myid2") |}];
+    ;;
+
+    let%expect_test "invalid attribute: invalid syntax" =
+      parse {|#myid .class_a .class_b key1=val1 key2="val2" hi|};
+      [%expect {| (Error "Invalid attributes: hi") |}];
+    ;;
+  end)
+;;
