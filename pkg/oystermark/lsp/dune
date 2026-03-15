@@ -1,0 +1,6 @@
+(executable
+ (name main)
+ (public_name oystermark-lsp)
+ (libraries oystermark linol-eio eio_main)
+ (preprocess
+  (pps ppx_jane)))
