@@ -33,6 +33,8 @@
   ppx_string
   ppx_blob
   ppx_quick_test
+  linol-eio
+  eio_main
   (textutils :with-test)
   (ppx_expect :with-test)
   (shexp :with-doc)
