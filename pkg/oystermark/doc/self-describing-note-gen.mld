@@ -1,4 +1,4 @@
-{0 Self-describing code execution}
+{0 Self-describing note transformatio}
 {@meta[
 date: "2026-03-15"
 ]}
@@ -21,7 +21,7 @@ oyster:
 
 This will get us [note2.md] with the content of [note1.md] twice.
 
-{1 DSL for code execution}
+{1 DSL for note transformation}
 
 We need a DSL to describe the transformation of [note1.md].
 
