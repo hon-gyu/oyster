@@ -30,10 +30,11 @@ let inline_to_plain_text (inline : Cmarkit.Inline.t) : string =
 ;;
 
 (** Create the single-pass mapper that:
-    - parses wikilinks in inline text nodes
-    - tags block identifiers at paragraph ends
-    - tags callout metadata on block quotes
-    - stamps deduplicated heading slugs onto heading block meta
+    - parses wikilinks in inline text nodes ({!module:Wikilink})
+    - tags block identifiers at paragraph ends ({!module:Block_id})
+    - tags callout metadata on block quotes ({!module:Callout})
+    - tags code block attributes onto code blocks ({!module:Attribute})
+    - tags deduplicated heading slugs onto heading block meta ({!module:Heading_slug})
 
     Returns a fresh mapper each time (heading slug dedup requires per-document state). *)
 let make_mapper () : Cmarkit.Mapper.t =
@@ -61,7 +62,10 @@ let make_mapper () : Cmarkit.Mapper.t =
     | _ ->
       (match Callout.map_callout mapper block with
        | `Map _ as result -> result
-       | `Default -> Block_id.tag_block_id_meta mapper block)
+       | `Default ->
+         (match Attribute.tag_cb_attr_meta mapper block with
+          | `Map _ as result -> result
+          | `Default -> Block_id.tag_block_id_meta mapper block))
   in
   Cmarkit.Mapper.make
     ~inline_ext_default:(fun _m i -> Some i)
@@ -252,7 +256,15 @@ II
 {|```python {#myid .class_a .class_b key1=val1 key2="val2"}
 II
 ```|});
-      [%expect {| (Code_block "python {#myid .class_a .class_b key1=val1 key2=\"val2\"}" II) |}]
+      [%expect {|
+        ((Code_block "python {#myid .class_a .class_b key1=val1 key2=\"val2\"}" II)
+          (meta
+            (attribute
+              ((info python)
+                (attribute
+                  ((id (#myid)) (classes (.class_a .class_b))
+                    (kvs ((key1 val1) (key2 val2)))))))))
+        |}]
     ;;
 
     let%expect_test "invalid attribute: multiple ids" =

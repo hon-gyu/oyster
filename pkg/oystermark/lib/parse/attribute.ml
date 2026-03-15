@@ -26,6 +26,15 @@ type code_block_info =
 let empty = { id = None; classes = []; kvs = [] }
 let meta_key : code_block_info Cmarkit.Meta.key = Cmarkit.Meta.key ()
 
+let strip_paired_double_quotes (s : string) : string =
+  if
+    String.length s >= 2
+    && String.is_prefix s ~prefix:"\""
+    && String.is_suffix s ~suffix:"\""
+  then String.sub s ~pos:1 ~len:(String.length s - 2)
+  else s
+;;
+
 let of_string_or_error (s : string) : (t, Error.t) result =
   let err_msg = ref None in
   let (items : string list) =
@@ -49,7 +58,7 @@ let of_string_or_error (s : string) : (t, Error.t) result =
   let (kvs : (string * string) list) =
     List.filter_map kv_candidates ~f:(fun kv ->
       match String.lsplit2 ~on:'=' kv with
-      | Some (key, value) -> Some (key, value)
+      | Some (key, value) -> Some (key, strip_paired_double_quotes value)
       | None ->
         invalid_attrs := kv :: !invalid_attrs;
         None)
@@ -88,7 +97,9 @@ let tag_cb_attr_meta (mapper : Mapper.t) (b : Block.t) : Block.t Mapper.result =
             in
             match of_string_or_error attr_str'' with
             | Ok attr ->
-              let new_meta = cb_meta |> Meta.add meta_key { info; attribute = attr } in
+              let new_meta =
+                cb_meta |> Meta.add meta_key { info = lang; attribute = attr }
+              in
               Mapper.ret (Cmarkit.Block.Code_block (cb, new_meta))
             | Error _ -> Mapper.default)
         | None -> Mapper.default))
@@ -107,19 +118,18 @@ let%test_module "parse attribute" =
       [%expect
         {|
         (Ok
-         ((id (#myid)) (classes (.class_a .class_b))
-          (kvs ((key1 val1) (key2 "\"val2\"")))))
-        |}];
+         ((id (#myid)) (classes (.class_a .class_b)) (kvs ((key1 val1) (key2 val2)))))
+        |}]
     ;;
 
     let%expect_test "invalid attribute: multiple ids" =
       parse {|#myid #myid2 .class_a .class_b key1=val1 key2="val2"|};
-      [%expect {| (Error "Too many ids: #myid #myid2") |}];
+      [%expect {| (Error "Too many ids: #myid #myid2") |}]
     ;;
 
     let%expect_test "invalid attribute: invalid syntax" =
       parse {|#myid .class_a .class_b key1=val1 key2="val2" hi|};
-      [%expect {| (Error "Invalid attributes: hi") |}];
+      [%expect {| (Error "Invalid attributes: hi") |}]
     ;;
   end)
 ;;
