@@ -1,4 +1,6 @@
-(** Extracting block(s) from blocks, i.e., extracting sub-tree from the AST  *)
+(** Utils for extracting block(s) from blocks, i.e., extracting sub-tree from the AST
+    Mostly used in embedding
+*)
 open Core
 
 (** Flatten a block list by splicing any top-level [Blocks] nodes into a flat

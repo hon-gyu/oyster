@@ -12,12 +12,14 @@ type t =
   ; classes : string list
   ; kvs : (string * string) list
   }
+[@@deriving sexp_of]
 
 type code_block_info =
   { info : string
     (** Cmarkit code block info string as in {{:https://spec.commonmark.org/0.31.2/#info-string}info string} *)
   ; attribute : t (** Pandoc attribute *)
   }
+[@@deriving sexp_of]
 
 let empty = { id = None; classes = []; kvs = [] }
 let meta_key : code_block_info Cmarkit.Meta.key = Cmarkit.Meta.key ()
@@ -80,3 +82,11 @@ let tag_cb_attr_meta (mapper : Mapper.t) (b : Block.t) : Block.t Mapper.result =
         | None -> Mapper.default))
   | _ -> Mapper.default
 ;;
+
+let%test_module "Attribute" =
+  (module struct
+    (* let sexp_of_block (b : Block.t) : Sexp.t =
+        let (meta : Meta.t) = Block.meta b in
+ *)
+  end
+)
