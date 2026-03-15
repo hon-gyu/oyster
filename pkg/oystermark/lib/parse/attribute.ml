@@ -1,7 +1,11 @@
-(** Pandoc-like attribute parsing.
+(** Pandoc code block attribute parsing.
     Implements {!page-"pandoc-attribute"}
+
+    Attribute will be attached to the code block if it can be parsed out.
 *)
 open Core
+
+open Cmarkit
 
 type t =
   { id : string option
@@ -9,7 +13,14 @@ type t =
   ; kvs : (string * string) list
   }
 
+type code_block_info =
+  { info : string
+    (** Cmarkit code block info string as in {{:https://spec.commonmark.org/0.31.2/#info-string}info string} *)
+  ; attribute : t (** Pandoc attribute *)
+  }
+
 let empty = { id = None; classes = []; kvs = [] }
+let meta_key : code_block_info Cmarkit.Meta.key = Cmarkit.Meta.key ()
 
 let of_string_or_error (s : string) : (t, Error.t) result =
   let err_msg = ref None in
@@ -50,4 +61,22 @@ let of_string_exn (s : string) : t =
   match of_string_or_error s with
   | Ok t -> t
   | Error e -> raise (Error.to_exn e)
+;;
+
+(** Try extract Pandoc attribute from CommonMark code block info string and attach it to the code block's meta. *)
+let tag_cb_attr_meta (mapper : Mapper.t) (b : Block.t) : Block.t Mapper.result =
+  match b with
+  | Cmarkit.Block.Code_block (cb, cb_meta) ->
+    (match Block.Code_block.info_string cb with
+     | None -> Mapper.default
+     | Some (info, _) ->
+       (match String.lsplit2 ~on:' ' (String.strip info) with
+        | Some (lang, attr_str) ->
+          (match of_string_or_error attr_str with
+           | Ok attr ->
+             let new_meta = cb_meta |> Meta.add meta_key { info; attribute = attr } in
+             Mapper.ret (Cmarkit.Block.Code_block (cb, new_meta))
+           | Error _ -> Mapper.default)
+        | None -> Mapper.default))
+  | _ -> Mapper.default
 ;;
