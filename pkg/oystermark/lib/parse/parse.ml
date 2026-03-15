@@ -244,7 +244,7 @@ let%test_module "Attribute" =
     let%expect_test "no attribute" =
       print_endline
         (parse
-{|```python
+           {|```python
 II
 ```|});
       [%expect {| (Code_block python II) |}]
@@ -253,10 +253,11 @@ II
     let%expect_test "attribute" =
       print_endline
         (parse
-{|```python {#myid .class_a .class_b key1=val1 key2="val2"}
+           {|```python {#myid .class_a .class_b key1=val1 key2="val2"}
 II
 ```|});
-      [%expect {|
+      [%expect
+        {|
         ((Code_block "python {#myid .class_a .class_b key1=val1 key2=\"val2\"}" II)
           (meta
             (attribute
@@ -270,10 +271,11 @@ II
     let%expect_test "invalid attribute: multiple ids" =
       print_endline
         (parse
-{|```python {#myid #myid2 .class_a .class_b key1=val1 key2="val2"}
+           {|```python {#myid #myid2 .class_a .class_b key1=val1 key2="val2"}
 II
 ```|});
-      [%expect {|
+      [%expect
+        {|
         (Code_block "python {#myid #myid2 .class_a .class_b key1=val1 key2=\"val2\"}"
           II)
         |}]
@@ -282,7 +284,7 @@ II
     let%expect_test "invalid attribute: invalid item" =
       print_endline
         (parse
-{|```python {#myid .class_a .class_b hi}
+           {|```python {#myid .class_a .class_b hi}
 II
 ```|});
       [%expect {| (Code_block "python {#myid .class_a .class_b hi}" II) |}]
@@ -291,7 +293,7 @@ II
     let%expect_test "invalid attribute: no info string" =
       print_endline
         (parse
-{|```{#myid .class_a .class_b}
+           {|```{#myid .class_a .class_b}
 II
 ```|});
       [%expect {| (Code_block "{#myid .class_a .class_b}" II) |}]

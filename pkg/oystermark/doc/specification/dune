@@ -6,11 +6,9 @@
  (alias doc)
  (deps
   (:exe ../md_to_mld.exe)
-  (:md ../../../../specification/pandoc/attribute.md)
- )
+  (:md ../../../../specification/pandoc/attribute.md))
  (action
   (progn
    (with-stdout-to
     pandoc-attribute.mld
-    (run %{exe} %{md}))
-   )))
+    (run %{exe} %{md})))))
