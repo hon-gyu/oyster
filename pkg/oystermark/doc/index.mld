@@ -44,5 +44,7 @@ Stages:
 
 {1 Other pages}
 
-- {!page-"cmarkit-label-resolution"}
-- {!page-"cmarkit-mapper-api"}
+{ul
+  {- {!page-"cmarkit-label-resolution"}}
+  {- {!page-"cmarkit-mapper-api"}}
+}

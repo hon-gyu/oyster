@@ -1,3 +1,5 @@
+{0 Attribute}
+{v
 # pandoc attribute
 
 ```python {#my-id .my-class key="value"}
@@ -35,3 +37,4 @@ Maps to class="foo bar baz" in HTML.
 {key="value" another=value}
 ```
 Quotes are optional if the value has no spaces. Maps to HTML attributes, or gets interpreted by Pandoc filters/writers specially.
+v}
