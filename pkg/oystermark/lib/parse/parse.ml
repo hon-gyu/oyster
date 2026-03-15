@@ -220,14 +220,16 @@ and sexp_of_block (b : Cmarkit.Block.t) : Sexp.t =
   | _ -> Sexp.Atom "<unknown-block>"
 ;;
 
-let%expect_test "get_heading_section" =
-  let make_block s : Cmarkit.Block.t =
-    let doc = of_string s in
-    Cmarkit.Doc.block doc
-  in
-  let block =
-    make_block
-      {|\
+let%test_module "Extract" =
+  (module struct
+    let%expect_test "get_heading_section" =
+      let make_block s : Cmarkit.Block.t =
+        let doc = of_string s in
+        Cmarkit.Doc.block doc
+      in
+      let block =
+        make_block
+          {|\
 # Heading 1
 ## Heading 2
 ### Heading 3
@@ -240,14 +242,14 @@ let%expect_test "get_heading_section" =
 ## Heading 10
 #### Heading 11
 ### Heading 12|}
-  in
-  let heading_id = "heading-1" in
-  let extracted = Extract.get_heading_section [ block ] heading_id in
-  print_endline
-    (commonmark_of_doc
-       (Cmarkit.Doc.make (Cmarkit.Block.Blocks (extracted, Cmarkit.Meta.none))));
-  [%expect
-    {|
+      in
+      let heading_id = "heading-1" in
+      let extracted = Extract.get_heading_section [ block ] heading_id in
+      print_endline
+        (commonmark_of_doc
+           (Cmarkit.Doc.make (Cmarkit.Block.Blocks (extracted, Cmarkit.Meta.none))));
+      [%expect
+        {|
     # Heading 1
     ## Heading 2
     ### Heading 3
@@ -255,85 +257,87 @@ let%expect_test "get_heading_section" =
     ##### Heading 5
     ###### Heading 6
     |}];
-  let heading_id = "heading-8" in
-  let extracted = Extract.get_heading_section [ block ] heading_id in
-  print_endline
-    (commonmark_of_doc
-       (Cmarkit.Doc.make (Cmarkit.Block.Blocks (extracted, Cmarkit.Meta.none))));
-  [%expect
-    {|
+      let heading_id = "heading-8" in
+      let extracted = Extract.get_heading_section [ block ] heading_id in
+      print_endline
+        (commonmark_of_doc
+           (Cmarkit.Doc.make (Cmarkit.Block.Blocks (extracted, Cmarkit.Meta.none))));
+      [%expect
+        {|
     ## Heading 8
     ### Heading 9
     |}]
-;;
+    ;;
 
-let%expect_test "get_block_by_caret_id" =
-  let render_block (block : Cmarkit.Block.t option) : unit =
-    match block with
-    | None -> print_endline "<none>"
-    | Some b -> print_endline (commonmark_of_doc (Cmarkit.Doc.make b))
-  in
-  (* Case 1: inline block ID at end of paragraph *)
-  let doc1 =
-    of_string
-      {|\
+    let%expect_test "get_block_by_caret_id" =
+      let render_block (block : Cmarkit.Block.t option) : unit =
+        match block with
+        | None -> print_endline "<none>"
+        | Some b -> print_endline (commonmark_of_doc (Cmarkit.Doc.make b))
+      in
+      (* Case 1: inline block ID at end of paragraph *)
+      let doc1 =
+        of_string
+          {|\
 First paragraph.
 
 Second paragraph text ^abc123|}
-  in
-  render_block (Extract.get_block_by_caret_id [ Cmarkit.Doc.block doc1 ] "abc123");
-  [%expect {| Second paragraph text ^abc123 |}];
-  (* Case 2: standalone block ID referencing previous block (blockquote) *)
-  let doc2 =
-    of_string
-      {|\
+      in
+      render_block (Extract.get_block_by_caret_id [ Cmarkit.Doc.block doc1 ] "abc123");
+      [%expect {| Second paragraph text ^abc123 |}];
+      (* Case 2: standalone block ID referencing previous block (blockquote) *)
+      let doc2 =
+        of_string
+          {|\
 > A blockquote here.
 
 ^bq001
 |}
-  in
-  render_block (Extract.get_block_by_caret_id [ Cmarkit.Doc.block doc2 ] "bq001");
-  [%expect {| > A blockquote here. |}];
-  (* Case 3: not found *)
-  let doc3 =
-    of_string
-      {|
+      in
+      render_block (Extract.get_block_by_caret_id [ Cmarkit.Doc.block doc2 ] "bq001");
+      [%expect {| > A blockquote here. |}];
+      (* Case 3: not found *)
+      let doc3 =
+        of_string
+          {|
 Some text ^exists
 |}
-  in
-  render_block (Extract.get_block_by_caret_id [ Cmarkit.Doc.block doc3 ] "nope");
-  [%expect {| <none> |}];
-  (* Case 4: standalone block ID referencing previous list *)
-  let doc4 =
-    of_string
-      {|
+      in
+      render_block (Extract.get_block_by_caret_id [ Cmarkit.Doc.block doc3 ] "nope");
+      [%expect {| <none> |}];
+      (* Case 4: standalone block ID referencing previous list *)
+      let doc4 =
+        of_string
+          {|
 - Item one
 - Item two
 
 ^lst001
 |}
-  in
-  render_block (Extract.get_block_by_caret_id [ Cmarkit.Doc.block doc4 ] "lst001");
-  [%expect
-    {|
+      in
+      render_block (Extract.get_block_by_caret_id [ Cmarkit.Doc.block doc4 ] "lst001");
+      [%expect
+        {|
     - Item one
     - Item two
     |}];
-  (* Case 5: block ID inside a list item *)
-  let doc5 =
-    of_string
-      {|
+      (* Case 5: block ID inside a list item *)
+      let doc5 =
+        of_string
+          {|
 - a nested list ^firstline
     - item
       ^inneritem
 |}
-  in
-  render_block (Extract.get_block_by_caret_id [ Cmarkit.Doc.block doc5 ] "firstline");
-  [%expect {| a nested list ^firstline |}];
-  render_block (Extract.get_block_by_caret_id [ Cmarkit.Doc.block doc5 ] "inneritem");
-  [%expect
-    {|
+      in
+      render_block (Extract.get_block_by_caret_id [ Cmarkit.Doc.block doc5 ] "firstline");
+      [%expect {| a nested list ^firstline |}];
+      render_block (Extract.get_block_by_caret_id [ Cmarkit.Doc.block doc5 ] "inneritem");
+      [%expect
+        {|
     item
     ^inneritem
     |}]
+    ;;
+  end)
 ;;
