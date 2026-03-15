@@ -37,12 +37,20 @@ A {{!Oystermark.Pipeline}pipeline} is a sequence of hooks that run at successive
 
 Stages:
 {ol
-    {- {b discover}: path only, before reading actual contents.}
-    {- {b parse}: obtain OysterMark AST (CommonMark AST + extensions).}
-    {- {b vault}: full vault transform after indexing and link resolution.}
+  {- {b discover}: path only, before reading actual contents.}
+  {- {b parse}: obtain OysterMark AST (CommonMark AST + extensions).}
+  {- {b vault}: full vault transform after indexing and link resolution.}
 }
 
 {1 Other pages}
 
-- {!page-"cmarkit-label-resolution"}
-- {!page-"cmarkit-mapper-api"}
+{2 Reference Specifications of Common CommonMark Extensions}
+{ul
+  {- {!page-"pandoc-attribute"}}
+}
+
+{2 Notes}
+{ul
+  {- {!page-"cmarkit-label-resolution"}}
+  {- {!page-"cmarkit-mapper-api"}}
+}

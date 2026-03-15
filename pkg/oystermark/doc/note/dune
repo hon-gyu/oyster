@@ -1,18 +1,16 @@
 (documentation)
 
-(executable
- (name md_to_mld)
- (libraries shexp.process core))
-
 (rule
  (mode
   (promote (until-clean)))
  (alias doc)
+ (deps
+  (:exe ../md_to_mld.exe))
  (action
   (progn
    (with-stdout-to
     cmarkit-mapper-api.mld
-    (run ./md_to_mld.exe %{dep:cmarkit-mapper-api.md}))
+    (run %{exe} %{dep:cmarkit-mapper-api.md}))
    (with-stdout-to
     cmarkit-label-resolution.mld
-    (run ./md_to_mld.exe %{dep:cmarkit-label-resolution.md})))))
+    (run %{exe} %{dep:cmarkit-label-resolution.md})))))

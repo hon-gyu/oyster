@@ -4,6 +4,8 @@ let () =
   let md = Sys.get_argv () |> Array.last in
   let title =
     String.chop_suffix_exn md ~suffix:".md"
+    |> String.split ~on:'/'
+    |> List.last_exn
     |> List.return
     |> List.concat_map ~f:(fun s -> String.split s ~on:'_')
     |> List.concat_map ~f:(fun s -> String.split s ~on:'-')
