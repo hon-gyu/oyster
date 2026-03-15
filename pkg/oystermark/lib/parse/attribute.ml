@@ -88,10 +88,9 @@ let tag_cb_attr_meta (mapper : Mapper.t) (b : Block.t) : Block.t Mapper.result =
           let attr_str' = String.strip attr_str in
           (* Check starting and ending brackets *)
           if
-            (not (String.is_prefix attr_str' ~prefix:"{"))
-            || not (String.is_suffix attr_str' ~suffix:"}")
-          then Mapper.default
-          else (
+            String.is_prefix attr_str' ~prefix:"{"
+            && String.is_suffix attr_str' ~suffix:"}"
+          then (
             let attr_str'' =
               String.sub attr_str' ~pos:1 ~len:(String.length attr_str' - 2)
             in
@@ -102,6 +101,7 @@ let tag_cb_attr_meta (mapper : Mapper.t) (b : Block.t) : Block.t Mapper.result =
               in
               Mapper.ret (Cmarkit.Block.Code_block (cb, new_meta))
             | Error _ -> Mapper.default)
+          else Mapper.default
         | None -> Mapper.default))
   | _ -> Mapper.default
 ;;
