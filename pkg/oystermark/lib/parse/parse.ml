@@ -7,6 +7,7 @@ module Frontmatter = Frontmatter
 module Heading_slug = Heading_slug
 module Wikilink = Wikilink
 module Extract = Extract
+module Attribute = Attribute
 
 type block_id =
   | Caret of Block_id.t
