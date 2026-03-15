@@ -1,7 +1,16 @@
 (library
  (name oystermark)
  (public_name oystermark)
- (libraries parse vault cmarkit core core_unix core_unix.sys_unix tyxml yaml)
+ (libraries
+  parse
+  vault
+  cmarkit
+  core
+  core_unix
+  core_unix.sys_unix
+  tyxml
+  yaml
+  yojson)
  (inline_tests)
  (preprocessor_deps
   (file static/theme.css))

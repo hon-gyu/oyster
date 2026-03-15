@@ -28,6 +28,7 @@
   core_unix
   tyxml
   yaml
+  yojson
   ppx_jane
   ppx_string
   ppx_blob
