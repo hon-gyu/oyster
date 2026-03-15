@@ -220,15 +220,79 @@ and sexp_of_block (b : Cmarkit.Block.t) : Sexp.t =
   | _ -> Sexp.Atom "<unknown-block>"
 ;;
 
+module For_test = struct
+  let make_block (s : string) : Cmarkit.Block.t =
+    let doc = of_string s in
+    Cmarkit.Doc.block doc
+  ;;
+
+  let parse (s : string) : string =
+    let block = make_block s in
+    Sexp.to_string_hum ~indent:2 (sexp_of_block block)
+  ;;
+end
+
+(* Tests for module Attribute *)
+let%test_module "Attribute" =
+  (module struct
+    let parse = For_test.parse
+
+    let%expect_test "no attribute" =
+      print_endline
+        (parse
+{|```python
+II
+```|});
+      [%expect {| (Code_block python II) |}]
+    ;;
+
+    let%expect_test "attribute" =
+      print_endline
+        (parse
+{|```python {#myid .class_a .class_b key1=val1 key2="val2"}
+II
+```|});
+      [%expect {| (Code_block "python {#myid .class_a .class_b key1=val1 key2=\"val2\"}" II) |}]
+    ;;
+
+    let%expect_test "invalid attribute: multiple ids" =
+      print_endline
+        (parse
+{|```python {#myid #myid2 .class_a .class_b key1=val1 key2="val2"}
+II
+```|});
+      [%expect {|
+        (Code_block "python {#myid #myid2 .class_a .class_b key1=val1 key2=\"val2\"}"
+          II)
+        |}]
+    ;;
+
+    let%expect_test "invalid attribute: invalid item" =
+      print_endline
+        (parse
+{|```python {#myid .class_a .class_b hi}
+II
+```|});
+      [%expect {| (Code_block "python {#myid .class_a .class_b hi}" II) |}]
+    ;;
+
+    let%expect_test "invalid attribute: no info string" =
+      print_endline
+        (parse
+{|```{#myid .class_a .class_b}
+II
+```|});
+      [%expect {| (Code_block "{#myid .class_a .class_b}" II) |}]
+    ;;
+  end)
+;;
+
+(* Tests for module Extract *)
 let%test_module "Extract" =
   (module struct
     let%expect_test "get_heading_section" =
-      let make_block s : Cmarkit.Block.t =
-        let doc = of_string s in
-        Cmarkit.Doc.block doc
-      in
       let block =
-        make_block
+        For_test.make_block
           {|\
 # Heading 1
 ## Heading 2
