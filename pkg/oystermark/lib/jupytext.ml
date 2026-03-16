@@ -60,7 +60,9 @@ let is_python_code_block (cb : Cmarkit.Block.Code_block.t) (meta : Cmarkit.Meta.
           | Some (lang, _) -> Some lang))
   in
   match lang with
-  | Some l -> String.equal l "python" || String.equal l "py"
+  | Some l ->
+    let ll = String.lowercase l in
+    String.equal ll "python" || String.equal ll "py"
   | None -> false
 ;;
 
