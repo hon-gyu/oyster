@@ -329,7 +329,42 @@ let backlinks : t =
   make ~on_vault ()
 ;;
 
-let jupytext : t = make ~on_parse:Jupytext.on_parse ()
+(** Execute Python code blocks in each document and splice the outputs back in.
+
+    - [path_filter]: skip execution for paths that return [false] (default: run all).
+    - [attr_filter]: forwarded to {!Code_executor.uv_executor} to select which
+      cells to run (default: run all Python cells).
+    - [loc_map]: forwarded to {!Code_executor.merge_outputs} to decide whether
+      each cell's output is appended after or replaces the source block
+      (default: append).
+
+    TODO: make the extraction of config configurable. *)
+let py_executor
+      ?(path_filter : string -> bool = fun _ -> true)
+      ?(attr_filter : (Parse.Attribute.t option -> bool) option)
+      ?(loc_map : (Parse.Attribute.t option -> [ `Append | `Replace ]) option)
+      ()
+  : t
+  =
+  make
+    ~on_parse:(fun path doc ->
+      if not (path_filter path)
+      then [ path, doc ]
+      else (
+        let ctx = Code_executor.extract_exec_ctx doc in
+        let outputs =
+          match attr_filter with
+          | Some f -> Code_executor.uv_executor ~attr_filter:f ctx
+          | None -> Code_executor.uv_executor ctx
+        in
+        let doc' =
+          match loc_map with
+          | Some f -> Code_executor.merge_outputs ~loc_map:f outputs doc
+          | None -> Code_executor.merge_outputs outputs doc
+        in
+        [ path, doc' ]))
+    ()
+;;
 
 let default : t =
   id
