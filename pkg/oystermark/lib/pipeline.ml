@@ -338,8 +338,9 @@ let backlinks : t =
       each cell's output is appended after or replaces the source block
       (default: append).
 
-    TODO: make the extraction of config configurable. *)
+    TODO: make the extraction of config configurable? (default: extract .oyster.pyproject) *)
 let py_executor
+      ?(uv_config_key : string option)
       ?(path_filter : string -> bool = fun _ -> true)
       ?(attr_filter : (Parse.Attribute.t option -> bool) option)
       ?(loc_map : (Parse.Attribute.t option -> [ `Append | `Replace ]) option)

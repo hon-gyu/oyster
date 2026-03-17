@@ -2,6 +2,12 @@ open Core
 module Attribute = Parse.Attribute
 module Frontmatter = Parse.Frontmatter
 
+(** Config key for Oyster-specific frontmatter in frontmatter *)
+let oyster_config_key = "oyster"
+
+(** Config key for uv-specific frontmatter in oyster config *)
+let uv_config_key = "pyproject"
+
 type cell =
   { id : int
     (** Unique code block id. Most of the time it will be the order of appearance in code blocks in the document *)
@@ -93,7 +99,7 @@ let extract_exec_ctx (doc : Cmarkit.Doc.t) : exec_ctx =
   let config =
     match Parse.Frontmatter.of_doc doc with
     | Some (`O fields) ->
-      (match List.Assoc.find fields ~equal:String.equal "oyster" with
+      (match List.Assoc.find fields ~equal:String.equal oyster_config_key with
        | Some (`O oys_fields) -> Yaml.(`O oys_fields)
        | Some _ -> failwith "Invalid frontmatter"
        | None -> Yaml.(`O []))
@@ -129,7 +135,7 @@ let default_uv_config = { version = 3.13; dependencies = [] }
           - pandas
     v} *)
 let uv_config_of_config (config : Yaml.value) : uv_config =
-  match Yaml.Util.find "pyproject" config with
+  match Yaml.Util.find uv_config_key config with
   | Ok (Some (`O fields)) ->
     let version =
       match List.Assoc.find fields ~equal:String.equal "version" with
