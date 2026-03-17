@@ -6,7 +6,7 @@ type cell =
   { id : int
     (** Unique code block id. Most of the time it will be the order of appearance in code blocks in the document *)
   ; lang : string option
-  ; info : Attribute.t option
+  ; attr : Attribute.t option
   ; content : string
   }
 [@@deriving sexp_of]
@@ -29,9 +29,9 @@ let todo () = failwith "TODO"
 (** Walk the Cmarkit AST and collect every fenced code block as a {!cell}.
     Cells are numbered in document order starting from 0.
 
-    Note: [lang] and [info] are only populated when a Pandoc attribute block
-    [{...}] follows the language tag (e.g. [```python \{.run\}]).
-    A plain [```python] fence produces [lang = None] and [info = None]. *)
+    [lang] and [attr] are populated from the {!Attribute.code_block_info} attached to the
+    block by {!Attribute.tag_cb_attr_meta} during parsing, which tags every fenced code
+    block that has a non-empty info string. *)
 let extract_code_blocks (doc : Cmarkit.Doc.t) : cell list =
   let block_id = ref 0 in
   let block _folder (acc : cell list) (b : Cmarkit.Block.t)
@@ -47,7 +47,7 @@ let extract_code_blocks (doc : Cmarkit.Doc.t) : cell list =
       let cell =
         { id = !block_id
         ; lang = cb_info |> Option.map ~f:(fun ci -> ci.lang)
-        ; info = cb_info |> Option.map ~f:(fun ci -> ci.attribute)
+        ; attr = cb_info |> Option.bind ~f:(fun ci -> ci.attribute)
         ; content
         }
       in
@@ -77,8 +77,8 @@ bar
   print_s [%sexp (cells : cell list)];
   [%expect
     {|
-    (((id 0) (lang ()) (info ()) (content "print(\"Hello\")"))
-     ((id 1) (lang (bash)) (info (((id ()) (classes (.foo)) (kvs ((baz zzz))))))
+    (((id 0) (lang (python)) (attr ()) (content "print(\"Hello\")"))
+     ((id 1) (lang (bash)) (attr (((id ()) (classes (.foo)) (kvs ((baz zzz))))))
       (content bar)))
     |}]
 ;;
@@ -283,7 +283,7 @@ let uv_executor ?(attr_filter : Attribute.t option -> bool = fun _ -> true) : ex
       | Some l ->
         let l' = l |> String.lowercase in
         let is_py = String.equal l' "python" || String.equal l' "py" in
-        is_py && attr_filter cell.info
+        is_py && attr_filter cell.attr
       | None -> false)
   in
   let sources = List.map python_cells ~f:(fun cell -> cell.content) in
@@ -339,7 +339,7 @@ let merge_outputs
        | Some res ->
          let attr =
            Cmarkit.Meta.find Attribute.meta_key meta
-           |> Option.map ~f:(fun ci -> ci.attribute)
+           |> Option.bind ~f:(fun ci -> ci.attribute)
          in
          let (info_str, content) =
            match res with
@@ -408,7 +408,11 @@ gibberish
       in
       print_s [%sexp (uv_executor ctx : output list)];
       [%expect
-        {| (((id 1) (res (Error "nbconvert failed")))) |}]
+        {|
+        (((id 0) (res (Error "nbconvert failed")))
+         ((id 1) (res (Error "nbconvert failed")))
+         ((id 2) (res (Error "nbconvert failed"))))
+        |}]
     ;;
 
     let%expect_test "uv_executor: python cells with other language in between" =

@@ -68,10 +68,11 @@ let is_python_code_block (cb : Cmarkit.Block.Code_block.t) (meta : Cmarkit.Meta.
 
 let is_eval_disabled (meta : Cmarkit.Meta.t) : bool =
   match Cmarkit.Meta.find Parse.Attribute.meta_key meta with
-  | Some { attribute; _ } ->
+  | Some { attribute = Some attribute; _ } ->
     (match List.Assoc.find attribute.kvs ~equal:String.equal "eval" with
      | Some "false" -> true
      | _ -> false)
+  | Some { attribute = None; _ } -> false
   | None -> false
 ;;
 

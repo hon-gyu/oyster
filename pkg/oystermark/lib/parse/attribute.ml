@@ -19,7 +19,7 @@ type t =
 type code_block_info =
   { lang : string
     (** Cmarkit code block info string as in {{:https://spec.commonmark.org/0.31.2/#info-string}info string} *)
-  ; attribute : t (** Pandoc attribute *)
+  ; attribute : t option (** Pandoc attribute *)
   }
 [@@deriving sexp_of]
 
@@ -76,33 +76,49 @@ let of_string_exn (s : string) : t =
   | Error e -> raise (Error.to_exn e)
 ;;
 
-(** Try extract Pandoc attribute from CommonMark code block info string and attach it to the code block's meta. *)
+(** Attach a {!code_block_info} to the meta of any fenced code block that has a lang.
+
+    Handles three info-string shapes:
+    - ["lang {attr}"] — lang + Pandoc attribute block → [attribute = Some t]
+    - ["lang"]        — lang only, no attribute block  → [attribute = None]
+    - ["lang other"]  — lang + non-attribute suffix    → [attribute = None] (suffix ignored)
+
+    Fences with no info string, or whose info string starts with ['{'] (attribute-only,
+    no lang), are left untagged — the outer [code_block_info option] in the meta stays
+    [None] for those blocks.
+
+    Invariant: whenever a [code_block_info] is attached, [lang] is a non-empty string.
+    Callers can therefore match on [Meta.find meta_key meta] and rely on [lang] always
+    being meaningful — there is no need for [lang : string option]. *)
 let tag_cb_attr_meta (mapper : Mapper.t) (b : Block.t) : Block.t Mapper.result =
   match b with
   | Cmarkit.Block.Code_block (cb, cb_meta) ->
     (match Block.Code_block.info_string cb with
      | None -> Mapper.default
      | Some (info, _) ->
-       (match String.lsplit2 ~on:' ' (String.strip info) with
-        | Some (lang, attr_str) ->
-          let attr_str' = String.strip attr_str in
-          (* Check starting and ending brackets *)
-          if
-            String.is_prefix attr_str' ~prefix:"{"
-            && String.is_suffix attr_str' ~suffix:"}"
-          then (
-            let attr_str'' =
-              String.sub attr_str' ~pos:1 ~len:(String.length attr_str' - 2)
-            in
-            match of_string_or_error attr_str'' with
-            | Ok attr ->
-              let new_meta =
-                cb_meta |> Meta.add meta_key { lang = lang; attribute = attr }
-              in
-              Mapper.ret (Cmarkit.Block.Code_block (cb, new_meta))
-            | Error _ -> Mapper.default)
-          else Mapper.default
-        | None -> Mapper.default))
+       let info' = String.strip info in
+       (* A fence whose info starts with '{' has attributes but no lang tag. *)
+       if String.is_empty info' || String.is_prefix info' ~prefix:"{"
+       then Mapper.default
+       else (
+         let (lang, rest) =
+           match String.lsplit2 ~on:' ' info' with
+           | Some (l, r) -> l, Some (String.strip r)
+           | None -> info', None
+         in
+         let attribute =
+           match rest with
+           | Some attr_str
+             when String.is_prefix attr_str ~prefix:"{"
+                  && String.is_suffix attr_str ~suffix:"}" ->
+             let inner = String.sub attr_str ~pos:1 ~len:(String.length attr_str - 2) in
+             (match of_string_or_error inner with
+              | Ok attr -> Some attr
+              | Error _ -> None)
+           | _ -> None
+         in
+         let new_meta = cb_meta |> Meta.add meta_key { lang; attribute } in
+         Mapper.ret (Cmarkit.Block.Code_block (cb, new_meta))))
   | _ -> Mapper.default
 ;;
 
