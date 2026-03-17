@@ -17,7 +17,7 @@ type t =
 [@@deriving sexp_of]
 
 type code_block_info =
-  { info : string
+  { lang : string
     (** Cmarkit code block info string as in {{:https://spec.commonmark.org/0.31.2/#info-string}info string} *)
   ; attribute : t (** Pandoc attribute *)
   }
@@ -97,7 +97,7 @@ let tag_cb_attr_meta (mapper : Mapper.t) (b : Block.t) : Block.t Mapper.result =
             match of_string_or_error attr_str'' with
             | Ok attr ->
               let new_meta =
-                cb_meta |> Meta.add meta_key { info = lang; attribute = attr }
+                cb_meta |> Meta.add meta_key { lang = lang; attribute = attr }
               in
               Mapper.ret (Cmarkit.Block.Code_block (cb, new_meta))
             | Error _ -> Mapper.default)

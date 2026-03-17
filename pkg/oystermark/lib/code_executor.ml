@@ -41,7 +41,7 @@ let extract_code_blocks (doc : Cmarkit.Doc.t) : cell list =
       let cb_info = Cmarkit.Meta.find Attribute.meta_key meta in
       let cell = {
         id = !block_id;
-        lang = (cb_info |> Option.map ~f:(fun ci -> ci.info));
+        lang = (cb_info |> Option.map ~f:(fun ci -> ci.lang));
         info = (cb_info |> Option.map ~f:(fun ci -> ci.attribute));
         content;
       } in

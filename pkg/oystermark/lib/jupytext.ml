@@ -50,7 +50,7 @@ end
 let is_python_code_block (cb : Cmarkit.Block.Code_block.t) (meta : Cmarkit.Meta.t) : bool =
   let lang =
     match Cmarkit.Meta.find Parse.Attribute.meta_key meta with
-    | Some { info; _ } -> Some (String.strip info)
+    | Some { lang; _ } -> Some (String.strip lang)
     | None ->
       (match Cmarkit.Block.Code_block.info_string cb with
        | None -> None
