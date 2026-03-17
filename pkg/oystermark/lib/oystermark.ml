@@ -13,6 +13,7 @@ module Html = Html
 module Pipeline = Pipeline
 module Theme = Theme
 module Config = Config
+module Code_executor = Code_executor
 
 (** Build and render a vault through the pipeline.
 

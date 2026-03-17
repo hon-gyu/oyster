@@ -1,0 +1,32 @@
+{0 Self-describing note transformatio}
+{@meta[
+date: "2026-03-15"
+]}
+
+
+{1 Self-describing in frontmatter}
+
+For example, in a [note1.md], it can has the following frontmatter
+{@yaml[
+oyster:
+  rule:
+    target: note2.md
+    action:
+      with-std-out-to:
+        - %{target}
+        - progn:
+          - cat %{self}
+          - cat %{self}
+]}
+
+This will get us [note2.md] with the content of [note1.md] twice.
+
+{1 DSL for note transformation}
+
+We need a DSL to describe the transformation of [note1.md].
+
+We might want to describe "Use the dependencies specified in the frontmatter's {b [.oyster.deps] } field, execute {b Python } codeblock without {b attributes "eval=false" }, and then {b append } the result right next to the codeblock."
+
+All above bolded content should be configurable by the DSL. For example, we might want to change [append] to [prepend] or [replace].
+
+This is essentially tree transformation. The object will be a tree of node with their index in the tree. We need an algebra to describe the transformation.
