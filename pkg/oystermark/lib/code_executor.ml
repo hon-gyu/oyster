@@ -98,3 +98,64 @@ type uv_config =
 
 let default_uv_config = { version = 3.13; dependencies = [] }
 let uv (default_config : uv_config) : executor = todo ()
+
+let make_notebook cells =
+  let make_cell source =
+    `Assoc [
+      "cell_type", `String "code";
+      "source", `List (List.map source ~f:(fun s -> `String s));
+      "metadata", `Assoc [];
+      "outputs", `List [];
+      "execution_count", `Null;
+    ]
+  in
+  `Assoc [
+    "nbformat", `Int 4;
+    "nbformat_minor", `Int 5;
+    "metadata", `Assoc [
+      "kernelspec", `Assoc [
+        "display_name", `String "Python 3";
+        "language", `String "python";
+        "name", `String "python3";
+      ]
+    ];
+    "cells", `List (List.map cells ~f:make_cell);
+  ]
+
+let run_notebook ~venv ~nb_json : (Yojson.Basic.t, string) result =
+  let tmp_in = Filename_unix.temp_file "nb_in" ".ipynb" in
+  let tmp_out = Filename_unix.temp_file "nb_out" ".ipynb" in
+  Yojson.Basic.to_file tmp_in nb_json;
+  let cmd = sprintf "%s/bin/jupyter nbconvert --to notebook --execute %s --output %s 2>/dev/null"
+    venv tmp_in tmp_out
+  in
+  match Core_unix.system cmd with
+  | Ok () ->
+    let result = Yojson.Basic.from_file tmp_out in
+    Sys_unix.remove tmp_in;
+    Sys_unix.remove tmp_out;
+    Ok result
+  | Error _ ->
+    Error "nbconvert failed"
+
+let cell_outputs (cell : Yojson.Basic.t) : string list =
+  let open Yojson.Basic.Util in
+  cell |> member "outputs" |> to_list |> List.filter_map ~f:(fun output ->
+    match output |> member "output_type" |> to_string with
+    | "stream" ->
+      Some (output |> member "text" |> to_string)
+    | "execute_result" | "display_data" ->
+      Some (output |> member "data" |> member "text/plain" |> to_string)
+    | "error" ->
+      let ename = output |> member "ename" |> to_string in
+      let evalue = output |> member "evalue" |> to_string in
+      Some (sprintf "%s: %s" ename evalue)
+    | _ -> None)
+
+let notebook_outputs (nb_json : Yojson.Basic.t) : string list list =
+  let open Yojson.Basic.Util in
+  nb_json
+  |> member "cells"
+  |> to_list
+  |> List.filter ~f:(fun c -> String.equal (c |> member "cell_type" |> to_string) "code")
+  |> List.map ~f:cell_outputs
