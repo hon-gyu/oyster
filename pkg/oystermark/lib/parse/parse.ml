@@ -262,7 +262,7 @@ II
         ((Code_block "python {#myid .class_a .class_b key1=val1 key2=\"val2\"}" II)
           (meta
             (attribute
-              ((info python)
+              ((lang python)
                 (attribute
                   ((id (#myid)) (classes (.class_a .class_b))
                     (kvs ((key1 val1) (key2 val2)))))))))
