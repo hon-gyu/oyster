@@ -464,3 +464,87 @@ let%test_module "prepend block" =
     ;;
   end)
 ;;
+
+let%test_module "py_executor" =
+  (module struct
+    let run doc = (py_executor ()).on_parse "test.md" doc |> List.hd_exn |> snd
+
+    let%expect_test "basic" =
+      let doc =
+        Parse.of_string
+          {|
+Hi
+```python
+print("hello")
+```
+Bye
+|}
+      in
+      print_endline (Parse.commonmark_of_doc (run doc));
+      [%expect
+        {|
+        Hi
+        ```python
+        print("hello")
+        ```
+        ```
+        hello
+
+        ```
+        Bye
+        |}]
+    ;;
+
+    let%expect_test "error, non-Python" =
+      let doc =
+        Parse.of_string
+          {|
+```py
+print("hello")
+```
+
+```python {}
+gibberish
+```
+
+```ts
+console.log("hello")
+```
+
+```py
+2
+```
+|}
+      in
+      print_endline (Parse.commonmark_of_doc (run doc));
+      [%expect
+        {|
+        ```py
+        print("hello")
+        ```
+        ```
+        hello
+
+        ```
+
+        ```python {}
+        gibberish
+        ```
+        ```
+        NameError: name 'gibberish' is not defined
+        ```
+
+        ```ts
+        console.log("hello")
+        ```
+
+        ```py
+        2
+        ```
+        ```
+        2
+        ```
+        |}]
+    ;;
+  end)
+;;
