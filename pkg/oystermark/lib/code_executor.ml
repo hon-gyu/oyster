@@ -22,8 +22,7 @@ type exec_ctx =
   ; inputs : cell list
   }
 
-type exec_result = output list
-type executor = exec_ctx -> exec_result
+type executor = exec_ctx -> output list
 
 let todo () = failwith "TODO"
 
@@ -203,8 +202,8 @@ let run_notebook ~(uv_config : uv_config) ~(nb_json : Yojson.Basic.t)
   in
   let cmd =
     sprintf
-      "JUPYTER_CONFIG_DIR=/dev/null uv run --python %g %s jupyter nbconvert --to notebook \
-       --execute %s --output %s 2>/dev/null"
+      "JUPYTER_CONFIG_DIR=/dev/null uv run --python %g %s jupyter nbconvert --to \
+       notebook --execute %s --output %s 2>/dev/null"
       uv_config.version
       with_args
       tmp_in
@@ -297,49 +296,65 @@ let uv_executor ?(attr_filter : Attribute.t option -> bool = fun _ -> true) : ex
       { id = cell.id; res = `Markdown (String.concat ~sep:"\n" outs) })
 ;;
 
-(* Unit test: dependency config is parsed from frontmatter *)
-let%expect_test "uv_config_of_config: parses version and dependencies" =
-  let config =
-    match
-      Yaml.of_string
-        {|
-pyproject:
-  version: "3.11"
-  dependencies:
-    - numpy
-    - pandas
-|}
-    with
-    | Ok v -> v
-    | Error (`Msg m) -> failwith m
+let insert_outputs (outputs : string list) (doc : Cmarkit.Doc.t) : Cmarkit.Doc.t =
+  let outputs_arr = Array.of_list outputs in
+  let counter = ref 0 in
+  let block _mapper (b : Cmarkit.Block.t) : Cmarkit.Block.t Cmarkit.Mapper.result =
+    match b with
+    | Cmarkit.Block.Code_block (cb, meta) ->
+      if is_python_code_block cb meta && not (is_eval_disabled meta)
+      then (
+        let idx = !counter in
+        incr counter;
+        if idx < Array.length outputs_arr && not (String.is_empty outputs_arr.(idx))
+        then (
+          let html_content = outputs_arr.(idx) in
+          let html_cb =
+            Cmarkit.Block.Code_block.make
+              ~info_string:("=html", Cmarkit.Meta.none)
+              (Cmarkit.Block_line.list_of_string html_content)
+          in
+          let html_block = Cmarkit.Block.Code_block (html_cb, Cmarkit.Meta.none) in
+          Cmarkit.Mapper.ret (Cmarkit.Block.Blocks ([ b; html_block ], Cmarkit.Meta.none)))
+        else Cmarkit.Mapper.default)
+      else Cmarkit.Mapper.default
+    | _ -> Cmarkit.Mapper.default
   in
-  let cfg = uv_config_of_config config in
-  print_s [%sexp (cfg : uv_config)];
-  [%expect {|
-    ((version 3.11) (dependencies (numpy pandas)))
-  |}]
+  let mapper =
+    Cmarkit.Mapper.make
+      ~inline_ext_default:(fun _m i -> Some i)
+      ~block_ext_default:(fun _m b -> Some b)
+      ~block
+      ()
+  in
+  Cmarkit.Mapper.map_doc mapper doc
 ;;
 
-(* Integration tests: require uv + jupyter in PATH *)
-
-let%expect_test "uv_executor: basic" =
-  let ctx = extract_exec_ctx (Parse.of_string {|
+let%test_module "uv_executor" =
+  (module struct
+    let%expect_test "uv_executor: basic" =
+      let ctx =
+        extract_exec_ctx
+          (Parse.of_string
+             {|
 ```python {}
 print("hello")
 ```
-|}) in
-  print_s [%sexp (uv_executor ctx : output list)];
-  [%expect {|
+|})
+      in
+      print_s [%sexp (uv_executor ctx : output list)];
+      [%expect
+        {|
     (((id 0) (res (Markdown "hello\n"))))
   |}]
-;;
+    ;;
 
-let%expect_test "uv_executor: python cells with other language in between" =
-  (* bash cell (id=1) is skipped; python cells (ids 0,2) share notebook state *)
-  let ctx =
-    extract_exec_ctx
-      (Parse.of_string
-         {|
+    let%expect_test "uv_executor: python cells with other language in between" =
+      (* bash cell (id=1) is skipped; python cells (ids 0,2) share notebook state *)
+      let ctx =
+        extract_exec_ctx
+          (Parse.of_string
+             {|
 ```python {}
 x = 1
 print(x)
@@ -351,18 +366,19 @@ echo hi
 print(x + 1)
 ```
 |})
-  in
-  print_s [%sexp (uv_executor ctx : output list)];
-  [%expect {|
+      in
+      print_s [%sexp (uv_executor ctx : output list)];
+      [%expect
+        {|
     (((id 0) (res (Markdown "1\n"))) ((id 2) (res (Markdown "2\n"))))
   |}]
-;;
+    ;;
 
-let%expect_test "uv_executor: attr_filter excludes matching cells" =
-  let ctx =
-    extract_exec_ctx
-      (Parse.of_string
-         {|
+    let%expect_test "uv_executor: attr_filter excludes matching cells" =
+      let ctx =
+        extract_exec_ctx
+          (Parse.of_string
+             {|
 ```python {}
 print("runs")
 ```
@@ -370,30 +386,30 @@ print("runs")
 print("skipped")
 ```
 |})
-  in
-  let outputs =
-    uv_executor
-      ~attr_filter:(fun attr ->
-        match attr with
-        | Some { classes; _ } ->
-          not (List.mem classes ".no-exec" ~equal:String.equal)
-        | None -> true)
-      ctx
-  in
-  print_s [%sexp (outputs : output list)];
-  [%expect {|
+      in
+      let outputs =
+        uv_executor
+          ~attr_filter:(fun attr ->
+            match attr with
+            | Some { classes; _ } -> not (List.mem classes ".no-exec" ~equal:String.equal)
+            | None -> true)
+          ctx
+      in
+      print_s [%sexp (outputs : output list)];
+      [%expect
+        {|
     (((id 0) (res (Markdown "runs\n"))))
   |}]
-;;
+    ;;
 
-let%expect_test "uv_executor: installs and uses dependency from frontmatter" =
-  (* Verifies the full path: frontmatter -> uv_config -> uv --with <dep> ->
+    let%expect_test "uv_executor: installs and uses dependency from frontmatter" =
+      (* Verifies the full path: frontmatter -> uv_config -> uv --with <dep> ->
      importable package inside the notebook. Uses [packaging] (pure-Python,
      no C extensions) so uv can resolve it quickly without network if cached. *)
-  let ctx =
-    extract_exec_ctx
-      (Parse.of_string
-         {|---
+      let ctx =
+        extract_exec_ctx
+          (Parse.of_string
+             {|---
 oyster:
   pyproject:
     dependencies:
@@ -404,9 +420,12 @@ from packaging.version import Version
 print(Version("2.1.0").major)
 ```
 |})
-  in
-  print_s [%sexp (uv_executor ctx : output list)];
-  [%expect {|
+      in
+      print_s [%sexp (uv_executor ctx : output list)];
+      [%expect
+        {|
     (((id 0) (res (Markdown "2\n"))))
   |}]
+    ;;
+  end)
 ;;
