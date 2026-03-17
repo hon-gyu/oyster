@@ -27,6 +27,12 @@ type executor = exec_ctx -> exec_result
 
 let todo () = failwith "TODO"
 
+(** Walk the Cmarkit AST and collect every fenced code block as a {!cell}.
+    Cells are numbered in document order starting from 0.
+
+    Note: [lang] and [info] are only populated when a Pandoc attribute block
+    [{...}] follows the language tag (e.g. [```python \{.run\}]).
+    A plain [```python] fence produces [lang = None] and [info = None]. *)
 let extract_code_blocks (doc : Cmarkit.Doc.t) : cell list =
   let block_id = ref 0 in
   let block _folder (acc : cell list) (b : Cmarkit.Block.t)
@@ -78,6 +84,10 @@ bar
     |}]
 ;;
 
+(** Build an {!exec_ctx} from a parsed document.
+    - [config]: the [oyster] mapping from the YAML frontmatter, or an empty
+      mapping if absent. Executors read their own sub-keys from this value.
+    - [inputs]: all code blocks in document order via {!extract_code_blocks}. *)
 let extract_exec_ctx (doc : Cmarkit.Doc.t) : exec_ctx =
   let config =
     match Parse.Frontmatter.of_doc doc with
@@ -104,6 +114,19 @@ type uv_config =
 
 let default_uv_config = { version = 3.13; dependencies = [] }
 
+(** Read [uv_config] from the [pyproject] sub-key of the oyster config.
+    Both [version: 3.11] (YAML float) and [version: "3.11"] (string) are
+    accepted. Falls back to {!default_uv_config} for any missing field.
+
+    Expected frontmatter shape:
+    {v
+    oyster:
+      pyproject:
+        version: "3.13"
+        dependencies:
+          - numpy
+          - pandas
+    v} *)
 let uv_config_of_config (config : Yaml.value) : uv_config =
   match Yaml.Util.find "pyproject" config with
   | Ok (Some (`O fields)) ->
@@ -125,6 +148,10 @@ let uv_config_of_config (config : Yaml.value) : uv_config =
   | _ -> default_uv_config
 ;;
 
+(** Build a minimal [.ipynb] JSON with a Python 3 kernelspec.
+    Each element of [cells] becomes one code cell; source is stored as a plain
+    string (Jupyter's [multiline_string] format accepts both a bare string and
+    an array of lines). *)
 let make_notebook (cells : string list) =
   let make_cell source =
     `Assoc
@@ -151,6 +178,16 @@ let make_notebook (cells : string list) =
     ]
 ;;
 
+(** Execute a notebook JSON via [uv run ... jupyter nbconvert].
+    Dependencies in [uv_config] are passed as [--with <dep>] arguments so uv
+    provisions an ephemeral virtual environment — no persistent venv needed.
+
+    Implementation notes:
+    - [JUPYTER_CONFIG_DIR=/dev/null] prevents local Jupyter config (e.g.
+      contrib extensions) from breaking the clean uv environment.
+    - [jupyter nbconvert --output] takes a base name and appends [.ipynb]
+      itself, so we strip the extension from the temp output path and
+      reconstruct it after the command. *)
 let run_notebook ~(uv_config : uv_config) ~(nb_json : Yojson.Basic.t)
   : (Yojson.Basic.t, string) result
   =
@@ -192,6 +229,12 @@ let multiline_string (j : Yojson.Basic.t) : string =
   | _ -> ""
 ;;
 
+(** Extract text from each output entry of a Jupyter code cell.
+    Handles the four output types defined by nbformat:
+    - [stream]: stdout/stderr text
+    - [execute_result] / [display_data]: [text/plain] from the MIME bundle
+    - [error]: formatted as ["ExcType: message"]
+    Other output types are silently ignored. *)
 let cell_outputs (cell : Yojson.Basic.t) : string list =
   let open Yojson.Basic.Util in
   cell
@@ -209,6 +252,9 @@ let cell_outputs (cell : Yojson.Basic.t) : string list =
     | _ -> None)
 ;;
 
+(** Return the outputs of every code cell in an executed notebook, in order.
+    Each element of the returned list corresponds to one code cell and is
+    itself a list of output strings (one per output entry). *)
 let notebook_outputs (nb_json : Yojson.Basic.t) : string list list =
   let open Yojson.Basic.Util in
   nb_json
@@ -218,6 +264,17 @@ let notebook_outputs (nb_json : Yojson.Basic.t) : string list list =
   |> List.map ~f:cell_outputs
 ;;
 
+(** Executor that runs Python cells via an ephemeral [uv] environment.
+
+    Only cells whose [lang] is ["python"] or ["py"] (case-insensitive) are
+    executed. The optional [attr_filter] allows further selection by Pandoc
+    attribute (e.g. skip cells tagged [.no-exec]).
+
+    All selected cells are assembled into a single notebook and executed
+    together, so they share interpreter state (imports, variables, etc.).
+    Outputs are mapped back to the original {!cell} IDs so callers can
+    correlate results with source positions even when non-Python cells appear
+    in between. *)
 let uv_executor ?(attr_filter : Attribute.t option -> bool = fun _ -> true) : executor =
   fun ctx ->
   let uv_config = uv_config_of_config ctx.config in
@@ -326,5 +383,30 @@ print("skipped")
   print_s [%sexp (outputs : output list)];
   [%expect {|
     (((id 0) (res (Markdown "runs\n"))))
+  |}]
+;;
+
+let%expect_test "uv_executor: installs and uses dependency from frontmatter" =
+  (* Verifies the full path: frontmatter -> uv_config -> uv --with <dep> ->
+     importable package inside the notebook. Uses [packaging] (pure-Python,
+     no C extensions) so uv can resolve it quickly without network if cached. *)
+  let ctx =
+    extract_exec_ctx
+      (Parse.of_string
+         {|---
+oyster:
+  pyproject:
+    dependencies:
+      - packaging
+---
+```python {}
+from packaging.version import Version
+print(Version("2.1.0").major)
+```
+|})
+  in
+  print_s [%sexp (uv_executor ctx : output list)];
+  [%expect {|
+    (((id 0) (res (Markdown "2\n"))))
   |}]
 ;;
