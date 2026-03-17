@@ -14,6 +14,8 @@ type cell =
 type output =
   { id : int
   ; res : [ `Html of string | `Markdown of string | `Error of string ]
+    (** [`Error] is only used when
+    nbconvert itself fails (process-level failure) *)
   }
 [@@deriving sexp_of]
 
@@ -203,7 +205,7 @@ let run_notebook ~(uv_config : uv_config) ~(nb_json : Yojson.Basic.t)
   let cmd =
     sprintf
       "JUPYTER_CONFIG_DIR=/dev/null uv run --python %g %s jupyter nbconvert --to \
-       notebook --execute %s --output %s 2>/dev/null"
+       notebook --execute --allow-errors %s --output %s 2>/dev/null"
       uv_config.version
       with_args
       tmp_in
@@ -323,8 +325,10 @@ let merge_outputs
   =
   (* Build a map from cell id to its result for O(log n) lookup in the fold. *)
   let output_map =
-    List.fold outputs ~init:(Map.empty (module Int)) ~f:(fun acc o ->
-      Map.set acc ~key:o.id ~data:o.res)
+    List.fold
+      outputs
+      ~init:(Map.empty (module Int))
+      ~f:(fun acc o -> Map.set acc ~key:o.id ~data:o.res)
   in
   (* Counter mirrors extract_code_blocks: increments on every code block so
      IDs assigned here match those in the exec_ctx. *)
@@ -341,7 +345,7 @@ let merge_outputs
            Cmarkit.Meta.find Attribute.meta_key meta
            |> Option.bind ~f:(fun ci -> ci.attribute)
          in
-         let (info_str, content) =
+         let info_str, content =
            match res with
            | `Html s -> "=html", s
            | `Markdown s -> "", s
@@ -355,7 +359,8 @@ let merge_outputs
          let out_block = Cmarkit.Block.Code_block (out_cb, Cmarkit.Meta.none) in
          (match loc_map attr with
           | `Append ->
-            Cmarkit.Mapper.ret (Cmarkit.Block.Blocks ([ b; out_block ], Cmarkit.Meta.none))
+            Cmarkit.Mapper.ret
+              (Cmarkit.Block.Blocks ([ b; out_block ], Cmarkit.Meta.none))
           | `Replace -> Cmarkit.Mapper.ret out_block))
     | _ -> Cmarkit.Mapper.default
   in
@@ -409,9 +414,9 @@ gibberish
       print_s [%sexp (uv_executor ctx : output list)];
       [%expect
         {|
-        (((id 0) (res (Error "nbconvert failed")))
-         ((id 1) (res (Error "nbconvert failed")))
-         ((id 2) (res (Error "nbconvert failed"))))
+        (((id 0) (res (Markdown "hello\n")))
+         ((id 1) (res (Markdown "NameError: name 'gibberish' is not defined")))
+         ((id 2) (res (Markdown 2))))
         |}]
     ;;
 
