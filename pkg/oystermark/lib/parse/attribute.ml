@@ -101,7 +101,7 @@ let tag_cb_attr_meta (mapper : Mapper.t) (b : Block.t) : Block.t Mapper.result =
        if String.is_empty info' || String.is_prefix info' ~prefix:"{"
        then Mapper.default
        else (
-         let (lang, rest) =
+         let lang, rest =
            match String.lsplit2 ~on:' ' info' with
            | Some (l, r) -> l, Some (String.strip r)
            | None -> info', None

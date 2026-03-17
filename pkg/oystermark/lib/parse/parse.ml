@@ -248,7 +248,8 @@ let%test_module "Attribute" =
            {|```python
 II
 ```|});
-      [%expect {| ((Code_block python II) (meta (attribute ((lang python) (attribute ()))))) |}]
+      [%expect
+        {| ((Code_block python II) (meta (attribute ((lang python) (attribute ()))))) |}]
     ;;
 
     let%expect_test "attribute" =
@@ -289,7 +290,8 @@ II
            {|```python {#myid .class_a .class_b hi}
 II
 ```|});
-      [%expect {|
+      [%expect
+        {|
         ((Code_block "python {#myid .class_a .class_b hi}" II)
           (meta (attribute ((lang python) (attribute ())))))
         |}]
