@@ -296,28 +296,67 @@ let uv_executor ?(attr_filter : Attribute.t option -> bool = fun _ -> true) : ex
       { id = cell.id; res = `Markdown (String.concat ~sep:"\n" outs) })
 ;;
 
-let insert_outputs (outputs : string list) (doc : Cmarkit.Doc.t) : Cmarkit.Doc.t =
-  let outputs_arr = Array.of_list outputs in
-  let counter = ref 0 in
+(** Splice executor outputs back into a document, producing a new {!Cmarkit.Doc.t}.
+
+    For every code block that has a matching entry in [outputs] (matched by the
+    same integer ID assigned by {!extract_code_blocks}), an output block is
+    inserted according to [loc_map]:
+    - [`Append] (default): keep the source cell and append the output block
+      immediately after it.
+    - [`Replace]: replace the source cell entirely with the output block.
+
+    [loc_map] receives the Pandoc {!Attribute.t} of the source cell (if any),
+    allowing callers to drive the append/replace decision from cell attributes
+    (e.g. [.replace] class → Replace).
+
+    The output block info string depends on the {!output.res} variant:
+    - [`Html _]     → ["=html"]   (raw HTML, passed through by the renderer)
+    - [`Markdown _] → no info string (preformatted plain-text block)
+    - [`Error _]    → ["=error"]  (can be styled distinctly by the renderer)
+
+    Cells with no matching entry in [outputs] are left untouched. *)
+let merge_outputs
+      ?(loc_map : Attribute.t option -> [ `Append | `Replace ] = fun _ -> `Append)
+      (outputs : output list)
+      (doc : Cmarkit.Doc.t)
+  : Cmarkit.Doc.t
+  =
+  (* Build a map from cell id to its result for O(log n) lookup in the fold. *)
+  let output_map =
+    List.fold outputs ~init:(Map.empty (module Int)) ~f:(fun acc o ->
+      Map.set acc ~key:o.id ~data:o.res)
+  in
+  (* Counter mirrors extract_code_blocks: increments on every code block so
+     IDs assigned here match those in the exec_ctx. *)
+  let block_id = ref 0 in
   let block _mapper (b : Cmarkit.Block.t) : Cmarkit.Block.t Cmarkit.Mapper.result =
     match b with
-    | Cmarkit.Block.Code_block (cb, meta) ->
-      if is_python_code_block cb meta && not (is_eval_disabled meta)
-      then (
-        let idx = !counter in
-        incr counter;
-        if idx < Array.length outputs_arr && not (String.is_empty outputs_arr.(idx))
-        then (
-          let html_content = outputs_arr.(idx) in
-          let html_cb =
-            Cmarkit.Block.Code_block.make
-              ~info_string:("=html", Cmarkit.Meta.none)
-              (Cmarkit.Block_line.list_of_string html_content)
-          in
-          let html_block = Cmarkit.Block.Code_block (html_cb, Cmarkit.Meta.none) in
-          Cmarkit.Mapper.ret (Cmarkit.Block.Blocks ([ b; html_block ], Cmarkit.Meta.none)))
-        else Cmarkit.Mapper.default)
-      else Cmarkit.Mapper.default
+    | Cmarkit.Block.Code_block (_cb, meta) ->
+      let id = !block_id in
+      incr block_id;
+      (match Map.find output_map id with
+       | None -> Cmarkit.Mapper.default
+       | Some res ->
+         let attr =
+           Cmarkit.Meta.find Attribute.meta_key meta
+           |> Option.map ~f:(fun ci -> ci.attribute)
+         in
+         let (info_str, content) =
+           match res with
+           | `Html s -> "=html", s
+           | `Markdown s -> "", s
+           | `Error s -> "=error", s
+         in
+         let out_cb =
+           Cmarkit.Block.Code_block.make
+             ~info_string:(info_str, Cmarkit.Meta.none)
+             (Cmarkit.Block_line.list_of_string content)
+         in
+         let out_block = Cmarkit.Block.Code_block (out_cb, Cmarkit.Meta.none) in
+         (match loc_map attr with
+          | `Append ->
+            Cmarkit.Mapper.ret (Cmarkit.Block.Blocks ([ b; out_block ], Cmarkit.Meta.none))
+          | `Replace -> Cmarkit.Mapper.ret out_block))
     | _ -> Cmarkit.Mapper.default
   in
   let mapper =
@@ -347,6 +386,29 @@ print("hello")
         {|
     (((id 0) (res (Markdown "hello\n"))))
   |}]
+    ;;
+
+    let%expect_test "uv_executor: error" =
+      let ctx =
+        extract_exec_ctx
+          (Parse.of_string
+             {|
+```py
+print("hello")
+```
+
+```python {}
+gibberish
+```
+
+```py
+2
+```
+|})
+      in
+      print_s [%sexp (uv_executor ctx : output list)];
+      [%expect
+        {| (((id 1) (res (Error "nbconvert failed")))) |}]
     ;;
 
     let%expect_test "uv_executor: python cells with other language in between" =
