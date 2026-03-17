@@ -312,9 +312,9 @@ let uv_executor ?(attr_filter : Attribute.t option -> bool = fun _ -> true) : ex
     (e.g. [.replace] class → Replace).
 
     The output block info string depends on the {!output.res} variant:
-    - [`Html _]     → ["=html"]   (raw HTML, passed through by the renderer)
+    - [`Html _]     → ["=html"]  (raw HTML, passed through by the renderer)
     - [`Markdown _] → no info string (preformatted plain-text block)
-    - [`Error _]    → ["=error"]  (can be styled distinctly by the renderer)
+    - [`Error _]    → ["=html"]  (TBD)
 
     Cells with no matching entry in [outputs] are left untouched. *)
 let merge_outputs
@@ -349,7 +349,7 @@ let merge_outputs
            match res with
            | `Html s -> "=html", s
            | `Markdown s -> "", s
-           | `Error s -> "=error", s
+           | `Error s -> "=html", s
          in
          let out_cb =
            Cmarkit.Block.Code_block.make
