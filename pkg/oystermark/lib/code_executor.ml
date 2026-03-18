@@ -322,7 +322,7 @@ let uv_executor ?(attr_filter : Attribute.t option -> bool = fun _ -> true) : ex
       { id = cell.id; res = `Markdown (String.concat ~sep:"\n" outs) })
 ;;
 
-(** Splice executor outputs back into a document, producing a new {!Cmarkit.Doc.t}.
+(** Splice executor outputs back into a document, producing a new [Cmarkit.Doc.t].
 
     For every code block that has a matching entry in [outputs] (matched by the
     same integer ID assigned by {!extract_code_blocks}), an output block is
