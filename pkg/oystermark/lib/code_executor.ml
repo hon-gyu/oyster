@@ -413,12 +413,15 @@ type cache = cache_entry String.Map.t ref
 
 let empty_cache () : cache = ref String.Map.empty
 
+(** Return pre-existing execution result for [path] and [hash] if it exists and matches [hash]. *)
 let cache_lookup (c : cache) ~(path : string) ~(hash : string) : output list option =
   match Map.find !c path with
   | Some entry when String.equal entry.hash hash -> Some entry.outputs
   | _ -> None
 ;;
 
+(** Store the execution result for [path] with content hash [hash] into the
+    in-memory cache. Call [save_cache] afterwards to persist to disk. *)
 let cache_set (c : cache) ~(path : string) ~(hash : string) ~(outputs : output list)
   : unit
   =
