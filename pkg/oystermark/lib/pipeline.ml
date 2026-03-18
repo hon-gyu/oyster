@@ -379,14 +379,14 @@ let py_executor
     ()
 ;;
 
-let default : t =
+let default ?(cache : Code_executor.cache option) () : t =
   id
   >> exclude_draft_by_note_name
   >> exclude_unpublish
   >> validate_no_duplicates
   >> drop_keys_in_frontmatter [ "publish"; "draft" ]
   >> drop_emtpy_frontmatter
-  >> py_executor ()
+  >> py_executor ?cache ()
   >> backlinks
   >> home_toc ~dir_link:true ()
   >> dir_index ()
