@@ -397,7 +397,7 @@ let py_executor
   let hash_fn ctx =
     let open Code_executor in
     let uv_config = uv_config_of_config ctx.config in
-    let python_cells = filter_python_cells ?attr_filter ctx.inputs in
+    let python_cells = filter_cells ~lang_filter:is_python ~attr_filter ctx.inputs in
     compute_hash python_cells uv_config
   in
   code_exec
@@ -523,7 +523,11 @@ hello
     let echo_hash doc = Code_executor.echo_hash_fn (Code_executor.extract_exec_ctx doc)
 
     let run_echo cache doc =
-      (code_exec ~cache ~executor:Code_executor.echo_executor ~hash_fn:Code_executor.echo_hash_fn ())
+      (code_exec
+         ~cache
+         ~executor:Code_executor.echo_executor
+         ~hash_fn:Code_executor.echo_hash_fn
+         ())
         .on_parse
         "test.md"
         doc
@@ -582,6 +586,12 @@ let%test_module "py_executor" =
       |> snd
     ;;
 
+    (* TODO: what is tested here is error-handling and html insertion.
+      none is python-specific. we should replace it with some other executor
+     that is faster to run. each python invocation takes ~2s.
+     this executor needs to be able to throw errors.
+     maybe bash executor?
+    *)
     let%expect_test "py_executor: error + non-Python + basic" =
       let doc =
         Parse.of_string

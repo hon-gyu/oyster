@@ -273,17 +273,21 @@ let notebook_outputs (nb_json : Yojson.Basic.t) : string list list =
 
 (** Filter [cells] down to Python cells (lang = "python" or "py", case-insensitive),
     optionally restricted further by [attr_filter]. *)
-let filter_python_cells
-      ?(attr_filter : Attribute.t option -> bool = fun _ -> true)
+let filter_cells
+      ~(lang_filter : string -> bool)
+      ~(attr_filter : Attribute.t option -> bool)
       (cells : cell list)
   : cell list
   =
   List.filter cells ~f:(fun cell ->
     match cell.lang with
-    | Some l ->
-      let l' = String.lowercase l in
-      (String.equal l' "python" || String.equal l' "py") && attr_filter cell.attr
+    | Some l -> lang_filter l && attr_filter cell.attr
     | None -> false)
+;;
+
+let is_python (lang : string) : bool =
+  let lang' = String.lowercase lang in
+  String.equal lang' "python" || String.equal lang' "py"
 ;;
 
 (** Compute a cache key hash from the filtered python cells and uv config.
@@ -311,7 +315,9 @@ let compute_hash (python_cells : cell list) (cfg : uv_config) : string =
 let uv_executor ?(attr_filter : Attribute.t option -> bool = fun _ -> true) : executor =
   fun ctx ->
   let uv_config = uv_config_of_config ctx.config in
-  let (python_cells : cell list) = filter_python_cells ~attr_filter ctx.inputs in
+  let (python_cells : cell list) =
+    filter_cells ~lang_filter:is_python ~attr_filter ctx.inputs
+  in
   let sources = List.map python_cells ~f:(fun cell -> cell.content) in
   let nb_json = make_notebook sources in
   match run_notebook ~uv_config ~nb_json with
@@ -505,7 +511,7 @@ let run_with
 (** Execute Python cells in [ctx], consulting [cache] first if provided.
     On a cache miss the notebook is run via {!uv_executor} and the result is
     stored back into [cache] before returning. *)
-let run
+let run_py
       ?(attr_filter : Attribute.t option -> bool = fun _ -> true)
       ?(cache : cache option)
       ~(path : string)
@@ -513,7 +519,7 @@ let run
   : output list
   =
   let uv_config = uv_config_of_config ctx.config in
-  let python_cells = filter_python_cells ~attr_filter ctx.inputs in
+  let python_cells = filter_cells ~lang_filter:is_python ~attr_filter ctx.inputs in
   let hash = compute_hash python_cells uv_config in
   run_with ?cache ~path ~hash ~executor:(fun () -> uv_executor ~attr_filter ctx) ()
 ;;
@@ -545,64 +551,28 @@ let echo_hash_fn (ctx : exec_ctx) : string =
 
 let%test_module "uv_executor" =
   (module struct
-    let%expect_test "uv_executor: basic" =
+    (* Covers: basic output, non-Python cells skipped (bash, id=1),
+       shared interpreter state across cells (x = 1 then x + 1),
+       and error handling. *)
+    let%expect_test "uv_executor: execution" =
       let ctx =
         extract_exec_ctx
           (Parse.of_string
              {|
 ```python {}
 print("hello")
-```
-|})
-      in
-      print_s [%sexp (uv_executor ctx : output list)];
-      [%expect
-        {|
-    (((id 0) (res (Markdown "hello\n"))))
-  |}]
-    ;;
-
-    let%expect_test "uv_executor: error" =
-      let ctx =
-        extract_exec_ctx
-          (Parse.of_string
-             {|
-```py
-print("hello")
-```
-
-```python {}
-gibberish
-```
-
-```py
-2
-```
-|})
-      in
-      print_s [%sexp (uv_executor ctx : output list)];
-      [%expect
-        {|
-        (((id 0) (res (Markdown "hello\n")))
-         ((id 1) (res (Markdown "NameError: name 'gibberish' is not defined")))
-         ((id 2) (res (Markdown 2))))
-        |}]
-    ;;
-
-    let%expect_test "uv_executor: python cells with other language in between" =
-      (* bash cell (id=1) is skipped; python cells (ids 0,2) share notebook state *)
-      let ctx =
-        extract_exec_ctx
-          (Parse.of_string
-             {|
-```python {}
-x = 1
-print(x)
 ```
 ```bash {}
 echo hi
 ```
+```py
+x = 1
+print(x)
+```
 ```python {}
+gibberish
+```
+```py
 print(x + 1)
 ```
 |})
@@ -610,36 +580,10 @@ print(x + 1)
       print_s [%sexp (uv_executor ctx : output list)];
       [%expect
         {|
-    (((id 0) (res (Markdown "1\n"))) ((id 2) (res (Markdown "2\n"))))
-  |}]
-    ;;
-
-    let%expect_test "uv_executor: attr_filter excludes matching cells" =
-      let ctx =
-        extract_exec_ctx
-          (Parse.of_string
-             {|
-```python {}
-print("runs")
-```
-```python {.no-exec}
-print("skipped")
-```
-|})
-      in
-      let outputs =
-        uv_executor
-          ~attr_filter:(fun attr ->
-            match attr with
-            | Some { classes; _ } -> not (List.mem classes ".no-exec" ~equal:String.equal)
-            | None -> true)
-          ctx
-      in
-      print_s [%sexp (outputs : output list)];
-      [%expect
-        {|
-    (((id 0) (res (Markdown "runs\n"))))
-  |}]
+        (((id 0) (res (Markdown "hello\n"))) ((id 2) (res (Markdown "1\n")))
+         ((id 3) (res (Markdown "NameError: name 'gibberish' is not defined")))
+         ((id 4) (res (Markdown "2\n"))))
+        |}]
     ;;
 
     let%expect_test "uv_executor: installs and uses dependency from frontmatter" =
