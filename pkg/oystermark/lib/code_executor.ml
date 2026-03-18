@@ -23,7 +23,7 @@ type output =
     (** [`Error] is only used when
     nbconvert itself fails (process-level failure) *)
   }
-[@@deriving sexp_of]
+[@@deriving sexp]
 
 type exec_ctx =
   { config : Yaml.value
@@ -117,7 +117,7 @@ type uv_config =
   { version : float
   ; dependencies : string list
   }
-[@@deriving sexp_of]
+[@@deriving sexp]
 
 let default_uv_config = { version = 3.13; dependencies = [] }
 
@@ -271,9 +271,35 @@ let notebook_outputs (nb_json : Yojson.Basic.t) : string list list =
   |> List.map ~f:cell_outputs
 ;;
 
+(** Filter [cells] down to Python cells (lang = "python" or "py", case-insensitive),
+    optionally restricted further by [attr_filter]. *)
+let filter_python_cells
+      ?(attr_filter : Attribute.t option -> bool = fun _ -> true)
+      (cells : cell list)
+  : cell list
+  =
+  List.filter cells ~f:(fun cell ->
+    match cell.lang with
+    | Some l ->
+      let l' = String.lowercase l in
+      (String.equal l' "python" || String.equal l' "py") && attr_filter cell.attr
+    | None -> false)
+;;
+
+(** Compute a cache key hash from the filtered python cells and uv config.
+    Dependencies are sorted before hashing so reordering them is a no-op. *)
+let compute_hash (python_cells : cell list) (cfg : uv_config) : string =
+  let contents = List.map python_cells ~f:(fun c -> c.content) in
+  let sorted_deps = List.sort cfg.dependencies ~compare:String.compare in
+  [%sexp_of: string list * float * string list] (contents, cfg.version, sorted_deps)
+  |> Sexp.to_string
+  |> Md5.digest_string
+  |> Md5.to_hex
+;;
+
 (** Executor that runs Python cells via an ephemeral [uv] environment.
 
-    Only cells whose [lang] is ["python"] or ["py"] (case-insensitive) are
+    Only cells whose [lang] is "python" or "py" (case-insensitive) are
     executed. The optional [attr_filter] allows further selection by Pandoc
     attribute (e.g. skip cells tagged [.no-exec]).
 
@@ -285,15 +311,7 @@ let notebook_outputs (nb_json : Yojson.Basic.t) : string list list =
 let uv_executor ?(attr_filter : Attribute.t option -> bool = fun _ -> true) : executor =
   fun ctx ->
   let uv_config = uv_config_of_config ctx.config in
-  let (python_cells : cell list) =
-    List.filter ctx.inputs ~f:(fun cell ->
-      match cell.lang with
-      | Some l ->
-        let l' = l |> String.lowercase in
-        let is_py = String.equal l' "python" || String.equal l' "py" in
-        is_py && attr_filter cell.attr
-      | None -> false)
-  in
+  let (python_cells : cell list) = filter_python_cells ~attr_filter ctx.inputs in
   let sources = List.map python_cells ~f:(fun cell -> cell.content) in
   let nb_json = make_notebook sources in
   match run_notebook ~uv_config ~nb_json with
@@ -379,6 +397,106 @@ let merge_outputs
   in
   Cmarkit.Mapper.map_doc mapper doc
 ;;
+
+(* Cache
+==================== *)
+
+let cache_file = "_exec_cache.json"
+
+type cache_entry =
+  { hash : string
+  ; outputs : output list
+  }
+
+(** Mutable map from vault-relative file path to its last execution result. *)
+type cache = cache_entry String.Map.t ref
+
+let empty_cache () : cache = ref String.Map.empty
+
+let cache_lookup (c : cache) ~(path : string) ~(hash : string) : output list option =
+  match Map.find !c path with
+  | Some entry when String.equal entry.hash hash -> Some entry.outputs
+  | _ -> None
+;;
+
+let cache_set (c : cache) ~(path : string) ~(hash : string) ~(outputs : output list)
+  : unit
+  =
+  c := Map.set !c ~key:path ~data:{ hash; outputs }
+;;
+
+(** Load cache from [_exec_cache.json] in [dir]. Returns an empty cache if the
+    file is missing or malformed. *)
+let load_cache ~(dir : string) : cache =
+  let path = Filename.concat dir cache_file in
+  if not (Sys_unix.file_exists_exn path)
+  then empty_cache ()
+  else (
+    try
+      let json = Yojson.Basic.from_file path in
+      let open Yojson.Basic.Util in
+      let entries =
+        json
+        |> to_assoc
+        |> List.filter_map ~f:(fun (file_path, v) ->
+          try
+            let hash = v |> member "hash" |> to_string in
+            let outputs =
+              v
+              |> member "outputs"
+              |> to_string
+              |> Sexp.of_string
+              |> [%of_sexp: output list]
+            in
+            Some (file_path, { hash; outputs })
+          with
+          | _ -> None)
+      in
+      ref (String.Map.of_alist_exn entries)
+    with
+    | _ -> empty_cache ())
+;;
+
+(** Persist [cache] to [_exec_cache.json] in [dir]. *)
+let save_cache (c : cache) ~(dir : string) : unit =
+  Core_unix.mkdir_p dir;
+  let path = Filename.concat dir cache_file in
+  let json =
+    `Assoc
+      (Map.to_alist !c
+       |> List.map ~f:(fun (file_path, entry) ->
+         ( file_path
+         , `Assoc
+             [ "hash", `String entry.hash
+             ; "outputs", `String ([%sexp_of: output list] entry.outputs |> Sexp.to_string)
+             ] )))
+  in
+  Yojson.Basic.to_file path json
+;;
+
+(** Execute Python cells in [ctx], consulting [cache] first if provided.
+    On a cache miss the notebook is run via {!uv_executor} and the result is
+    stored back into [cache] before returning. *)
+let run
+      ?(attr_filter : Attribute.t option -> bool = fun _ -> true)
+      ?(cache : cache option)
+      ~(path : string)
+      (ctx : exec_ctx)
+  : output list
+  =
+  let uv_config = uv_config_of_config ctx.config in
+  let python_cells = filter_python_cells ~attr_filter ctx.inputs in
+  let hash = compute_hash python_cells uv_config in
+  match Option.bind cache ~f:(cache_lookup ~path ~hash) with
+  | Some cached -> cached
+  | None ->
+    let outs = uv_executor ~attr_filter ctx in
+    Option.iter cache ~f:(cache_set ~path ~hash ~outputs:outs);
+    outs
+;;
+
+(* Test
+==================== *)
 
 let%test_module "uv_executor" =
   (module struct

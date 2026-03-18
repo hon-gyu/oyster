@@ -329,35 +329,47 @@ let backlinks : t =
   make ~on_vault ()
 ;;
 
+let fm_has_pyproject_in_oyster (fm_opt : Parse.Frontmatter.t option) : bool =
+  match fm_opt with
+  | Some (`O fields) ->
+    (match List.Assoc.find fields ~equal:String.equal "oyster" with
+     | Some (`O pyproject_fields) ->
+       List.Assoc.mem pyproject_fields ~equal:String.equal "pyproject"
+     | _ -> false)
+  | _ -> false
+;;
+
 (** Execute Python code blocks in each document and splice the outputs back in.
 
     - [path_filter]: skip execution for paths that return [false] (default: run all).
+    - [fm_filter]: skip execution for documents with frontmatter that returns [false]
+      (default: run those with oyster.pyproject config).
     - [attr_filter]: forwarded to {!Code_executor.uv_executor} to select which
       cells to run (default: run all Python cells).
     - [loc_map]: forwarded to {!Code_executor.merge_outputs} to decide whether
       each cell's output is appended after or replaces the source block
       (default: append).
-
-    TODO: make the extraction of config configurable? (default: extract .oyster.pyproject) *)
+    - [cache]: if provided, execution results are looked up by hash before running
+      nbconvert and written back after a miss.
+*)
 let py_executor
       ?(uv_config_key : string option)
       ?(path_filter : string -> bool = fun _ -> true)
+      ?(fm_filter : Parse.Frontmatter.t option -> bool = fm_has_pyproject_in_oyster)
       ?(attr_filter : (Parse.Attribute.t option -> bool) option)
       ?(loc_map : (Parse.Attribute.t option -> [ `Append | `Replace ]) option)
+      ?(cache : Code_executor.cache option)
       ()
   : t
+    (* TODO: make the extraction of config configurable? (default: extract .oyster.pyproject)  *)
   =
   make
-    ~on_parse:(fun path doc ->
-      if not (path_filter path)
+    ~on_parse:(fun path (doc : Cmarkit.Doc.t) ->
+      if (not (path_filter path)) || not (fm_filter (Parse.Frontmatter.of_doc doc))
       then [ path, doc ]
       else (
         let ctx = Code_executor.extract_exec_ctx doc in
-        let outputs =
-          match attr_filter with
-          | Some f -> Code_executor.uv_executor ~attr_filter:f ctx
-          | None -> Code_executor.uv_executor ctx
-        in
+        let outputs = Code_executor.run ?attr_filter ?cache ~path ctx in
         let doc' =
           match loc_map with
           | Some f -> Code_executor.merge_outputs ~loc_map:f outputs doc
@@ -374,6 +386,7 @@ let default : t =
   >> validate_no_duplicates
   >> drop_keys_in_frontmatter [ "publish"; "draft" ]
   >> drop_emtpy_frontmatter
+  >> py_executor ()
   >> backlinks
   >> home_toc ~dir_link:true ()
   >> dir_index ()
@@ -467,7 +480,7 @@ let%test_module "prepend block" =
 
 let%test_module "py_executor" =
   (module struct
-    let run doc = (py_executor ()).on_parse "test.md" doc |> List.hd_exn |> snd
+    let run doc = (py_executor ~fm_filter:(fun _ -> true) ()).on_parse "test.md" doc |> List.hd_exn |> snd
 
     let%expect_test "basic" =
       let doc =
