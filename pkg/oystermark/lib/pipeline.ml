@@ -394,19 +394,19 @@ let py_executor
   : t
     (* TODO: make the extraction of config configurable? (default: extract .oyster.pyproject)  *)
   =
-  let hash_fn ctx =
-    let open Code_executor in
-    let uv_config = uv_config_of_config ctx.config in
-    let python_cells = filter_cells ~lang_filter:is_python ~attr_filter ctx.inputs in
-    compute_hash python_cells uv_config
-  in
-  code_exec
-    ?loc_map
-    ?cache
-    ~path_filter
-    ~fm_filter
-    ~executor:(Code_executor.uv_executor ?attr_filter)
-    ~hash_fn
+  make
+    ~on_parse:(fun path (doc : Cmarkit.Doc.t) ->
+      if (not (path_filter path)) || not (fm_filter (Parse.Frontmatter.of_doc doc))
+      then [ path, doc ]
+      else (
+        let ctx = Code_executor.extract_exec_ctx doc in
+        let outputs = Code_executor.run_py ?attr_filter ?cache ~path ctx in
+        let doc' =
+          match loc_map with
+          | Some f -> Code_executor.merge_outputs ~loc_map:f outputs doc
+          | None -> Code_executor.merge_outputs outputs doc
+        in
+        [ path, doc' ]))
     ()
 ;;
 
