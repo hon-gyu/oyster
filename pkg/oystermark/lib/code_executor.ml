@@ -485,6 +485,24 @@ let save_cache (c : cache) ~(dir : string) : unit =
   Yojson.Basic.to_file path json
 ;;
 
+(** Generic caching wrapper: look up [(path, hash)] in [cache]; on a miss call
+    [executor ()] and write the result back before returning. *)
+let run_with
+      ?(cache : cache option)
+      ~(path : string)
+      ~(hash : string)
+      ~(executor : unit -> output list)
+      ()
+  : output list
+  =
+  match Option.bind cache ~f:(cache_lookup ~path ~hash) with
+  | Some cached -> cached
+  | None ->
+    let outs = executor () in
+    Option.iter cache ~f:(cache_set ~path ~hash ~outputs:outs);
+    outs
+;;
+
 (** Execute Python cells in [ctx], consulting [cache] first if provided.
     On a cache miss the notebook is run via {!uv_executor} and the result is
     stored back into [cache] before returning. *)
@@ -498,12 +516,18 @@ let run
   let uv_config = uv_config_of_config ctx.config in
   let python_cells = filter_python_cells ~attr_filter ctx.inputs in
   let hash = compute_hash python_cells uv_config in
-  match Option.bind cache ~f:(cache_lookup ~path ~hash) with
-  | Some cached -> cached
-  | None ->
-    let outs = uv_executor ~attr_filter ctx in
-    Option.iter cache ~f:(cache_set ~path ~hash ~outputs:outs);
-    outs
+  run_with ?cache ~path ~hash ~executor:(fun () -> uv_executor ~attr_filter ctx) ()
+;;
+
+(** Executor for the synthetic [echo] language: returns each cell's source unchanged
+    as its output. Intended for tests that need to exercise caching without invoking
+    any external process. *)
+let echo_executor (ctx : exec_ctx) : output list =
+  List.filter_map ctx.inputs ~f:(fun cell ->
+    match cell.lang with
+    | Some l when String.equal (String.lowercase l) "echo" ->
+      Some { id = cell.id; res = `Markdown cell.content }
+    | _ -> None)
 ;;
 
 (* Test
@@ -638,62 +662,80 @@ print(Version("2.1.0").major)
 
 let%test_module "cache" =
   (module struct
-    let test_doc =
+    let echo_doc =
       Parse.of_string
         {|
-```python {}
-print("hello")
+```echo {}
+hello
 ```
 |}
 
-    let test_hash ctx =
-      let uv_config = uv_config_of_config ctx.config in
-      let python_cells = filter_python_cells ctx.inputs in
-      compute_hash python_cells uv_config
+    let echo_hash doc =
+      let ctx = extract_exec_ctx doc in
+      let echo_cells =
+        List.filter ctx.inputs ~f:(fun c ->
+          match c.lang with
+          | Some l -> String.equal (String.lowercase l) "echo"
+          | None -> false)
+      in
+      compute_hash echo_cells default_uv_config
 
-    let%expect_test "run: cache hit returns cached output, not real execution" =
-      (* Pre-seed cache with a fake output for the correct hash.
-         If run returns "FAKE", the cache was consulted and nbconvert was skipped. *)
-      let ctx = extract_exec_ctx test_doc in
-      let hash = test_hash ctx in
+    let%expect_test "run_with: cache hit returns cached output, not real execution" =
+      let ctx = extract_exec_ctx echo_doc in
+      let hash = echo_hash echo_doc in
       let fake = [ { id = 0; res = `Markdown "FAKE" } ] in
       let cache = empty_cache () in
       cache_set cache ~path:"test.md" ~hash ~outputs:fake;
-      let result = run ~cache ~path:"test.md" ctx in
+      let result =
+        run_with ~cache ~path:"test.md" ~hash ~executor:(fun () -> echo_executor ctx) ()
+      in
       print_s [%sexp (result : output list)];
       [%expect {| (((id 0) (res (Markdown FAKE)))) |}]
     ;;
 
-    let%expect_test "run: cache miss executes and populates cache" =
-      let ctx = extract_exec_ctx test_doc in
+    let%expect_test "run_with: cache miss executes and populates cache" =
+      let ctx = extract_exec_ctx echo_doc in
+      let hash = echo_hash echo_doc in
       let cache = empty_cache () in
-      let _first = run ~cache ~path:"test.md" ctx in
-      let cached = cache_lookup cache ~path:"test.md" ~hash:(test_hash ctx) in
+      let _first =
+        run_with ~cache ~path:"test.md" ~hash ~executor:(fun () -> echo_executor ctx) ()
+      in
+      let cached = cache_lookup cache ~path:"test.md" ~hash in
       print_s [%sexp (cached : output list option)];
-      [%expect {| ((((id 0) (res (Markdown "hello\n"))))) |}]
+      [%expect {| ((((id 0) (res (Markdown hello))))) |}]
     ;;
 
     let%expect_test "full lifecycle: miss → save → load → hit" =
       let tmp = Filename_unix.temp_dir "oyster_cache_test" "" in
-      let ctx = extract_exec_ctx test_doc in
-      (* Cold start: cache miss → real execution *)
+      let ctx = extract_exec_ctx echo_doc in
+      let hash = echo_hash echo_doc in
+      (* Cold start: cache miss → echo execution, no external process *)
       let cache1 = load_cache ~dir:tmp in
-      let real_out = run ~cache:cache1 ~path:"test.md" ctx in
+      let real_out =
+        run_with ~cache:cache1 ~path:"test.md" ~hash ~executor:(fun () -> echo_executor ctx) ()
+      in
       print_s [%sexp (real_out : output list)];
       (* Tamper in-memory entry so we can tell whether disk roundtrip succeeded *)
       cache_set
         cache1
         ~path:"test.md"
-        ~hash:(test_hash ctx)
+        ~hash
         ~outputs:[ { id = 0; res = `Markdown "PERSISTED" } ];
       save_cache cache1 ~dir:tmp;
       (* Warm start: load from disk, run again — must return tampered value *)
       let cache2 = load_cache ~dir:tmp in
-      let cached_out = run ~cache:cache2 ~path:"test.md" ctx in
+      let cached_out =
+        run_with
+          ~cache:cache2
+          ~path:"test.md"
+          ~hash
+          ~executor:(fun () -> echo_executor ctx)
+          ()
+      in
       print_s [%sexp (cached_out : output list)];
       [%expect
         {|
-        (((id 0) (res (Markdown "hello\n"))))
+        (((id 0) (res (Markdown hello))))
         (((id 0) (res (Markdown PERSISTED))))
         |}]
     ;;

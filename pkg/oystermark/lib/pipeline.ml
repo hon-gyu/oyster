@@ -339,6 +339,38 @@ let fm_has_pyproject_in_oyster (fm_opt : Parse.Frontmatter.t option) : bool =
   | _ -> false
 ;;
 
+(** Code executor pipeline factory: run any [executor] on each document, cache via
+    [hash_fn], and splice outputs back in.*)
+let code_exec
+      ?(path_filter : string -> bool = fun _ -> true)
+      ?(fm_filter : Parse.Frontmatter.t option -> bool = fun _ -> true)
+      ?(loc_map : (Parse.Attribute.t option -> [ `Append | `Replace ]) option)
+      ?(cache : Code_executor.cache option)
+      ~(executor : Code_executor.executor)
+      ~(hash_fn : Code_executor.exec_ctx -> string)
+      ()
+  : t
+  =
+  make
+    ~on_parse:(fun path (doc : Cmarkit.Doc.t) ->
+      if (not (path_filter path)) || not (fm_filter (Parse.Frontmatter.of_doc doc))
+      then [ path, doc ]
+      else (
+        let ctx = Code_executor.extract_exec_ctx doc in
+        let hash = hash_fn ctx in
+        let outputs =
+          Code_executor.run_with ?cache ~path ~hash ~executor:(fun () -> executor ctx) ()
+        in
+        let doc' =
+          match loc_map with
+          | Some f -> Code_executor.merge_outputs ~loc_map:f outputs doc
+          | None -> Code_executor.merge_outputs outputs doc
+        in
+        [ path, doc' ]))
+    ()
+;;
+
+
 (** Execute Python code blocks in each document and splice the outputs back in.
 
     - [path_filter]: skip execution for paths that return [false] (default: run all).
@@ -363,19 +395,19 @@ let py_executor
   : t
     (* TODO: make the extraction of config configurable? (default: extract .oyster.pyproject)  *)
   =
-  make
-    ~on_parse:(fun path (doc : Cmarkit.Doc.t) ->
-      if (not (path_filter path)) || not (fm_filter (Parse.Frontmatter.of_doc doc))
-      then [ path, doc ]
-      else (
-        let ctx = Code_executor.extract_exec_ctx doc in
-        let outputs = Code_executor.run ?attr_filter ?cache ~path ctx in
-        let doc' =
-          match loc_map with
-          | Some f -> Code_executor.merge_outputs ~loc_map:f outputs doc
-          | None -> Code_executor.merge_outputs outputs doc
-        in
-        [ path, doc' ]))
+  let hash_fn ctx =
+    let open Code_executor in
+    let uv_config = uv_config_of_config ctx.config in
+    let python_cells = filter_python_cells ?attr_filter ctx.inputs in
+    compute_hash python_cells uv_config
+  in
+  code_exec
+    ?loc_map
+    ?cache
+    ~path_filter
+    ~fm_filter
+    ~executor:(Code_executor.uv_executor ?attr_filter)
+    ~hash_fn
     ()
 ;;
 
@@ -478,7 +510,7 @@ let%test_module "prepend block" =
   end)
 ;;
 
-let%test_module "py_executor" =
+let%test_module "code executor" =
   (module struct
     let run doc = (py_executor ~fm_filter:(fun _ -> true) ()).on_parse "test.md" doc |> List.hd_exn |> snd
 
@@ -508,38 +540,50 @@ Bye
         |}]
     ;;
 
-    let test_doc =
+    let echo_doc =
       Parse.of_string
         {|
-```python {}
-print("hello")
+```echo {}
+hello
 ```
 |}
 
-    let test_hash doc =
-      let ctx = Code_executor.extract_exec_ctx doc in
-      let uv_config = Code_executor.uv_config_of_config ctx.config in
-      let python_cells = Code_executor.filter_python_cells ctx.inputs in
-      Code_executor.compute_hash python_cells uv_config
+    let echo_hash_fn (ctx : Code_executor.exec_ctx) =
+      let open Code_executor in
+      let echo_cells =
+        List.filter ctx.inputs ~f:(fun c ->
+          match c.lang with
+          | Some l -> String.equal (String.lowercase l) "echo"
+          | None -> false)
+      in
+      compute_hash echo_cells default_uv_config
 
-    let run_with_cache cache doc =
-      (py_executor ~fm_filter:(fun _ -> true) ~cache ()).on_parse "test.md" doc
+    let echo_hash doc = echo_hash_fn (Code_executor.extract_exec_ctx doc)
+
+    let run_with_echo cache doc =
+      (code_exec
+         ~cache
+         ~executor:Code_executor.echo_executor
+         ~hash_fn:echo_hash_fn
+         ()).on_parse
+        "test.md"
+        doc
       |> List.hd_exn
       |> snd
 
-    let%expect_test "py_executor: cache hit — cached output rendered, not real execution" =
+    let%expect_test "cache hit — cached output rendered, not real execution" =
       let cache = Code_executor.empty_cache () in
       Code_executor.cache_set
         cache
         ~path:"test.md"
-        ~hash:(test_hash test_doc)
+        ~hash:(echo_hash echo_doc)
         ~outputs:[ { Code_executor.id = 0; res = `Markdown "CACHED" } ];
-      let doc' = run_with_cache cache test_doc in
+      let doc' = run_with_echo cache echo_doc in
       print_endline (Parse.commonmark_of_doc doc');
       [%expect
         {|
-        ```python {}
-        print("hello")
+        ```echo {}
+        hello
         ```
         ```
         CACHED
@@ -547,23 +591,24 @@ print("hello")
         |}]
     ;;
 
-    let%expect_test "py_executor: cache miss — executes and populates cache" =
+    let%expect_test "cache miss — executes and populates cache" =
       let cache = Code_executor.empty_cache () in
-      let doc' = run_with_cache cache test_doc in
+      let doc' = run_with_echo cache echo_doc in
       print_endline (Parse.commonmark_of_doc doc');
-      let cached = Code_executor.cache_lookup cache ~path:"test.md" ~hash:(test_hash test_doc) in
+      let cached =
+        Code_executor.cache_lookup cache ~path:"test.md" ~hash:(echo_hash echo_doc)
+      in
       print_s [%sexp (cached : Code_executor.output list option)];
       [%expect
         {|
-        ```python {}
-        print("hello")
+        ```echo {}
+        hello
         ```
         ```
         hello
-
         ```
 
-        ((((id 0) (res (Markdown "hello\n")))))
+        ((((id 0) (res (Markdown hello)))))
         |}]
     ;;
 
