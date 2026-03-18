@@ -401,7 +401,6 @@ let merge_outputs
 (* Cache
 ==================== *)
 
-
 (* NOTE: currently cache is defined solely for code execution caching
 
   It should be easily to extend it for other purposes by wrapping code execution
@@ -669,6 +668,7 @@ let%test_module "cache" =
 hello
 ```
 |}
+    ;;
 
     let echo_hash doc =
       let ctx = extract_exec_ctx doc in
@@ -679,6 +679,7 @@ hello
           | None -> false)
       in
       compute_hash echo_cells default_uv_config
+    ;;
 
     let%expect_test "run_with: cache hit returns cached output, not real execution" =
       let ctx = extract_exec_ctx echo_doc in
@@ -712,7 +713,12 @@ hello
       (* Cold start: cache miss → echo execution, no external process *)
       let cache1 = load_cache ~dir:tmp in
       let real_out =
-        run_with ~cache:cache1 ~path:"test.md" ~hash ~executor:(fun () -> echo_executor ctx) ()
+        run_with
+          ~cache:cache1
+          ~path:"test.md"
+          ~hash
+          ~executor:(fun () -> echo_executor ctx)
+          ()
       in
       print_s [%sexp (real_out : output list)];
       (* Tamper in-memory entry so we can tell whether disk roundtrip succeeded *)
