@@ -508,6 +508,65 @@ Bye
         |}]
     ;;
 
+    let test_doc =
+      Parse.of_string
+        {|
+```python {}
+print("hello")
+```
+|}
+
+    let test_hash doc =
+      let ctx = Code_executor.extract_exec_ctx doc in
+      let uv_config = Code_executor.uv_config_of_config ctx.config in
+      let python_cells = Code_executor.filter_python_cells ctx.inputs in
+      Code_executor.compute_hash python_cells uv_config
+
+    let run_with_cache cache doc =
+      (py_executor ~fm_filter:(fun _ -> true) ~cache ()).on_parse "test.md" doc
+      |> List.hd_exn
+      |> snd
+
+    let%expect_test "py_executor: cache hit — cached output rendered, not real execution" =
+      let cache = Code_executor.empty_cache () in
+      Code_executor.cache_set
+        cache
+        ~path:"test.md"
+        ~hash:(test_hash test_doc)
+        ~outputs:[ { Code_executor.id = 0; res = `Markdown "CACHED" } ];
+      let doc' = run_with_cache cache test_doc in
+      print_endline (Parse.commonmark_of_doc doc');
+      [%expect
+        {|
+        ```python {}
+        print("hello")
+        ```
+        ```
+        CACHED
+        ```
+        |}]
+    ;;
+
+    let%expect_test "py_executor: cache miss — executes and populates cache" =
+      let cache = Code_executor.empty_cache () in
+      let doc' = run_with_cache cache test_doc in
+      print_endline (Parse.commonmark_of_doc doc');
+      let cached = Code_executor.cache_lookup cache ~path:"test.md" ~hash:(test_hash test_doc) in
+      print_s [%sexp (cached : Code_executor.output list option)];
+      [%expect
+        {|
+        ```python {}
+        print("hello")
+        ```
+        ```
+        hello
+
+        ```
+
+        ((((id 0) (res (Markdown "hello\n")))))
+        |}]
+    ;;
+
     let%expect_test "error, non-Python" =
       let doc =
         Parse.of_string
