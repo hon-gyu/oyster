@@ -23,7 +23,7 @@ module Code_executor = Code_executor
     3. Build index, resolve links, apply [on_vault] to all entries
        (docs + dirs with synthetic empty docs), then render to HTML. *)
 let render_vault
-      ?(pipeline : Pipeline.t = Pipeline.default)
+      ?(pipeline : Pipeline.t = Pipeline.default ())
       ?(theme : Theme.t = Theme.none)
       ~(backend_blocks : bool)
       ~(safe : bool)

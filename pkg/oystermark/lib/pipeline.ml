@@ -329,34 +329,37 @@ let backlinks : t =
   make ~on_vault ()
 ;;
 
-(** Execute Python code blocks in each document and splice the outputs back in.
+let fm_has_pyproject_in_oyster (fm_opt : Parse.Frontmatter.t option) : bool =
+  match fm_opt with
+  | Some (`O fields) ->
+    (match List.Assoc.find fields ~equal:String.equal "oyster" with
+     | Some (`O pyproject_fields) ->
+       List.Assoc.mem pyproject_fields ~equal:String.equal "pyproject"
+     | _ -> false)
+  | _ -> false
+;;
 
-    - [path_filter]: skip execution for paths that return [false] (default: run all).
-    - [attr_filter]: forwarded to {!Code_executor.uv_executor} to select which
-      cells to run (default: run all Python cells).
-    - [loc_map]: forwarded to {!Code_executor.merge_outputs} to decide whether
-      each cell's output is appended after or replaces the source block
-      (default: append).
-
-    TODO: make the extraction of config configurable? (default: extract .oyster.pyproject) *)
-let py_executor
-      ?(uv_config_key : string option)
+(** Code executor pipeline factory: run any [executor] on each document, cache via
+    [hash_fn], and splice outputs back in.*)
+let code_exec
       ?(path_filter : string -> bool = fun _ -> true)
-      ?(attr_filter : (Parse.Attribute.t option -> bool) option)
+      ?(fm_filter : Parse.Frontmatter.t option -> bool = fun _ -> true)
       ?(loc_map : (Parse.Attribute.t option -> [ `Append | `Replace ]) option)
+      ?(cache : Code_executor.cache option)
+      ~(executor : Code_executor.executor)
+      ~(hash_fn : Code_executor.exec_ctx -> string)
       ()
   : t
   =
   make
-    ~on_parse:(fun path doc ->
-      if not (path_filter path)
+    ~on_parse:(fun path (doc : Cmarkit.Doc.t) ->
+      if (not (path_filter path)) || not (fm_filter (Parse.Frontmatter.of_doc doc))
       then [ path, doc ]
       else (
         let ctx = Code_executor.extract_exec_ctx doc in
+        let hash = hash_fn ctx in
         let outputs =
-          match attr_filter with
-          | Some f -> Code_executor.uv_executor ~attr_filter:f ctx
-          | None -> Code_executor.uv_executor ctx
+          Code_executor.run_with ?cache ~path ~hash ~executor:(fun () -> executor ctx) ()
         in
         let doc' =
           match loc_map with
@@ -367,13 +370,54 @@ let py_executor
     ()
 ;;
 
-let default : t =
+(** Execute Python code blocks in each document and splice the outputs back in.
+
+    - [path_filter]: skip execution for paths that return [false] (default: run all).
+    - [fm_filter]: skip execution for documents with frontmatter that returns [false]
+      (default: run those with oyster.pyproject config).
+    - [attr_filter]: forwarded to {!Code_executor.uv_executor} to select which
+      cells to run (default: run all Python cells).
+    - [loc_map]: forwarded to {!Code_executor.merge_outputs} to decide whether
+      each cell's output is appended after or replaces the source block
+      (default: append).
+    - [cache]: if provided, execution results are looked up by hash before running
+      nbconvert and written back after a miss.
+*)
+let py_executor
+      ?(uv_config_key : string option)
+      ?(path_filter : string -> bool = fun _ -> true)
+      ?(fm_filter : Parse.Frontmatter.t option -> bool = fm_has_pyproject_in_oyster)
+      ?(attr_filter : (Parse.Attribute.t option -> bool) option)
+      ?(loc_map : (Parse.Attribute.t option -> [ `Append | `Replace ]) option)
+      ?(cache : Code_executor.cache option)
+      ()
+  : t
+    (* TODO: make the extraction of config configurable? (default: extract .oyster.pyproject)  *)
+  =
+  make
+    ~on_parse:(fun path (doc : Cmarkit.Doc.t) ->
+      if (not (path_filter path)) || not (fm_filter (Parse.Frontmatter.of_doc doc))
+      then [ path, doc ]
+      else (
+        let ctx = Code_executor.extract_exec_ctx doc in
+        let outputs = Code_executor.run_py ?attr_filter ?cache ~path ctx in
+        let doc' =
+          match loc_map with
+          | Some f -> Code_executor.merge_outputs ~loc_map:f outputs doc
+          | None -> Code_executor.merge_outputs outputs doc
+        in
+        [ path, doc' ]))
+    ()
+;;
+
+let default ?(cache : Code_executor.cache option) () : t =
   id
   >> exclude_draft_by_note_name
   >> exclude_unpublish
   >> validate_no_duplicates
   >> drop_keys_in_frontmatter [ "publish"; "draft" ]
   >> drop_emtpy_frontmatter
+  >> py_executor ?cache ()
   >> backlinks
   >> home_toc ~dir_link:true ()
   >> dir_index ()
@@ -465,37 +509,90 @@ let%test_module "prepend block" =
   end)
 ;;
 
-let%test_module "py_executor" =
+let%test_module "code executor cache" =
   (module struct
-    let run doc = (py_executor ()).on_parse "test.md" doc |> List.hd_exn |> snd
-
-    let%expect_test "basic" =
-      let doc =
-        Parse.of_string
-          {|
-Hi
-```python
-print("hello")
+    let echo_doc =
+      Parse.of_string
+        {|
+```echo {}
+hello
 ```
-Bye
 |}
-      in
-      print_endline (Parse.commonmark_of_doc (run doc));
+    ;;
+
+    let echo_hash doc = Code_executor.echo_hash_fn (Code_executor.extract_exec_ctx doc)
+
+    let run_echo cache doc =
+      (code_exec
+         ~cache
+         ~executor:Code_executor.echo_executor
+         ~hash_fn:Code_executor.echo_hash_fn
+         ())
+        .on_parse
+        "test.md"
+        doc
+      |> List.hd_exn
+      |> snd
+    ;;
+
+    let%expect_test "cache hit — cached output rendered, not real execution" =
+      let cache = Code_executor.empty_cache () in
+      Code_executor.cache_set
+        cache
+        ~path:"test.md"
+        ~hash:(echo_hash echo_doc)
+        ~outputs:[ { Code_executor.id = 0; res = `Markdown "CACHED" } ];
+      let doc' = run_echo cache echo_doc in
+      print_endline (Parse.commonmark_of_doc doc');
       [%expect
         {|
-        Hi
-        ```python
-        print("hello")
-        ```
-        ```
+        ```echo {}
         hello
-
         ```
-        Bye
+        ```
+        CACHED
+        ```
         |}]
     ;;
 
-    let%expect_test "error, non-Python" =
+    let%expect_test "cache miss — executes and populates cache" =
+      let cache = Code_executor.empty_cache () in
+      let doc' = run_echo cache echo_doc in
+      print_endline (Parse.commonmark_of_doc doc');
+      let cached =
+        Code_executor.cache_lookup cache ~path:"test.md" ~hash:(echo_hash echo_doc)
+      in
+      print_s [%sexp (cached : Code_executor.output list option)];
+      [%expect
+        {|
+        ```echo {}
+        hello
+        ```
+        ```
+        hello
+        ```
+
+        ((((id 0) (res (Markdown hello)))))
+        |}]
+    ;;
+  end)
+;;
+
+let%test_module "py_executor" =
+  (module struct
+    let run_py doc =
+      (py_executor ~fm_filter:(fun _ -> true) ()).on_parse "test.md" doc
+      |> List.hd_exn
+      |> snd
+    ;;
+
+    (* TODO: what is tested here is error-handling and html insertion.
+      none is python-specific. we should replace it with some other executor
+     that is faster to run. each python invocation takes ~2s.
+     this executor needs to be able to throw errors.
+     maybe bash executor?
+    *)
+    let%expect_test "py_executor: error + non-Python + basic" =
       let doc =
         Parse.of_string
           {|
@@ -516,7 +613,7 @@ console.log("hello")
 ```
 |}
       in
-      print_endline (Parse.commonmark_of_doc (run doc));
+      print_endline (Parse.commonmark_of_doc (run_py doc));
       [%expect
         {|
         ```py

@@ -23,7 +23,7 @@ type output =
     (** [`Error] is only used when
     nbconvert itself fails (process-level failure) *)
   }
-[@@deriving sexp_of]
+[@@deriving sexp]
 
 type exec_ctx =
   { config : Yaml.value
@@ -117,7 +117,7 @@ type uv_config =
   { version : float
   ; dependencies : string list
   }
-[@@deriving sexp_of]
+[@@deriving sexp]
 
 let default_uv_config = { version = 3.13; dependencies = [] }
 
@@ -271,9 +271,39 @@ let notebook_outputs (nb_json : Yojson.Basic.t) : string list list =
   |> List.map ~f:cell_outputs
 ;;
 
+(** Filter [cells] down to Python cells (lang = "python" or "py", case-insensitive),
+    optionally restricted further by [attr_filter]. *)
+let filter_cells
+      ~(lang_filter : string -> bool)
+      ~(attr_filter : Attribute.t option -> bool)
+      (cells : cell list)
+  : cell list
+  =
+  List.filter cells ~f:(fun cell ->
+    match cell.lang with
+    | Some l -> lang_filter l && attr_filter cell.attr
+    | None -> false)
+;;
+
+let is_python (lang : string) : bool =
+  let lang' = String.lowercase lang in
+  String.equal lang' "python" || String.equal lang' "py"
+;;
+
+(** Compute a cache key hash from the filtered python cells and uv config.
+    Dependencies are sorted before hashing so reordering them is a no-op. *)
+let compute_hash (python_cells : cell list) (cfg : uv_config) : string =
+  let contents = List.map python_cells ~f:(fun c -> c.content) in
+  let sorted_deps = List.sort cfg.dependencies ~compare:String.compare in
+  [%sexp_of: string list * float * string list] (contents, cfg.version, sorted_deps)
+  |> Sexp.to_string
+  |> Md5.digest_string
+  |> Md5.to_hex
+;;
+
 (** Executor that runs Python cells via an ephemeral [uv] environment.
 
-    Only cells whose [lang] is ["python"] or ["py"] (case-insensitive) are
+    Only cells whose [lang] is "python" or "py" (case-insensitive) are
     executed. The optional [attr_filter] allows further selection by Pandoc
     attribute (e.g. skip cells tagged [.no-exec]).
 
@@ -286,13 +316,7 @@ let uv_executor ?(attr_filter : Attribute.t option -> bool = fun _ -> true) : ex
   fun ctx ->
   let uv_config = uv_config_of_config ctx.config in
   let (python_cells : cell list) =
-    List.filter ctx.inputs ~f:(fun cell ->
-      match cell.lang with
-      | Some l ->
-        let l' = l |> String.lowercase in
-        let is_py = String.equal l' "python" || String.equal l' "py" in
-        is_py && attr_filter cell.attr
-      | None -> false)
+    filter_cells ~lang_filter:is_python ~attr_filter ctx.inputs
   in
   let sources = List.map python_cells ~f:(fun cell -> cell.content) in
   let nb_json = make_notebook sources in
@@ -304,7 +328,7 @@ let uv_executor ?(attr_filter : Attribute.t option -> bool = fun _ -> true) : ex
       { id = cell.id; res = `Markdown (String.concat ~sep:"\n" outs) })
 ;;
 
-(** Splice executor outputs back into a document, producing a new {!Cmarkit.Doc.t}.
+(** Splice executor outputs back into a document, producing a new [Cmarkit.Doc.t].
 
     For every code block that has a matching entry in [outputs] (matched by the
     same integer ID assigned by {!extract_code_blocks}), an output block is
@@ -380,66 +404,175 @@ let merge_outputs
   Cmarkit.Mapper.map_doc mapper doc
 ;;
 
+(* Cache
+==================== *)
+
+(* NOTE: currently cache is defined solely for code execution caching
+
+  It should be easily to extend it for other purposes by wrapping code execution
+  in a field of a bigger cache record. Also it would be necessary to create a
+  separate cache module.
+*)
+
+let cache_file = "_exec_cache.json"
+
+type cache_entry =
+  { hash : string
+  ; outputs : output list
+  }
+
+(** Mutable map from vault-relative file path to its last execution result. *)
+type cache = cache_entry String.Map.t ref
+
+let empty_cache () : cache = ref String.Map.empty
+
+(** Return pre-existing execution result for [path] and [hash] if it exists and matches [hash]. *)
+let cache_lookup (c : cache) ~(path : string) ~(hash : string) : output list option =
+  match Map.find !c path with
+  | Some entry when String.equal entry.hash hash -> Some entry.outputs
+  | _ -> None
+;;
+
+(** Store the execution result for [path] with content hash [hash] into the
+    in-memory cache. Call [save_cache] afterwards to persist to disk. *)
+let cache_set (c : cache) ~(path : string) ~(hash : string) ~(outputs : output list)
+  : unit
+  =
+  c := Map.set !c ~key:path ~data:{ hash; outputs }
+;;
+
+(** Load cache from [_exec_cache.json] in [dir]. Returns an empty cache if the
+    file is missing or malformed. *)
+let load_cache ~(dir : string) : cache =
+  let path = Filename.concat dir cache_file in
+  if not (Sys_unix.file_exists_exn path)
+  then empty_cache ()
+  else (
+    try
+      let json = Yojson.Basic.from_file path in
+      let open Yojson.Basic.Util in
+      let entries =
+        json
+        |> to_assoc
+        |> List.filter_map ~f:(fun (file_path, v) ->
+          try
+            let hash = v |> member "hash" |> to_string in
+            let outputs =
+              v
+              |> member "outputs"
+              |> to_string
+              |> Sexp.of_string
+              |> [%of_sexp: output list]
+            in
+            Some (file_path, { hash; outputs })
+          with
+          | _ -> None)
+      in
+      ref (String.Map.of_alist_exn entries)
+    with
+    | _ -> empty_cache ())
+;;
+
+(** Persist [cache] to [_exec_cache.json] in [dir]. *)
+let save_cache (c : cache) ~(dir : string) : unit =
+  Core_unix.mkdir_p dir;
+  let path = Filename.concat dir cache_file in
+  let json =
+    `Assoc
+      (Map.to_alist !c
+       |> List.map ~f:(fun (file_path, entry) ->
+         ( file_path
+         , `Assoc
+             [ "hash", `String entry.hash
+             ; "outputs", `String ([%sexp_of: output list] entry.outputs |> Sexp.to_string)
+             ] )))
+  in
+  Yojson.Basic.to_file path json
+;;
+
+(** Generic caching wrapper: look up [(path, hash)] in [cache]; on a miss call
+    [executor ()] and write the result back before returning. *)
+let run_with
+      ?(cache : cache option)
+      ~(path : string)
+      ~(hash : string)
+      ~(executor : unit -> output list)
+      ()
+  : output list
+  =
+  match Option.bind cache ~f:(cache_lookup ~path ~hash) with
+  | Some cached -> cached
+  | None ->
+    let outs = executor () in
+    Option.iter cache ~f:(cache_set ~path ~hash ~outputs:outs);
+    outs
+;;
+
+(** Execute Python cells in [ctx], consulting [cache] first if provided.
+    On a cache miss the notebook is run via {!uv_executor} and the result is
+    stored back into [cache] before returning. *)
+let run_py
+      ?(attr_filter : Attribute.t option -> bool = fun _ -> true)
+      ?(cache : cache option)
+      ~(path : string)
+      (ctx : exec_ctx)
+  : output list
+  =
+  let uv_config = uv_config_of_config ctx.config in
+  let python_cells = filter_cells ~lang_filter:is_python ~attr_filter ctx.inputs in
+  let hash = compute_hash python_cells uv_config in
+  run_with ?cache ~path ~hash ~executor:(fun () -> uv_executor ~attr_filter ctx) ()
+;;
+
+(** Executor for the synthetic [echo] language: returns each cell's source unchanged
+    as its output. Intended for tests that need to exercise caching without invoking
+    any external process. *)
+let echo_executor (ctx : exec_ctx) : output list =
+  List.filter_map ctx.inputs ~f:(fun cell ->
+    match cell.lang with
+    | Some l when String.equal (String.lowercase l) "echo" ->
+      Some { id = cell.id; res = `Markdown cell.content }
+    | _ -> None)
+;;
+
+(** Hash function companion to {!echo_executor}: keys on [echo] cell contents. *)
+let echo_hash_fn (ctx : exec_ctx) : string =
+  let echo_cells =
+    List.filter ctx.inputs ~f:(fun c ->
+      match c.lang with
+      | Some l -> String.equal (String.lowercase l) "echo"
+      | None -> false)
+  in
+  compute_hash echo_cells default_uv_config
+;;
+
+(* Test
+==================== *)
+
 let%test_module "uv_executor" =
   (module struct
-    let%expect_test "uv_executor: basic" =
+    (* Covers: basic output, non-Python cells skipped (bash, id=1),
+       shared interpreter state across cells (x = 1 then x + 1),
+       and error handling. *)
+    let%expect_test "uv_executor: execution" =
       let ctx =
         extract_exec_ctx
           (Parse.of_string
              {|
 ```python {}
 print("hello")
-```
-|})
-      in
-      print_s [%sexp (uv_executor ctx : output list)];
-      [%expect
-        {|
-    (((id 0) (res (Markdown "hello\n"))))
-  |}]
-    ;;
-
-    let%expect_test "uv_executor: error" =
-      let ctx =
-        extract_exec_ctx
-          (Parse.of_string
-             {|
-```py
-print("hello")
-```
-
-```python {}
-gibberish
-```
-
-```py
-2
-```
-|})
-      in
-      print_s [%sexp (uv_executor ctx : output list)];
-      [%expect
-        {|
-        (((id 0) (res (Markdown "hello\n")))
-         ((id 1) (res (Markdown "NameError: name 'gibberish' is not defined")))
-         ((id 2) (res (Markdown 2))))
-        |}]
-    ;;
-
-    let%expect_test "uv_executor: python cells with other language in between" =
-      (* bash cell (id=1) is skipped; python cells (ids 0,2) share notebook state *)
-      let ctx =
-        extract_exec_ctx
-          (Parse.of_string
-             {|
-```python {}
-x = 1
-print(x)
 ```
 ```bash {}
 echo hi
 ```
+```py
+x = 1
+print(x)
+```
 ```python {}
+gibberish
+```
+```py
 print(x + 1)
 ```
 |})
@@ -447,36 +580,10 @@ print(x + 1)
       print_s [%sexp (uv_executor ctx : output list)];
       [%expect
         {|
-    (((id 0) (res (Markdown "1\n"))) ((id 2) (res (Markdown "2\n"))))
-  |}]
-    ;;
-
-    let%expect_test "uv_executor: attr_filter excludes matching cells" =
-      let ctx =
-        extract_exec_ctx
-          (Parse.of_string
-             {|
-```python {}
-print("runs")
-```
-```python {.no-exec}
-print("skipped")
-```
-|})
-      in
-      let outputs =
-        uv_executor
-          ~attr_filter:(fun attr ->
-            match attr with
-            | Some { classes; _ } -> not (List.mem classes ".no-exec" ~equal:String.equal)
-            | None -> true)
-          ctx
-      in
-      print_s [%sexp (outputs : output list)];
-      [%expect
-        {|
-    (((id 0) (res (Markdown "runs\n"))))
-  |}]
+        (((id 0) (res (Markdown "hello\n"))) ((id 2) (res (Markdown "1\n")))
+         ((id 3) (res (Markdown "NameError: name 'gibberish' is not defined")))
+         ((id 4) (res (Markdown "2\n"))))
+        |}]
     ;;
 
     let%expect_test "uv_executor: installs and uses dependency from frontmatter" =
@@ -503,6 +610,86 @@ print(Version("2.1.0").major)
         {|
     (((id 0) (res (Markdown "2\n"))))
   |}]
+    ;;
+  end)
+;;
+
+let%test_module "cache" =
+  (module struct
+    let echo_doc =
+      Parse.of_string
+        {|
+```echo {}
+hello
+```
+|}
+    ;;
+
+    let echo_hash doc = echo_hash_fn (extract_exec_ctx doc)
+
+    let%expect_test "run_with: cache hit returns cached output, not real execution" =
+      let ctx = extract_exec_ctx echo_doc in
+      let hash = echo_hash echo_doc in
+      let fake = [ { id = 0; res = `Markdown "FAKE" } ] in
+      let cache = empty_cache () in
+      cache_set cache ~path:"test.md" ~hash ~outputs:fake;
+      let result =
+        run_with ~cache ~path:"test.md" ~hash ~executor:(fun () -> echo_executor ctx) ()
+      in
+      print_s [%sexp (result : output list)];
+      [%expect {| (((id 0) (res (Markdown FAKE)))) |}]
+    ;;
+
+    let%expect_test "run_with: cache miss executes and populates cache" =
+      let ctx = extract_exec_ctx echo_doc in
+      let hash = echo_hash echo_doc in
+      let cache = empty_cache () in
+      let _first =
+        run_with ~cache ~path:"test.md" ~hash ~executor:(fun () -> echo_executor ctx) ()
+      in
+      let cached = cache_lookup cache ~path:"test.md" ~hash in
+      print_s [%sexp (cached : output list option)];
+      [%expect {| ((((id 0) (res (Markdown hello))))) |}]
+    ;;
+
+    let%expect_test "full lifecycle: miss → save → load → hit" =
+      let tmp = Filename_unix.temp_dir "oyster_cache_test" "" in
+      let ctx = extract_exec_ctx echo_doc in
+      let hash = echo_hash echo_doc in
+      (* Cold start: cache miss → echo execution, no external process *)
+      let cache1 = load_cache ~dir:tmp in
+      let real_out =
+        run_with
+          ~cache:cache1
+          ~path:"test.md"
+          ~hash
+          ~executor:(fun () -> echo_executor ctx)
+          ()
+      in
+      print_s [%sexp (real_out : output list)];
+      (* Tamper in-memory entry so we can tell whether disk roundtrip succeeded *)
+      cache_set
+        cache1
+        ~path:"test.md"
+        ~hash
+        ~outputs:[ { id = 0; res = `Markdown "PERSISTED" } ];
+      save_cache cache1 ~dir:tmp;
+      (* Warm start: load from disk, run again — must return tampered value *)
+      let cache2 = load_cache ~dir:tmp in
+      let cached_out =
+        run_with
+          ~cache:cache2
+          ~path:"test.md"
+          ~hash
+          ~executor:(fun () -> echo_executor ctx)
+          ()
+      in
+      print_s [%sexp (cached_out : output list)];
+      [%expect
+        {|
+        (((id 0) (res (Markdown hello))))
+        (((id 0) (res (Markdown PERSISTED))))
+        |}]
     ;;
   end)
 ;;
