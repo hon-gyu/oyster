@@ -401,6 +401,14 @@ let merge_outputs
 (* Cache
 ==================== *)
 
+
+(* NOTE: currently cache is defined solely for code execution caching
+
+  It should be easily to extend it for other purposes by wrapping code execution
+  in a field of a bigger cache record. Also it would be necessary to create a
+  separate cache module.
+*)
+
 let cache_file = "_exec_cache.json"
 
 type cache_entry =

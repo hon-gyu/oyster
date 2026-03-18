@@ -127,6 +127,7 @@ let vault_cmd : Command.t =
            let curr_dir = Sys_unix.getcwd () in
            curr_dir ^ "/_site"
        in
+       (* Load cache and pass it to the pipeline builder *)
        let cache = Code_executor.load_cache ~dir:output_dir in
        let pipeline : Pipeline.t = pipeline_of_profile ~cache config.pipeline_profile in
        let results =
