@@ -529,6 +529,17 @@ let echo_executor (ctx : exec_ctx) : output list =
     | _ -> None)
 ;;
 
+(** Hash function companion to {!echo_executor}: keys on [echo] cell contents. *)
+let echo_hash_fn (ctx : exec_ctx) : string =
+  let echo_cells =
+    List.filter ctx.inputs ~f:(fun c ->
+      match c.lang with
+      | Some l -> String.equal (String.lowercase l) "echo"
+      | None -> false)
+  in
+  compute_hash echo_cells default_uv_config
+;;
+
 (* Test
 ==================== *)
 
@@ -670,16 +681,7 @@ hello
 |}
     ;;
 
-    let echo_hash doc =
-      let ctx = extract_exec_ctx doc in
-      let echo_cells =
-        List.filter ctx.inputs ~f:(fun c ->
-          match c.lang with
-          | Some l -> String.equal (String.lowercase l) "echo"
-          | None -> false)
-      in
-      compute_hash echo_cells default_uv_config
-    ;;
+    let echo_hash doc = echo_hash_fn (extract_exec_ctx doc)
 
     let%expect_test "run_with: cache hit returns cached output, not real execution" =
       let ctx = extract_exec_ctx echo_doc in

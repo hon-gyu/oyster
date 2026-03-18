@@ -520,21 +520,10 @@ hello
 |}
     ;;
 
-    let echo_hash_fn (ctx : Code_executor.exec_ctx) =
-      let open Code_executor in
-      let echo_cells =
-        List.filter ctx.inputs ~f:(fun c ->
-          match c.lang with
-          | Some l -> String.equal (String.lowercase l) "echo"
-          | None -> false)
-      in
-      compute_hash echo_cells default_uv_config
-    ;;
-
-    let echo_hash doc = echo_hash_fn (Code_executor.extract_exec_ctx doc)
+    let echo_hash doc = Code_executor.echo_hash_fn (Code_executor.extract_exec_ctx doc)
 
     let run_echo cache doc =
-      (code_exec ~cache ~executor:Code_executor.echo_executor ~hash_fn:echo_hash_fn ())
+      (code_exec ~cache ~executor:Code_executor.echo_executor ~hash_fn:Code_executor.echo_hash_fn ())
         .on_parse
         "test.md"
         doc
