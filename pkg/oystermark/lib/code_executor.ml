@@ -635,3 +635,67 @@ print(Version("2.1.0").major)
     ;;
   end)
 ;;
+
+let%test_module "cache" =
+  (module struct
+    let test_doc =
+      Parse.of_string
+        {|
+```python {}
+print("hello")
+```
+|}
+
+    let test_hash ctx =
+      let uv_config = uv_config_of_config ctx.config in
+      let python_cells = filter_python_cells ctx.inputs in
+      compute_hash python_cells uv_config
+
+    let%expect_test "run: cache hit returns cached output, not real execution" =
+      (* Pre-seed cache with a fake output for the correct hash.
+         If run returns "FAKE", the cache was consulted and nbconvert was skipped. *)
+      let ctx = extract_exec_ctx test_doc in
+      let hash = test_hash ctx in
+      let fake = [ { id = 0; res = `Markdown "FAKE" } ] in
+      let cache = empty_cache () in
+      cache_set cache ~path:"test.md" ~hash ~outputs:fake;
+      let result = run ~cache ~path:"test.md" ctx in
+      print_s [%sexp (result : output list)];
+      [%expect {| (((id 0) (res (Markdown FAKE)))) |}]
+    ;;
+
+    let%expect_test "run: cache miss executes and populates cache" =
+      let ctx = extract_exec_ctx test_doc in
+      let cache = empty_cache () in
+      let _first = run ~cache ~path:"test.md" ctx in
+      let cached = cache_lookup cache ~path:"test.md" ~hash:(test_hash ctx) in
+      print_s [%sexp (cached : output list option)];
+      [%expect {| ((((id 0) (res (Markdown "hello\n"))))) |}]
+    ;;
+
+    let%expect_test "full lifecycle: miss → save → load → hit" =
+      let tmp = Filename_unix.temp_dir "oyster_cache_test" "" in
+      let ctx = extract_exec_ctx test_doc in
+      (* Cold start: cache miss → real execution *)
+      let cache1 = load_cache ~dir:tmp in
+      let real_out = run ~cache:cache1 ~path:"test.md" ctx in
+      print_s [%sexp (real_out : output list)];
+      (* Tamper in-memory entry so we can tell whether disk roundtrip succeeded *)
+      cache_set
+        cache1
+        ~path:"test.md"
+        ~hash:(test_hash ctx)
+        ~outputs:[ { id = 0; res = `Markdown "PERSISTED" } ];
+      save_cache cache1 ~dir:tmp;
+      (* Warm start: load from disk, run again — must return tampered value *)
+      let cache2 = load_cache ~dir:tmp in
+      let cached_out = run ~cache:cache2 ~path:"test.md" ctx in
+      print_s [%sexp (cached_out : output list)];
+      [%expect
+        {|
+        (((id 0) (res (Markdown "hello\n"))))
+        (((id 0) (res (Markdown PERSISTED))))
+        |}]
+    ;;
+  end)
+;;
