@@ -370,7 +370,6 @@ let code_exec
     ()
 ;;
 
-
 (** Execute Python code blocks in each document and splice the outputs back in.
 
     - [path_filter]: skip execution for paths that return [false] (default: run all).
@@ -510,36 +509,8 @@ let%test_module "prepend block" =
   end)
 ;;
 
-let%test_module "code executor" =
+let%test_module "code executor cache" =
   (module struct
-    let run doc = (py_executor ~fm_filter:(fun _ -> true) ()).on_parse "test.md" doc |> List.hd_exn |> snd
-
-    let%expect_test "basic" =
-      let doc =
-        Parse.of_string
-          {|
-Hi
-```python
-print("hello")
-```
-Bye
-|}
-      in
-      print_endline (Parse.commonmark_of_doc (run doc));
-      [%expect
-        {|
-        Hi
-        ```python
-        print("hello")
-        ```
-        ```
-        hello
-
-        ```
-        Bye
-        |}]
-    ;;
-
     let echo_doc =
       Parse.of_string
         {|
@@ -547,6 +518,7 @@ Bye
 hello
 ```
 |}
+    ;;
 
     let echo_hash_fn (ctx : Code_executor.exec_ctx) =
       let open Code_executor in
@@ -557,19 +529,18 @@ hello
           | None -> false)
       in
       compute_hash echo_cells default_uv_config
+    ;;
 
     let echo_hash doc = echo_hash_fn (Code_executor.extract_exec_ctx doc)
 
-    let run_with_echo cache doc =
-      (code_exec
-         ~cache
-         ~executor:Code_executor.echo_executor
-         ~hash_fn:echo_hash_fn
-         ()).on_parse
+    let run_echo cache doc =
+      (code_exec ~cache ~executor:Code_executor.echo_executor ~hash_fn:echo_hash_fn ())
+        .on_parse
         "test.md"
         doc
       |> List.hd_exn
       |> snd
+    ;;
 
     let%expect_test "cache hit — cached output rendered, not real execution" =
       let cache = Code_executor.empty_cache () in
@@ -578,7 +549,7 @@ hello
         ~path:"test.md"
         ~hash:(echo_hash echo_doc)
         ~outputs:[ { Code_executor.id = 0; res = `Markdown "CACHED" } ];
-      let doc' = run_with_echo cache echo_doc in
+      let doc' = run_echo cache echo_doc in
       print_endline (Parse.commonmark_of_doc doc');
       [%expect
         {|
@@ -593,7 +564,7 @@ hello
 
     let%expect_test "cache miss — executes and populates cache" =
       let cache = Code_executor.empty_cache () in
-      let doc' = run_with_echo cache echo_doc in
+      let doc' = run_echo cache echo_doc in
       print_endline (Parse.commonmark_of_doc doc');
       let cached =
         Code_executor.cache_lookup cache ~path:"test.md" ~hash:(echo_hash echo_doc)
@@ -611,8 +582,18 @@ hello
         ((((id 0) (res (Markdown hello)))))
         |}]
     ;;
+  end)
+;;
 
-    let%expect_test "error, non-Python" =
+let%test_module "py_executor" =
+  (module struct
+    let run_py doc =
+      (py_executor ~fm_filter:(fun _ -> true) ()).on_parse "test.md" doc
+      |> List.hd_exn
+      |> snd
+    ;;
+
+    let%expect_test "py_executor: error + non-Python + basic" =
       let doc =
         Parse.of_string
           {|
@@ -633,7 +614,7 @@ console.log("hello")
 ```
 |}
       in
-      print_endline (Parse.commonmark_of_doc (run doc));
+      print_endline (Parse.commonmark_of_doc (run_py doc));
       [%expect
         {|
         ```py
