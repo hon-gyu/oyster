@@ -1,0 +1,9 @@
+(library
+ (name test_lsp_integration)
+ (libraries core core_unix yojson)
+ (inline_tests
+  (deps
+   (source_tree data)
+   %{bin:oystermark-lsp}))
+ (preprocess
+  (pps ppx_expect ppx_jane)))

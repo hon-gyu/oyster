@@ -1,0 +1,15 @@
+(library
+ (name lsp_lib)
+ (modules lsp_lib)
+ (libraries oystermark core)
+ (inline_tests)
+ (preprocess
+  (pps ppx_jane ppx_string)))
+
+(executable
+ (name main)
+ (public_name oystermark-lsp)
+ (modules main)
+ (libraries lsp_lib oystermark linol-eio eio_main))
+
+(documentation)
