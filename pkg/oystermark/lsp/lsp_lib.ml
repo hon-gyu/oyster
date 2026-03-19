@@ -32,7 +32,7 @@ type located_link =
   }
 
 (** Walk a parsed document's AST and collect all links (wikilinks and markdown
-    links/images) together with their byte ranges from {!Cmarkit.Meta.textloc}.
+    links/images) together with their byte ranges from [Cmarkit.Meta.textloc].
 
     Requires the document to have been parsed with [~locs:true] so that
     text locations are available on AST nodes. *)
@@ -138,7 +138,7 @@ let find_block_id_line_in_doc (doc : Cmarkit.Doc.t) (block_id : string) : int =
 
 (** {1 Parsing} *)
 
-(** Parse [content] into a {!Cmarkit.Doc.t} with locations enabled.
+(** Parse [content] into a [Cmarkit.Doc.t] with locations enabled.
 
     {b Caching opportunity}: This is called on every LSP request (e.g.
     go-to-definition). A future optimisation could cache the parsed document
@@ -152,7 +152,7 @@ let parse_doc (content : string) : Cmarkit.Doc.t =
 
     {b Caching opportunity}: Target files are typically already parsed during
     vault index building. A future optimisation could store the parsed
-    {!Cmarkit.Doc.t} (with locs) in the vault index alongside each file entry,
+    [Cmarkit.Doc.t] (with locs) in the vault index alongside each file entry,
     so that heading/block-ID lookups can reuse the already-parsed AST instead
     of re-parsing. *)
 let parse_target_doc (content : string) : Cmarkit.Doc.t =
