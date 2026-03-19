@@ -1,5 +1,8 @@
 (** Pure logic for the oystermark LSP: link detection, position conversion,
-    heading/block-ID lookup. All functions are independent of the LSP protocol. *)
+    heading/block-ID lookup. All functions are independent of the LSP protocol.
+
+    Uses {!Oystermark.Parse} for parsing and {!Oystermark.Vault} for link
+    resolution. *)
 
 open Core
 
@@ -18,158 +21,141 @@ let byte_offset_of_position (content : string) ~(line : int) ~(character : int) 
   min (!i + character) len
 ;;
 
-(** {1 Substring search} *)
+(** {1 Link detection} *)
 
-(** Find substring [needle] in [haystack] starting at [from]. *)
-let find_substring haystack ~needle ~from =
-  let nlen = String.length needle in
-  let hlen = String.length haystack in
-  if from + nlen > hlen
-  then None
-  else (
-    let rec loop i =
-      if i + nlen > hlen
-      then None
-      else if String.is_substring_at haystack ~pos:i ~substring:needle
-      then Some i
-      else loop (i + 1)
-    in
-    loop from)
-;;
+(** A link found in the AST together with its byte range.
+    [first_byte] and [last_byte] are 0-based absolute byte positions. *)
+type located_link =
+  { link_ref : Oystermark.Vault.Link_ref.t
+  ; first_byte : int
+  ; last_byte : int
+  }
 
-(** {1 Link detection in raw text} *)
+(** Walk a parsed document's AST and collect all links (wikilinks and markdown
+    links/images) together with their byte ranges from {!Cmarkit.Meta.textloc}.
 
-(** Find the wikilink ([[…]]) enclosing byte [offset] in [text].
-    Returns the parsed {!Oystermark.Parse.Wikilink.t}. *)
-let find_wikilink_at_offset (text : string) (offset : int)
-  : Oystermark.Parse.Wikilink.t option
-  =
-  let len = String.length text in
-  let rec scan i =
-    if i > len - 4
-    then None
-    else (
-      match find_substring text ~needle:"[[" ~from:i with
-      | None -> None
-      | Some open_pos ->
-        let embed = open_pos > 0 && Char.equal (String.get text (open_pos - 1)) '!' in
-        let span_start = if embed then open_pos - 1 else open_pos in
-        let content_start = open_pos + 2 in
-        (match find_substring text ~needle:"]]" ~from:content_start with
-         | None -> None
-         | Some close_pos ->
-           let span_end = close_pos + 1 in
-           if span_start <= offset && offset <= span_end
-           then (
-             let content =
-               String.sub text ~pos:content_start ~len:(close_pos - content_start)
-             in
-             Some (Oystermark.Parse.Wikilink.make ~embed content))
-           else scan (close_pos + 2)))
+    Requires the document to have been parsed with [~locs:true] so that
+    text locations are available on AST nodes. *)
+let collect_links (doc : Cmarkit.Doc.t) : located_link list =
+  let try_add_link acc link_ref loc =
+    if Cmarkit.Textloc.is_none loc
+    then acc
+    else
+      { link_ref
+      ; first_byte = Cmarkit.Textloc.first_byte loc
+      ; last_byte = Cmarkit.Textloc.last_byte loc
+      }
+      :: acc
   in
-  scan 0
-;;
-
-(** Find a markdown link destination where [offset] falls inside a
-    [\[text\](url)] or [!\[alt\](url)] span. Returns the raw URL string. *)
-let find_mdlink_dest_at_offset (text : string) (offset : int) : string option =
-  let len = String.length text in
-  let rec scan i =
-    if i >= len - 2
-    then None
-    else (
-      match find_substring text ~needle:"](" ~from:i with
-      | None -> None
-      | Some bracket_pos ->
-        let url_start = bracket_pos + 2 in
-        let rec find_close j depth =
-          if j >= len
-          then None
-          else if Char.equal (String.get text j) '('
-          then find_close (j + 1) (depth + 1)
-          else if Char.equal (String.get text j) ')'
-          then if depth = 0 then Some j else find_close (j + 1) (depth - 1)
-          else find_close (j + 1) depth
-        in
-        (match find_close url_start 0 with
-         | None -> scan (bracket_pos + 2)
-         | Some close_paren ->
-           let rec find_open j depth =
-             if j < 0
-             then None
-             else if Char.equal (String.get text j) ']'
-             then find_open (j - 1) (depth + 1)
-             else if Char.equal (String.get text j) '['
-             then if depth = 0 then Some j else find_open (j - 1) (depth - 1)
-             else find_open (j - 1) depth
-           in
-           (match find_open (bracket_pos - 1) 0 with
-            | None -> scan (bracket_pos + 2)
-            | Some open_bracket ->
-              let span_start =
-                if open_bracket > 0 && Char.equal (String.get text (open_bracket - 1)) '!'
-                then open_bracket - 1
-                else open_bracket
-              in
-              if span_start <= offset && offset <= close_paren
-              then (
-                let url = String.sub text ~pos:url_start ~len:(close_paren - url_start) in
-                Some url)
-              else scan (bracket_pos + 2))))
+  let folder =
+    Cmarkit.Folder.make
+      ~inline_ext_default:(fun _f acc i ->
+        match i with
+        | Oystermark.Parse.Wikilink.Ext_wikilink (wl, meta) ->
+          let link_ref = Oystermark.Vault.Link_ref.of_wikilink wl in
+          try_add_link acc link_ref (Cmarkit.Meta.textloc meta)
+        | _ -> acc)
+      ~inline:(fun _f acc i ->
+        match i with
+        | Cmarkit.Inline.Link (link, meta) | Cmarkit.Inline.Image (link, meta) ->
+          let loc = Cmarkit.Meta.textloc meta in
+          let ref_ = Cmarkit.Inline.Link.reference link in
+          (match Oystermark.Vault.Link_ref.of_cmark_reference ref_ with
+           | Some link_ref -> Cmarkit.Folder.ret (try_add_link acc link_ref loc)
+           | None -> Cmarkit.Folder.default)
+        | _ -> Cmarkit.Folder.default)
+      ()
   in
-  scan 0
+  List.rev (Cmarkit.Folder.fold_doc folder [] doc)
 ;;
 
-(** Try to extract a {!Oystermark.Vault.Link_ref.t} from the raw text at
-    [offset]. Checks wikilinks first, then markdown links. *)
-let find_link_ref_at_offset (text : string) (offset : int)
+(** Find the link whose byte range contains [offset].
+    Returns the {!Oystermark.Vault.Link_ref.t} if found. *)
+let find_link_ref_at_offset (links : located_link list) (offset : int)
   : Oystermark.Vault.Link_ref.t option
   =
-  match find_wikilink_at_offset text offset with
-  | Some wl -> Some (Oystermark.Vault.Link_ref.of_wikilink wl)
-  | None ->
-    (match find_mdlink_dest_at_offset text offset with
-     | Some url -> Oystermark.Vault.Link_ref.of_cmark_dest url
-     | None -> None)
+  List.find_map links ~f:(fun ll ->
+    if ll.first_byte <= offset && offset <= ll.last_byte then Some ll.link_ref else None)
 ;;
 
 (** {1 Heading / block-ID line lookup} *)
 
-(** Find the 0-based line number of a heading in [content] whose text matches
-    [heading_text]. Returns 0 if not found. *)
-let find_heading_line (content : string) (heading_text : string) : int =
-  let lines = String.split_lines content in
-  let rec loop i = function
-    | [] -> 0
-    | line :: rest ->
-      let trimmed = String.lstrip line in
-      if String.length trimmed > 0 && Char.equal (String.get trimmed 0) '#'
-      then (
-        let j = ref 0 in
-        while !j < String.length trimmed && Char.equal (String.get trimmed !j) '#' do
-          incr j
-        done;
-        while !j < String.length trimmed && Char.equal (String.get trimmed !j) ' ' do
-          incr j
-        done;
-        let text = String.drop_prefix trimmed !j in
-        if String.equal text heading_text then i else loop (i + 1) rest)
-      else loop (i + 1) rest
+(** Find the 0-based line number of a heading with the given [slug] in [doc].
+    Returns 0 if not found or if text locations are unavailable.
+
+    Requires the document to have been parsed with [~locs:true]. *)
+let find_heading_line_in_doc (doc : Cmarkit.Doc.t) (slug : string) : int =
+  let folder =
+    Cmarkit.Folder.make
+      ~block:(fun _f acc block ->
+        match block with
+        | Cmarkit.Block.Heading (_h, meta) ->
+          (match Cmarkit.Meta.find Oystermark.Parse.Heading_slug.meta_key meta with
+           | Some s when String.equal s slug ->
+             let loc = Cmarkit.Meta.textloc meta in
+             if Cmarkit.Textloc.is_none loc
+             then Cmarkit.Folder.default
+             else (
+               (* Textloc.first_line is (line_num, byte_pos) where line_num is 1-based *)
+               let line_num, _byte_pos = Cmarkit.Textloc.first_line loc in
+               Cmarkit.Folder.ret (Some (line_num - 1)))
+           | _ -> Cmarkit.Folder.default)
+        | _ -> Cmarkit.Folder.default)
+      ~inline_ext_default:(fun _f acc _i -> acc)
+      ~block_ext_default:(fun _f acc _b -> acc)
+      ()
   in
-  loop 0 lines
+  Cmarkit.Folder.fold_doc folder None doc |> Option.value ~default:0
 ;;
 
-(** Find the 0-based line number of a block ID ([^id]) in [content].
-    Returns 0 if not found. *)
-let find_block_id_line (content : string) (block_id : string) : int =
-  let pattern = "^" ^ block_id in
-  let lines = String.split_lines content in
-  let rec loop i = function
-    | [] -> 0
-    | line :: rest ->
-      if String.is_substring line ~substring:pattern then i else loop (i + 1) rest
+(** Find the 0-based line number of a block ID ([^id]) in [doc].
+    Returns 0 if not found or if text locations are unavailable.
+
+    Requires the document to have been parsed with [~locs:true]. *)
+let find_block_id_line_in_doc (doc : Cmarkit.Doc.t) (block_id : string) : int =
+  let folder =
+    Cmarkit.Folder.make
+      ~block:(fun _f acc block ->
+        match block with
+        | Cmarkit.Block.Paragraph (_p, meta) ->
+          (match Cmarkit.Meta.find Oystermark.Parse.Block_id.meta_key meta with
+           | Some (bid : Oystermark.Parse.Block_id.t) when String.equal bid.id block_id ->
+             let loc = Cmarkit.Meta.textloc meta in
+             if Cmarkit.Textloc.is_none loc
+             then Cmarkit.Folder.default
+             else (
+               let line_num, _byte_pos = Cmarkit.Textloc.first_line loc in
+               Cmarkit.Folder.ret (Some (line_num - 1)))
+           | _ -> Cmarkit.Folder.default)
+        | _ -> Cmarkit.Folder.default)
+      ~inline_ext_default:(fun _f acc _i -> acc)
+      ~block_ext_default:(fun _f acc _b -> acc)
+      ()
   in
-  loop 0 lines
+  Cmarkit.Folder.fold_doc folder None doc |> Option.value ~default:0
+;;
+
+(** {1 Parsing} *)
+
+(** Parse [content] into a {!Cmarkit.Doc.t} with locations enabled.
+
+    {b Caching opportunity}: This is called on every LSP request (e.g.
+    go-to-definition). A future optimisation could cache the parsed document
+    per file and invalidate on [didChange], avoiding re-parsing when the
+    buffer has not changed since the last request. *)
+let parse_doc (content : string) : Cmarkit.Doc.t =
+  Oystermark.Parse.of_string ~locs:true content
+;;
+
+(** Parse a target file's content for heading/block-ID line lookup.
+
+    {b Caching opportunity}: Target files are typically already parsed during
+    vault index building. A future optimisation could store the parsed
+    {!Cmarkit.Doc.t} (with locs) in the vault index alongside each file entry,
+    so that heading/block-ID lookups can reuse the already-parsed AST instead
+    of re-parsing. *)
+let parse_target_doc (content : string) : Cmarkit.Doc.t =
+  Oystermark.Parse.of_string ~locs:true content
 ;;
 
 (** {1 End-to-end: resolve cursor position to target path and line} *)
@@ -197,35 +183,38 @@ let go_to_definition
   : definition_result option
   =
   let offset = byte_offset_of_position content ~line ~character in
-  match find_link_ref_at_offset content offset with
+  let doc = parse_doc content in
+  let links = collect_links doc in
+  match find_link_ref_at_offset links offset with
   | None -> None
   | Some link_ref ->
     let target = Oystermark.Vault.Resolve.resolve link_ref rel_path index in
     (match target with
      | Oystermark.Vault.Resolve.Note { path } | File { path } -> Some { path; line = 0 }
-     | Heading { path; heading; _ } ->
+     | Heading { path; slug; _ } ->
        let line =
          match read_file path with
-         | Some c -> find_heading_line c heading
+         | Some c -> find_heading_line_in_doc (parse_target_doc c) slug
          | None -> 0
        in
        Some { path; line }
      | Block { path; block_id } ->
        let line =
          match read_file path with
-         | Some c -> find_block_id_line c block_id
+         | Some c -> find_block_id_line_in_doc (parse_target_doc c) block_id
          | None -> 0
        in
        Some { path; line }
      | Curr_file -> Some { path = rel_path; line = 0 }
-     | Curr_heading { heading; _ } ->
-       Some { path = rel_path; line = find_heading_line content heading }
+     | Curr_heading { slug; _ } ->
+       Some { path = rel_path; line = find_heading_line_in_doc doc slug }
      | Curr_block { block_id } ->
-       Some { path = rel_path; line = find_block_id_line content block_id }
+       Some { path = rel_path; line = find_block_id_line_in_doc doc block_id }
      | Unresolved -> None)
 ;;
 
-(** {1 Tests} *)
+(* Tests
+==================== *)
 
 let%test_module "byte_offset_of_position" =
   (module struct
@@ -239,29 +228,87 @@ let%test_module "byte_offset_of_position" =
   end)
 ;;
 
-let%test_module "find_wikilink_at_offset" =
+let%test_module "collect_links" =
   (module struct
-    let find = find_wikilink_at_offset
+    let show text =
+      let doc = parse_doc text in
+      let links = collect_links doc in
+      List.iter links ~f:(fun ll ->
+        printf
+          "[%d-%d] %s\n"
+          ll.first_byte
+          ll.last_byte
+          (Sexp.to_string (Oystermark.Vault.Link_ref.sexp_of_t ll.link_ref)))
+    ;;
+
+    let%expect_test "wikilink" =
+      show "see [[Note]] here";
+      [%expect {| [4-11] ((target(Note))(fragment())) |}]
+    ;;
+
+    let%expect_test "embed wikilink" =
+      show "see ![[Image.png]] here";
+      [%expect {| [4-17] ((target(Image.png))(fragment())) |}]
+    ;;
+
+    let%expect_test "wikilink with fragment" =
+      show "go to [[Note#Heading]] now";
+      [%expect {| [6-21] ((target(Note))(fragment((Heading(Heading))))) |}]
+    ;;
+
+    let%expect_test "markdown link" =
+      show "see [text](other) here";
+      [%expect {| [4-16] ((target(other))(fragment())) |}]
+    ;;
+
+    let%expect_test "external link ignored" =
+      show "[text](https://example.com)";
+      [%expect {| |}]
+    ;;
+
+    let%expect_test "two wikilinks" =
+      show "[[A]] and [[B]]";
+      [%expect
+        {|
+        [0-4] ((target(A))(fragment()))
+        [10-14] ((target(B))(fragment()))
+        |}]
+    ;;
+
+    let%expect_test "image link" =
+      show "see ![alt](img.png) here";
+      [%expect {| [4-18] ((target(img.png))(fragment())) |}]
+    ;;
+  end)
+;;
+
+let%test_module "find_link_ref_at_offset" =
+  (module struct
+    let find text offset =
+      let doc = parse_doc text in
+      let links = collect_links doc in
+      find_link_ref_at_offset links offset
+    ;;
 
     let show text offset =
       match find text offset with
       | None -> print_endline "<none>"
-      | Some wl -> print_endline (Oystermark.Parse.Wikilink.to_commonmark wl)
+      | Some lr -> print_s (Oystermark.Vault.Link_ref.sexp_of_t lr)
     ;;
 
-    let%expect_test "cursor on target" =
+    let%expect_test "cursor on wikilink target" =
       show "see [[Note]] here" 6;
-      [%expect {| [[Note]] |}]
+      [%expect {| ((target (Note)) (fragment ())) |}]
     ;;
 
     let%expect_test "cursor on opening brackets" =
       show "see [[Note]] here" 4;
-      [%expect {| [[Note]] |}]
+      [%expect {| ((target (Note)) (fragment ())) |}]
     ;;
 
     let%expect_test "cursor on closing brackets" =
       show "see [[Note]] here" 11;
-      [%expect {| [[Note]] |}]
+      [%expect {| ((target (Note)) (fragment ())) |}]
     ;;
 
     let%expect_test "cursor outside" =
@@ -272,105 +319,6 @@ let%test_module "find_wikilink_at_offset" =
     let%expect_test "cursor after link" =
       show "see [[Note]] here" 13;
       [%expect {| <none> |}]
-    ;;
-
-    let%expect_test "embed wikilink" =
-      show "see ![[Image.png]] here" 8;
-      [%expect {| ![[Image.png]] |}]
-    ;;
-
-    let%expect_test "wikilink with fragment" =
-      show "go to [[Note#Heading]] now" 10;
-      [%expect {| [[Note#Heading]] |}]
-    ;;
-
-    let%expect_test "wikilink with display" =
-      show "see [[Note|label]] ok" 8;
-      [%expect {| [[Note|label]] |}]
-    ;;
-
-    let%expect_test "second of two links" =
-      show "[[A]] and [[B]]" 12;
-      [%expect {| [[B]] |}]
-    ;;
-
-    let%expect_test "first of two links" =
-      show "[[A]] and [[B]]" 3;
-      [%expect {| [[A]] |}]
-    ;;
-
-    let%expect_test "between two links" =
-      show "[[A]] and [[B]]" 7;
-      [%expect {| <none> |}]
-    ;;
-  end)
-;;
-
-let%test_module "find_mdlink_dest_at_offset" =
-  (module struct
-    let find = find_mdlink_dest_at_offset
-
-    let show text offset =
-      match find text offset with
-      | None -> print_endline "<none>"
-      | Some url -> print_endline url
-    ;;
-
-    let%expect_test "cursor on url" =
-      show "see [text](url) here" 12;
-      [%expect {| url |}]
-    ;;
-
-    let%expect_test "cursor on text" =
-      show "see [text](url) here" 5;
-      [%expect {| url |}]
-    ;;
-
-    let%expect_test "cursor on opening bracket" =
-      show "see [text](url) here" 4;
-      [%expect {| url |}]
-    ;;
-
-    let%expect_test "cursor on closing paren" =
-      show "see [text](url) here" 14;
-      [%expect {| url |}]
-    ;;
-
-    let%expect_test "cursor outside" =
-      show "see [text](url) here" 2;
-      [%expect {| <none> |}]
-    ;;
-
-    let%expect_test "cursor after link" =
-      show "see [text](url) here" 16;
-      [%expect {| <none> |}]
-    ;;
-
-    let%expect_test "image link" =
-      show "see ![alt](img.png) here" 6;
-      [%expect {| img.png |}]
-    ;;
-
-    let%expect_test "url with fragment" =
-      show "[go](Note#Heading)" 6;
-      [%expect {| Note#Heading |}]
-    ;;
-  end)
-;;
-
-let%test_module "find_link_ref_at_offset" =
-  (module struct
-    let find = find_link_ref_at_offset
-
-    let show text offset =
-      match find text offset with
-      | None -> print_endline "<none>"
-      | Some lr -> print_s (Oystermark.Vault.Link_ref.sexp_of_t lr)
-    ;;
-
-    let%expect_test "wikilink takes priority" =
-      show "[[Note]]" 3;
-      [%expect {| ((target (Note)) (fragment ())) |}]
     ;;
 
     let%expect_test "markdown link" =
@@ -385,26 +333,36 @@ let%test_module "find_link_ref_at_offset" =
   end)
 ;;
 
-let%test_module "find_heading_line" =
+let%test_module "find_heading_line_in_doc" =
   (module struct
-    let%test "finds heading" =
-      let content = "# Title\n\nSome text\n\n## Chapter 1\n\nBody" in
-      find_heading_line content "Chapter 1" = 4
+    let find content slug =
+      let doc = parse_doc content in
+      find_heading_line_in_doc doc slug
     ;;
 
-    let%test "returns 0 if not found" = find_heading_line "# Title\n\nBody" "Missing" = 0
-    let%test "first heading" = find_heading_line "# Title\nBody" "Title" = 0
+    let%test "finds heading" =
+      let content = "# Title\n\nSome text\n\n## Chapter 1\n\nBody" in
+      find content "chapter-1" = 4
+    ;;
+
+    let%test "returns 0 if not found" = find "# Title\n\nBody" "missing" = 0
+    let%test "first heading" = find "# Title\nBody" "title" = 0
   end)
 ;;
 
-let%test_module "find_block_id_line" =
+let%test_module "find_block_id_line_in_doc" =
   (module struct
-    let%test "finds block id" =
-      let content = "First para\n\nSecond para ^abc123\n\nThird" in
-      find_block_id_line content "abc123" = 2
+    let find content block_id =
+      let doc = parse_doc content in
+      find_block_id_line_in_doc doc block_id
     ;;
 
-    let%test "returns 0 if not found" = find_block_id_line "no ids here" "missing" = 0
+    let%test "finds block id" =
+      let content = "First para\n\nSecond para ^abc123\n\nThird" in
+      find content "abc123" = 2
+    ;;
+
+    let%test "returns 0 if not found" = find "no ids here" "missing" = 0
   end)
 ;;
 

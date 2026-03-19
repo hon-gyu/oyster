@@ -1,7 +1,6 @@
 {0 oystermark-lsp}
-{@meta[
-  date: "2026-03-19"
-]}
+
+{b This is a living document}
 
 An LSP server for Oystermark vaults, built on [linol-eio].
 
@@ -35,9 +34,10 @@ just the file.
                        ┌──────▼───────┐
                        │  lsp_lib.ml  │   pure logic, no LSP types
                        │              │
-                       │  • link detection (raw-text scan)
+                       │  • parse doc (via Parse.of_string)
+                       │  • AST-based link detection
                        │  • position conversion
-                       │  • heading / block-ID line lookup
+                       │  • AST-based heading / block-ID lookup
                        │  • go_to_definition (end-to-end)
                        └──────┬───────┘
                               │ uses
@@ -67,21 +67,25 @@ All testable logic lives here, free of LSP protocol types.
 
 {3 Link detection}
 
-Given the raw file content and a byte offset, scan for:
+The file content is parsed via {!Oystermark.Parse.of_string} with
+[~locs:true] to produce an AST with text locations.  A folder walks the
+AST and collects all links (wikilinks and markdown links/images) together
+with their byte ranges from [Cmarkit.Meta.textloc].  The link whose byte
+range contains the cursor offset is selected and converted to an
+{!Oystermark.Vault.Link_ref.t}, then resolved against the vault index via
+{!Oystermark.Vault.Resolve.resolve}.
 
-{ol
-  {- A wikilink [[[…]]] enclosing the offset.}
-  {- A markdown link [[…](…)] enclosing the offset.}
-}
-
-The detected link is parsed into an {!Oystermark.Vault.Link_ref.t} and
-resolved against the vault index via {!Oystermark.Vault.Resolve.resolve}.
+Currently, the document is re-parsed on every request.  A future
+optimisation could cache the parsed AST per file and invalidate on
+[didChange].
 
 {3 Target location}
 
 The resolved target is mapped to a file path and line number.  For
-[Heading] and [Block] targets, the target file is read and scanned for
-the matching heading text or [^blockid] pattern.
+[Heading] and [Block] targets, the target file is parsed and the line
+number is read from the heading/block-ID AST node's [Textloc] metadata
+(using heading slugs from {!Oystermark.Parse.Heading_slug} and block IDs
+from {!Oystermark.Parse.Block_id}).
 
 {1 Editor setup}
 
