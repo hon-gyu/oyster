@@ -51,8 +51,7 @@ let read_response (ic : In_channel.t) ~(id : int) : Yojson.Safe.t =
 
 (** {1 LSP message constructors} *)
 
-let make_request ~(id : int) ~(method_ : string) (params : Yojson.Safe.t) : Yojson.Safe.t
-  =
+let make_request ~(id : int) ~(method_ : string) (params : Yojson.Safe.t) : Yojson.Safe.t =
   `Assoc
     [ "jsonrpc", `String "2.0"
     ; "id", `Int id
@@ -98,7 +97,10 @@ let initialize (s : session) : unit =
       [ "processId", `Int (Pid.to_int (Core_unix.getpid ()))
       ; "rootUri", `String uri
       ; ( "capabilities"
-        , `Assoc [ "textDocument", `Assoc [ "definition", `Assoc [ "dynamicRegistration", `Bool false ] ] ] )
+        , `Assoc
+            [ ( "textDocument"
+              , `Assoc [ "definition", `Assoc [ "dynamicRegistration", `Bool false ] ] )
+            ] )
       ]
   in
   send_message s.oc (make_request ~id ~method_:"initialize" params);
@@ -159,9 +161,7 @@ let pp_definition_result (vault_root : string) (result : Yojson.Safe.t) : string
   match result with
   | `Null -> "null"
   | `List [ loc ] ->
-    let uri =
-      Yojson.Safe.Util.(member "uri" loc |> to_string)
-    in
+    let uri = Yojson.Safe.Util.(member "uri" loc |> to_string) in
     let range = Yojson.Safe.Util.member "range" loc in
     let start = Yojson.Safe.Util.member "start" range in
     let line = Yojson.Safe.Util.(member "line" start |> to_int) in

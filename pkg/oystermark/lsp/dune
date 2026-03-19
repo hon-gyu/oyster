@@ -11,3 +11,5 @@
  (public_name oystermark-lsp)
  (modules main)
  (libraries lsp_lib oystermark linol-eio eio_main))
+
+(documentation)

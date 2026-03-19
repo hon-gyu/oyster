@@ -107,16 +107,13 @@ let find_mdlink_dest_at_offset (text : string) (offset : int) : string option =
             | None -> scan (bracket_pos + 2)
             | Some open_bracket ->
               let span_start =
-                if open_bracket > 0
-                   && Char.equal (String.get text (open_bracket - 1)) '!'
+                if open_bracket > 0 && Char.equal (String.get text (open_bracket - 1)) '!'
                 then open_bracket - 1
                 else open_bracket
               in
               if span_start <= offset && offset <= close_paren
               then (
-                let url =
-                  String.sub text ~pos:url_start ~len:(close_paren - url_start)
-                in
+                let url = String.sub text ~pos:url_start ~len:(close_paren - url_start) in
                 Some url)
               else scan (bracket_pos + 2))))
   in
@@ -205,8 +202,7 @@ let go_to_definition
   | Some link_ref ->
     let target = Oystermark.Vault.Resolve.resolve link_ref rel_path index in
     (match target with
-     | Oystermark.Vault.Resolve.Note { path } | File { path } ->
-       Some { path; line = 0 }
+     | Oystermark.Vault.Resolve.Note { path } | File { path } -> Some { path; line = 0 }
      | Heading { path; heading; _ } ->
        let line =
          match read_file path with
@@ -234,30 +230,12 @@ let go_to_definition
 let%test_module "byte_offset_of_position" =
   (module struct
     let offset = byte_offset_of_position
-
-    let%test "line 0, char 0" =
-      offset "hello\nworld" ~line:0 ~character:0 = 0
-    ;;
-
-    let%test "line 0, char 3" =
-      offset "hello\nworld" ~line:0 ~character:3 = 3
-    ;;
-
-    let%test "line 1, char 0" =
-      offset "hello\nworld" ~line:1 ~character:0 = 6
-    ;;
-
-    let%test "line 1, char 2" =
-      offset "hello\nworld" ~line:1 ~character:2 = 8
-    ;;
-
-    let%test "past end clamps" =
-      offset "hi" ~line:0 ~character:99 = 2
-    ;;
-
-    let%test "line past end" =
-      offset "hi\n" ~line:5 ~character:0 = 3
-    ;;
+    let%test "line 0, char 0" = offset "hello\nworld" ~line:0 ~character:0 = 0
+    let%test "line 0, char 3" = offset "hello\nworld" ~line:0 ~character:3 = 3
+    let%test "line 1, char 0" = offset "hello\nworld" ~line:1 ~character:0 = 6
+    let%test "line 1, char 2" = offset "hello\nworld" ~line:1 ~character:2 = 8
+    let%test "past end clamps" = offset "hi" ~line:0 ~character:99 = 2
+    let%test "line past end" = offset "hi\n" ~line:5 ~character:0 = 3
   end)
 ;;
 
@@ -268,8 +246,7 @@ let%test_module "find_wikilink_at_offset" =
     let show text offset =
       match find text offset with
       | None -> print_endline "<none>"
-      | Some wl ->
-        print_endline (Oystermark.Parse.Wikilink.to_commonmark wl)
+      | Some wl -> print_endline (Oystermark.Parse.Wikilink.to_commonmark wl)
     ;;
 
     let%expect_test "cursor on target" =
@@ -388,8 +365,7 @@ let%test_module "find_link_ref_at_offset" =
     let show text offset =
       match find text offset with
       | None -> print_endline "<none>"
-      | Some lr ->
-        print_s (Oystermark.Vault.Link_ref.sexp_of_t lr)
+      | Some lr -> print_s (Oystermark.Vault.Link_ref.sexp_of_t lr)
     ;;
 
     let%expect_test "wikilink takes priority" =
@@ -416,13 +392,8 @@ let%test_module "find_heading_line" =
       find_heading_line content "Chapter 1" = 4
     ;;
 
-    let%test "returns 0 if not found" =
-      find_heading_line "# Title\n\nBody" "Missing" = 0
-    ;;
-
-    let%test "first heading" =
-      find_heading_line "# Title\nBody" "Title" = 0
-    ;;
+    let%test "returns 0 if not found" = find_heading_line "# Title\n\nBody" "Missing" = 0
+    let%test "first heading" = find_heading_line "# Title\nBody" "Title" = 0
   end)
 ;;
 
@@ -433,9 +404,7 @@ let%test_module "find_block_id_line" =
       find_block_id_line content "abc123" = 2
     ;;
 
-    let%test "returns 0 if not found" =
-      find_block_id_line "no ids here" "missing" = 0
-    ;;
+    let%test "returns 0 if not found" = find_block_id_line "no ids here" "missing" = 0
   end)
 ;;
 
@@ -469,10 +438,7 @@ let%test_module "go_to_definition" =
     ;;
 
     let index = make_index files
-
-    let read_file rel_path =
-      List.Assoc.find files ~equal:String.equal rel_path
-    ;;
+    let read_file rel_path = List.Assoc.find files ~equal:String.equal rel_path
 
     let show ~rel_path ~content ~line ~character =
       match go_to_definition ~index ~rel_path ~content ~line ~character ~read_file with
