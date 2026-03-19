@@ -1,0 +1,114 @@
+{0 oystermark-lsp}
+{@meta[
+  date: "2026-03-19"
+]}
+
+An LSP server for Oystermark vaults, built on [linol-eio].
+
+{1 Features}
+
+{2 Go to definition}
+
+Jump from a link to its target. Supported link forms:
+
+{ul
+  {- Wikilinks: [[[Note]]], [[[Note#Heading]]], [[[Note#^blockid]]], [![[embed]]]}
+  {- Markdown links: [[text](target)], [![alt](image)]}
+}
+
+Resolution uses the same algorithm as the renderer
+(see {!Oystermark.Vault.Resolve}): exact file match first, then
+ordered-subsequence fuzzy match, then heading/block-ID lookup within the
+target file.
+
+For heading and block-ID targets the cursor lands on the target line, not
+just the file.
+
+{1 Architecture}
+
+{v
+                       ┌──────────────┐
+  editor  ◄──JSON-RPC──►  main.ml     │   linol-eio server (stdio)
+                       │   (thin glue) │
+                       └──────┬───────┘
+                              │ delegates to
+                       ┌──────▼───────┐
+                       │  lsp_lib.ml  │   pure logic, no LSP types
+                       │              │
+                       │  • link detection (raw-text scan)
+                       │  • position conversion
+                       │  • heading / block-ID line lookup
+                       │  • go_to_definition (end-to-end)
+                       └──────┬───────┘
+                              │ uses
+                       ┌──────▼───────┐
+                       │  oystermark  │   Parse, Vault.Index,
+                       │  library     │   Vault.Resolve, Vault.Link_ref
+                       └──────────────┘
+v}
+
+{2 Server ([main.ml])}
+
+The [oystermark_server] class inherits from [Linol_eio.Jsonrpc2.server] and
+overrides:
+
+{ul
+  {- [config_definition] — advertises go-to-definition support.}
+  {- [on_req_initialize] — captures the workspace root from [rootUri].}
+  {- [on_notif_doc_did_open], [on_notif_doc_did_save] — rebuild the vault
+     index.  The index is rebuilt from disk each time (simple, correct;
+     optimise later).}
+  {- [on_req_definition] — delegates to {!Lsp_lib.go_to_definition}.}
+}
+
+{2 Pure logic ([lsp_lib.ml])}
+
+All testable logic lives here, free of LSP protocol types.
+
+{3 Link detection}
+
+Given the raw file content and a byte offset, scan for:
+
+{ol
+  {- A wikilink [[[…]]] enclosing the offset.}
+  {- A markdown link [[…](…)] enclosing the offset.}
+}
+
+The detected link is parsed into an {!Oystermark.Vault.Link_ref.t} and
+resolved against the vault index via {!Oystermark.Vault.Resolve.resolve}.
+
+{3 Target location}
+
+The resolved target is mapped to a file path and line number.  For
+[Heading] and [Block] targets, the target file is read and scanned for
+the matching heading text or [^blockid] pattern.
+
+{1 Editor setup}
+
+Configure your LSP client to run [oystermark-lsp] for markdown files.
+The workspace root should be the vault directory.
+
+Example for Neovim (via [nvim-lspconfig]):
+{v
+vim.lsp.config['oystermark'] = {
+  cmd = { 'oystermark-lsp' },
+  filetypes = { 'markdown' },
+  root_markers = { '.obsidian', '.git' },
+}
+vim.lsp.enable('oystermark')
+v}
+
+{1 Testing}
+
+{2 Unit tests}
+
+[lsp_lib.ml] contains inline [ppx_expect] tests covering link detection,
+position conversion, heading/block-ID lookup, and end-to-end
+[go_to_definition] with an in-memory vault.
+
+{2 Integration tests}
+
+[test/lsp/test_lsp_integration.ml] spawns the real [oystermark-lsp]
+binary as a subprocess, sends JSON-RPC messages (initialize, didOpen,
+definition), and asserts on the responses.  A small test vault under
+[test/lsp/data/] provides the fixture files.
