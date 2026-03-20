@@ -1,6 +1,10 @@
 /* Base reset & typography */
+:root {
+  --header-h: 2.7rem;
+  --sidebar-width: 16rem;
+}
 *, *::before, *::after { box-sizing: border-box; }
-html { font-size: 16px; }
+html { font-size: 18px; }
 body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   background: var(--bg);
@@ -15,6 +19,8 @@ header {
   border-bottom: 1px solid var(--border);
   padding: 0.5rem 1.5rem;
   background: var(--bg);
+  position: relative;
+  z-index: 20;
 }
 footer {
   border-top: 1px solid var(--border);
@@ -26,19 +32,23 @@ footer {
 
 /* Layout */
 .layout {
-  display: flex;
+  position: relative;
   min-height: calc(100vh - 3rem);
 }
 
-/* Sidebar */
+/* Sidebar — positioned out of flow so main content stays centered */
 .sidebar {
-  width: 10rem;
-  flex-shrink: 0;
+  position: fixed;
+  top: var(--header-h);
+  left: 0;
+  width: var(--sidebar-width);
+  height: calc(100vh - var(--header-h));
   padding: 1.5rem 1rem;
   background: var(--bg);
   overflow-y: auto;
   font-size: 0.85em;
   transition: width 0.2s, padding 0.2s;
+  z-index: 10;
 }
 .sidebar ul { list-style: none; padding-left: 1em; margin: 0.2em 0; }
 .sidebar > ul { padding-left: 0; }
@@ -46,23 +56,26 @@ footer {
 .sidebar a:hover { color: var(--accent2); }
 .sidebar details > summary { cursor: pointer; }
 .sidebar-handle {
-  width: 1px;
-  flex-shrink: 0;
+  position: fixed;
+  top: var(--header-h);
+  left: var(--sidebar-width);
+  width: 6px;
+  height: calc(100vh - var(--header-h));
   cursor: col-resize;
   background: var(--bg);
-  position: relative;
-  transition: width 0.15s, background 0.15s;
+  transition: width 0.15s, background 0.15s, left 0.2s;
+  z-index: 10;
 }
 .sidebar-handle:hover { width: 10px; background: var(--accent); }
 .sidebar-collapsed .sidebar { width: 0; padding: 0; overflow: hidden; }
-.sidebar-collapsed .sidebar-handle { width: 6px; cursor: pointer; }
+.sidebar-collapsed .sidebar-handle { left: 0; width: 6px; cursor: pointer; }
 .sidebar-collapsed .sidebar-handle:hover { width: 8px; }
 
-/* Main content */
+/* Main content — position is independent of sidebar state */
 main {
   max-width: 48rem;
-  flex: 1;
-  margin: 0 auto 0 2rem;
+  width: 100%;
+  margin: 0 auto;
   padding: 2rem 1.5rem;
 }
 
