@@ -19,7 +19,14 @@
     }
     v}
 
-    Also wraps bare [r, g, b] color values in [rgb()]. *)
+    Also wraps bare [r, g, b] color values in [rgb()].
+
+    TODO: fully conform to the following
+    {v
+     --callout-icon can be an icon ID from lucide.dev,
+     or an SVG element.
+    v}
+    *)
 
 open Core
 
