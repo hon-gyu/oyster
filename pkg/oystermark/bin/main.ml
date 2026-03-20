@@ -163,7 +163,6 @@ let vault_cmd : Command.t =
 ;;
 
 let () =
-  Command.group ~summary:"Oystermark renderer"
-    [ "file", file_cmd; "vault", vault_cmd ]
-  |> Command_unix.run  ~version:"0.1.0"
+  Command.group ~summary:"Oystermark renderer" [ "file", file_cmd; "vault", vault_cmd ]
+  |> Command_unix.run ~version:"0.1.0"
 ;;
