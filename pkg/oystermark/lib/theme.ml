@@ -120,7 +120,7 @@ document.addEventListener("DOMContentLoaded", function() {
 ;;
 
 let of_colors ?(extra_css : string = "") (colors : colors) : t =
-  wrap ~css:(css_of_colors colors ^ extra_css)
+  wrap ~css:(Callout_css.expand (css_of_colors colors ^ extra_css))
 ;;
 
 let none : t =

@@ -58,7 +58,7 @@ overrides:
   {- [on_notif_doc_did_open], [on_notif_doc_did_save] — rebuild the vault
      index.  The index is rebuilt from disk each time (simple, correct;
      optimise later).}
-  {- [on_req_definition] — delegates to {!Lsp_lib.go_to_definition}.}
+  {- [on_req_definition] — delegates to [Lsp_lib.go_to_definition].}
 }
 
 {2 Pure logic ([lsp_lib.ml])}

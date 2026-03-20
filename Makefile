@@ -11,4 +11,14 @@ help:  ## Show this help (usage: make help)
 		} \
 	}' $(MAKEFILE_LIST)
 
-include Makefile.local
+.PHONY: build-doc
+build-doc:
+	dune build @doc-private @doc
+
+.PHONY: build
+	dune build
+
+.PHONY: test
+	dune test
+
+-include Makefile.local
