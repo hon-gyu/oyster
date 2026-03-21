@@ -5,9 +5,11 @@ open Core
 let f x = Trace.with_span ~__FILE__ ~__LINE__ "inside-f" @@ fun _sp -> x + 1
 
 let g x =
-  Trace.with_span ~__FILE__ ~__LINE__ "g" @@ fun _sp ->
+  Trace.with_span ~__FILE__ ~__LINE__ "g"
+  @@ fun _sp ->
   let y = x + 2 in
-  Trace.with_span ~__FILE__ ~__LINE__ "right-before-f" @@ fun _sp2 ->
+  Trace.with_span ~__FILE__ ~__LINE__ "right-before-f"
+  @@ fun _sp2 ->
   Trace.add_data_to_span _sp2 [ "y", `Int y ];
   let y' = f y in
   y'
@@ -22,7 +24,8 @@ let%expect_test "trace_pp" =
   [%expect {| (inside-f right-before-f g) |}];
   let spans = Trace_collect.spans t in
   print_string (Trace_collect.Trace_pp.format Flat spans);
-  [%expect {|
+  [%expect
+    {|
      span             duration   attrs
     ╶──────────────╴ ╶────────╴ ╶─────╴
      g                     6us
@@ -30,7 +33,8 @@ let%expect_test "trace_pp" =
      inside-f              1us
     |}];
   print_string (Trace_collect.Trace_pp.format Indented spans);
-  [%expect {|
+  [%expect
+    {|
      span               duration   attrs
     ╶────────────────╴ ╶────────╴ ╶─────╴
      g                       6us
@@ -38,7 +42,8 @@ let%expect_test "trace_pp" =
          inside-f            1us
     |}];
   print_string (Trace_collect.Trace_pp.format Show_parents spans);
-  [%expect {|
+  [%expect
+    {|
      span               duration   attrs
     ╶────────────────╴ ╶────────╴ ╶─────╴
      g                       6us

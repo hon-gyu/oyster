@@ -499,6 +499,5 @@ let%test_module "go_to_definition" =
       show ~rel_path:"note-e.md" ~content ~line:2 ~character:12;
       [%expect {| note-e.md:0 |}]
     ;;
-
   end)
 ;;

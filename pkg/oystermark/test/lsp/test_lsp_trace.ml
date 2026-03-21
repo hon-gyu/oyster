@@ -49,7 +49,8 @@ let%test_module "go_to_definition trace" =
         in
         ());
       print_s [%sexp (Trace_collect.span_names t : string list)];
-      [%expect {|
+      [%expect
+        {|
         (byte_offset_of_position parse_doc collect_links find_link_ref_at_offset
          parse_target_doc find_heading_line_in_doc go_to_definition)
         |}];
@@ -58,7 +59,8 @@ let%test_module "go_to_definition trace" =
        | None -> print_endline "<no span>"
        | Some sp ->
          List.iter (Trace_collect.span_attrs sp) ~f:(fun (k, v) -> printf "%s=%s\n" k v));
-      [%expect {|
+      [%expect
+        {|
         resolution=heading
         rel_path=note-c.md
         line=2

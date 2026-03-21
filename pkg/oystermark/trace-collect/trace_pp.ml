@@ -45,7 +45,6 @@ type row =
 (* span helpers
 ==================== *)
 
-
 let span_id_hex (b : bytes) : string =
   let len = Bytes.length b in
   if len = 0
@@ -68,8 +67,7 @@ let is_internal_attr key =
 ;;
 
 let format_attrs (sp : OT.span) : string =
-  List.filter_map sp.attributes
-    ~f:(fun (kv : Opentelemetry_proto.Common.key_value) ->
+  List.filter_map sp.attributes ~f:(fun (kv : Opentelemetry_proto.Common.key_value) ->
     if is_internal_attr kv.key
     then None
     else (
@@ -87,7 +85,6 @@ let format_attrs (sp : OT.span) : string =
 
 (* tree
 ==================== *)
-
 
 type span_node =
   { span : OT.span
@@ -123,7 +120,6 @@ let build_forest (spans : OT.span list) : span_node list =
 (* row computation per style
 ==================== *)
 
-
 let make_row ?(prefix = "") (sp : OT.span) : row =
   { name = prefix ^ sp.name; duration = format_duration sp; attrs = format_attrs sp }
 ;;
@@ -158,7 +154,10 @@ let show_parents_rows spans : row list =
     (* Check if parent context is already visible *)
     let parent_visible =
       depth = 0
-      || Option.equal String.equal last_path.(depth - 1) (Some (span_id_hex node.span.parent_span_id))
+      || Option.equal
+           String.equal
+           last_path.(depth - 1)
+           (Some (span_id_hex node.span.parent_span_id))
     in
     (* If parent isn't the last thing at that depth, re-print ancestors *)
     if not parent_visible then re_print_ancestors depth node;
@@ -197,9 +196,7 @@ let show_parents_rows spans : row list =
       if depth < 0 || String.is_empty sid
       then ()
       else (
-        let visible =
-          Option.equal String.equal last_path.(depth) (Some sid)
-        in
+        let visible = Option.equal String.equal last_path.(depth) (Some sid) in
         if not visible
         then (
           match Hashtbl.find id_to_node sid with
@@ -221,7 +218,6 @@ let show_parents_rows spans : row list =
 (* rendering with Ascii_table
 ==================== *)
 
-
 let render_rows (rows : row list) : string =
   let has_attrs = List.exists rows ~f:(fun r -> not (String.is_empty r.attrs)) in
   let columns =
@@ -229,7 +225,7 @@ let render_rows (rows : row list) : string =
     [ create "span" ~align:Left (fun r -> r.name)
     ; create "duration" ~align:Right (fun r -> r.duration)
     ]
-    @ (if has_attrs then [ create "attrs" ~align:Left (fun r -> r.attrs) ] else [])
+    @ if has_attrs then [ create "attrs" ~align:Left (fun r -> r.attrs) ] else []
   in
   Ascii_table_kernel.to_string_noattr
     ~display:Ascii_table_kernel.Display.column_titles
@@ -240,7 +236,6 @@ let render_rows (rows : row list) : string =
 
 (* public API
 ==================== *)
-
 
 type t =
   { style : style
@@ -261,7 +256,7 @@ let contents t =
   render_rows rows
 ;;
 
-let format style spans =
+let format (style : style) (spans : OT.span list) : string =
   let t = create style in
   List.iter spans ~f:(process t);
   contents t
