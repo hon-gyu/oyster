@@ -25,22 +25,12 @@
 
 open Core
 module OT = Opentelemetry_proto.Trace
-module Column = Ascii_table_kernel.Column
 
 type style =
   | Flat
   | Indented
   | Show_parents
 [@@deriving sexp_of]
-
-(* internal row representation
-==================== *)
-
-type row =
-  { name : string (* includes indentation prefix *)
-  ; duration : string
-  ; attrs : string
-  }
 
 (* span helpers
 ==================== *)
@@ -60,6 +50,10 @@ let format_duration (sp : OT.span) : string =
   else if Float.(us >= 1_000.0)
   then sprintf "%.1fms" (us /. 1_000.0)
   else sprintf "%.0fus" us
+;;
+
+let duration_nanos (sp : OT.span) =
+  Int64.(sp.end_time_unix_nano - sp.start_time_unix_nano)
 ;;
 
 let is_internal_attr key =
@@ -117,12 +111,8 @@ let build_forest (spans : OT.span list) : span_node list =
   List.map roots ~f:build
 ;;
 
-(* row computation per style
+(* duration ranks
 ==================== *)
-
-let duration_nanos (sp : OT.span) =
-  Int64.(sp.end_time_unix_nano - sp.start_time_unix_nano)
-;;
 
 (** Build a map from span_id to duration rank (1 = shortest). Ties share the same rank. *)
 let build_duration_ranks (spans : OT.span list) : (string, int) Hashtbl.t =
@@ -142,8 +132,11 @@ let build_duration_ranks (spans : OT.span list) : (string, int) Hashtbl.t =
   ranks
 ;;
 
-let make_row ?(prefix = "") ?duration_ranks (sp : OT.span) : row =
-  let duration =
+(* line formatting
+==================== *)
+
+let format_line ?duration_ranks ?(prefix = "") (sp : OT.span) : string =
+  let dur =
     match duration_ranks with
     | Some ranks ->
       (match Hashtbl.find ranks (span_id_hex sp.span_id) with
@@ -151,37 +144,43 @@ let make_row ?(prefix = "") ?duration_ranks (sp : OT.span) : row =
        | None -> format_duration sp)
     | None -> format_duration sp
   in
-  { name = prefix ^ sp.name; duration; attrs = format_attrs sp }
+  let attrs = format_attrs sp in
+  let parts =
+    [ prefix ^ sp.name; dur ] @ if String.is_empty attrs then [] else [ attrs ]
+  in
+  String.concat parts ~sep:" "
 ;;
 
-let flat_rows ?duration_ranks spans : row list =
-  List.sort spans ~compare:(fun a b ->
-    Int64.compare a.OT.start_time_unix_nano b.start_time_unix_nano)
-  |> List.map ~f:(make_row ?duration_ranks ?prefix:None)
+(* row computation per style
+==================== *)
+
+let flat_lines ?duration_ranks spans buf =
+  let sorted =
+    List.sort spans ~compare:(fun a b ->
+      Int64.compare a.OT.start_time_unix_nano b.start_time_unix_nano)
+  in
+  List.iter sorted ~f:(fun sp ->
+    Buffer.add_string buf (format_line ?duration_ranks sp);
+    Buffer.add_char buf '\n')
 ;;
 
-let indented_rows ?duration_ranks spans : row list =
+let indented_lines ?duration_ranks spans buf =
   let forest = build_forest spans in
-  let acc = Queue.create () in
   let rec walk depth node =
     let prefix = String.make (depth * 2) ' ' in
-    Queue.enqueue acc (make_row ?duration_ranks ~prefix node.span);
+    Buffer.add_string buf (format_line ?duration_ranks ~prefix node.span);
+    Buffer.add_char buf '\n';
     List.iter node.children ~f:(walk (depth + 1))
   in
-  List.iter forest ~f:(walk 0);
-  Queue.to_list acc
+  List.iter forest ~f:(walk 0)
 ;;
 
-let show_parents_rows ?duration_ranks spans : row list =
+let show_parents_lines ?duration_ranks spans buf =
   let forest = build_forest spans in
-  (* Walk depth-first but track the "last path" so we can re-print
-     ancestor context when we jump between subtrees. *)
-  let acc = Queue.create () in
   (* last_path.(i) = span_id at depth i of the most recently printed span *)
   let last_path : string option array = Array.create ~len:64 None in
   let rec walk depth node =
     let sid = span_id_hex node.span.span_id in
-    (* Check if parent context is already visible *)
     let parent_visible =
       depth = 0
       || Option.equal
@@ -189,27 +188,23 @@ let show_parents_rows ?duration_ranks spans : row list =
            last_path.(depth - 1)
            (Some (span_id_hex node.span.parent_span_id))
     in
-    (* If parent isn't the last thing at that depth, re-print ancestors *)
     if not parent_visible then re_print_ancestors depth node;
     let prefix = String.make (depth * 2) ' ' in
-    Queue.enqueue acc (make_row ?duration_ranks ~prefix node.span);
+    Buffer.add_string buf (format_line ?duration_ranks ~prefix node.span);
+    Buffer.add_char buf '\n';
     last_path.(depth) <- Some sid;
-    (* Clear deeper levels *)
     for i = depth + 1 to Array.length last_path - 1 do
       last_path.(i) <- None
     done;
     List.iter node.children ~f:(walk (depth + 1))
   and re_print_ancestors depth node =
-    (* Collect ancestor chain from the tree *)
     let ancestors = collect_ancestors depth node in
     List.iter ancestors ~f:(fun (d, sp) ->
       let prefix = String.make (d * 2) ' ' ^ "~ " in
-      Queue.enqueue acc (make_row ?duration_ranks ~prefix sp);
+      Buffer.add_string buf (format_line ?duration_ranks ~prefix sp);
+      Buffer.add_char buf '\n';
       last_path.(d) <- Some (span_id_hex sp.span_id))
   and collect_ancestors _depth _node =
-    (* Walk up using parent_span_id to find ancestors not in last_path *)
-    (* For tree-based rendering, ancestors are implicit in the recursion,
-       so we find them by looking at the forest. *)
     let id_to_node = Hashtbl.create (module String) in
     let parent_of = Hashtbl.create (module String) in
     let rec index ~parent_id node =
@@ -219,8 +214,6 @@ let show_parents_rows ?duration_ranks spans : row list =
       List.iter node.children ~f:(index ~parent_id:sid)
     in
     List.iter (build_forest spans) ~f:(index ~parent_id:"");
-    let _target_sid = span_id_hex _node.span.span_id in
-    (* Walk up from target, collecting ancestors not in last_path *)
     let chain = ref [] in
     let rec go sid depth =
       if depth < 0 || String.is_empty sid
@@ -236,32 +229,11 @@ let show_parents_rows ?duration_ranks spans : row list =
         | Some pid -> go pid (depth - 1)
         | None -> ())
     in
-    (* Find parent and walk up *)
     let pid = span_id_hex _node.span.parent_span_id in
     go pid (_depth - 1);
     !chain
   in
-  List.iter forest ~f:(walk 0);
-  Queue.to_list acc
-;;
-
-(* rendering with Ascii_table
-==================== *)
-
-let render_rows (rows : row list) : string =
-  let has_attrs = List.exists rows ~f:(fun r -> not (String.is_empty r.attrs)) in
-  let columns =
-    let open Column in
-    [ create "span" ~align:Left (fun r -> r.name)
-    ; create "duration" ~align:Right (fun r -> r.duration)
-    ]
-    @ if has_attrs then [ create "attrs" ~align:Left (fun r -> r.attrs) ] else []
-  in
-  Ascii_table_kernel.to_string_noattr
-    ~display:Ascii_table_kernel.Display.column_titles
-    ~bars:`Unicode
-    columns
-    rows
+  List.iter forest ~f:(walk 0)
 ;;
 
 (* public API
@@ -273,10 +245,7 @@ type t =
   ; mutable spans : OT.span list
   }
 
-let create ?(normalize_duration = false) style =
-  { style; normalize_duration; spans = [] }
-;;
-
+let create ?(normalize_duration = false) style = { style; normalize_duration; spans = [] }
 let process t span = t.spans <- span :: t.spans
 
 let contents t =
@@ -284,17 +253,15 @@ let contents t =
   let duration_ranks =
     if t.normalize_duration then Some (build_duration_ranks spans) else None
   in
-  let rows =
-    match t.style with
-    | Flat -> flat_rows ?duration_ranks spans
-    | Indented -> indented_rows ?duration_ranks spans
-    | Show_parents -> show_parents_rows ?duration_ranks spans
-  in
-  render_rows rows
+  let buf = Buffer.create 256 in
+  (match t.style with
+   | Flat -> flat_lines ?duration_ranks spans buf
+   | Indented -> indented_lines ?duration_ranks spans buf
+   | Show_parents -> show_parents_lines ?duration_ranks spans buf);
+  Buffer.contents buf
 ;;
 
-let format ?(normalize_duration = false) (style : style) (spans : OT.span list) : string
-    =
+let format ?(normalize_duration = false) (style : style) (spans : OT.span list) : string =
   let t = create ~normalize_duration style in
   List.iter spans ~f:(process t);
   contents t

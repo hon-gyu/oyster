@@ -7,7 +7,6 @@
   opentelemetry.trace
   trace.core
   ambient-context
-  ambient-context.tls
-  textutils.ascii_table_kernel)
+  ambient-context.tls)
  (preprocess
   (pps ppx_jane ppx_string)))
