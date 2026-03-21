@@ -1,6 +1,7 @@
 (library
  (name trace_collect)
- (modules trace_collect)
- (libraries core opentelemetry opentelemetry.trace trace.core)
+ (modules trace_collect trace_pp)
+ (libraries core opentelemetry opentelemetry.trace trace.core
+   ambient-context ambient-context.tls textutils.ascii_table_kernel)
  (preprocess
   (pps ppx_jane ppx_string)))

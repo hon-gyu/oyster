@@ -43,6 +43,7 @@ let exporter (t : t) : Opentelemetry.Exporter.t =
     Uses unbatched providers so spans arrive at the exporter immediately
     without needing a flush or tick. *)
 let with_collect (t : t) (f : unit -> 'a) : 'a =
+  Ambient_context.set_current_storage Ambient_context_tls.storage;
   let exp = exporter t in
   Opentelemetry.Sdk.set exp;
   Opentelemetry_trace.setup ();
@@ -83,3 +84,5 @@ let span_attrs (sp : OT.span) : (string * string) list =
 let span_attr (sp : OT.span) (key : string) : string option =
   List.Assoc.find (span_attrs sp) ~equal:String.equal key
 ;;
+
+module Trace_pp = Trace_pp
