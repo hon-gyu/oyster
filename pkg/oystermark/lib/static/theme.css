@@ -1,7 +1,7 @@
 /* Base reset & typography */
 :root {
     --header-h: 2.7rem;
-    --sidebar-width: 16rem;
+    --sidebar-width: 14rem;
 }
 *,
 *::before,
@@ -108,12 +108,15 @@ footer {
     width: 8px;
 }
 
-/* Main content — position is independent of sidebar state */
+/* Main content — centered in viewport, but never overlaps sidebar */
 main {
     max-width: 48rem;
-    width: 100%;
-    margin: 0 auto;
     padding: 2rem 1.5rem;
+    margin-left: max(var(--sidebar-width), calc((100vw - 48rem) / 2));
+    margin-right: max(0px, calc((100vw - 48rem) / 2 - var(--sidebar-width)));
+}
+.sidebar-collapsed main {
+    margin-left: auto;
 }
 
 /* Headings */

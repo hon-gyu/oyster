@@ -53,6 +53,7 @@ let wrap ~(css : string) (page : page) : string =
 <html>
 <head>
 <meta charset="UTF-8">
+<link rel="icon" href="/favicon.png">
 <title>%{page.title}</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
