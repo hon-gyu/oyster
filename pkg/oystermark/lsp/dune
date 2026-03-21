@@ -6,13 +6,6 @@
  (preprocess
   (pps ppx_jane ppx_string)))
 
-(library
- (name trace_collect)
- (modules trace_collect)
- (libraries core opentelemetry opentelemetry.trace trace.core)
- (preprocess
-  (pps ppx_jane ppx_string)))
-
 (executable
  (name main)
  (public_name oystermark-lsp)
