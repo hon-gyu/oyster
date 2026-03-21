@@ -10,6 +10,6 @@
  (name main)
  (public_name oystermark-lsp)
  (modules main)
- (libraries lsp_lib oystermark linol-eio eio_main))
+ (libraries lsp_lib oystermark linol-eio eio_main opentelemetry.trace opentelemetry-client-cohttp-eio))
 
 (documentation)

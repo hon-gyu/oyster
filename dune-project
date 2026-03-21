@@ -34,6 +34,8 @@
   ppx_blob
   ppx_quick_test
   trace
+  opentelemetry
+  opentelemetry-client-cohttp-eio
   linol-eio
   eio_main
   (textutils :with-test)

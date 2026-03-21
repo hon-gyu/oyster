@@ -120,6 +120,11 @@ class oystermark_server =
 let () =
   Eio_main.run
   @@ fun env ->
+  let enable_otel = Sys.getenv_opt "OTEL_EXPORTER_OTLP_ENDPOINT" <> None in
+  Opentelemetry_client_cohttp_eio.with_setup ~enable:enable_otel env
+  @@ fun () ->
+  if enable_otel then Opentelemetry_trace.setup ();
+  Trace_core.set_process_name "oystermark-lsp";
   let s = new oystermark_server in
   let server = Linol_eio.Jsonrpc2.create_stdio ~env s in
   Linol_eio.Jsonrpc2.run server
