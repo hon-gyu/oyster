@@ -30,7 +30,6 @@ type style =
   | Flat
   | Indented
   | Show_parents
-[@@deriving sexp_of]
 
 (* span helpers
 ==================== *)
@@ -135,12 +134,17 @@ let build_duration_ranks (spans : OT.span list) : (string, int) Hashtbl.t =
 (* line formatting
 ==================== *)
 
-let format_line ?duration_ranks ?(prefix = "") (sp : OT.span) : string =
+let format_line
+      ?(duration_ranks : (string, int) Base.Hashtbl.t option)
+      ?(prefix = "")
+      (sp : OT.span)
+  : string
+  =
   let dur =
     match duration_ranks with
     | Some ranks ->
       (match Hashtbl.find ranks (span_id_hex sp.span_id) with
-       | Some r -> Int.to_string r
+       | Some r -> Int.to_string r ^ "us"
        | None -> format_duration sp)
     | None -> format_duration sp
   in
@@ -154,7 +158,12 @@ let format_line ?duration_ranks ?(prefix = "") (sp : OT.span) : string =
 (* row computation per style
 ==================== *)
 
-let flat_lines ?duration_ranks spans buf =
+let flat_lines
+      ?(duration_ranks : (string, int) Base.Hashtbl.t option)
+      (spans : OT.span list)
+      (buf : Buffer.t)
+  : unit
+  =
   let sorted =
     List.sort spans ~compare:(fun a b ->
       Int64.compare a.OT.start_time_unix_nano b.start_time_unix_nano)
@@ -164,7 +173,12 @@ let flat_lines ?duration_ranks spans buf =
     Buffer.add_char buf '\n')
 ;;
 
-let indented_lines ?duration_ranks spans buf =
+let indented_lines
+      ?(duration_ranks : (string, int) Base.Hashtbl.t option)
+      (spans : OT.span list)
+      (buf : Buffer.t)
+  : unit
+  =
   let forest = build_forest spans in
   let rec walk depth node =
     let prefix = String.make (depth * 2) ' ' in
@@ -175,7 +189,11 @@ let indented_lines ?duration_ranks spans buf =
   List.iter forest ~f:(walk 0)
 ;;
 
-let show_parents_lines ?duration_ranks spans buf =
+let show_parents_lines
+      ?(duration_ranks : (string, int) Base.Hashtbl.t option)
+      (spans : OT.span list)
+      (buf : Buffer.t)
+  =
   let forest = build_forest spans in
   (* last_path.(i) = span_id at depth i of the most recently printed span *)
   let last_path : string option array = Array.create ~len:64 None in
@@ -245,12 +263,15 @@ type t =
   ; mutable spans : OT.span list
   }
 
-let create ?(normalize_duration = false) style = { style; normalize_duration; spans = [] }
-let process t span = t.spans <- span :: t.spans
+let create ?(normalize_duration = false) (style : style) : t =
+  { style; normalize_duration; spans = [] }
+;;
 
-let contents t =
+let process (t : t) (span : OT.span) : unit = t.spans <- span :: t.spans
+
+let contents (t : t) : string =
   let spans = List.rev t.spans in
-  let duration_ranks =
+  let (duration_ranks : (string, int) Base.Hashtbl.t option) =
     if t.normalize_duration then Some (build_duration_ranks spans) else None
   in
   let buf = Buffer.create 256 in
