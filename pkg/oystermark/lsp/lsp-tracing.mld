@@ -1,0 +1,95 @@
+{0 LSP Tracing}
+
+All key functions in [lsp_lib.ml] are instrumented with
+{{:https://github.com/ocaml-tracing/ocaml-trace} [ocaml-trace]}
+([Trace_core.with_span]).  Each span records structured data (inputs,
+outputs, resolution tags) via [Trace_core.add_data_to_span].
+
+Instrumentation has zero overhead when no collector is installed.
+
+{1 Design choices}
+
+{2 [ocaml-trace]}
+
+[ocaml-trace] is a thin, backend-agnostic stub.  Library code
+([lsp_lib.ml]) depends only on [trace.core], keeping the dependency
+footprint minimal and avoiding coupling to any particular backend.
+
+The backend is chosen at the application level ([main.ml]), so the
+same instrumented code works with:
+
+{ul
+  {- No collector — zero cost, the default.}
+  {- An in-memory test collector — for trace-based property testing.}
+  {- OpenTelemetry — for production observability via Jaeger / Grafana / etc.}
+}
+
+{2 Version constraints}
+
+[opentelemetry 0.13] (pinned from git) adapts to [trace 0.12].
+Earlier releases ([opentelemetry 0.12] on opam) require
+[trace >= 0.10 && < 0.11], which would force downgrades.  We pin
+all three packages from the same repo:
+
+{v
+opam pin add -ny opentelemetry      git+https://github.com/ocaml-tracing/ocaml-opentelemetry.git
+opam pin add -ny opentelemetry-client git+https://github.com/ocaml-tracing/ocaml-opentelemetry.git
+opam pin add -ny opentelemetry-client-cohttp-eio git+https://github.com/ocaml-tracing/ocaml-opentelemetry.git
+opam install opentelemetry opentelemetry-client opentelemetry-client-cohttp-eio
+v}
+
+{1 Backends}
+
+{2 OpenTelemetry (production)}
+
+Set [OTEL_EXPORTER_OTLP_ENDPOINT] to enable OTLP export over HTTP.
+When the variable is absent, no collector is installed and tracing is
+disabled.
+
+{v
+# Start Jaeger (all-in-one, receives OTLP on port 4318, UI on 16686):
+docker run -d --name jaeger \
+  -p 16686:16686 -p 4318:4318 \
+  jaegertracing/jaeger:latest
+
+# Run the LSP with tracing:
+OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 oystermark-lsp
+
+# View traces:
+open http://localhost:16686
+v}
+
+The bridge is [opentelemetry.trace], which implements
+[Trace_core.Collector.t] by forwarding spans to the OTEL SDK.
+[opentelemetry-client-cohttp-eio] handles the HTTP export using the
+same [eio] event loop as the LSP server.
+
+{2 In-memory collector (testing)}
+
+[Trace_collect] ([trace_collect.ml]) is a lightweight collector that
+captures spans and messages into a mutable list.  It is designed for
+trace-based property testing: run the function under test inside
+[Trace_collect.with_collector], then assert on the captured events.
+
+{v
+let t = Trace_collect.create () in
+Trace_collect.with_collector t (fun () ->
+  (* call instrumented code *)
+  let _ = Lsp_lib.go_to_definition ~index ~rel_path ~content ~line ~character ~read_file in
+  ());
+
+(* inspect *)
+Trace_collect.span_names t       (* ordered list of span names *)
+Trace_collect.find_span t "go_to_definition"   (* data for a span *)
+Trace_collect.events t           (* full event list *)
+v}
+
+Event types:
+
+{ul
+  {- [Enter \{ name; data \}] — span opened, with final accumulated data.}
+  {- [Exit \{ name \}] — span closed.}
+  {- [Message \{ msg; data \}] — a trace message.}
+}
+
+All events have [sexp_of_event] for use with [ppx_expect].
