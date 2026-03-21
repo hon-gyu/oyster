@@ -1,26 +1,27 @@
 (** Oystermark LSP server entrypoint. *)
 
+open Core
 open Linol_eio
 
 (** Build a vault index by scanning the vault root directory. *)
 let build_vault_index (vault_root : string) : Oystermark.Vault.Index.t =
   let all_entries = Oystermark.Vault.list_entries vault_root in
-  let is_dir p = String.length p > 0 && p.[String.length p - 1] = '/' in
-  let dirs = List.filter is_dir all_entries in
-  let files = List.filter (fun p -> not (is_dir p)) all_entries in
+  let is_dir p = String.length p > 0 && Char.equal p.[String.length p - 1] '/' in
+  let dirs = List.filter all_entries ~f:is_dir in
+  let files = List.filter ~f:(fun p -> not (is_dir p)) all_entries in
   let is_md p = Filename.check_suffix p ".md" in
-  let md_files = List.filter is_md files in
-  let other_files = List.filter (fun p -> not (is_md p)) files in
+  let md_files = List.filter ~f:is_md files in
+  let other_files = List.filter ~f:(fun p -> not (is_md p)) files in
   let md_docs =
     List.filter_map
-      (fun rel_path ->
-         let full_path = Filename.concat vault_root rel_path in
-         try
-           let content = In_channel.with_open_text full_path In_channel.input_all in
-           let doc = Oystermark.Parse.of_string content in
-           Some (rel_path, doc)
-         with
-         | _ -> None)
+      ~f:(fun rel_path ->
+        let full_path = Filename.concat vault_root rel_path in
+        try
+          let content = In_channel.read_all full_path in
+          let doc = Oystermark.Parse.of_string content in
+          Some (rel_path, doc)
+        with
+        | _ -> None)
       md_files
   in
   Oystermark.Vault.build_index ~md_docs ~other_files ~dirs
@@ -90,13 +91,15 @@ class oystermark_server =
         let rel_path =
           let prefix = root ^ "/" in
           let plen = String.length prefix in
-          if String.length file_path >= plen && String.sub file_path 0 plen = prefix
-          then String.sub file_path plen (String.length file_path - plen)
+          if
+            String.length file_path >= plen
+            && String.equal (String.sub file_path ~pos:0 ~len:plen) prefix
+          then String.sub file_path ~pos:plen ~len:(String.length file_path - plen)
           else file_path
         in
         let read_file rp =
           let fp = Filename.concat root rp in
-          try Some (In_channel.with_open_text fp In_channel.input_all) with
+          try Some (In_channel.read_all fp) with
           | _ -> None
         in
         (match
@@ -120,7 +123,7 @@ class oystermark_server =
 let () =
   Eio_main.run
   @@ fun env ->
-  let enable_otel = Sys.getenv_opt "OTEL_EXPORTER_OTLP_ENDPOINT" <> None in
+  let enable_otel = Option.is_some (Sys.getenv "OTEL_EXPORTER_OTLP_ENDPOINT") in
   Opentelemetry_client_cohttp_eio.with_setup ~enable:enable_otel env
   @@ fun () ->
   if enable_otel then Opentelemetry_trace.setup ();
