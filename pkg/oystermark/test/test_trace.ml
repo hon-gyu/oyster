@@ -23,31 +23,31 @@ let%expect_test "trace_pp" =
   print_s [%sexp (Trace_collect.span_names t : string list)];
   [%expect {| (inside-f right-before-f g) |}];
   let spans = Trace_collect.spans t in
-  print_string (Trace_collect.Trace_pp.format Flat spans);
+  print_string (Trace_collect.Trace_pp.format ~normalize_duration:true Flat spans);
   [%expect
     {|
      span             duration   attrs
     ╶──────────────╴ ╶────────╴ ╶─────╴
-     g                     6us
-     right-before-f        2us   y=5
-     inside-f              1us
+     g                       3
+     right-before-f          2   y=5
+     inside-f                1
     |}];
-  print_string (Trace_collect.Trace_pp.format Indented spans);
+  print_string (Trace_collect.Trace_pp.format ~normalize_duration:true Indented spans);
   [%expect
     {|
      span               duration   attrs
     ╶────────────────╴ ╶────────╴ ╶─────╴
-     g                       6us
-       right-before-f        2us   y=5
-         inside-f            1us
+     g                         3
+       right-before-f          2   y=5
+         inside-f              1
     |}];
-  print_string (Trace_collect.Trace_pp.format Show_parents spans);
+  print_string (Trace_collect.Trace_pp.format ~normalize_duration:true Show_parents spans);
   [%expect
     {|
      span               duration   attrs
     ╶────────────────╴ ╶────────╴ ╶─────╴
-     g                       6us
-       right-before-f        2us   y=5
-         inside-f            1us
+     g                         3
+       right-before-f          2   y=5
+         inside-f              1
     |}]
 ;;
