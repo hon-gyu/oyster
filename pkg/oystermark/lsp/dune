@@ -1,7 +1,7 @@
 (library
  (name lsp_lib)
- (modules lsp_lib)
- (libraries oystermark core)
+ (modules lsp_lib trace_collect)
+ (libraries oystermark core trace.core)
  (inline_tests)
  (preprocess
   (pps ppx_jane ppx_string)))

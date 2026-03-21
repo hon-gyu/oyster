@@ -33,6 +33,7 @@
   ppx_string
   ppx_blob
   ppx_quick_test
+  trace
   linol-eio
   eio_main
   (textutils :with-test)
