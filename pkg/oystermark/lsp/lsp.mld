@@ -102,6 +102,11 @@ vim.lsp.config['oystermark'] = {
 vim.lsp.enable('oystermark')
 v}
 
+{1 Tracing}
+
+See {!page-"lsp-tracing"} for full details on instrumentation,
+backends (OTEL / in-memory), design choices, and version constraints.
+
 {1 Testing}
 
 {2 Unit tests}
@@ -112,10 +117,10 @@ position conversion, heading/block-ID lookup, and end-to-end
 
 {2 Trace-based tests}
 
-The [go_to_definition] test module includes a trace-based test that
-installs [Trace_collect], runs a definition request, and asserts on
-the span names and data using [ppx_expect].  This validates not just
-the result but the internal execution path.
+[test/lsp_trace/test_lsp_trace.ml] captures OTEL spans via
+[Trace_collect] and asserts on span names and attributes using
+[ppx_expect].  This validates not just the result but the internal
+execution path.
 
 {2 Integration tests}
 

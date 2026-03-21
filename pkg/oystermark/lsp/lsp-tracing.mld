@@ -20,9 +20,61 @@ same instrumented code works with:
 
 {ul
   {- No collector — zero cost, the default.}
-  {- An in-memory test collector — for trace-based property testing.}
-  {- OpenTelemetry — for production observability via Jaeger / Grafana / etc.}
+  {- An in-memory OTEL collector — for trace-based property testing.}
+  {- OpenTelemetry over HTTP — for production observability via Jaeger / Grafana / etc.}
 }
+
+{2 [opentelemetry.trace] (the bridge)}
+
+The library [opentelemetry.trace]
+({{:https://github.com/ocaml-tracing/ocaml-opentelemetry/?tab=readme-ov-file#opentelemetry-trace} docs})
+implements [Trace_core.Collector.t] by forwarding spans into the
+OpenTelemetry SDK.  This means code instrumented with
+[Trace_core.with_span] automatically produces OTEL spans — no
+OTEL-specific instrumentation needed.
+
+{2 Why OTEL as the data model}
+
+The in-memory test collector captures [Opentelemetry_proto.Trace.span]
+values — the same protobuf types you get from parsing OTLP JSON.
+This means a single pretty-printer / assertion library can work with:
+
+{ul
+  {- OCaml traces captured in-process via [Trace_collect].}
+  {- External OTLP JSON exported by apps in any language (Rust, Python, Go, …).}
+}
+
+Both paths converge on the same data type.
+
+{2 Dependency structure}
+
+{v
+lsp_lib           → trace.core            (lightweight, no OTEL)
+trace_collect     → opentelemetry,         (OTEL exporter for tests)
+                    opentelemetry.trace,
+                    trace.core
+test_lsp_trace    → lsp_lib, trace_collect (test-only)
+main (executable) → lsp_lib,              (production binary)
+                    opentelemetry.trace,
+                    opentelemetry-client-cohttp-eio
+v}
+
+[lsp_lib] has no transitive dependency on [opentelemetry].
+The OTEL dependency only appears in test code and the executable.
+
+{2 Stack}
+
+{v
+Trace_core.with_span            (instrumentation in lsp_lib.ml)
+     ↓
+opentelemetry.trace             (bridge: Trace_core → OTEL spans)
+     ↓
+Opentelemetry.Exporter.t        (pluggable: in-memory or HTTP)
+     ↓  (production)            ↓  (testing)
+opentelemetry-client-cohttp-eio Trace_collect (in-memory buffer)
+     ↓
+OTel Collector / Jaeger / etc.
+v}
 
 {2 Version constraints}
 
@@ -40,7 +92,7 @@ v}
 
 {1 Backends}
 
-{2 OpenTelemetry (production)}
+{2 OpenTelemetry over HTTP (production)}
 
 Set [OTEL_EXPORTER_OTLP_ENDPOINT] to enable OTLP export over HTTP.
 When the variable is absent, no collector is installed and tracing is
@@ -59,37 +111,48 @@ OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 oystermark-lsp
 open http://localhost:16686
 v}
 
-The bridge is [opentelemetry.trace], which implements
-[Trace_core.Collector.t] by forwarding spans to the OTEL SDK.
 [opentelemetry-client-cohttp-eio] handles the HTTP export using the
 same [eio] event loop as the LSP server.
 
-{2 In-memory collector (testing)}
+{2 In-memory OTEL collector (testing)}
 
-[Trace_collect] ([trace_collect.ml]) is a lightweight collector that
-captures spans and messages into a mutable list.  It is designed for
-trace-based property testing: run the function under test inside
-[Trace_collect.with_collector], then assert on the captured events.
+[Trace_collect] ([trace_collect.ml]) implements
+[Opentelemetry.Exporter.t] by buffering OTEL spans in memory.
+It is designed for trace-based property testing: run the function
+under test inside [Trace_collect.with_collect], then inspect the
+captured [Opentelemetry_proto.Trace.span] values.
 
 {v
 let t = Trace_collect.create () in
-Trace_collect.with_collector t (fun () ->
+Trace_collect.with_collect t (fun () ->
   (* call instrumented code *)
   let _ = Lsp_lib.go_to_definition ~index ~rel_path ~content ~line ~character ~read_file in
   ());
 
 (* inspect *)
-Trace_collect.span_names t       (* ordered list of span names *)
-Trace_collect.find_span t "go_to_definition"   (* data for a span *)
-Trace_collect.events t           (* full event list *)
+Trace_collect.span_names t                       (* ordered list of span names *)
+Trace_collect.find_span t "go_to_definition"     (* Opentelemetry_proto.Trace.span option *)
+Trace_collect.span_attrs sp                      (* attribute key-value pairs as strings *)
+Trace_collect.span_attr sp "resolution"          (* single attribute lookup *)
 v}
 
-Event types:
+The captured spans are standard OTEL proto types, so any future
+pretty-printer built on [Opentelemetry_proto.Trace.span] will work
+with both in-process captures and external OTLP JSON.
 
-{ul
-  {- [Enter \{ name; data \}] — span opened, with final accumulated data.}
-  {- [Exit \{ name \}] — span closed.}
-  {- [Message \{ msg; data \}] — a trace message.}
+{1 Instrumented spans}
+
+{table
+  {tr {th Span name} {th Data fields} {th Source}}
+  {tr {td [go_to_definition]} {td [rel_path], [line], [character], [resolution]} {td [lsp_lib.ml]}}
+  {tr {td [byte_offset_of_position]} {td [line], [character], [offset]} {td [lsp_lib.ml]}}
+  {tr {td [parse_doc]} {td [content_len]} {td [lsp_lib.ml]}}
+  {tr {td [parse_target_doc]} {td [content_len]} {td [lsp_lib.ml]}}
+  {tr {td [collect_links]} {td [num_links]} {td [lsp_lib.ml]}}
+  {tr {td [find_link_ref_at_offset]} {td [offset], [found]} {td [lsp_lib.ml]}}
+  {tr {td [find_heading_line_in_doc]} {td [slug], [result_line]} {td [lsp_lib.ml]}}
+  {tr {td [find_block_id_line_in_doc]} {td [block_id], [result_line]} {td [lsp_lib.ml]}}
 }
 
-All events have [sexp_of_event] for use with [ppx_expect].
+Note: OTEL automatically adds [code.filepath] and [code.lineno]
+attributes to each span via the [__FILE__] and [__LINE__] parameters.

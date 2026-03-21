@@ -1,122 +1,85 @@
-(** In-memory trace collector for testing.
+(** In-memory OTEL trace collector for testing.
 
-    Captures spans and messages into a mutable list, suitable for
-    trace-based property testing. Install with {!with_collector},
-    then inspect {!event} values after the function under test returns. *)
+    Captures OpenTelemetry spans via a custom {!Opentelemetry.Exporter.t},
+    suitable for trace-based property testing. The captured data is
+    [Opentelemetry_proto.Trace.span list] — the same type you get from
+    parsing OTLP JSON, so the same pretty-printer works for both OCaml
+    traces and external traces from any language.
+
+    Usage:
+    {[
+      let t = Trace_collect.create () in
+      Trace_collect.with_collect t (fun () ->
+        (* call instrumented code *)
+        ...);
+      Trace_collect.spans t  (* returns Opentelemetry_proto.Trace.span list *)
+    ]} *)
 
 open Core
+module OT = Opentelemetry_proto.Trace
 
-let sexp_of_user_data : Trace_core.user_data -> Sexp.t = function
-  | `Int i -> Sexp.List [ Atom "Int"; sexp_of_int i ]
-  | `String s -> Sexp.List [ Atom "String"; sexp_of_string s ]
-  | `Bool b -> Sexp.List [ Atom "Bool"; sexp_of_bool b ]
-  | `Float f -> Sexp.List [ Atom "Float"; sexp_of_float f ]
-  | `None -> Sexp.Atom "None"
-;;
+type t = { mutable collected_spans : OT.span list }
 
-let sexp_of_datum (k, v) = Sexp.List [ sexp_of_string k; sexp_of_user_data v ]
-let sexp_of_data data = sexp_of_list sexp_of_datum data
+let create () = { collected_spans = [] }
 
-(** A single recorded trace event. *)
-type event =
-  | Enter of
-      { name : string
-      ; data : (string * Trace_core.user_data) list
-      }
-  | Exit of { name : string }
-  | Message of
-      { msg : string
-      ; data : (string * Trace_core.user_data) list
-      }
-
-let sexp_of_event = function
-  | Enter { name; data } ->
-    Sexp.List [ Atom "Enter"; Sexp.List [ Atom name; sexp_of_data data ] ]
-  | Exit { name } -> Sexp.List [ Atom "Exit"; Atom name ]
-  | Message { msg; data } ->
-    Sexp.List [ Atom "Message"; Sexp.List [ Atom msg; sexp_of_data data ] ]
-;;
-
-type span_info =
-  { name : string
-  ; mutable data : (string * Trace_core.user_data) list
+(** Build an in-memory OTEL exporter that captures spans into [t]. *)
+let exporter (t : t) : Opentelemetry.Exporter.t =
+  let sw, _trigger = Opentelemetry.Aswitch.create () in
+  { export =
+      (fun signal ->
+        match signal with
+        | Opentelemetry.Any_signal_l.Spans spans ->
+          t.collected_spans <- spans @ t.collected_spans
+        | _ -> ())
+  ; active = (fun () -> sw)
+  ; shutdown = ignore
+  ; self_metrics = (fun () -> [])
   }
-
-type Trace_core.span += Test_span of span_info
-
-(** Collected events, most recent last. *)
-type t = { mutable events : event list }
-
-let create () = { events = [] }
-
-let collector (t : t) : Trace_core.Collector.t =
-  Trace_core.Collector.C_some
-    ( t
-    , Trace_core.Collector.Callbacks.make
-        ~enter_span:
-          (fun
-            t
-            ~__FUNCTION__:_
-            ~__FILE__:_
-            ~__LINE__:_
-            ~level:_
-            ~params:_
-            ~data
-            ~parent:_
-            name ->
-          let info = { name; data } in
-          t.events <- Enter { name; data } :: t.events;
-          Test_span info)
-        ~exit_span:(fun t span ->
-          match span with
-          | Test_span info -> t.events <- Exit { name = info.name } :: t.events
-          | _ -> ())
-        ~add_data_to_span:(fun t span data ->
-          match span with
-          | Test_span info ->
-            info.data <- info.data @ data;
-            (* Update the most recent Enter event for this span *)
-            t.events
-            <- List.map t.events ~f:(fun ev ->
-                 match ev with
-                 | Enter e when String.equal e.name info.name ->
-                   Enter { e with data = info.data }
-                 | other -> other)
-          | _ -> ())
-        ~message:(fun t ~level:_ ~params:_ ~data ~span:_ msg ->
-          t.events <- Message { msg; data } :: t.events)
-        ~metric:(fun _ ~level:_ ~params:_ ~data:_ _ _ -> ())
-        () )
 ;;
 
-(** Run [f] with tracing collected into [t]. *)
-let with_collector (t : t) (f : unit -> 'a) : 'a =
-  Trace_core.with_setup_collector (collector t) f
+(** Run [f] with both the OTEL exporter and the ocaml-trace bridge installed.
+    Spans emitted via [Trace_core.with_span] are captured into [t].
+
+    Uses unbatched providers so spans arrive at the exporter immediately
+    without needing a flush or tick. *)
+let with_collect (t : t) (f : unit -> 'a) : 'a =
+  let exp = exporter t in
+  Opentelemetry.Sdk.set exp;
+  Opentelemetry_trace.setup ();
+  let result = f () in
+  Opentelemetry.Sdk.remove ~on_done:ignore ();
+  Trace_core.shutdown ();
+  result
 ;;
 
-(** Get events in chronological order. *)
-let events (t : t) : event list = List.rev t.events
-
-(** Get only [Enter] events (completed spans with final data). *)
-let spans (t : t) : (string * (string * Trace_core.user_data) list) list =
-  List.filter_map (events t) ~f:(fun ev ->
-    match ev with
-    | Enter { name; data } -> Some (name, data)
-    | _ -> None)
-;;
-
-(** Find span data by name. Returns the data of the first matching span. *)
-let find_span (t : t) (name : string) : (string * Trace_core.user_data) list option =
-  List.find_map (events t) ~f:(fun ev ->
-    match ev with
-    | Enter { name = n; data } when String.equal n name -> Some data
-    | _ -> None)
-;;
+(** Get collected spans in chronological order (earliest first). *)
+let spans (t : t) : OT.span list = List.rev t.collected_spans
 
 (** Get just the span names in order. *)
 let span_names (t : t) : string list =
-  List.filter_map (events t) ~f:(fun ev ->
-    match ev with
-    | Enter { name; _ } -> Some name
-    | _ -> None)
+  List.map (spans t) ~f:(fun (sp : OT.span) -> sp.name)
+;;
+
+(** Find the first span with the given name. *)
+let find_span (t : t) (name : string) : OT.span option =
+  List.find (spans t) ~f:(fun (sp : OT.span) -> String.equal sp.name name)
+;;
+
+(** Extract attribute values from a span as an assoc list of [string * string]. *)
+let span_attrs (sp : OT.span) : (string * string) list =
+  List.map sp.attributes ~f:(fun (kv : Opentelemetry_proto.Common.key_value) ->
+    let v =
+      match kv.value with
+      | Some (String_value s) -> s
+      | Some (Int_value i) -> Int64.to_string i
+      | Some (Bool_value b) -> Bool.to_string b
+      | Some (Double_value f) -> Float.to_string f
+      | _ -> "<unknown>"
+    in
+    kv.key, v)
+;;
+
+(** Find attribute value by key in a span. *)
+let span_attr (sp : OT.span) (key : string) : string option =
+  List.Assoc.find (span_attrs sp) ~equal:String.equal key
 ;;

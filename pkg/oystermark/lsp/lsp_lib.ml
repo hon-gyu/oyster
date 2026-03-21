@@ -500,35 +500,5 @@ let%test_module "go_to_definition" =
       [%expect {| note-e.md:0 |}]
     ;;
 
-    let%expect_test "trace: go_to_definition heading" =
-      let t = Trace_collect.create () in
-      Trace_collect.with_collector t (fun () ->
-        let content = List.Assoc.find_exn files ~equal:String.equal "note-c.md" in
-        let _result =
-          go_to_definition
-            ~index
-            ~rel_path:"note-c.md"
-            ~content
-            ~line:2
-            ~character:8
-            ~read_file
-        in
-        ());
-      print_s [%sexp (Trace_collect.span_names t : string list)];
-      [%expect
-        {|
-        (go_to_definition byte_offset_of_position parse_doc collect_links
-         find_link_ref_at_offset parse_target_doc find_heading_line_in_doc)
-        |}];
-      let go_data = Trace_collect.find_span t "go_to_definition" in
-      (match go_data with
-       | None -> print_endline "<no span>"
-       | Some data -> print_s (Trace_collect.sexp_of_data data));
-      [%expect
-        {|
-        ((rel_path (String note-c.md)) (line (Int 2)) (character (Int 8))
-         (resolution (String heading)))
-        |}]
-    ;;
   end)
 ;;

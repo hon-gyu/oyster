@@ -1,8 +1,15 @@
 (library
  (name lsp_lib)
- (modules lsp_lib trace_collect)
+ (modules lsp_lib)
  (libraries oystermark core trace.core)
  (inline_tests)
+ (preprocess
+  (pps ppx_jane ppx_string)))
+
+(library
+ (name trace_collect)
+ (modules trace_collect)
+ (libraries core opentelemetry opentelemetry.trace trace.core)
  (preprocess
   (pps ppx_jane ppx_string)))
 
@@ -10,6 +17,12 @@
  (name main)
  (public_name oystermark-lsp)
  (modules main)
- (libraries lsp_lib oystermark linol-eio eio_main opentelemetry.trace opentelemetry-client-cohttp-eio))
+ (libraries
+  lsp_lib
+  oystermark
+  linol-eio
+  eio_main
+  opentelemetry.trace
+  opentelemetry-client-cohttp-eio))
 
 (documentation)
