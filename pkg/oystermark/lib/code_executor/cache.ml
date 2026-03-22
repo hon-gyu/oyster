@@ -1,3 +1,5 @@
+(** Content-addressed execution cache keyed by file path and input hash. *)
+
 open Core
 
 let cache_file = "_exec_cache.json"

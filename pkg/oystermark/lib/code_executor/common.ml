@@ -1,3 +1,5 @@
+(** Core types and AST extraction shared by all code-executor sub-modules. *)
+
 open Core
 module Attribute = Parse.Attribute
 module Frontmatter = Parse.Frontmatter

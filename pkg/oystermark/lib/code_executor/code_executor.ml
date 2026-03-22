@@ -1,3 +1,8 @@
+(** Execute fenced code blocks from OysterMark documents and splice results back.
+
+    Re-exports {!Common}, {!Cache}, {!Uv}, and {!Jupyter} so downstream
+    consumers only need to open [Code_executor]. *)
+
 open Core
 include Common
 

@@ -1,3 +1,5 @@
+(** Python executor backed by ephemeral [uv] environments and Jupyter [nbconvert]. *)
+
 open Core
 module Attribute = Parse.Attribute
 

@@ -1,3 +1,5 @@
+(** Jupyter notebook construction, execution via [nbconvert], and output extraction. *)
+
 open Core
 
 (** Build a minimal [.ipynb] JSON with a Python 3 kernelspec.
