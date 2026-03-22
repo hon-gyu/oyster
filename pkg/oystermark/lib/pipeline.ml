@@ -582,7 +582,9 @@ hello
 |}
     ;;
 
-    let echo_hash doc = Code_executor.hash_fn_of_lang (Code_executor.extract_exec_ctx doc) "echo"
+    let echo_hash doc =
+      Code_executor.hash_fn_of_lang (Code_executor.extract_exec_ctx doc) "echo"
+    ;;
 
     let run_echo cache doc =
       (code_exec
