@@ -1,6 +1,3 @@
 [submodule "vendor/cmarkit"]
 	path = vendor/cmarkit
 	url = git@github.com:hon-gyu/cmarkit.git
-[submodule "vendor/odoc-dot-extension"]
-	path = vendor/odoc-dot-extension
-	url = https://tangled.org/jon.recoil.org/odoc-dot-extension
