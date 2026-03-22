@@ -31,6 +31,12 @@ type style =
   | Indented
   | Show_parents
 
+(** Tree-drawing characters for indented styles. *)
+type tree_chars =
+  | Null (** plain indentation only *)
+  | Ascii (** [|-- ] and [`-- ] *)
+  | Utf8 (** [├── ] and [└── ] *)
+
 (* span helpers
 ==================== *)
 
@@ -131,16 +137,14 @@ let build_duration_ranks (spans : OT.span list) : (string, int) Hashtbl.t =
   ranks
 ;;
 
-(* line formatting
+(* line formatter closure
 ==================== *)
 
-let format_line
-      ?(duration_ranks : (string, int) Base.Hashtbl.t option)
-      ?(prefix = "")
-      (sp : OT.span)
-  : string
+(** Build a [prefix -> span -> string] closure that captures duration_ranks. *)
+let make_format_line (duration_ranks : (string, int) Hashtbl.t option)
+  : prefix:string -> OT.span -> string
   =
-  let dur =
+  let format_dur (sp : OT.span) =
     match duration_ranks with
     | Some ranks ->
       (match Hashtbl.find ranks (span_id_hex sp.span_id) with
@@ -148,49 +152,82 @@ let format_line
        | None -> format_duration sp)
     | None -> format_duration sp
   in
-  let attrs = format_attrs sp in
-  let parts =
-    [ prefix ^ sp.name; dur ] @ if String.is_empty attrs then [] else [ attrs ]
-  in
-  String.concat parts ~sep:" "
+  fun ~prefix (sp : OT.span) ->
+    let dur = format_dur sp in
+    let attrs = format_attrs sp in
+    let parts =
+      [ prefix ^ sp.name; dur ] @ if String.is_empty attrs then [] else [ attrs ]
+    in
+    String.concat parts ~sep:" "
+;;
+
+(* tree prefix helpers
+==================== *)
+
+let tree_prefix (tc : tree_chars) ~depth ~is_last =
+  match tc with
+  | Null -> String.make (depth * 2) ' '
+  | Ascii ->
+    let indent = if depth = 0 then "" else String.make ((depth - 1) * 4) ' ' in
+    if depth = 0 then "" else indent ^ if is_last then "`-- " else "|-- "
+  | Utf8 ->
+    let indent = if depth = 0 then "" else String.make ((depth - 1) * 4) ' ' in
+    if depth = 0 then "" else indent ^ if is_last then "└── " else "├── "
+;;
+
+(** Build the continuation prefix for children: spaces under [|] columns, blanks under [`]. *)
+let tree_child_indent (tc : tree_chars) ~depth ~is_last =
+  match tc with
+  | Null -> ignore (depth, is_last)
+  | Ascii | Utf8 -> ignore (depth, is_last)
 ;;
 
 (* row computation per style
 ==================== *)
 
-let flat_lines
-      ?(duration_ranks : (string, int) Base.Hashtbl.t option)
-      (spans : OT.span list)
-      (buf : Buffer.t)
-  : unit
-  =
+let flat_lines format_line (spans : OT.span list) (buf : Buffer.t) : unit =
   let sorted =
     List.sort spans ~compare:(fun a b ->
       Int64.compare a.OT.start_time_unix_nano b.start_time_unix_nano)
   in
   List.iter sorted ~f:(fun sp ->
-    Buffer.add_string buf (format_line ?duration_ranks sp);
+    Buffer.add_string buf (format_line ~prefix:"" sp);
     Buffer.add_char buf '\n')
 ;;
 
-let indented_lines
-      ?(duration_ranks : (string, int) Base.Hashtbl.t option)
-      (spans : OT.span list)
-      (buf : Buffer.t)
+let indented_lines format_line ~(tc : tree_chars) (spans : OT.span list) (buf : Buffer.t)
   : unit
   =
   let forest = build_forest spans in
-  let rec walk depth node =
-    let prefix = String.make (depth * 2) ' ' in
-    Buffer.add_string buf (format_line ?duration_ranks ~prefix node.span);
+  let rec walk ~depth ~parent_prefix node ~is_last =
+    let prefix = parent_prefix ^ tree_prefix tc ~depth ~is_last in
+    Buffer.add_string buf (format_line ~prefix node.span);
     Buffer.add_char buf '\n';
-    List.iter node.children ~f:(walk (depth + 1))
+    let n_children = List.length node.children in
+    List.iteri node.children ~f:(fun i child ->
+      let child_is_last = i = n_children - 1 in
+      let next_parent_prefix =
+        match tc with
+        | Null -> ""
+        | Ascii ->
+          parent_prefix ^ if depth = 0 then "" else if is_last then "    " else "|   "
+        | Utf8 ->
+          parent_prefix ^ if depth = 0 then "" else if is_last then "    " else "│   "
+      in
+      walk
+        ~depth:(depth + 1)
+        ~parent_prefix:next_parent_prefix
+        child
+        ~is_last:child_is_last)
   in
-  List.iter forest ~f:(walk 0)
+  let n_roots = List.length forest in
+  List.iteri forest ~f:(fun i root ->
+    walk ~depth:0 ~parent_prefix:"" root ~is_last:(i = n_roots - 1))
 ;;
 
 let show_parents_lines
-      ?(duration_ranks : (string, int) Base.Hashtbl.t option)
+      format_line
+      ~(tc : tree_chars)
       (spans : OT.span list)
       (buf : Buffer.t)
   =
@@ -207,8 +244,8 @@ let show_parents_lines
            (Some (span_id_hex node.span.parent_span_id))
     in
     if not parent_visible then re_print_ancestors depth node;
-    let prefix = String.make (depth * 2) ' ' in
-    Buffer.add_string buf (format_line ?duration_ranks ~prefix node.span);
+    let prefix = tree_prefix tc ~depth ~is_last:true in
+    Buffer.add_string buf (format_line ~prefix node.span);
     Buffer.add_char buf '\n';
     last_path.(depth) <- Some sid;
     for i = depth + 1 to Array.length last_path - 1 do
@@ -218,8 +255,8 @@ let show_parents_lines
   and re_print_ancestors depth node =
     let ancestors = collect_ancestors depth node in
     List.iter ancestors ~f:(fun (d, sp) ->
-      let prefix = String.make (d * 2) ' ' ^ "~ " in
-      Buffer.add_string buf (format_line ?duration_ranks ~prefix sp);
+      let prefix = tree_prefix tc ~depth:d ~is_last:true ^ "~ " in
+      Buffer.add_string buf (format_line ~prefix sp);
       Buffer.add_char buf '\n';
       last_path.(d) <- Some (span_id_hex sp.span_id))
   and collect_ancestors _depth _node =
@@ -259,31 +296,39 @@ let show_parents_lines
 
 type t =
   { style : style
+  ; tree_chars : tree_chars
   ; normalize_duration : bool
   ; mutable spans : OT.span list
   }
 
-let create ?(normalize_duration = false) (style : style) : t =
-  { style; normalize_duration; spans = [] }
+let create ?(tree_chars = Null) ?(normalize_duration = false) (style : style) : t =
+  { style; tree_chars; normalize_duration; spans = [] }
 ;;
 
 let process (t : t) (span : OT.span) : unit = t.spans <- span :: t.spans
 
 let contents (t : t) : string =
   let spans = List.rev t.spans in
-  let (duration_ranks : (string, int) Base.Hashtbl.t option) =
+  let duration_ranks =
     if t.normalize_duration then Some (build_duration_ranks spans) else None
   in
+  let format_line = make_format_line duration_ranks in
   let buf = Buffer.create 256 in
   (match t.style with
-   | Flat -> flat_lines ?duration_ranks spans buf
-   | Indented -> indented_lines ?duration_ranks spans buf
-   | Show_parents -> show_parents_lines ?duration_ranks spans buf);
+   | Flat -> flat_lines format_line spans buf
+   | Indented -> indented_lines format_line ~tc:t.tree_chars spans buf
+   | Show_parents -> show_parents_lines format_line ~tc:t.tree_chars spans buf);
   Buffer.contents buf
 ;;
 
-let format ?(normalize_duration = false) (style : style) (spans : OT.span list) : string =
-  let t = create ~normalize_duration style in
+let format
+      ?(tree_chars = Null)
+      ?(normalize_duration = false)
+      (style : style)
+      (spans : OT.span list)
+  : string
+  =
+  let t = create ~tree_chars ~normalize_duration style in
   List.iter spans ~f:(process t);
   contents t
 ;;

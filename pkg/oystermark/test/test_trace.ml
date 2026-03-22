@@ -43,5 +43,29 @@ let%expect_test "trace_pp" =
     g 3us
       right-before-f 2us y=5
         inside-f 1us
+    |}];
+  print_string
+    (Trace_collect.Trace_pp.format
+       ~tree_chars:Ascii
+       ~normalize_duration:true
+       Indented
+       spans);
+  [%expect
+    {|
+    g 3us
+    `-- right-before-f 2us y=5
+            `-- inside-f 1us
+    |}];
+  print_string
+    (Trace_collect.Trace_pp.format
+       ~tree_chars:Utf8
+       ~normalize_duration:true
+       Indented
+       spans);
+  [%expect
+    {|
+    g 3us
+    └── right-before-f 2us y=5
+            └── inside-f 1us
     |}]
 ;;
