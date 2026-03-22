@@ -32,8 +32,6 @@ type exec_ctx =
 
 type executor = exec_ctx -> output list
 
-let todo () = failwith "TODO"
-
 (** Walk the Cmarkit AST and collect every fenced code block as a {!cell}.
     Cells are numbered in document order starting from 0.
 
