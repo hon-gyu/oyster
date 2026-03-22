@@ -1,0 +1,6 @@
+(library
+ (name test)
+ (libraries core trace trace_collect)
+ (inline_tests)
+ (preprocess
+  (pps ppx_jane ppx_trace ppx_expect)))

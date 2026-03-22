@@ -1,6 +1,6 @@
 (library
- (name test_lsp_integration)
- (libraries core core_unix yojson)
+ (name test_lsp)
+ (libraries core core_unix yojson lsp_lib trace_collect)
  (inline_tests
   (deps
    (source_tree data)

@@ -11,6 +11,8 @@ open Core
 (** Convert a 0-based (line, character) position to a byte offset in [content].
     [character] is treated as a byte offset within the line (correct for ASCII). *)
 let byte_offset_of_position (content : string) ~(line : int) ~(character : int) : int =
+  Trace_core.with_span ~__FILE__ ~__LINE__ "byte_offset_of_position"
+  @@ fun _sp ->
   let len = String.length content in
   let cur_line = ref 0 in
   let i = ref 0 in
@@ -18,7 +20,11 @@ let byte_offset_of_position (content : string) ~(line : int) ~(character : int) 
     if Char.equal (String.get content !i) '\n' then incr cur_line;
     incr i
   done;
-  min (!i + character) len
+  let offset = min (!i + character) len in
+  Trace_core.add_data_to_span
+    _sp
+    [ "line", `Int line; "character", `Int character; "offset", `Int offset ];
+  offset
 ;;
 
 (** {1 Link detection} *)
@@ -37,6 +43,8 @@ type located_link =
     Requires the document to have been parsed with [~locs:true] so that
     text locations are available on AST nodes. *)
 let collect_links (doc : Cmarkit.Doc.t) : located_link list =
+  Trace_core.with_span ~__FILE__ ~__LINE__ "collect_links"
+  @@ fun _sp ->
   let try_add_link acc link_ref loc =
     if Cmarkit.Textloc.is_none loc
     then acc
@@ -67,7 +75,9 @@ let collect_links (doc : Cmarkit.Doc.t) : located_link list =
         | _ -> Cmarkit.Folder.default)
       ()
   in
-  List.rev (Cmarkit.Folder.fold_doc folder [] doc)
+  let links = List.rev (Cmarkit.Folder.fold_doc folder [] doc) in
+  Trace_core.add_data_to_span _sp [ "num_links", `Int (List.length links) ];
+  links
 ;;
 
 (** Find the link whose byte range contains [offset].
@@ -75,8 +85,16 @@ let collect_links (doc : Cmarkit.Doc.t) : located_link list =
 let find_link_ref_at_offset (links : located_link list) (offset : int)
   : Oystermark.Vault.Link_ref.t option
   =
-  List.find_map links ~f:(fun ll ->
-    if ll.first_byte <= offset && offset <= ll.last_byte then Some ll.link_ref else None)
+  Trace_core.with_span ~__FILE__ ~__LINE__ "find_link_ref_at_offset"
+  @@ fun _sp ->
+  let result =
+    List.find_map links ~f:(fun ll ->
+      if ll.first_byte <= offset && offset <= ll.last_byte then Some ll.link_ref else None)
+  in
+  Trace_core.add_data_to_span
+    _sp
+    [ "offset", `Int offset; "found", `Bool (Option.is_some result) ];
+  result
 ;;
 
 (** {1 Heading / block-ID line lookup} *)
@@ -86,6 +104,9 @@ let find_link_ref_at_offset (links : located_link list) (offset : int)
 
     Requires the document to have been parsed with [~locs:true]. *)
 let find_heading_line_in_doc (doc : Cmarkit.Doc.t) (slug : string) : int =
+  Trace_core.with_span ~__FILE__ ~__LINE__ "find_heading_line_in_doc"
+  @@ fun _sp ->
+  Trace_core.add_data_to_span _sp [ "slug", `String slug ];
   let folder =
     Cmarkit.Folder.make
       ~block:(fun _f acc block ->
@@ -106,7 +127,9 @@ let find_heading_line_in_doc (doc : Cmarkit.Doc.t) (slug : string) : int =
       ~block_ext_default:(fun _f acc _b -> acc)
       ()
   in
-  Cmarkit.Folder.fold_doc folder None doc |> Option.value ~default:0
+  let result = Cmarkit.Folder.fold_doc folder None doc |> Option.value ~default:0 in
+  Trace_core.add_data_to_span _sp [ "result_line", `Int result ];
+  result
 ;;
 
 (** Find the 0-based line number of a block ID ([^id]) in [doc].
@@ -114,6 +137,9 @@ let find_heading_line_in_doc (doc : Cmarkit.Doc.t) (slug : string) : int =
 
     Requires the document to have been parsed with [~locs:true]. *)
 let find_block_id_line_in_doc (doc : Cmarkit.Doc.t) (block_id : string) : int =
+  Trace_core.with_span ~__FILE__ ~__LINE__ "find_block_id_line_in_doc"
+  @@ fun _sp ->
+  Trace_core.add_data_to_span _sp [ "block_id", `String block_id ];
   let folder =
     Cmarkit.Folder.make
       ~block:(fun _f acc block ->
@@ -133,7 +159,9 @@ let find_block_id_line_in_doc (doc : Cmarkit.Doc.t) (block_id : string) : int =
       ~block_ext_default:(fun _f acc _b -> acc)
       ()
   in
-  Cmarkit.Folder.fold_doc folder None doc |> Option.value ~default:0
+  let result = Cmarkit.Folder.fold_doc folder None doc |> Option.value ~default:0 in
+  Trace_core.add_data_to_span _sp [ "result_line", `Int result ];
+  result
 ;;
 
 (** {1 Parsing} *)
@@ -145,6 +173,9 @@ let find_block_id_line_in_doc (doc : Cmarkit.Doc.t) (block_id : string) : int =
     per file and invalidate on [didChange], avoiding re-parsing when the
     buffer has not changed since the last request. *)
 let parse_doc (content : string) : Cmarkit.Doc.t =
+  Trace_core.with_span ~__FILE__ ~__LINE__ "parse_doc"
+  @@ fun _sp ->
+  Trace_core.add_data_to_span _sp [ "content_len", `Int (String.length content) ];
   Oystermark.Parse.of_string ~locs:true content
 ;;
 
@@ -156,6 +187,9 @@ let parse_doc (content : string) : Cmarkit.Doc.t =
     so that heading/block-ID lookups can reuse the already-parsed AST instead
     of re-parsing. *)
 let parse_target_doc (content : string) : Cmarkit.Doc.t =
+  Trace_core.with_span ~__FILE__ ~__LINE__ "parse_target_doc"
+  @@ fun _sp ->
+  Trace_core.add_data_to_span _sp [ "content_len", `Int (String.length content) ];
   Oystermark.Parse.of_string ~locs:true content
 ;;
 
@@ -183,13 +217,32 @@ let go_to_definition
       ~(read_file : string -> string option)
   : definition_result option
   =
+  Trace_core.with_span ~__FILE__ ~__LINE__ "go_to_definition"
+  @@ fun _sp ->
+  Trace_core.add_data_to_span
+    _sp
+    [ "rel_path", `String rel_path; "line", `Int line; "character", `Int character ];
   let offset = byte_offset_of_position content ~line ~character in
   let doc = parse_doc content in
   let links = collect_links doc in
   match find_link_ref_at_offset links offset with
-  | None -> None
+  | None ->
+    Trace_core.add_data_to_span _sp [ "result", `String "no_link_at_cursor" ];
+    None
   | Some link_ref ->
     let target = Oystermark.Vault.Resolve.resolve link_ref rel_path index in
+    let resolution_tag =
+      match target with
+      | Oystermark.Vault.Resolve.Note _ -> "note"
+      | File _ -> "file"
+      | Heading _ -> "heading"
+      | Block _ -> "block"
+      | Curr_file -> "curr_file"
+      | Curr_heading _ -> "curr_heading"
+      | Curr_block _ -> "curr_block"
+      | Unresolved -> "unresolved"
+    in
+    Trace_core.add_data_to_span _sp [ "resolution", `String resolution_tag ];
     (match target with
      | Oystermark.Vault.Resolve.Note { path } | File { path } -> Some { path; line = 0 }
      | Heading { path; slug; _ } ->

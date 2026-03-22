@@ -1,0 +1,12 @@
+(library
+ (name trace_collect)
+ (modules trace_collect trace_pp)
+ (libraries
+  core
+  opentelemetry
+  opentelemetry.trace
+  trace.core
+  ambient-context
+  ambient-context.tls)
+ (preprocess
+  (pps ppx_jane ppx_string)))

@@ -16,9 +16,11 @@ build-doc:
 	dune build @doc-private @doc
 
 .PHONY: build
+build:
 	dune build
 
 .PHONY: test
+test:
 	dune test
 
 -include Makefile.local
