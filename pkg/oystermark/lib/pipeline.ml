@@ -9,6 +9,7 @@
     3. {b vault} — full vault transform after indexing and link resolution. *)
 
 open Core
+module Cache = Code_executor.Cache
 
 (** Pipeline: a record of hooks, one per stage. *)
 type t =
@@ -345,7 +346,7 @@ let code_exec
       ?(path_filter : string -> bool = fun _ -> true)
       ?(fm_filter : Parse.Frontmatter.t option -> bool = fun _ -> true)
       ?(loc_map : (Parse.Attribute.t option -> [ `Append | `Replace | `Silent ]) option)
-      ?(cache : Code_executor.cache option)
+      ?(cache : Cache.cache option)
       ~(executor : Code_executor.executor)
       ~(hash_fn : Code_executor.exec_ctx -> string)
       ()
@@ -359,7 +360,7 @@ let code_exec
         let ctx = Code_executor.extract_exec_ctx doc in
         let hash = hash_fn ctx in
         let outputs =
-          Code_executor.run_with ?cache ~path ~hash ~executor:(fun () -> executor ctx) ()
+          Cache.run_with ?cache ~path ~hash ~executor:(fun () -> executor ctx) ()
         in
         let doc' =
           match loc_map with
@@ -389,7 +390,7 @@ let py_executor
       ?(fm_filter : Parse.Frontmatter.t option -> bool = fm_has_pyproject_in_oyster)
       ?(attr_filter : (Parse.Attribute.t option -> bool) option)
       ?(loc_map : (Parse.Attribute.t option -> [ `Append | `Replace | `Silent ]) option)
-      ?(cache : Code_executor.cache option)
+      ?(cache : Cache.cache option)
       ()
   : t
     (* TODO: make the extraction of config configurable? (default: extract .oyster.pyproject)  *)
@@ -400,7 +401,7 @@ let py_executor
       then [ path, doc ]
       else (
         let ctx = Code_executor.extract_exec_ctx doc in
-        let outputs = Code_executor.run_py ?attr_filter ?cache ~path ctx in
+        let outputs = Code_executor.Uv.run_py ?attr_filter ?cache ~path ctx in
         let doc' =
           match loc_map with
           | Some f -> Code_executor.merge_outputs ~loc_map:f outputs doc
@@ -431,7 +432,7 @@ let py_executor
 let traced_code_exec
       ?(path_filter : string -> bool = fun _ -> true)
       ?(fm_filter : Parse.Frontmatter.t option -> bool = fun _ -> true)
-      ?(cache : Code_executor.cache option)
+      ?(cache : Cache.cache option)
       ~(executor : Code_executor.executor)
       ~(hash_fn : Code_executor.exec_ctx -> string)
       ()
@@ -447,12 +448,7 @@ let traced_code_exec
         let tc = Trace_collect.create () in
         let outputs =
           Trace_collect.with_collect tc (fun () ->
-            Code_executor.run_with
-              ?cache
-              ~path
-              ~hash
-              ~executor:(fun () -> executor ctx)
-              ())
+            Cache.run_with ?cache ~path ~hash ~executor:(fun () -> executor ctx) ())
         in
         let trace_text =
           Trace_collect.Trace_pp.format ~tree_chars:Utf8 Indented (Trace_collect.spans tc)
@@ -472,7 +468,7 @@ let traced_code_exec
     ()
 ;;
 
-let default ?(cache : Code_executor.cache option) () : t =
+let default ?(cache : Cache.cache option) () : t =
   id
   >> exclude_draft_by_note_name
   >> exclude_unpublish
@@ -600,8 +596,8 @@ hello
     ;;
 
     let%expect_test "cache hit — cached output rendered, not real execution" =
-      let cache = Code_executor.empty_cache () in
-      Code_executor.cache_set
+      let cache = Cache.empty_cache () in
+      Cache.cache_set
         cache
         ~path:"test.md"
         ~hash:(echo_hash echo_doc)
@@ -620,12 +616,10 @@ hello
     ;;
 
     let%expect_test "cache miss — executes and populates cache" =
-      let cache = Code_executor.empty_cache () in
+      let cache = Cache.empty_cache () in
       let doc' = run_echo cache echo_doc in
       print_endline (Parse.commonmark_of_doc doc');
-      let cached =
-        Code_executor.cache_lookup cache ~path:"test.md" ~hash:(echo_hash echo_doc)
-      in
+      let cached = Cache.cache_lookup cache ~path:"test.md" ~hash:(echo_hash echo_doc) in
       print_s [%sexp (cached : Code_executor.output list option)];
       [%expect
         {|

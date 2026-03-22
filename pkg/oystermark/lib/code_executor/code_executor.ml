@@ -1,47 +1,10 @@
-(** Execute fenced code blocks from OysterMark documents and splice results back.
-
-    Re-exports {!Common}, {!Cache}, {!Uv}, and {!Jupyter} so downstream
-    consumers only need to open [Code_executor]. *)
+(** Execute fenced code blocks from OysterMark documents and splice results back. *)
 
 open Core
 include Common
-
-(* Re-export Cache types and functions *)
-type cache_entry = Cache.cache_entry =
-  { hash : string
-  ; outputs : output list
-  }
-
-type cache = Cache.cache
-
-let empty_cache = Cache.empty_cache
-let cache_lookup = Cache.cache_lookup
-let cache_set = Cache.cache_set
-let load_cache = Cache.load_cache
-let save_cache = Cache.save_cache
-let run_with = Cache.run_with
-
-(* Re-export Uv types and functions *)
-type uv_config = Uv.uv_config =
-  { version : float
-  ; dependencies : string list
-  }
-
-let default_uv_config = Uv.default_uv_config
-let uv_config_of_config = Uv.uv_config_of_config
-let is_python = Uv.is_python
-let compute_hash = Uv.compute_hash
-let uv_executor = Uv.uv_executor
-let run_py = Uv.run_py
-
-(* Re-export Jupyter functions *)
-let make_notebook = Jupyter.make_notebook
-let run_notebook = Jupyter.run_notebook
-let multiline_string = Jupyter.multiline_string
-let cell_outputs = Jupyter.cell_outputs
-let notebook_outputs = Jupyter.notebook_outputs
-
-(* Owned by this module *)
+module Cache = Cache
+module Uv = Uv
+module Jupyter = Jupyter
 
 (** Splice executor outputs back into a document, producing a new [Cmarkit.Doc.t].
 
@@ -142,7 +105,7 @@ let hash_fn_of_lang (ctx : exec_ctx) (lang : string) : string =
       | Some l -> String.equal (String.lowercase l) lang
       | None -> false)
   in
-  compute_hash cells default_uv_config
+  Uv.compute_hash cells Uv.default_uv_config
 ;;
 
 (* Test
@@ -165,10 +128,15 @@ hello
       let ctx = extract_exec_ctx echo_doc in
       let hash = echo_hash echo_doc in
       let fake = [ { id = 0; res = `Markdown "FAKE" } ] in
-      let cache = empty_cache () in
-      cache_set cache ~path:"test.md" ~hash ~outputs:fake;
+      let cache = Cache.empty_cache () in
+      Cache.cache_set cache ~path:"test.md" ~hash ~outputs:fake;
       let result =
-        run_with ~cache ~path:"test.md" ~hash ~executor:(fun () -> echo_executor ctx) ()
+        Cache.run_with
+          ~cache
+          ~path:"test.md"
+          ~hash
+          ~executor:(fun () -> echo_executor ctx)
+          ()
       in
       print_s [%sexp (result : output list)];
       [%expect {| (((id 0) (res (Markdown FAKE)))) |}]
@@ -177,11 +145,16 @@ hello
     let%expect_test "run_with: cache miss executes and populates cache" =
       let ctx = extract_exec_ctx echo_doc in
       let hash = echo_hash echo_doc in
-      let cache = empty_cache () in
+      let cache = Cache.empty_cache () in
       let _first =
-        run_with ~cache ~path:"test.md" ~hash ~executor:(fun () -> echo_executor ctx) ()
+        Cache.run_with
+          ~cache
+          ~path:"test.md"
+          ~hash
+          ~executor:(fun () -> echo_executor ctx)
+          ()
       in
-      let cached = cache_lookup cache ~path:"test.md" ~hash in
+      let cached = Cache.cache_lookup cache ~path:"test.md" ~hash in
       print_s [%sexp (cached : output list option)];
       [%expect {| ((((id 0) (res (Markdown hello))))) |}]
     ;;
@@ -191,9 +164,9 @@ hello
       let ctx = extract_exec_ctx echo_doc in
       let hash = echo_hash echo_doc in
       (* Cold start: cache miss → echo execution, no external process *)
-      let cache1 = load_cache ~dir:tmp in
+      let cache1 = Cache.load_cache ~dir:tmp in
       let real_out =
-        run_with
+        Cache.run_with
           ~cache:cache1
           ~path:"test.md"
           ~hash
@@ -202,16 +175,16 @@ hello
       in
       print_s [%sexp (real_out : output list)];
       (* Tamper in-memory entry so we can tell whether disk roundtrip succeeded *)
-      cache_set
+      Cache.cache_set
         cache1
         ~path:"test.md"
         ~hash
         ~outputs:[ { id = 0; res = `Markdown "PERSISTED" } ];
-      save_cache cache1 ~dir:tmp;
+      Cache.save_cache cache1 ~dir:tmp;
       (* Warm start: load from disk, run again — must return tampered value *)
-      let cache2 = load_cache ~dir:tmp in
+      let cache2 = Cache.load_cache ~dir:tmp in
       let cached_out =
-        run_with
+        Cache.run_with
           ~cache:cache2
           ~path:"test.md"
           ~hash
