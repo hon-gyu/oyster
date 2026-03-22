@@ -6,6 +6,16 @@ module Cache = Cache
 module Uv = Uv
 module Jupyter = Jupyter
 
+(** Hash function that keys on code blocks of language [lang], ignoring config *)
+let hash_fn_of_lang (lang : string) : exec_ctx -> string =
+  Cache.make_hash_fn
+    ~config_filter:(fun _ -> None)
+    ~cell_filter:(fun (c : cell) ->
+      match c.lang with
+      | Some l when String.equal (String.lowercase l) lang -> Some c.content
+      | _ -> None)
+;;
+
 (** Splice executor outputs back into a document, producing a new [Cmarkit.Doc.t].
 
     For every code block that has a matching entry in [outputs] (matched by the
@@ -97,14 +107,28 @@ let echo_executor (ctx : exec_ctx) : output list =
     | _ -> None)
 ;;
 
-(** Hash function that keys on code blocks of language [lang], ignoring config *)
-let hash_fn_of_lang (lang : string) : exec_ctx -> string =
-  Cache.make_hash_fn
-    ~config_filter:(fun _ -> None)
-    ~cell_filter:(fun (c : cell) ->
-      match c.lang with
-      | Some l when String.equal (String.lowercase l) lang -> Some c.content
+(** Execute code blocks with trace collection, filling [trace] placeholder blocks
+    with formatted span output.
+
+    Wraps the executor in {!Trace_collect.with_collect} to capture OpenTelemetry
+    spans emitted during execution. Any code block with [lang = "trace"] is treated
+    as a placeholder: its content is replaced with the formatted trace tree. *)
+let traced_executor_of_executor (executor : exec_ctx -> output list) (ctx : exec_ctx)
+  : output list
+  =
+  let tc = Trace_collect.create () in
+  let outputs = Trace_collect.with_collect tc (fun () -> executor ctx) in
+  let trace_text =
+    Trace_collect.Trace_pp.format ~tree_chars:Utf8 Indented (Trace_collect.spans tc)
+  in
+  let trace_outputs =
+    List.filter_map ctx.inputs ~f:(fun (cell : cell) ->
+      match cell.lang with
+      | Some l when String.equal (String.lowercase l) "trace" ->
+        Some { id = cell.id; res = `Markdown trace_text }
       | _ -> None)
+  in
+  outputs @ trace_outputs
 ;;
 
 (* Test

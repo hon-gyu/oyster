@@ -404,18 +404,16 @@ let py_executor
       ()
   : t
   =
-  code_exec ~path_filter ~fm_filter ?loc_map ?cache
+  code_exec
+    ~path_filter
+    ~fm_filter
+    ?loc_map
+    ?cache
     ~executor:(Code_executor.Uv.executor ~attr_filter)
     ~hash_fn:(Code_executor.Uv.hash_fn ~attr_filter)
     ()
 ;;
 
-(** Execute code blocks with trace collection, filling [trace] placeholder blocks
-    with formatted span output.
-
-    Wraps the executor in {!Trace_collect.with_collect} to capture OpenTelemetry
-    spans emitted during execution. Any code block with [lang = "trace"] is treated
-    as a placeholder: its content is replaced with the formatted trace tree. *)
 let traced_code_exec
       ?(path_filter : string -> bool = fun _ -> true)
       ?(fm_filter : Parse.Frontmatter.t option -> bool = fm_traced_in_oyster)
@@ -425,23 +423,14 @@ let traced_code_exec
       ()
   : t
   =
-  let traced_executor (ctx : Code_executor.exec_ctx) : Code_executor.output list =
-    let tc = Trace_collect.create () in
-    let outputs = Trace_collect.with_collect tc (fun () -> executor ctx) in
-    let trace_text =
-      Trace_collect.Trace_pp.format ~tree_chars:Utf8 Indented (Trace_collect.spans tc)
-    in
-    let trace_outputs =
-      List.filter_map ctx.inputs ~f:(fun (cell : Code_executor.cell) ->
-        match cell.lang with
-        | Some l when String.equal (String.lowercase l) "trace" ->
-          Some { Code_executor.id = cell.id; res = `Markdown trace_text }
-        | _ -> None)
-    in
-    outputs @ trace_outputs
-  in
-  code_exec ~path_filter ~fm_filter ~loc_map:(fun _ -> `Replace) ?cache
-    ~executor:traced_executor ~hash_fn ()
+  code_exec
+    ~path_filter
+    ~fm_filter
+    ~loc_map:(fun _ -> `Replace)
+    ?cache
+    ~executor:(Code_executor.traced_executor_of_executor executor)
+    ~hash_fn
+    ()
 ;;
 
 let default ?(cache : Cache.cache option) () : t =
