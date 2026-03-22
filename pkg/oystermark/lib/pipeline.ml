@@ -330,7 +330,7 @@ let backlinks : t =
   make ~on_vault ()
 ;;
 
-module Fm_filter = struct
+include struct
   let fm_has_pyproject_in_oyster (fm_opt : Parse.Frontmatter.t option) : bool =
     match fm_opt with
     | Some (`O fields) ->
@@ -354,10 +354,16 @@ module Fm_filter = struct
   ;;
 end
 
-open Fm_filter
+(** Code executor pipeline: extract code cells, execute them, and merge outputs
+    back into the document. Handles caching when [~cache] is provided.
 
-(** Code executor pipeline factory: run any [executor] on each document, cache via
-    [hash_fn], and splice outputs back in.*)
+    @param path_filter filter function for document paths.
+    @param fm_filter filter function for frontmatter.
+    @param cache optional execution cache.
+    @param loc_map controls how outputs are spliced (append/replace/silent).
+    @param executor the computation that produces outputs from an exec_ctx.
+    @param hash_fn cache key derivation; use {!Cache.make_hash_fn} to build one.
+    *)
 let code_exec
       ?(path_filter : string -> bool = fun _ -> true)
       ?(fm_filter : Parse.Frontmatter.t option -> bool = fun _ -> true)
@@ -388,63 +394,28 @@ let code_exec
 ;;
 
 (** Execute Python code blocks in each document and splice the outputs back in.
-
-    @param path_filter skip execution for paths that return [false] (default: run all).
-    @param fm_filter skip execution for documents with frontmatter that returns [false]
-      (default: run those with oyster.pyproject config).
-    @param attr_filter forwarded to {!Code_executor.Uv.uv_executor} to select which
-      cells to run (default: run all Python cells).
-    @param loc_map forwarded to {!Code_executor.merge_outputs} to decide whether
-      each cell's output is appended after or replaces the source block
-      (default: append).
-    @param cache if provided, execution results are looked up by hash before running
-      nbconvert and written back after a miss.
-*)
+    Thin wrapper around {!code_exec} with {!Code_executor.Uv} executor and hash. *)
 let py_executor
-      ?(uv_config_key : string option)
       ?(path_filter : string -> bool = fun _ -> true)
       ?(fm_filter : Parse.Frontmatter.t option -> bool = fm_has_pyproject_in_oyster)
-      ?(attr_filter : (Parse.Attribute.t option -> bool) option)
+      ?(attr_filter : Parse.Attribute.t option -> bool = fun _ -> true)
       ?(loc_map : (Parse.Attribute.t option -> [ `Append | `Replace | `Silent ]) option)
       ?(cache : Cache.cache option)
       ()
   : t
-    (* TODO: make the extraction of config configurable? (default: extract .oyster.pyproject)  *)
   =
-  make
-    ~on_parse:(fun path (doc : Cmarkit.Doc.t) ->
-      if (not (path_filter path)) || not (fm_filter (Parse.Frontmatter.of_doc doc))
-      then [ path, doc ]
-      else (
-        let ctx = Code_executor.extract_exec_ctx doc in
-        let outputs = Code_executor.Uv.run_py ?attr_filter ?cache ~path ctx in
-        let doc' =
-          match loc_map with
-          | Some f -> Code_executor.merge_outputs ~loc_map:f outputs doc
-          | None -> Code_executor.merge_outputs outputs doc
-        in
-        [ path, doc' ]))
+  code_exec ~path_filter ~fm_filter ?loc_map ?cache
+    ~executor:(Code_executor.Uv.executor ~attr_filter)
+    ~hash_fn:(Code_executor.Uv.hash_fn ~attr_filter)
     ()
 ;;
 
 (** Execute code blocks with trace collection, filling [trace] placeholder blocks
     with formatted span output.
 
-    Works like {!code_exec} but wraps the executor in {!Trace_collect.with_collect}
-    to capture OpenTelemetry spans emitted during execution. Any code block with
-    [lang = "trace"] is treated as a placeholder: its content is replaced with the
-    formatted text display of trace tree.
-
-    Example document:
-    {v
-    ```python {}
-    print("hello")
-    ```
-    ```trace
-    ```
-    v}
-
-    After processing, the [trace] block is replaced with the span tree. *)
+    Wraps the executor in {!Trace_collect.with_collect} to capture OpenTelemetry
+    spans emitted during execution. Any code block with [lang = "trace"] is treated
+    as a placeholder: its content is replaced with the formatted trace tree. *)
 let traced_code_exec
       ?(path_filter : string -> bool = fun _ -> true)
       ?(fm_filter : Parse.Frontmatter.t option -> bool = fm_traced_in_oyster)
@@ -454,34 +425,23 @@ let traced_code_exec
       ()
   : t
   =
-  make
-    ~on_parse:(fun path (doc : Cmarkit.Doc.t) ->
-      if (not (path_filter path)) || not (fm_filter (Parse.Frontmatter.of_doc doc))
-      then [ path, doc ]
-      else (
-        let ctx = Code_executor.extract_exec_ctx doc in
-        let hash = hash_fn ctx in
-        let tc = Trace_collect.create () in
-        let outputs =
-          Trace_collect.with_collect tc (fun () ->
-            Cache.run_with ?cache ~path ~hash ~executor:(fun () -> executor ctx) ())
-        in
-        let trace_text =
-          Trace_collect.Trace_pp.format ~tree_chars:Utf8 Indented (Trace_collect.spans tc)
-        in
-        let trace_outputs =
-          List.filter_map ctx.inputs ~f:(fun (cell : Code_executor.cell) ->
-            match cell.lang with
-            | Some l when String.equal (String.lowercase l) "trace" ->
-              Some { Code_executor.id = cell.id; res = `Markdown trace_text }
-            | _ -> None)
-        in
-        let all_outputs = outputs @ trace_outputs in
-        let doc' =
-          Code_executor.merge_outputs ~loc_map:(fun _ -> `Replace) all_outputs doc
-        in
-        [ path, doc' ]))
-    ()
+  let traced_executor (ctx : Code_executor.exec_ctx) : Code_executor.output list =
+    let tc = Trace_collect.create () in
+    let outputs = Trace_collect.with_collect tc (fun () -> executor ctx) in
+    let trace_text =
+      Trace_collect.Trace_pp.format ~tree_chars:Utf8 Indented (Trace_collect.spans tc)
+    in
+    let trace_outputs =
+      List.filter_map ctx.inputs ~f:(fun (cell : Code_executor.cell) ->
+        match cell.lang with
+        | Some l when String.equal (String.lowercase l) "trace" ->
+          Some { Code_executor.id = cell.id; res = `Markdown trace_text }
+        | _ -> None)
+    in
+    outputs @ trace_outputs
+  in
+  code_exec ~path_filter ~fm_filter ~loc_map:(fun _ -> `Replace) ?cache
+    ~executor:traced_executor ~hash_fn ()
 ;;
 
 let default ?(cache : Cache.cache option) () : t =
@@ -595,14 +555,14 @@ hello
     ;;
 
     let echo_hash doc =
-      Code_executor.hash_fn_of_lang (Code_executor.extract_exec_ctx doc) "echo"
+      Code_executor.hash_fn_of_lang "echo" (Code_executor.extract_exec_ctx doc)
     ;;
 
     let run_echo cache doc =
       (code_exec
          ~cache
          ~executor:Code_executor.echo_executor
-         ~hash_fn:(fun ctx -> Code_executor.hash_fn_of_lang ctx "echo")
+         ~hash_fn:(Code_executor.hash_fn_of_lang "echo")
          ())
         .on_parse
         "test.md"

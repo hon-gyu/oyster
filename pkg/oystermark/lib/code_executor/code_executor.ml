@@ -97,15 +97,14 @@ let echo_executor (ctx : exec_ctx) : output list =
     | _ -> None)
 ;;
 
-(** Hash function that keys on codeblocks of language [lang] cell contents. *)
-let hash_fn_of_lang (ctx : exec_ctx) (lang : string) : string =
-  let cells =
-    List.filter ctx.inputs ~f:(fun c ->
+(** Hash function that keys on code blocks of language [lang], ignoring config *)
+let hash_fn_of_lang (lang : string) : exec_ctx -> string =
+  Cache.make_hash_fn
+    ~config_filter:(fun _ -> None)
+    ~cell_filter:(fun (c : cell) ->
       match c.lang with
-      | Some l -> String.equal (String.lowercase l) lang
-      | None -> false)
-  in
-  Uv.compute_hash cells Uv.default_uv_config
+      | Some l when String.equal (String.lowercase l) lang -> Some c.content
+      | _ -> None)
 ;;
 
 (* Test
@@ -122,7 +121,7 @@ hello
 |}
     ;;
 
-    let echo_hash doc = hash_fn_of_lang (extract_exec_ctx doc) "echo"
+    let echo_hash doc = hash_fn_of_lang "echo" (extract_exec_ctx doc)
 
     let%expect_test "run_with: cache hit returns cached output, not real execution" =
       let ctx = extract_exec_ctx echo_doc in

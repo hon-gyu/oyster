@@ -1,6 +1,7 @@
 (** Content-addressed execution cache keyed by file path and input hash. *)
 
 open Core
+open Common
 
 let cache_file = "_exec_cache.json"
 
@@ -101,4 +102,23 @@ let run_with
     let outs = executor () in
     Option.iter cache ~f:(cache_set ~path ~hash ~outputs:outs);
     outs
+;;
+
+(** Hash function maker
+  @param config_filter Filter function for the oyster config
+  @param cell_filter Filter function for code blocks
+  @return hash function that can be applied to an execution context
+*)
+let make_hash_fn
+      ~(config_filter : Yaml.value -> string option)
+      ~(cell_filter : cell -> string option)
+  : exec_ctx -> string
+  =
+  fun ctx ->
+  let cells = List.filter_map ctx.inputs ~f:cell_filter in
+  let config_content = config_filter ctx.config in
+  [%sexp_of: string list * string option] (cells, config_content)
+  |> Sexp.to_string
+  |> Md5.digest_string
+  |> Md5.to_hex
 ;;

@@ -2,6 +2,7 @@
 
 open Core
 module Attribute = Parse.Attribute
+open Common
 
 (** Config key for uv-specific frontmatter in oyster config *)
 let uv_config_key = "pyproject"
@@ -53,15 +54,20 @@ let is_python (lang : string) : bool =
   String.equal lang' "python" || String.equal lang' "py"
 ;;
 
-(** Compute a cache key hash from the filtered python cells and uv config.
+(** Hash function for Python execution: keys on python cell contents and uv config.
     Dependencies are sorted before hashing so reordering them is a no-op. *)
-let compute_hash (python_cells : Common.cell list) (cfg : uv_config) : string =
-  let contents = List.map python_cells ~f:(fun c -> c.content) in
-  let sorted_deps = List.sort cfg.dependencies ~compare:String.compare in
-  [%sexp_of: string list * float * string list] (contents, cfg.version, sorted_deps)
-  |> Sexp.to_string
-  |> Md5.digest_string
-  |> Md5.to_hex
+let hash_fn ?(attr_filter : Attribute.t option -> bool = fun _ -> true)
+  : exec_ctx -> string
+  =
+  Cache.make_hash_fn
+    ~config_filter:(fun config ->
+      let cfg = uv_config_of_config config in
+      let sorted_deps = List.sort cfg.dependencies ~compare:String.compare in
+      Some ([%sexp_of: float * string list] (cfg.version, sorted_deps) |> Sexp.to_string))
+    ~cell_filter:(fun (c : Common.cell) ->
+      match c.lang with
+      | Some l when is_python l && attr_filter c.attr -> Some c.content
+      | _ -> None)
 ;;
 
 (** Executor that runs Python cells via an ephemeral [uv] environment.
@@ -75,9 +81,7 @@ let compute_hash (python_cells : Common.cell list) (cfg : uv_config) : string =
     Outputs are mapped back to the original {!Common.cell} IDs so callers can
     correlate results with source positions even when non-Python cells appear
     in between. *)
-let uv_executor ?(attr_filter : Attribute.t option -> bool = fun _ -> true)
-  : Common.executor
-  =
+let executor ?(attr_filter : Attribute.t option -> bool = fun _ -> true) : executor =
   fun ctx ->
   let uv_config = uv_config_of_config ctx.config in
   let (python_cells : Common.cell list) =
@@ -97,22 +101,6 @@ let uv_executor ?(attr_filter : Attribute.t option -> bool = fun _ -> true)
     let outputs = Jupyter.notebook_outputs executed in
     List.map2_exn python_cells outputs ~f:(fun cell outs ->
       { Common.id = cell.id; res = `Markdown (String.concat ~sep:"\n" outs) })
-;;
-
-(** Execute Python cells in [ctx], consulting [cache] first if provided.
-    On a cache miss the notebook is run via {!uv_executor} and the result is
-    stored back into [cache] before returning. *)
-let run_py
-      ?(attr_filter : Attribute.t option -> bool = fun _ -> true)
-      ?(cache : Cache.cache option)
-      ~(path : string)
-      (ctx : Common.exec_ctx)
-  : Common.output list
-  =
-  let uv_config = uv_config_of_config ctx.config in
-  let python_cells = Common.filter_cells ~lang_filter:is_python ~attr_filter ctx.inputs in
-  let hash = compute_hash python_cells uv_config in
-  Cache.run_with ?cache ~path ~hash ~executor:(fun () -> uv_executor ~attr_filter ctx) ()
 ;;
 
 (* Test
@@ -146,7 +134,7 @@ print(x + 1)
 ```
 |})
       in
-      print_s [%sexp (uv_executor ctx : Common.output list)];
+      print_s [%sexp (executor ctx : Common.output list)];
       [%expect
         {|
         (((id 0) (res (Markdown "hello\n"))) ((id 2) (res (Markdown "1\n")))
@@ -174,7 +162,7 @@ print(Version("2.1.0").major)
 ```
 |})
       in
-      print_s [%sexp (uv_executor ctx : Common.output list)];
+      print_s [%sexp (executor ctx : Common.output list)];
       [%expect
         {|
     (((id 0) (res (Markdown "2\n"))))
