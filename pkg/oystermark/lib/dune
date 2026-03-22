@@ -4,6 +4,7 @@
  (libraries
   parse
   vault
+  code_executor
   cmarkit
   core
   core_unix
