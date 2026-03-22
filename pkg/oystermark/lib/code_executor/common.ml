@@ -101,37 +101,36 @@ let filter_cells
 ;;
 
 (** Extract a session ID from a cell's attribute's [session_id] key.
-  - Returns default session [ Some "" ] if no attribute is present.
-  - Returns default session [ Some "" ] if no [session_id] key is found.
+  - Returns default session [ "1" ] if no attribute is present.
+  - Returns default session [ "1" ] if no [session_id] key is found.
 *)
-let session_id_of_attr (attr_opt : Attribute.t option) : string option =
+let session_id_of_attr (attr_opt : Attribute.t option) : string =
   attr_opt
-  |> Option.value_map ~default:(Some "") ~f:(fun attr ->
+  |> Option.value_map ~default:"1" ~f:(fun attr ->
     List.Assoc.find attr.kvs ~equal:String.equal "session_id"
-    |> Option.value_map ~default:(Some "") ~f:(fun session_id -> Some session_id))
+    |> Option.value_map ~default:"1" ~f:(fun session_id -> session_id))
 ;;
 
 (** Filter and group cells by language and session ID.
     @param lang_filter filter cells by language
-    @param attr_filter A function that extracts a session ID from a cell's attribute.
-    None indicates no precense in final output
+    @param attr_filter filter cells by attribute
+    @param attr_session_map A function that extracts a session ID from a cell's attribute.
 *)
 let filter_group_cells
       ~(lang_filter : string -> bool)
-      ~(attr_filter : Attribute.t option -> string option)
+      ~(attr_filter : Attribute.t option -> bool)
+      ~(attr_session_map : Attribute.t option -> string)
       (cells : cell list)
   : (string * cell list) list
   =
   let groups : (string * cell list ref) list ref = ref [] in
   List.iter cells ~f:(fun cell ->
     match cell.lang with
-    | Some l when lang_filter l ->
-      (match attr_filter cell.attr with
-       | Some session_id ->
-         (match List.Assoc.find !groups ~equal:String.equal session_id with
-          | Some cells_ref -> cells_ref := !cells_ref @ [ cell ]
-          | None -> groups := !groups @ [ session_id, ref [ cell ] ])
-       | None -> ())
+    | Some l when lang_filter l && attr_filter cell.attr ->
+      let session_id = attr_session_map cell.attr in
+      (match List.Assoc.find !groups ~equal:String.equal session_id with
+       | Some cells_ref -> cells_ref := !cells_ref @ [ cell ]
+       | None -> groups := !groups @ [ session_id, ref [ cell ] ])
     | _ -> ());
   List.map !groups ~f:(fun (session_id, cells_ref) -> session_id, !cells_ref)
 ;;

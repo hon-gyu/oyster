@@ -398,7 +398,9 @@ let code_exec
 let py_executor
       ?(path_filter : string -> bool = fun _ -> true)
       ?(fm_filter : Parse.Frontmatter.t option -> bool = fm_has_pyproject_in_oyster)
-      ?(attr_filter : Parse.Attribute.t option -> bool = fun _ -> true)
+      ?(attr_filter : (Parse.Attribute.t option -> bool) option)
+      ?(attr_session_map : (Parse.Attribute.t option -> string) option)
+      ?(attr_hash_key : (Parse.Attribute.t option -> string) option)
       ?(loc_map : (Parse.Attribute.t option -> [ `Append | `Replace | `Silent ]) option)
       ?(cache : Cache.cache option)
       ()
@@ -409,8 +411,8 @@ let py_executor
     ~fm_filter
     ?loc_map
     ?cache
-    ~executor:(Code_executor.Uv.executor ~attr_filter)
-    ~hash_fn:(Code_executor.Uv.hash_fn ~attr_filter)
+    ~executor:(Code_executor.Uv.executor ?attr_filter ?attr_session_map)
+    ~hash_fn:(Code_executor.Uv.hash_fn ?attr_filter ?attr_hash_key)
     ()
 ;;
 

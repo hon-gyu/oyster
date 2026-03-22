@@ -54,9 +54,16 @@ let is_python (lang : string) : bool =
   String.equal lang' "python" || String.equal lang' "py"
 ;;
 
-(** Hash function for Python execution: keys on python cell contents and uv config.
-    Dependencies are sorted before hashing so reordering them is a no-op. *)
-let hash_fn ?(attr_filter : Attribute.t option -> bool = fun _ -> true)
+(** Hash function for Python execution: keys on uv config, attributes, and cell contents.
+    Dependencies are sorted before hashing so reordering them is a no-op.
+
+    @param attr_filter filter cells by attribute (e.g. skip cells tagged [.no-exec])
+    @param attr_hash_key extract a string from the optional attribute to be used for hashing.
+    *)
+let hash_fn
+      ?(attr_filter : Attribute.t option -> bool = fun _ -> true)
+      ?(attr_hash_key : Attribute.t option -> string =
+        fun attr_opt -> [%sexp_of: Attribute.t option] attr_opt |> Sexp.to_string)
   : exec_ctx -> string
   =
   Cache.make_hash_fn
@@ -66,7 +73,12 @@ let hash_fn ?(attr_filter : Attribute.t option -> bool = fun _ -> true)
       Some ([%sexp_of: float * string list] (cfg.version, sorted_deps) |> Sexp.to_string))
     ~cell_filter:(fun (c : Common.cell) ->
       match c.lang with
-      | Some l when is_python l && attr_filter c.attr -> Some c.content
+      | Some l when is_python l && attr_filter c.attr ->
+        let attr_hash_content = attr_hash_key c.attr in
+        let sexp =
+          [%sexp_of: string * string] (attr_hash_content, c.content) |> Sexp.to_string
+        in
+        Some sexp
       | _ -> None)
 ;;
 
@@ -76,18 +88,25 @@ let hash_fn ?(attr_filter : Attribute.t option -> bool = fun _ -> true)
     executed. The optional [attr_filter] allows further selection by Pandoc
     attribute (e.g. skip cells tagged [.no-exec]).
 
-    All selected cells are assembled into a single notebook and executed
-    together, so they share interpreter state (imports, variables, etc.).
+    Cells after filtering are groupped by session id. Each group share
+    interpreter state (imports, variables, etc.).
+
     Outputs are mapped back to the original {!cell} IDs so callers can
     correlate results with source positions even when non-Python cells appear
-    in between. *)
-let executor ?(attr_filter : Attribute.t option -> string option = session_id_of_attr)
+    in between.
+
+    @param attr_filter see {!filter_group_cells}
+    @param attr_session_map see {!filter_group_cells}
+    *)
+let executor
+  ?(attr_filter : Attribute.t option -> bool = fun _ -> true)
+  ?(attr_session_map : Attribute.t option -> string = session_id_of_attr)
   : executor
   =
   fun ctx ->
   let uv_config = uv_config_of_config ctx.config in
   let (python_cells_by_session : (string * cell list) list) =
-    filter_group_cells ~lang_filter:is_python ~attr_filter ctx.inputs
+    filter_group_cells ~lang_filter:is_python ~attr_filter:attr_filter ~attr_session_map ctx.inputs
   in
   let (outputs : output list list) =
     List.map python_cells_by_session ~f:(fun (session_id, cells) ->
