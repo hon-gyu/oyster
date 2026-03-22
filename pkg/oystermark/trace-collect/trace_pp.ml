@@ -120,10 +120,16 @@ let build_forest (spans : OT.span list) : span_node list =
 ==================== *)
 
 (** Build a map from span_id to duration rank (1 = shortest). Ties share the same rank. *)
-let build_duration_ranks (spans : OT.span list) : (string, int) Hashtbl.t =
+let build_duration_ranks
+      ?(tie_tolerance_nano : int64 = Int64.of_int 3)
+      (spans : OT.span list)
+  : (string, int) Hashtbl.t
+  =
   let sorted =
     List.map spans ~f:(fun sp -> span_id_hex sp.span_id, duration_nanos sp)
-    |> List.sort ~compare:(fun (_, a) (_, b) -> Int64.compare a b)
+    |> List.sort ~compare:(fun (_, a) (_, b) ->
+      let diff = Int64.(abs (a - b)) in
+      if Int64.(diff <= tie_tolerance_nano) then 0 else Int64.compare a b)
   in
   let ranks = Hashtbl.create (module String) in
   let rank = ref 0 in
