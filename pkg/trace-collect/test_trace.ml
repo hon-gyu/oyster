@@ -67,5 +67,5 @@ let%expect_test "trace_pp" =
     g 3us
     `-- right-before-f 2us y=5
             `-- inside-f 1us
-    |}];
+    |}]
 ;;

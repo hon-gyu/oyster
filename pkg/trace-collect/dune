@@ -1,5 +1,6 @@
 (library
  (name trace_collect)
+ (public_name trace-collect)
  (modules trace_collect trace_pp)
  (libraries
   core

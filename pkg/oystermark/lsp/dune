@@ -8,6 +8,7 @@
 
 (executable
  (name main)
+ (package oystermark)
  (public_name oystermark-lsp)
  (modules main)
  (libraries
@@ -18,4 +19,5 @@
   opentelemetry.trace
   opentelemetry-client-cohttp-eio))
 
-(documentation)
+(documentation
+ (package oystermark))

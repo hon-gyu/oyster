@@ -1,5 +1,6 @@
 (executable
  (public_name oystermark)
+ (package oystermark)
  (name main)
  (libraries oystermark core core_unix core_unix.command_unix)
  (preprocess

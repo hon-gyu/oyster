@@ -33,4 +33,5 @@
     (cat index.mld.1of2)
     (cat index.mld.2of2)))))
 
-(documentation)
+(documentation
+ (package oystermark))

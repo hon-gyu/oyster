@@ -1,4 +1,5 @@
-(documentation)
+(documentation
+ (package oystermark))
 
 (rule
  (mode
