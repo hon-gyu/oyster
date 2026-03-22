@@ -1,330 +1,42 @@
 open Core
-module Attribute = Parse.Attribute
-module Frontmatter = Parse.Frontmatter
+include Common
 
-(** Config key for Oyster-specific frontmatter in frontmatter *)
-let oyster_config_key = "oyster"
-
-(** Config key for uv-specific frontmatter in oyster config *)
-let uv_config_key = "pyproject"
-
-type cell =
-  { id : int
-    (** Unique code block id. Most of the time it will be the order of appearance in code blocks in the document *)
-  ; lang : string option
-  ; attr : Attribute.t option
-  ; content : string
-  }
-[@@deriving sexp_of]
-
-type output =
-  { id : int
-  ; res : [ `Html of string | `Markdown of string | `Error of string ]
-    (** [`Error] is only used when
-    nbconvert itself fails (process-level failure) *)
-  }
-[@@deriving sexp]
-
-type exec_ctx =
-  { config : Yaml.value
-  ; inputs : cell list
+(* Re-export Cache types and functions *)
+type cache_entry = Cache.cache_entry =
+  { hash : string
+  ; outputs : output list
   }
 
-type executor = exec_ctx -> output list
+type cache = Cache.cache
 
-(** Walk the Cmarkit AST and collect every fenced code block as a {!cell}.
-    Cells are numbered in document order starting from 0.
+let empty_cache = Cache.empty_cache
+let cache_lookup = Cache.cache_lookup
+let cache_set = Cache.cache_set
+let load_cache = Cache.load_cache
+let save_cache = Cache.save_cache
+let run_with = Cache.run_with
 
-    [lang] and [attr] are populated from the {!Attribute.code_block_info} attached to the
-    block by {!Attribute.tag_cb_attr_meta} during parsing, which tags every fenced code
-    block that has a non-empty info string. *)
-let extract_code_blocks (doc : Cmarkit.Doc.t) : cell list =
-  let block_id = ref 0 in
-  let block _folder (acc : cell list) (b : Cmarkit.Block.t)
-    : cell list Cmarkit.Folder.result
-    =
-    match b with
-    | Cmarkit.Block.Code_block (cb, meta) ->
-      let (content : string) =
-        List.map (Cmarkit.Block.Code_block.code cb) ~f:Cmarkit.Block_line.to_string
-        |> String.concat ~sep:"\n"
-      in
-      let cb_info = Cmarkit.Meta.find Attribute.meta_key meta in
-      let cell =
-        { id = !block_id
-        ; lang = cb_info |> Option.map ~f:(fun ci -> ci.lang)
-        ; attr = cb_info |> Option.bind ~f:(fun ci -> ci.attribute)
-        ; content
-        }
-      in
-      incr block_id;
-      Cmarkit.Folder.ret (cell :: acc)
-    | _ -> Cmarkit.Folder.default
-  in
-  let folder = Cmarkit.Folder.make ~block_ext_default:(fun _f acc _b -> acc) ~block () in
-  Cmarkit.Folder.fold_doc folder [] doc |> List.rev
-;;
-
-let%expect_test "extract_code_blocks" =
-  let doc =
-    Parse.of_string
-      {|
-Hi
-```python
-print("Hello")
-```
-.
-```bash {.foo baz=zzz}
-bar
-```
-|}
-  in
-  let cells = extract_code_blocks doc in
-  print_s [%sexp (cells : cell list)];
-  [%expect
-    {|
-    (((id 0) (lang (python)) (attr ()) (content "print(\"Hello\")"))
-     ((id 1) (lang (bash)) (attr (((id ()) (classes (.foo)) (kvs ((baz zzz))))))
-      (content bar)))
-    |}]
-;;
-
-(** Build an {!exec_ctx} from a parsed document.
-    - [config]: the [oyster] mapping from the YAML frontmatter, or an empty
-      mapping if absent. Executors read their own sub-keys from this value.
-    - [inputs]: all code blocks in document order via {!extract_code_blocks}. *)
-let extract_exec_ctx (doc : Cmarkit.Doc.t) : exec_ctx =
-  let config =
-    match Parse.Frontmatter.of_doc doc with
-    | Some (`O fields) ->
-      (match List.Assoc.find fields ~equal:String.equal oyster_config_key with
-       | Some (`O oys_fields) -> Yaml.(`O oys_fields)
-       | Some _ -> failwith "Invalid frontmatter"
-       | None -> Yaml.(`O []))
-    | Some _ -> failwith "Invalid frontmatter"
-    | None -> Yaml.(`O [])
-  in
-  let inputs = extract_code_blocks doc in
-  { config; inputs }
-;;
-
-(* uv
-==================== *)
-
-type uv_config =
+(* Re-export Uv types and functions *)
+type uv_config = Uv.uv_config =
   { version : float
   ; dependencies : string list
   }
-[@@deriving sexp]
 
-let default_uv_config = { version = 3.13; dependencies = [] }
+let default_uv_config = Uv.default_uv_config
+let uv_config_of_config = Uv.uv_config_of_config
+let is_python = Uv.is_python
+let compute_hash = Uv.compute_hash
+let uv_executor = Uv.uv_executor
+let run_py = Uv.run_py
 
-(** Read [uv_config] from the [pyproject] sub-key of the oyster config.
-    Both [version: 3.11] (YAML float) and [version: "3.11"] (string) are
-    accepted. Falls back to {!default_uv_config} for any missing field.
+(* Re-export Jupyter functions *)
+let make_notebook = Jupyter.make_notebook
+let run_notebook = Jupyter.run_notebook
+let multiline_string = Jupyter.multiline_string
+let cell_outputs = Jupyter.cell_outputs
+let notebook_outputs = Jupyter.notebook_outputs
 
-    Expected frontmatter shape:
-    {v
-    oyster:
-      pyproject:
-        version: "3.13"
-        dependencies:
-          - numpy
-          - pandas
-    v} *)
-let uv_config_of_config (config : Yaml.value) : uv_config =
-  match Yaml.Util.find uv_config_key config with
-  | Ok (Some (`O fields)) ->
-    let version =
-      match List.Assoc.find fields ~equal:String.equal "version" with
-      | Some (`Float v) -> v
-      | Some (`String s) -> Float.of_string s
-      | _ -> default_uv_config.version
-    in
-    let dependencies =
-      match List.Assoc.find fields ~equal:String.equal "dependencies" with
-      | Some (`A deps) ->
-        List.filter_map deps ~f:(function
-          | `String s -> Some s
-          | _ -> None)
-      | _ -> default_uv_config.dependencies
-    in
-    { version; dependencies }
-  | _ -> default_uv_config
-;;
-
-(** Build a minimal [.ipynb] JSON with a Python 3 kernelspec.
-    Each element of [cells] becomes one code cell; source is stored as a plain
-    string (Jupyter's [multiline_string] format accepts both a bare string and
-    an array of lines). *)
-let make_notebook (cells : string list) =
-  let make_cell source =
-    `Assoc
-      [ "cell_type", `String "code"
-      ; "source", `String source
-      ; "metadata", `Assoc []
-      ; "outputs", `List []
-      ; "execution_count", `Null
-      ]
-  in
-  `Assoc
-    [ "nbformat", `Int 4
-    ; "nbformat_minor", `Int 5
-    ; ( "metadata"
-      , `Assoc
-          [ ( "kernelspec"
-            , `Assoc
-                [ "display_name", `String "Python 3"
-                ; "language", `String "python"
-                ; "name", `String "python3"
-                ] )
-          ] )
-    ; "cells", `List (List.map cells ~f:make_cell)
-    ]
-;;
-
-(** Execute a notebook JSON via [uv run ... jupyter nbconvert].
-    Dependencies in [uv_config] are passed as [--with <dep>] arguments so uv
-    provisions an ephemeral virtual environment — no persistent venv needed.
-
-    Implementation notes:
-    - [JUPYTER_CONFIG_DIR=/dev/null] prevents local Jupyter config (e.g.
-      contrib extensions) from breaking the clean uv environment.
-    - [jupyter nbconvert --output] takes a base name and appends [.ipynb]
-      itself, so we strip the extension from the temp output path and
-      reconstruct it after the command. *)
-let run_notebook ~(uv_config : uv_config) ~(nb_json : Yojson.Basic.t)
-  : (Yojson.Basic.t, string) result
-  =
-  let tmp_in = Filename_unix.temp_file "nb_in" ".ipynb" in
-  (* jupyter appends .ipynb to --output, so omit the extension here *)
-  let tmp_out_base = Filename_unix.temp_file "nb_out" "" in
-  let tmp_out = tmp_out_base ^ ".ipynb" in
-  Yojson.Basic.to_file tmp_in nb_json;
-  let with_args =
-    "jupyter" :: uv_config.dependencies
-    |> List.map ~f:(fun dep -> sprintf "--with %s" dep)
-    |> String.concat ~sep:" "
-  in
-  let cmd =
-    sprintf
-      "JUPYTER_CONFIG_DIR=/dev/null uv run --python %g %s jupyter nbconvert --to \
-       notebook --execute --allow-errors %s --output %s 2>/dev/null"
-      uv_config.version
-      with_args
-      tmp_in
-      tmp_out_base
-  in
-  match Core_unix.system cmd with
-  | Ok () ->
-    let result = Yojson.Basic.from_file tmp_out in
-    Sys_unix.remove tmp_in;
-    Sys_unix.remove tmp_out_base;
-    Sys_unix.remove tmp_out;
-    Ok result
-  | Error _ -> Error "nbconvert failed"
-;;
-
-(** Jupyter multiline_string: either a plain string or an array of strings *)
-let multiline_string (j : Yojson.Basic.t) : string =
-  let open Yojson.Basic.Util in
-  match j with
-  | `String s -> s
-  | `List _ -> j |> to_list |> List.map ~f:to_string |> String.concat ~sep:""
-  | _ -> ""
-;;
-
-(** Extract text from each output entry of a Jupyter code cell.
-    Handles the four output types defined by nbformat:
-    - [stream]: stdout/stderr text
-    - [execute_result] / [display_data]: [text/plain] from the MIME bundle
-    - [error]: formatted as ["ExcType: message"]
-    Other output types are silently ignored. *)
-let cell_outputs (cell : Yojson.Basic.t) : string list =
-  let open Yojson.Basic.Util in
-  cell
-  |> member "outputs"
-  |> to_list
-  |> List.filter_map ~f:(fun output ->
-    match output |> member "output_type" |> to_string with
-    | "stream" -> Some (output |> member "text" |> multiline_string)
-    | "execute_result" | "display_data" ->
-      Some (output |> member "data" |> member "text/plain" |> multiline_string)
-    | "error" ->
-      let ename = output |> member "ename" |> to_string in
-      let evalue = output |> member "evalue" |> to_string in
-      Some (sprintf "%s: %s" ename evalue)
-    | _ -> None)
-;;
-
-(** Return the outputs of every code cell in an executed notebook, in order.
-    Each element of the returned list corresponds to one code cell and is
-    itself a list of output strings (one per output entry). *)
-let notebook_outputs (nb_json : Yojson.Basic.t) : string list list =
-  let open Yojson.Basic.Util in
-  nb_json
-  |> member "cells"
-  |> to_list
-  |> List.filter ~f:(fun c -> String.equal (c |> member "cell_type" |> to_string) "code")
-  |> List.map ~f:cell_outputs
-;;
-
-(** Filter [cells] down to Python cells (lang = "python" or "py", case-insensitive),
-    optionally restricted further by [attr_filter]. *)
-let filter_cells
-      ~(lang_filter : string -> bool)
-      ~(attr_filter : Attribute.t option -> bool)
-      (cells : cell list)
-  : cell list
-  =
-  List.filter cells ~f:(fun cell ->
-    match cell.lang with
-    | Some l -> lang_filter l && attr_filter cell.attr
-    | None -> false)
-;;
-
-let is_python (lang : string) : bool =
-  let lang' = String.lowercase lang in
-  String.equal lang' "python" || String.equal lang' "py"
-;;
-
-(** Compute a cache key hash from the filtered python cells and uv config.
-    Dependencies are sorted before hashing so reordering them is a no-op. *)
-let compute_hash (python_cells : cell list) (cfg : uv_config) : string =
-  let contents = List.map python_cells ~f:(fun c -> c.content) in
-  let sorted_deps = List.sort cfg.dependencies ~compare:String.compare in
-  [%sexp_of: string list * float * string list] (contents, cfg.version, sorted_deps)
-  |> Sexp.to_string
-  |> Md5.digest_string
-  |> Md5.to_hex
-;;
-
-(** Executor that runs Python cells via an ephemeral [uv] environment.
-
-    Only cells whose [lang] is "python" or "py" (case-insensitive) are
-    executed. The optional [attr_filter] allows further selection by Pandoc
-    attribute (e.g. skip cells tagged [.no-exec]).
-
-    All selected cells are assembled into a single notebook and executed
-    together, so they share interpreter state (imports, variables, etc.).
-    Outputs are mapped back to the original {!cell} IDs so callers can
-    correlate results with source positions even when non-Python cells appear
-    in between. *)
-let uv_executor ?(attr_filter : Attribute.t option -> bool = fun _ -> true) : executor =
-  fun ctx ->
-  let uv_config = uv_config_of_config ctx.config in
-  let (python_cells : cell list) =
-    filter_cells ~lang_filter:is_python ~attr_filter ctx.inputs
-  in
-  let sources = List.map python_cells ~f:(fun cell -> cell.content) in
-  let nb_json = make_notebook sources in
-  match run_notebook ~uv_config ~nb_json with
-  | Error msg -> List.map python_cells ~f:(fun cell -> { id = cell.id; res = `Error msg })
-  | Ok executed ->
-    let outputs = notebook_outputs executed in
-    List.map2_exn python_cells outputs ~f:(fun cell outs ->
-      { id = cell.id; res = `Markdown (String.concat ~sep:"\n" outs) })
-;;
+(* Owned by this module *)
 
 (** Splice executor outputs back into a document, producing a new [Cmarkit.Doc.t].
 
@@ -406,126 +118,6 @@ let merge_outputs
   Cmarkit.Mapper.map_doc mapper doc
 ;;
 
-(* Cache
-==================== *)
-
-(* NOTE: currently cache is defined solely for code execution caching
-
-  It should be easily to extend it for other purposes by wrapping code execution
-  in a field of a bigger cache record. Also it would be necessary to create a
-  separate cache module.
-*)
-
-let cache_file = "_exec_cache.json"
-
-type cache_entry =
-  { hash : string
-  ; outputs : output list
-  }
-
-(** Mutable map from vault-relative file path to its last execution result. *)
-type cache = cache_entry String.Map.t ref
-
-let empty_cache () : cache = ref String.Map.empty
-
-(** Return pre-existing execution result for [path] and [hash] if it exists and matches [hash]. *)
-let cache_lookup (c : cache) ~(path : string) ~(hash : string) : output list option =
-  match Map.find !c path with
-  | Some entry when String.equal entry.hash hash -> Some entry.outputs
-  | _ -> None
-;;
-
-(** Store the execution result for [path] with content hash [hash] into the
-    in-memory cache. Call [save_cache] afterwards to persist to disk. *)
-let cache_set (c : cache) ~(path : string) ~(hash : string) ~(outputs : output list)
-  : unit
-  =
-  c := Map.set !c ~key:path ~data:{ hash; outputs }
-;;
-
-(** Load cache from [_exec_cache.json] in [dir]. Returns an empty cache if the
-    file is missing or malformed. *)
-let load_cache ~(dir : string) : cache =
-  let path = Filename.concat dir cache_file in
-  if not (Sys_unix.file_exists_exn path)
-  then empty_cache ()
-  else (
-    try
-      let json = Yojson.Basic.from_file path in
-      let open Yojson.Basic.Util in
-      let entries =
-        json
-        |> to_assoc
-        |> List.filter_map ~f:(fun (file_path, v) ->
-          try
-            let hash = v |> member "hash" |> to_string in
-            let outputs =
-              v
-              |> member "outputs"
-              |> to_string
-              |> Sexp.of_string
-              |> [%of_sexp: output list]
-            in
-            Some (file_path, { hash; outputs })
-          with
-          | _ -> None)
-      in
-      ref (String.Map.of_alist_exn entries)
-    with
-    | _ -> empty_cache ())
-;;
-
-(** Persist [cache] to [_exec_cache.json] in [dir]. *)
-let save_cache (c : cache) ~(dir : string) : unit =
-  Core_unix.mkdir_p dir;
-  let path = Filename.concat dir cache_file in
-  let json =
-    `Assoc
-      (Map.to_alist !c
-       |> List.map ~f:(fun (file_path, entry) ->
-         ( file_path
-         , `Assoc
-             [ "hash", `String entry.hash
-             ; "outputs", `String ([%sexp_of: output list] entry.outputs |> Sexp.to_string)
-             ] )))
-  in
-  Yojson.Basic.to_file path json
-;;
-
-(** Generic caching wrapper: look up [(path, hash)] in [cache]; on a miss call
-    [executor ()] and write the result back before returning. *)
-let run_with
-      ?(cache : cache option)
-      ~(path : string)
-      ~(hash : string)
-      ~(executor : unit -> output list)
-      ()
-  : output list
-  =
-  match Option.bind cache ~f:(cache_lookup ~path ~hash) with
-  | Some cached -> cached
-  | None ->
-    let outs = executor () in
-    Option.iter cache ~f:(cache_set ~path ~hash ~outputs:outs);
-    outs
-;;
-
-(** Execute Python cells in [ctx], consulting [cache] first if provided.
-    On a cache miss the notebook is run via {!uv_executor} and the result is
-    stored back into [cache] before returning. *)
-let run_py
-      ?(attr_filter : Attribute.t option -> bool = fun _ -> true)
-      ?(cache : cache option)
-      ~(path : string)
-      (ctx : exec_ctx)
-  : output list
-  =
-  let uv_config = uv_config_of_config ctx.config in
-  let python_cells = filter_cells ~lang_filter:is_python ~attr_filter ctx.inputs in
-  let hash = compute_hash python_cells uv_config in
-  run_with ?cache ~path ~hash ~executor:(fun () -> uv_executor ~attr_filter ctx) ()
-;;
-
 (** Executor for the synthetic [echo] language: returns each cell's source unchanged
     as its output. Intended for tests that need to exercise caching without invoking
     any external process. *)
@@ -550,71 +142,6 @@ let hash_fn_of_lang (ctx : exec_ctx) (lang : string) : string =
 
 (* Test
 ==================== *)
-
-let%test_module "uv_executor" =
-  (module struct
-    (* Covers: basic output, non-Python cells skipped (bash, id=1),
-       shared interpreter state across cells (x = 1 then x + 1),
-       and error handling. *)
-    let%expect_test "uv_executor: execution" =
-      let ctx =
-        extract_exec_ctx
-          (Parse.of_string
-             {|
-```python {}
-print("hello")
-```
-```bash {}
-echo hi
-```
-```py
-x = 1
-print(x)
-```
-```python {}
-gibberish
-```
-```py
-print(x + 1)
-```
-|})
-      in
-      print_s [%sexp (uv_executor ctx : output list)];
-      [%expect
-        {|
-        (((id 0) (res (Markdown "hello\n"))) ((id 2) (res (Markdown "1\n")))
-         ((id 3) (res (Markdown "NameError: name 'gibberish' is not defined")))
-         ((id 4) (res (Markdown "2\n"))))
-        |}]
-    ;;
-
-    let%expect_test "uv_executor: installs and uses dependency from frontmatter" =
-      (* Verifies the full path: frontmatter -> uv_config -> uv --with <dep> ->
-     importable package inside the notebook. Uses [packaging] (pure-Python,
-     no C extensions) so uv can resolve it quickly without network if cached. *)
-      let ctx =
-        extract_exec_ctx
-          (Parse.of_string
-             {|---
-oyster:
-  pyproject:
-    dependencies:
-      - packaging
----
-```python {}
-from packaging.version import Version
-print(Version("2.1.0").major)
-```
-|})
-      in
-      print_s [%sexp (uv_executor ctx : output list)];
-      [%expect
-        {|
-    (((id 0) (res (Markdown "2\n"))))
-  |}]
-    ;;
-  end)
-;;
 
 let%test_module "cache" =
   (module struct
