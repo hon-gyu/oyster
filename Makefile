@@ -23,4 +23,8 @@ build:
 test:
 	dune test
 
+.PHONY: setup-hooks
+setup-hooks:  ## Install git hooks from scripts/pre-commit
+	git config core.hooksPath scripts/pre-commit
+
 -include Makefile.local
