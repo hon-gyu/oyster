@@ -330,15 +330,31 @@ let backlinks : t =
   make ~on_vault ()
 ;;
 
-let fm_has_pyproject_in_oyster (fm_opt : Parse.Frontmatter.t option) : bool =
-  match fm_opt with
-  | Some (`O fields) ->
-    (match List.Assoc.find fields ~equal:String.equal "oyster" with
-     | Some (`O pyproject_fields) ->
-       List.Assoc.mem pyproject_fields ~equal:String.equal "pyproject"
-     | _ -> false)
-  | _ -> false
-;;
+module Fm_filter = struct
+  let fm_has_pyproject_in_oyster (fm_opt : Parse.Frontmatter.t option) : bool =
+    match fm_opt with
+    | Some (`O fields) ->
+      (match List.Assoc.find fields ~equal:String.equal "oyster" with
+       | Some (`O pyproject_fields) ->
+         List.Assoc.mem pyproject_fields ~equal:String.equal "pyproject"
+       | _ -> false)
+    | _ -> false
+  ;;
+
+  let fm_traced_in_oyster (fm_opt : Parse.Frontmatter.t option) : bool =
+    match fm_opt with
+    | Some (`O fields) ->
+      (match List.Assoc.find fields ~equal:String.equal "oyster" with
+       | Some (`O pyproject_fields) ->
+         (match List.Assoc.find pyproject_fields ~equal:String.equal "traced" with
+          | Some (`Bool true) -> true
+          | _ -> false)
+       | _ -> false)
+    | _ -> false
+  ;;
+end
+
+open Fm_filter
 
 (** Code executor pipeline factory: run any [executor] on each document, cache via
     [hash_fn], and splice outputs back in.*)
@@ -373,15 +389,15 @@ let code_exec
 
 (** Execute Python code blocks in each document and splice the outputs back in.
 
-    - [path_filter]: skip execution for paths that return [false] (default: run all).
-    - [fm_filter]: skip execution for documents with frontmatter that returns [false]
+    @param path_filter skip execution for paths that return [false] (default: run all).
+    @param fm_filter skip execution for documents with frontmatter that returns [false]
       (default: run those with oyster.pyproject config).
-    - [attr_filter]: forwarded to {!Code_executor.uv_executor} to select which
+    @param attr_filter forwarded to {!Code_executor.Uv.uv_executor} to select which
       cells to run (default: run all Python cells).
-    - [loc_map]: forwarded to {!Code_executor.merge_outputs} to decide whether
+    @param loc_map forwarded to {!Code_executor.merge_outputs} to decide whether
       each cell's output is appended after or replaces the source block
       (default: append).
-    - [cache]: if provided, execution results are looked up by hash before running
+    @param cache if provided, execution results are looked up by hash before running
       nbconvert and written back after a miss.
 *)
 let py_executor
@@ -431,7 +447,7 @@ let py_executor
     After processing, the [trace] block is replaced with the span tree. *)
 let traced_code_exec
       ?(path_filter : string -> bool = fun _ -> true)
-      ?(fm_filter : Parse.Frontmatter.t option -> bool = fun _ -> true)
+      ?(fm_filter : Parse.Frontmatter.t option -> bool = fm_traced_in_oyster)
       ?(cache : Cache.cache option)
       ~(executor : Code_executor.executor)
       ~(hash_fn : Code_executor.exec_ctx -> string)
