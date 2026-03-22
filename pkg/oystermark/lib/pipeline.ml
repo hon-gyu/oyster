@@ -410,6 +410,68 @@ let py_executor
     ()
 ;;
 
+(** Execute code blocks with trace collection, filling [trace] placeholder blocks
+    with formatted span output.
+
+    Works like {!code_exec} but wraps the executor in {!Trace_collect.with_collect}
+    to capture OpenTelemetry spans emitted during execution. Any code block with
+    [lang = "trace"] is treated as a placeholder: its content is replaced with the
+    formatted text display of trace tree.
+
+    Example document:
+    {v
+    ```python {}
+    print("hello")
+    ```
+    ```trace
+    ```
+    v}
+
+    After processing, the [trace] block is replaced with the span tree. *)
+let traced_code_exec
+      ?(path_filter : string -> bool = fun _ -> true)
+      ?(fm_filter : Parse.Frontmatter.t option -> bool = fun _ -> true)
+      ?(cache : Code_executor.cache option)
+      ~(executor : Code_executor.executor)
+      ~(hash_fn : Code_executor.exec_ctx -> string)
+      ()
+  : t
+  =
+  make
+    ~on_parse:(fun path (doc : Cmarkit.Doc.t) ->
+      if (not (path_filter path)) || not (fm_filter (Parse.Frontmatter.of_doc doc))
+      then [ path, doc ]
+      else (
+        let ctx = Code_executor.extract_exec_ctx doc in
+        let hash = hash_fn ctx in
+        let tc = Trace_collect.create () in
+        let outputs =
+          Trace_collect.with_collect tc (fun () ->
+            Code_executor.run_with
+              ?cache
+              ~path
+              ~hash
+              ~executor:(fun () -> executor ctx)
+              ())
+        in
+        let trace_text =
+          Trace_collect.Trace_pp.format ~tree_chars:Utf8 Indented (Trace_collect.spans tc)
+        in
+        let trace_outputs =
+          List.filter_map ctx.inputs ~f:(fun (cell : Code_executor.cell) ->
+            match cell.lang with
+            | Some l when String.equal (String.lowercase l) "trace" ->
+              Some { Code_executor.id = cell.id; res = `Markdown trace_text }
+            | _ -> None)
+        in
+        let all_outputs = outputs @ trace_outputs in
+        let doc' =
+          Code_executor.merge_outputs ~loc_map:(fun _ -> `Replace) all_outputs doc
+        in
+        [ path, doc' ]))
+    ()
+;;
+
 let default ?(cache : Code_executor.cache option) () : t =
   id
   >> exclude_draft_by_note_name
@@ -520,13 +582,13 @@ hello
 |}
     ;;
 
-    let echo_hash doc = Code_executor.echo_hash_fn (Code_executor.extract_exec_ctx doc)
+    let echo_hash doc = Code_executor.hash_fn_of_lang (Code_executor.extract_exec_ctx doc) "echo"
 
     let run_echo cache doc =
       (code_exec
          ~cache
          ~executor:Code_executor.echo_executor
-         ~hash_fn:Code_executor.echo_hash_fn
+         ~hash_fn:(fun ctx -> Code_executor.hash_fn_of_lang ctx "echo")
          ())
         .on_parse
         "test.md"

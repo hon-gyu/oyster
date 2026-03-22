@@ -348,7 +348,8 @@ let uv_executor ?(attr_filter : Attribute.t option -> bool = fun _ -> true) : ex
 
     Cells with no matching entry in [outputs] are left untouched. *)
 let merge_outputs
-      ?(loc_map : Attribute.t option -> [ `Append | `Replace | `Silent ] = fun _ -> `Append)
+      ?(loc_map : Attribute.t option -> [ `Append | `Replace | `Silent ] =
+        fun _ -> `Append)
       (outputs : output list)
       (doc : Cmarkit.Doc.t)
   : Cmarkit.Doc.t
@@ -392,9 +393,7 @@ let merge_outputs
             Cmarkit.Mapper.ret
               (Cmarkit.Block.Blocks ([ b; out_block ], Cmarkit.Meta.none))
           | `Replace -> Cmarkit.Mapper.ret out_block
-          | `Silent ->
-            Cmarkit.Mapper.ret
-              (Cmarkit.Block.Blocks ([], Cmarkit.Meta.none))))
+          | `Silent -> Cmarkit.Mapper.ret (Cmarkit.Block.Blocks ([], Cmarkit.Meta.none))))
     | _ -> Cmarkit.Mapper.default
   in
   let mapper =
@@ -538,15 +537,15 @@ let echo_executor (ctx : exec_ctx) : output list =
     | _ -> None)
 ;;
 
-(** Hash function companion to {!echo_executor}: keys on [echo] cell contents. *)
-let echo_hash_fn (ctx : exec_ctx) : string =
-  let echo_cells =
+(** Hash function that keys on codeblocks of language [lang] cell contents. *)
+let hash_fn_of_lang (ctx : exec_ctx) (lang : string) : string =
+  let cells =
     List.filter ctx.inputs ~f:(fun c ->
       match c.lang with
-      | Some l -> String.equal (String.lowercase l) "echo"
+      | Some l -> String.equal (String.lowercase l) lang
       | None -> false)
   in
-  compute_hash echo_cells default_uv_config
+  compute_hash cells default_uv_config
 ;;
 
 (* Test
@@ -628,7 +627,7 @@ hello
 |}
     ;;
 
-    let echo_hash doc = echo_hash_fn (extract_exec_ctx doc)
+    let echo_hash doc = hash_fn_of_lang (extract_exec_ctx doc) "echo"
 
     let%expect_test "run_with: cache hit returns cached output, not real execution" =
       let ctx = extract_exec_ctx echo_doc in
