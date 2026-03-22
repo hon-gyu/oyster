@@ -223,3 +223,65 @@ hello
     ;;
   end)
 ;;
+
+let%test_module "traced_executor_of_executor" =
+  (module struct
+    let%expect_test "passes through base outputs and fills trace placeholder" =
+      let doc =
+        Parse.of_string
+          {|
+```echo {}
+hello
+```
+```trace
+```
+|}
+      in
+      let ctx = extract_exec_ctx doc in
+      let result = traced_executor_of_executor echo_executor ctx in
+      print_s [%sexp (result : output list)];
+      [%expect
+        {|
+        (((id 0) (res (Markdown hello))) ((id 1) (res (Markdown ""))))
+        |}]
+    ;;
+
+    let%expect_test "no trace block — only base outputs returned" =
+      let doc =
+        Parse.of_string
+          {|
+```echo {}
+world
+```
+|}
+      in
+      let ctx = extract_exec_ctx doc in
+      let result = traced_executor_of_executor echo_executor ctx in
+      print_s [%sexp (result : output list)];
+      [%expect {| (((id 0) (res (Markdown world)))) |}]
+    ;;
+
+    let%expect_test "multiple trace blocks all get same trace text" =
+      let doc =
+        Parse.of_string
+          {|
+```echo {}
+hi
+```
+```trace
+```
+```trace
+```
+|}
+      in
+      let ctx = extract_exec_ctx doc in
+      let result = traced_executor_of_executor echo_executor ctx in
+      print_s [%sexp (result : output list)];
+      [%expect
+        {|
+        (((id 0) (res (Markdown hi))) ((id 1) (res (Markdown "")))
+         ((id 2) (res (Markdown ""))))
+        |}]
+    ;;
+  end)
+;;
