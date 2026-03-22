@@ -99,14 +99,14 @@ let hash_fn
     @param attr_session_map see {!filter_group_cells}
     *)
 let executor
-  ?(attr_filter : Attribute.t option -> bool = fun _ -> true)
-  ?(attr_session_map : Attribute.t option -> string = session_id_of_attr)
+      ?(attr_filter : Attribute.t option -> bool = fun _ -> true)
+      ?(attr_session_map : Attribute.t option -> string = session_id_of_attr)
   : executor
   =
   fun ctx ->
   let uv_config = uv_config_of_config ctx.config in
   let (python_cells_by_session : (string * cell list) list) =
-    filter_group_cells ~lang_filter:is_python ~attr_filter:attr_filter ~attr_session_map ctx.inputs
+    filter_group_cells ~lang_filter:is_python ~attr_filter ~attr_session_map ctx.inputs
   in
   let (outputs : output list list) =
     List.map python_cells_by_session ~f:(fun (session_id, cells) ->

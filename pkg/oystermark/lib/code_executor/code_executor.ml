@@ -107,6 +107,88 @@ let echo_executor (ctx : exec_ctx) : output list =
     | _ -> None)
 ;;
 
+let is_bash (lang : string) : bool =
+  let lang' = String.lowercase lang in
+  String.equal lang' "bash" || String.equal lang' "sh"
+;;
+
+(** Run a multi-cell bash session.
+
+    Each cell's code is wrapped in [{ ... } > tmpfile 2>&1] so that:
+    - All cells run in the same process (shared functions, variables, cwd)
+    - Each cell's stdout+stderr is captured to its own temp file
+
+    Returns [Ok outputs] with per-cell strings, or [Error msg] on process failure. *)
+let run_bash_session (cells : cell list) : (string list, string) result =
+  let tmp = Filename_unix.temp_dir "oyster_bash" "" in
+  let out_file i = tmp ^/ sprintf "cell_%d.out" i in
+  let script =
+    List.mapi cells ~f:(fun i cell ->
+      sprintf "{\n%s\n} > %s 2>&1" cell.content (out_file i))
+    |> String.concat ~sep:"\n"
+  in
+  try
+    let pc = Core_unix.open_process_full ~env:(Core_unix.environment ()) "/bin/bash" in
+    Out_channel.output_string pc.stdin script;
+    Out_channel.close pc.stdin;
+    (* Drain stdout/stderr so the process doesn't block *)
+    let _out = In_channel.input_all pc.stdout in
+    let proc_err = In_channel.input_all pc.stderr in
+    let status = Core_unix.close_process_full pc in
+    match status with
+    | Ok () | Error _ ->
+      let outputs =
+        List.mapi cells ~f:(fun i _cell ->
+          let path = out_file i in
+          if Sys_unix.file_exists_exn path
+          then In_channel.read_all path
+          else
+            (* Cell didn't run (earlier cell caused exit) *)
+            proc_err)
+      in
+      (* Clean up temp files *)
+      List.iteri cells ~f:(fun i _ ->
+        let path = out_file i in
+        if Sys_unix.file_exists_exn path then Sys_unix.remove path);
+      (try Core_unix.rmdir tmp with
+       | _ -> ());
+      Ok outputs
+  with
+  | exn ->
+    (try Core_unix.rmdir tmp with
+     | _ -> ());
+    Error (Exn.to_string exn)
+;;
+
+(** Executor for [bash]/[sh] code blocks.
+
+    Cells are grouped by session ID (from the [session_id] attribute key).
+    Cells within the same session run in a single [/bin/bash] process so they
+    share shell state (functions, variables, cwd, etc.).  Each cell's
+    stdout+stderr is captured individually via temp-file redirection.
+
+    @param attr_filter see {!filter_group_cells}
+    @param attr_session_map see {!filter_group_cells} *)
+let bash_executor
+      ?(attr_filter : Attribute.t option -> bool = fun _ -> true)
+      ?(attr_session_map : Attribute.t option -> string = session_id_of_attr)
+  : executor
+  =
+  fun ctx ->
+  let bash_cells_by_session =
+    filter_group_cells ~lang_filter:is_bash ~attr_filter ~attr_session_map ctx.inputs
+  in
+  let outputs =
+    List.map bash_cells_by_session ~f:(fun (_session_id, cells) ->
+      match run_bash_session cells with
+      | Ok outs ->
+        List.map2_exn cells outs ~f:(fun cell out ->
+          { id = cell.id; res = `Markdown out })
+      | Error msg -> List.map cells ~f:(fun cell -> { id = cell.id; res = `Error msg }))
+  in
+  outputs |> List.concat |> List.sort ~compare:(fun a b -> Int.compare a.id b.id)
+;;
+
 (** Execute code blocks with trace collection, filling [trace] placeholder blocks
     with formatted span output.
 
@@ -281,6 +363,92 @@ hi
         {|
         (((id 0) (res (Markdown hi))) ((id 1) (res (Markdown "")))
          ((id 2) (res (Markdown ""))))
+        |}]
+    ;;
+  end)
+;;
+
+let%test_module "bash_executor" =
+  (module struct
+    let%expect_test "shared state: define function in one cell, call in another" =
+      let ctx =
+        extract_exec_ctx
+          (Parse.of_string
+             {|
+```bash
+greet() { echo "hello $1"; }
+```
+```bash
+greet world
+```
+|})
+      in
+      print_s [%sexp (bash_executor ctx : output list)];
+      [%expect
+        {|
+        (((id 0) (res (Markdown ""))) ((id 1) (res (Markdown "hello world\n"))))
+        |}]
+    ;;
+
+    let%expect_test "shared variables across cells" =
+      let ctx =
+        extract_exec_ctx
+          (Parse.of_string
+             {|
+```bash
+X=42
+```
+```bash
+echo $X
+```
+|})
+      in
+      print_s [%sexp (bash_executor ctx : output list)];
+      [%expect
+        {|
+        (((id 0) (res (Markdown ""))) ((id 1) (res (Markdown "42\n"))))
+        |}]
+    ;;
+
+    let%expect_test "separate sessions are isolated" =
+      let ctx =
+        extract_exec_ctx
+          (Parse.of_string
+             {|
+```bash {session_id=a}
+Y=aaa
+echo $Y
+```
+```bash {session_id=b}
+echo "${Y:-empty}"
+```
+|})
+      in
+      print_s [%sexp (bash_executor ctx : output list)];
+      [%expect
+        {| (((id 0) (res (Markdown "aaa\n"))) ((id 1) (res (Markdown "empty\n")))) |}]
+    ;;
+
+    let%expect_test "non-bash cells are skipped" =
+      let ctx =
+        extract_exec_ctx
+          (Parse.of_string
+             {|
+```bash
+echo hi
+```
+```python
+print("hello")
+```
+```sh
+echo bye
+```
+|})
+      in
+      print_s [%sexp (bash_executor ctx : output list)];
+      [%expect
+        {|
+        (((id 0) (res (Markdown "hi\n"))) ((id 2) (res (Markdown "bye\n"))))
         |}]
     ;;
   end)
