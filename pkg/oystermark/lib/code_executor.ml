@@ -330,23 +330,25 @@ let uv_executor ?(attr_filter : Attribute.t option -> bool = fun _ -> true) : ex
 
     For every code block that has a matching entry in [outputs] (matched by the
     same integer ID assigned by {!extract_code_blocks}), an output block is
-    inserted according to [loc_map]:
+    inserted according to [loc_map].
+
+    @param loc_map receives the Pandoc {!Attribute.t} of the source cell (if any),
+    allowing callers to drive the append/replace decision from cell attributes
+    (e.g. [.replace] class → Replace):
     - [`Append] (default): keep the source cell and append the output block
       immediately after it.
     - [`Replace]: replace the source cell entirely with the output block.
+    - [`Silent]: execute the code but drop both the source cell and its output
+      from the document.
 
-    [loc_map] receives the Pandoc {!Attribute.t} of the source cell (if any),
-    allowing callers to drive the append/replace decision from cell attributes
-    (e.g. [.replace] class → Replace).
-
-    The output block info string depends on the {!output.res} variant:
+    @param outputs The output block info string depends on the {!output.res} variant:
     - [`Html _]     → ["=html"]  (raw HTML, passed through by the renderer)
     - [`Markdown _] → no info string (preformatted plain-text block)
     - [`Error _]    → ["=html"]  (TBD)
 
     Cells with no matching entry in [outputs] are left untouched. *)
 let merge_outputs
-      ?(loc_map : Attribute.t option -> [ `Append | `Replace ] = fun _ -> `Append)
+      ?(loc_map : Attribute.t option -> [ `Append | `Replace | `Silent ] = fun _ -> `Append)
       (outputs : output list)
       (doc : Cmarkit.Doc.t)
   : Cmarkit.Doc.t
@@ -389,7 +391,10 @@ let merge_outputs
           | `Append ->
             Cmarkit.Mapper.ret
               (Cmarkit.Block.Blocks ([ b; out_block ], Cmarkit.Meta.none))
-          | `Replace -> Cmarkit.Mapper.ret out_block))
+          | `Replace -> Cmarkit.Mapper.ret out_block
+          | `Silent ->
+            Cmarkit.Mapper.ret
+              (Cmarkit.Block.Blocks ([], Cmarkit.Meta.none))))
     | _ -> Cmarkit.Mapper.default
   in
   let mapper =
