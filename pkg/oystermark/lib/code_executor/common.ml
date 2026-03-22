@@ -64,34 +64,13 @@ let extract_code_blocks (doc : Cmarkit.Doc.t) : cell list =
   Cmarkit.Folder.fold_doc folder [] doc |> List.rev
 ;;
 
-let%expect_test "extract_code_blocks" =
-  let doc =
-    Parse.of_string
-      {|
-Hi
-```python
-print("Hello")
-```
-.
-```bash {.foo baz=zzz}
-bar
-```
-|}
-  in
-  let cells = extract_code_blocks doc in
-  print_s [%sexp (cells : cell list)];
-  [%expect
-    {|
-    (((id 0) (lang (python)) (attr ()) (content "print(\"Hello\")"))
-     ((id 1) (lang (bash)) (attr (((id ()) (classes (.foo)) (kvs ((baz zzz))))))
-      (content bar)))
-    |}]
-;;
-
 (** Build an {!exec_ctx} from a parsed document.
+    @return
     - [config]: the [oyster] mapping from the YAML frontmatter, or an empty
       mapping if absent. Executors read their own sub-keys from this value.
-    - [inputs]: all code blocks in document order via {!extract_code_blocks}. *)
+    - [inputs]: all code blocks in document.
+    Dev note:
+    - Blocks are collected via {!extract_code_blocks}  *)
 let extract_exec_ctx (doc : Cmarkit.Doc.t) : exec_ctx =
   let config =
     match Parse.Frontmatter.of_doc doc with
@@ -119,4 +98,64 @@ let filter_cells
     match cell.lang with
     | Some l -> lang_filter l && attr_filter cell.attr
     | None -> false)
+;;
+
+(** Extract a session ID from a cell's attribute's [session_id] key.
+  - Returns default session [ Some "" ] if no attribute is present.
+  - Returns default session [ Some "" ] if no [session_id] key is found.
+*)
+let session_id_of_attr (attr_opt : Attribute.t option) : string option =
+  attr_opt
+  |> Option.value_map ~default:(Some "") ~f:(fun attr ->
+    List.Assoc.find attr.kvs ~equal:String.equal "session_id"
+    |> Option.value_map ~default:(Some "") ~f:(fun session_id -> Some session_id))
+;;
+
+(** Filter and group cells by language and session ID.
+    @param lang_filter filter cells by language
+    @param attr_filter A function that extracts a session ID from a cell's attribute.
+    None indicates no precense in final output
+*)
+let filter_group_cells
+      ~(lang_filter : string -> bool)
+      ~(attr_filter : Attribute.t option -> string option)
+      (cells : cell list)
+  : (string * cell list) list
+  =
+  let groups : (string * cell list ref) list ref = ref [] in
+  List.iter cells ~f:(fun cell ->
+    match cell.lang with
+    | Some l when lang_filter l ->
+      (match attr_filter cell.attr with
+       | Some session_id ->
+         (match List.Assoc.find !groups ~equal:String.equal session_id with
+          | Some cells_ref -> cells_ref := !cells_ref @ [ cell ]
+          | None -> groups := !groups @ [ session_id, ref [ cell ] ])
+       | None -> ())
+    | _ -> ());
+  List.map !groups ~f:(fun (session_id, cells_ref) -> session_id, !cells_ref)
+;;
+
+let%expect_test "extract_code_blocks" =
+  let doc =
+    Parse.of_string
+      {|
+Hi
+```python
+print("Hello")
+```
+.
+```bash {.foo baz=zzz}
+bar
+```
+|}
+  in
+  let cells = extract_code_blocks doc in
+  print_s [%sexp (cells : cell list)];
+  [%expect
+    {|
+    (((id 0) (lang (python)) (attr ()) (content "print(\"Hello\")"))
+     ((id 1) (lang (bash)) (attr (((id ()) (classes (.foo)) (kvs ((baz zzz))))))
+      (content bar)))
+    |}]
 ;;

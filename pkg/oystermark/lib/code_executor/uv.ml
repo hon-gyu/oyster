@@ -78,29 +78,35 @@ let hash_fn ?(attr_filter : Attribute.t option -> bool = fun _ -> true)
 
     All selected cells are assembled into a single notebook and executed
     together, so they share interpreter state (imports, variables, etc.).
-    Outputs are mapped back to the original {!Common.cell} IDs so callers can
+    Outputs are mapped back to the original {!cell} IDs so callers can
     correlate results with source positions even when non-Python cells appear
     in between. *)
-let executor ?(attr_filter : Attribute.t option -> bool = fun _ -> true) : executor =
+let executor ?(attr_filter : Attribute.t option -> string option = session_id_of_attr)
+  : executor
+  =
   fun ctx ->
   let uv_config = uv_config_of_config ctx.config in
-  let (python_cells : Common.cell list) =
-    Common.filter_cells ~lang_filter:is_python ~attr_filter ctx.inputs
+  let (python_cells_by_session : (string * cell list) list) =
+    filter_group_cells ~lang_filter:is_python ~attr_filter ctx.inputs
   in
-  let sources = List.map python_cells ~f:(fun cell -> cell.content) in
-  let nb_json = Jupyter.make_notebook sources in
-  match
-    Jupyter.run_notebook
-      ~python_version:uv_config.version
-      ~with_args:uv_config.dependencies
-      ~nb_json
-  with
-  | Error msg ->
-    List.map python_cells ~f:(fun cell -> { Common.id = cell.id; res = `Error msg })
-  | Ok executed ->
-    let outputs = Jupyter.notebook_outputs executed in
-    List.map2_exn python_cells outputs ~f:(fun cell outs ->
-      { Common.id = cell.id; res = `Markdown (String.concat ~sep:"\n" outs) })
+  let (outputs : output list list) =
+    List.map python_cells_by_session ~f:(fun (session_id, cells) ->
+      let sources = List.map cells ~f:(fun cell -> cell.content) in
+      let nb_json = Jupyter.make_notebook sources in
+      match
+        Jupyter.run_notebook
+          ~python_version:uv_config.version
+          ~with_args:uv_config.dependencies
+          ~nb_json
+      with
+      | Error msg ->
+        List.map cells ~f:(fun cell -> { Common.id = cell.id; res = `Error msg })
+      | Ok executed ->
+        let outputs = Jupyter.notebook_outputs executed in
+        List.map2_exn cells outputs ~f:(fun cell outs ->
+          { Common.id = cell.id; res = `Markdown (String.concat ~sep:"\n" outs) }))
+  in
+  outputs |> List.concat |> List.sort ~compare:(fun a b -> Int.compare a.id b.id)
 ;;
 
 (* Test
