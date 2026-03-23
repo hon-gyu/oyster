@@ -1,7 +1,7 @@
 (library
  (name trace_collect)
  (public_name trace-collect)
- (modules trace_collect trace_pp otlp_receiver)
+ (modules trace_collect trace_pp otlp_receiver span_pipeline)
  (libraries
   core
   core_unix.core_thread
