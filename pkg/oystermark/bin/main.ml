@@ -1,5 +1,6 @@
 open Core
 open Oystermark
+module Cache = Code_executor.Cache
 
 (* NOTE:
 
@@ -55,9 +56,7 @@ let file_cmd : Command.t =
 
 let theme_of_string (s : string) : Theme.t = Theme.of_name (Config.theme_of_string s)
 
-let pipeline_of_profile ~(cache : Code_executor.cache) (p : Config.pipeline_profile)
-  : Pipeline.t
-  =
+let pipeline_of_profile ~(cache : Cache.cache) (p : Config.pipeline_profile) : Pipeline.t =
   match p with
   | Default -> Pipeline.default ~cache ()
   | Basic -> Pipeline.basic
@@ -128,12 +127,12 @@ let vault_cmd : Command.t =
            curr_dir ^ "/_site"
        in
        (* Load cache and pass it to the pipeline builder *)
-       let cache = Code_executor.load_cache ~dir:output_dir in
+       let cache = Cache.load_cache ~dir:output_dir in
        let pipeline : Pipeline.t = pipeline_of_profile ~cache config.pipeline_profile in
        let results =
          render_vault ~pipeline ~theme ~backend_blocks:true ~safe:false vault_root
        in
-       Code_executor.save_cache cache ~dir:output_dir;
+       Cache.save_cache cache ~dir:output_dir;
        List.iteri results ~f:(fun i (out_rel, html) ->
          let out_path = Filename.concat output_dir out_rel in
          let out_dir = Filename.dirname out_path in

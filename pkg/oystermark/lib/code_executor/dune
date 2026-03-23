@@ -1,0 +1,15 @@
+(library
+ (name code_executor)
+ (public_name oystermark.code_executor)
+ (libraries
+  cmarkit
+  core
+  yaml
+  parse
+  yojson
+  core_unix
+  core_unix.filename_unix
+  trace_collect)
+ (inline_tests)
+ (preprocess
+  (pps ppx_jane ppx_string ppx_quick_test)))

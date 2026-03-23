@@ -57,10 +57,6 @@ let format_duration (sp : OT.span) : string =
   else sprintf "%.0fus" us
 ;;
 
-let duration_nanos (sp : OT.span) =
-  Int64.(sp.end_time_unix_nano - sp.start_time_unix_nano)
-;;
-
 let is_internal_attr key =
   String.is_prefix key ~prefix:"code." || String.is_prefix key ~prefix:"otel."
 ;;
@@ -116,55 +112,16 @@ let build_forest (spans : OT.span list) : span_node list =
   List.map roots ~f:build
 ;;
 
-(* duration ranks
+(* line formatter
 ==================== *)
 
-(** Build a map from span_id to duration rank (1 = shortest). Ties share the same rank. *)
-let build_duration_ranks
-      ?(tie_tolerance_nano : int64 = Int64.of_int 3)
-      (spans : OT.span list)
-  : (string, int) Hashtbl.t
-  =
-  let sorted =
-    List.map spans ~f:(fun sp -> span_id_hex sp.span_id, duration_nanos sp)
-    |> List.sort ~compare:(fun (_, a) (_, b) ->
-      let diff = Int64.(abs (a - b)) in
-      if Int64.(diff <= tie_tolerance_nano) then 0 else Int64.compare a b)
+let format_line ~prefix (sp : OT.span) : string =
+  let dur = format_duration sp in
+  let attrs = format_attrs sp in
+  let parts =
+    [ prefix ^ sp.name; dur ] @ if String.is_empty attrs then [] else [ attrs ]
   in
-  let ranks = Hashtbl.create (module String) in
-  let rank = ref 0 in
-  let prev = ref Int64.min_value in
-  List.iter sorted ~f:(fun (sid, dur) ->
-    if Int64.( <> ) dur !prev
-    then (
-      Int.incr rank;
-      prev := dur);
-    Hashtbl.set ranks ~key:sid ~data:!rank);
-  ranks
-;;
-
-(* line formatter closure
-==================== *)
-
-(** Build a [prefix -> span -> string] closure that captures duration_ranks. *)
-let make_format_line (duration_ranks : (string, int) Hashtbl.t option)
-  : prefix:string -> OT.span -> string
-  =
-  let format_dur (sp : OT.span) =
-    match duration_ranks with
-    | Some ranks ->
-      (match Hashtbl.find ranks (span_id_hex sp.span_id) with
-       | Some r -> Int.to_string r ^ "us"
-       | None -> format_duration sp)
-    | None -> format_duration sp
-  in
-  fun ~prefix (sp : OT.span) ->
-    let dur = format_dur sp in
-    let attrs = format_attrs sp in
-    let parts =
-      [ prefix ^ sp.name; dur ] @ if String.is_empty attrs then [] else [ attrs ]
-    in
-    String.concat parts ~sep:" "
+  String.concat parts ~sep:" "
 ;;
 
 (* tree prefix helpers
@@ -191,7 +148,7 @@ let tree_child_indent (tc : tree_chars) ~depth ~is_last =
 (* row computation per style
 ==================== *)
 
-let flat_lines format_line (spans : OT.span list) (buf : Buffer.t) : unit =
+let flat_lines (spans : OT.span list) (buf : Buffer.t) : unit =
   let sorted =
     List.sort spans ~compare:(fun a b ->
       Int64.compare a.OT.start_time_unix_nano b.start_time_unix_nano)
@@ -201,9 +158,7 @@ let flat_lines format_line (spans : OT.span list) (buf : Buffer.t) : unit =
     Buffer.add_char buf '\n')
 ;;
 
-let indented_lines format_line ~(tc : tree_chars) (spans : OT.span list) (buf : Buffer.t)
-  : unit
-  =
+let indented_lines ~(tc : tree_chars) (spans : OT.span list) (buf : Buffer.t) : unit =
   let forest = build_forest spans in
   let rec walk ~depth ~parent_prefix node ~is_last =
     let prefix = parent_prefix ^ tree_prefix tc ~depth ~is_last in
@@ -231,12 +186,7 @@ let indented_lines format_line ~(tc : tree_chars) (spans : OT.span list) (buf : 
     walk ~depth:0 ~parent_prefix:"" root ~is_last:(i = n_roots - 1))
 ;;
 
-let show_parents_lines
-      format_line
-      ~(tc : tree_chars)
-      (spans : OT.span list)
-      (buf : Buffer.t)
-  =
+let show_parents_lines ~(tc : tree_chars) (spans : OT.span list) (buf : Buffer.t) =
   let forest = build_forest spans in
   (* last_path.(i) = span_id at depth i of the most recently printed span *)
   let last_path : string option array = Array.create ~len:64 None in
@@ -303,38 +253,24 @@ let show_parents_lines
 type t =
   { style : style
   ; tree_chars : tree_chars
-  ; normalize_duration : bool
   ; mutable spans : OT.span list
   }
 
-let create ?(tree_chars = Null) ?(normalize_duration = false) (style : style) : t =
-  { style; tree_chars; normalize_duration; spans = [] }
-;;
-
+let create ?(tree_chars = Null) (style : style) : t = { style; tree_chars; spans = [] }
 let process (t : t) (span : OT.span) : unit = t.spans <- span :: t.spans
 
 let contents (t : t) : string =
   let spans = List.rev t.spans in
-  let duration_ranks =
-    if t.normalize_duration then Some (build_duration_ranks spans) else None
-  in
-  let format_line = make_format_line duration_ranks in
   let buf = Buffer.create 256 in
   (match t.style with
-   | Flat -> flat_lines format_line spans buf
-   | Indented -> indented_lines format_line ~tc:t.tree_chars spans buf
-   | Show_parents -> show_parents_lines format_line ~tc:t.tree_chars spans buf);
+   | Flat -> flat_lines spans buf
+   | Indented -> indented_lines ~tc:t.tree_chars spans buf
+   | Show_parents -> show_parents_lines ~tc:t.tree_chars spans buf);
   Buffer.contents buf
 ;;
 
-let format
-      ?(tree_chars = Null)
-      ?(normalize_duration = false)
-      (style : style)
-      (spans : OT.span list)
-  : string
-  =
-  let t = create ~tree_chars ~normalize_duration style in
+let format ?(tree_chars = Utf8) (style : style) (spans : OT.span list) : string =
+  let t = create ~tree_chars style in
   List.iter spans ~f:(process t);
   contents t
 ;;

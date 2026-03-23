@@ -1,6 +1,6 @@
 (** In-memory OTEL trace collector for testing.
 
-    Captures OpenTelemetry spans via a custom {!Opentelemetry.Exporter.t},
+    Captures OpenTelemetry spans via a custom [Opentelemetry.Exporter.t],
     suitable for trace-based property testing. The captured data is
     [Opentelemetry_proto.Trace.span list] — the same type you get from
     parsing OTLP JSON, so the same pretty-printer works for both OCaml
@@ -17,6 +17,9 @@
 
 open Core
 module OT = Opentelemetry_proto.Trace
+module Trace_pp = Trace_pp
+module Otlp_receiver = Otlp_receiver
+module Span_pipeline = Span_pipeline
 
 type t = { mutable collected_spans : OT.span list }
 
@@ -84,5 +87,3 @@ let span_attrs (sp : OT.span) : (string * string) list =
 let span_attr (sp : OT.span) (key : string) : string option =
   List.Assoc.find (span_attrs sp) ~equal:String.equal key
 ;;
-
-module Trace_pp = Trace_pp
