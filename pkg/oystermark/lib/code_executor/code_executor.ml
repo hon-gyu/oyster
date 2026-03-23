@@ -119,7 +119,9 @@ let is_bash (lang : string) : bool =
     - Each cell's stdout+stderr is captured to its own temp file
 
     Returns [Ok outputs] with per-cell strings, or [Error msg] on process failure. *)
-let run_bash_session (cells : cell list) : (string list, string) result =
+let run_bash_session ?(extra_env : string list = []) (cells : cell list)
+  : (string list, string) result
+  =
   let tmp = Filename_unix.temp_dir "oyster_bash" "" in
   let out_file i = tmp ^/ sprintf "cell_%d.out" i in
   let script =
@@ -128,7 +130,8 @@ let run_bash_session (cells : cell list) : (string list, string) result =
     |> String.concat ~sep:"\n"
   in
   try
-    let pc = Core_unix.open_process_full ~env:(Core_unix.environment ()) "/bin/bash" in
+    let env = Array.append (Core_unix.environment ()) (Array.of_list extra_env) in
+    let pc = Core_unix.open_process_full ~env "/bin/bash" in
     Out_channel.output_string pc.stdin script;
     Out_channel.close pc.stdin;
     (* Drain stdout/stderr so the process doesn't block *)
@@ -195,14 +198,27 @@ let bash_executor
     Wraps the executor in {!Trace_collect.with_collect} to capture OpenTelemetry
     spans emitted during execution. Any code block with [lang = "trace"] is treated
     as a placeholder: its content is replaced with the formatted trace tree. *)
-let traced_executor_of_executor (executor : exec_ctx -> output list) (ctx : exec_ctx)
+let traced_executor_of_executor
+  ?(filter_keys : string list list = [])
+  ?(scrub_keys : string list list = [])
+  (executor : exec_ctx -> output list) (ctx : exec_ctx)
   : output list
   =
+  let module OT = Opentelemetry_proto.Trace in
   let tc = Trace_collect.create () in
+  let receiver = Trace_collect.Otlp_receiver.create () in
+  Trace_collect.Otlp_receiver.start receiver;
+  let endpoint = Trace_collect.Otlp_receiver.endpoint receiver in
+  Core_unix.putenv ~key:"OTEL_EXPORTER_OTLP_ENDPOINT" ~data:endpoint;
   let outputs = Trace_collect.with_collect tc (fun () -> executor ctx) in
-  let trace_text =
-    Trace_collect.Trace_pp.format ~tree_chars:Utf8 Indented (Trace_collect.spans tc)
+  Core_unix.unsetenv "OTEL_EXPORTER_OTLP_ENDPOINT";
+  Trace_collect.Otlp_receiver.stop receiver;
+  let (all_spans : OT.span list) = Trace_collect.spans tc @ Trace_collect.Otlp_receiver.spans receiver in
+  let all_spans' = all_spans |> Trace_collect.Span_pipeline.normalize_duration
+    |> Trace_collect.Span_pipeline.filter_attributes ~remove:filter_keys
+    |> Trace_collect.Span_pipeline.scrub_attributes ~scrub:scrub_keys
   in
+  let trace_text = Trace_collect.Trace_pp.format Indented all_spans' in
   let trace_outputs =
     List.filter_map ctx.inputs ~f:(fun (cell : cell) ->
       match cell.lang with
@@ -341,6 +357,63 @@ world
       let result = traced_executor_of_executor echo_executor ctx in
       print_s [%sexp (result : output list)];
       [%expect {| (((id 0) (res (Markdown world)))) |}]
+    ;;
+
+    let traced_bash_executor = traced_executor_of_executor
+      ~scrub_keys:[["process.owner"]; ["process.pid"]; ["process.parent_pid"]]
+      bash_executor
+
+    let%expect_test "bash with otel-cli captures external traces" =
+      let doc =
+        Parse.of_string
+          {|
+```bash
+otel-cli exec --service oyster-test --name "fetch-data" -- echo "fetched"
+```
+```trace
+```
+|}
+      in
+      let ctx = extract_exec_ctx doc in
+      let result = traced_bash_executor ctx in
+      let (trace_output : string) =
+        List.find_map_exn result ~f:(fun o ->
+          match o.res with
+          | `Markdown s when o.id = 1 -> Some s
+          | _ -> None)
+      in
+      print_endline trace_output;
+      [%expect
+        {| fetch-data 1us process.command=echo process.command_args=? process.owner=- process.pid=- process.parent_pid=- |}]
+    ;;
+
+    let%expect_test "bash with nested otel-cli spans shows tree" =
+      let doc =
+        Parse.of_string
+          {|
+```bash
+CARRIER=$(mktemp)
+otel-cli exec --service oyster-test --name "parent-op" --tp-carrier $CARRIER -- \
+  otel-cli exec --service oyster-test --name "child-step" --tp-carrier $CARRIER -- echo "done"
+```
+```trace
+```
+|}
+      in
+      let ctx = extract_exec_ctx doc in
+      let result = traced_bash_executor ctx in
+      let trace_output =
+        List.find_map_exn result ~f:(fun o ->
+          match o.res with
+          | `Markdown s when o.id = 1 -> Some s
+          | _ -> None)
+      in
+      print_endline trace_output;
+      [%expect
+        {|
+        parent-op 2us process.command=otel-cli process.command_args=? process.owner=- process.pid=- process.parent_pid=-
+        └── child-step 1us process.command=echo process.command_args=? process.owner=- process.pid=- process.parent_pid=-
+        |}]
     ;;
 
     let%expect_test "multiple trace blocks all get same trace text" =

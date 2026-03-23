@@ -253,20 +253,17 @@ let show_parents_lines ~(tc : tree_chars) (spans : OT.span list) (buf : Buffer.t
 type t =
   { style : style
   ; tree_chars : tree_chars
-  ; normalize_duration : bool
   ; mutable spans : OT.span list
   }
 
-let create ?(tree_chars = Null) ?(normalize_duration = false) (style : style) : t =
-  { style; tree_chars; normalize_duration; spans = [] }
+let create ?(tree_chars = Null) (style : style) : t =
+  { style; tree_chars; spans = [] }
 ;;
 
 let process (t : t) (span : OT.span) : unit = t.spans <- span :: t.spans
 
 let contents (t : t) : string =
-  let spans =
-    let raw = List.rev t.spans in
-    if t.normalize_duration then Span_pipeline.normalize_duration raw else raw
+  let spans = List.rev t.spans
   in
   let buf = Buffer.create 256 in
   (match t.style with
@@ -277,13 +274,12 @@ let contents (t : t) : string =
 ;;
 
 let format
-      ?(tree_chars = Null)
-      ?(normalize_duration = false)
+      ?(tree_chars = Utf8)
       (style : style)
       (spans : OT.span list)
   : string
   =
-  let t = create ~tree_chars ~normalize_duration style in
+  let t = create ~tree_chars style in
   List.iter spans ~f:(process t);
   contents t
 ;;

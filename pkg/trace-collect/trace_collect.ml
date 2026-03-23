@@ -19,6 +19,7 @@ open Core
 module OT = Opentelemetry_proto.Trace
 module Trace_pp = Trace_pp
 module Otlp_receiver = Otlp_receiver
+module Span_pipeline = Span_pipeline
 
 type t = { mutable collected_spans : OT.span list }
 
