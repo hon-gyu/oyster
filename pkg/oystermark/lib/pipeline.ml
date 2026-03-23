@@ -603,68 +603,71 @@ hello
   end)
 ;;
 
-let%test_module "py_executor" =
+let%test_module "code_exec with bash" =
   (module struct
-    let run_py doc =
-      (py_executor ~fm_filter:(fun _ -> true) ()).on_parse "test.md" doc
+    let run_bash doc =
+      (code_exec
+         ~fm_filter:(fun _ -> true)
+         ~executor:Code_executor.bash_executor
+         ~hash_fn:(Code_executor.hash_fn_of_lang "bash")
+         ())
+        .on_parse
+        "test.md"
+        doc
       |> List.hd_exn
       |> snd
     ;;
 
-    (* TODO: what is tested here is error-handling and html insertion.
-      none is python-specific. we should replace it with some other executor
-     that is faster to run. each python invocation takes ~2s.
-     this executor needs to be able to throw errors.
-     maybe bash executor?
-    *)
-    let%expect_test "py_executor: error + non-Python + basic" =
+    let%expect_test "error + non-matching lang + basic" =
       let doc =
         Parse.of_string
           {|
-```py
-print("hello")
+```bash
+echo hello
 ```
 
-```python {}
-gibberish
+```sh {}
+gibberish_command_that_does_not_exist
 ```
 
 ```ts
 console.log("hello")
 ```
 
-```py
-2
+```bash
+echo 2
 ```
 |}
       in
-      print_endline (Parse.commonmark_of_doc (run_py doc));
+      print_endline (Parse.commonmark_of_doc (run_bash doc));
       [%expect
         {|
-        ```py
-        print("hello")
+        ```bash
+        echo hello
         ```
         ```
         hello
 
         ```
 
-        ```python {}
-        gibberish
+        ```sh {}
+        gibberish_command_that_does_not_exist
         ```
         ```
-        NameError: name 'gibberish' is not defined
+        /bin/bash: line 5: gibberish_command_that_does_not_exist: command not found
+
         ```
 
         ```ts
         console.log("hello")
         ```
 
-        ```py
-        2
+        ```bash
+        echo 2
         ```
         ```
         2
+
         ```
         |}]
     ;;
