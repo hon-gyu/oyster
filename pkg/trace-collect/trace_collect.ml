@@ -17,6 +17,8 @@
 
 open Core
 module OT = Opentelemetry_proto.Trace
+module Trace_pp = Trace_pp
+module Otlp_receiver = Otlp_receiver
 
 type t = { mutable collected_spans : OT.span list }
 
@@ -84,5 +86,3 @@ let span_attrs (sp : OT.span) : (string * string) list =
 let span_attr (sp : OT.span) (key : string) : string option =
   List.Assoc.find (span_attrs sp) ~equal:String.equal key
 ;;
-
-module Trace_pp = Trace_pp

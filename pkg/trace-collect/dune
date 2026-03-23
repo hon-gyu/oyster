@@ -1,11 +1,15 @@
 (library
  (name trace_collect)
  (public_name trace-collect)
- (modules trace_collect trace_pp)
+ (modules trace_collect trace_pp otlp_receiver)
  (libraries
   core
+  core_unix.core_thread
+  core_unix
   opentelemetry
+  opentelemetry.proto
   opentelemetry.trace
+  pbrt
   trace.core
   ambient-context
   ambient-context.tls)
