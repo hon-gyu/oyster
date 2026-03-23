@@ -3,6 +3,8 @@
 open Core
 module OT = Opentelemetry_proto.Trace
 
+type kv = Opentelemetry_proto.Common.key_value
+
 let span_id_hex (b : bytes) : string =
   let len = Bytes.length b in
   if len = 0
@@ -43,5 +45,23 @@ let normalize_duration
     OT.span_set_end_time_unix_nano
       sp'
       Int64.(sp'.start_time_unix_nano + (of_int r * of_int 1000));
+    sp')
+;;
+
+let filter_attributes (spans : OT.span list) (remove : string list) : OT.span list =
+  let remove_set = Set.of_list (module String) remove in
+  List.map spans ~f:(fun sp ->
+    let sp' = OT.copy_span sp in
+    OT.span_set_attributes
+      sp'
+      (List.filter sp'.attributes ~f:(fun (attr : kv) ->
+         not (Set.mem remove_set attr.key)));
+    sp')
+;;
+
+let filter_map_attributes (spans : OT.span list) ~(f : kv -> kv option) : OT.span list =
+  List.map spans ~f:(fun sp ->
+    let sp' = OT.copy_span sp in
+    OT.span_set_attributes sp' (List.filter_map sp'.attributes ~f);
     sp')
 ;;
