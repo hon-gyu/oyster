@@ -199,9 +199,10 @@ let bash_executor
     spans emitted during execution. Any code block with [lang = "trace"] is treated
     as a placeholder: its content is replaced with the formatted trace tree. *)
 let traced_executor_of_executor
-  ?(filter_keys : string list list = [])
-  ?(scrub_keys : string list list = [])
-  (executor : exec_ctx -> output list) (ctx : exec_ctx)
+      ?(filter_keys : string list list = [])
+      ?(scrub_keys : string list list = [])
+      (executor : exec_ctx -> output list)
+      (ctx : exec_ctx)
   : output list
   =
   let module OT = Opentelemetry_proto.Trace in
@@ -213,8 +214,12 @@ let traced_executor_of_executor
   let outputs = Trace_collect.with_collect tc (fun () -> executor ctx) in
   Core_unix.unsetenv "OTEL_EXPORTER_OTLP_ENDPOINT";
   Trace_collect.Otlp_receiver.stop receiver;
-  let (all_spans : OT.span list) = Trace_collect.spans tc @ Trace_collect.Otlp_receiver.spans receiver in
-  let all_spans' = all_spans |> Trace_collect.Span_pipeline.normalize_duration
+  let (all_spans : OT.span list) =
+    Trace_collect.spans tc @ Trace_collect.Otlp_receiver.spans receiver
+  in
+  let all_spans' =
+    all_spans
+    |> Trace_collect.Span_pipeline.normalize_duration
     |> Trace_collect.Span_pipeline.filter_attributes ~remove:filter_keys
     |> Trace_collect.Span_pipeline.scrub_attributes ~scrub:scrub_keys
   in
@@ -359,9 +364,11 @@ world
       [%expect {| (((id 0) (res (Markdown world)))) |}]
     ;;
 
-    let traced_bash_executor = traced_executor_of_executor
-      ~scrub_keys:[["process.owner"]; ["process.pid"]; ["process.parent_pid"]]
-      bash_executor
+    let traced_bash_executor =
+      traced_executor_of_executor
+        ~scrub_keys:[ [ "process.owner" ]; [ "process.pid" ]; [ "process.parent_pid" ] ]
+        bash_executor
+    ;;
 
     let%expect_test "bash with otel-cli captures external traces" =
       let doc =

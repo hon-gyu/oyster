@@ -256,15 +256,11 @@ type t =
   ; mutable spans : OT.span list
   }
 
-let create ?(tree_chars = Null) (style : style) : t =
-  { style; tree_chars; spans = [] }
-;;
-
+let create ?(tree_chars = Null) (style : style) : t = { style; tree_chars; spans = [] }
 let process (t : t) (span : OT.span) : unit = t.spans <- span :: t.spans
 
 let contents (t : t) : string =
-  let spans = List.rev t.spans
-  in
+  let spans = List.rev t.spans in
   let buf = Buffer.create 256 in
   (match t.style with
    | Flat -> flat_lines spans buf
@@ -273,12 +269,7 @@ let contents (t : t) : string =
   Buffer.contents buf
 ;;
 
-let format
-      ?(tree_chars = Utf8)
-      (style : style)
-      (spans : OT.span list)
-  : string
-  =
+let format ?(tree_chars = Utf8) (style : style) (spans : OT.span list) : string =
   let t = create ~tree_chars style in
   List.iter spans ~f:(process t);
   contents t
