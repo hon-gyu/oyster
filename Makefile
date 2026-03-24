@@ -11,8 +11,8 @@ help:  ## Show this help (usage: make help)
 		} \
 	}' $(MAKEFILE_LIST)
 
-.PHONY: build-doc
-build-doc:
+.PHONY: doc
+doc:
 	dune build @doc-private @doc
 
 .PHONY: build

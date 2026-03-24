@@ -12,6 +12,13 @@
  (package oystermark)
  (name md2script)
  (modules md2script)
- (libraries parse cmarkit core core_unix core_unix.command_unix core_unix.filename_unix yaml)
+ (libraries
+  parse
+  cmarkit
+  core
+  core_unix
+  core_unix.command_unix
+  core_unix.filename_unix
+  yaml)
  (preprocess
   (pps ppx_jane)))
