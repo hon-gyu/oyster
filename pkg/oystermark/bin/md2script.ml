@@ -2,7 +2,7 @@
 
     The percent format delimits cells with [# %%] markers:
     - [# %%] for code cells (Python)
-    - [# %% \[markdown\]] for markdown cells (each line prefixed with [# ])
+    - [# %% [markdown]] for markdown cells (each line prefixed with [# ])
 
     Frontmatter [oyster.pyproject] maps to PEP 723 inline script metadata. *)
 
@@ -67,6 +67,7 @@ let uncomment_lines (s : string) : string =
     # ///
     v} *)
 let pep723_of_config (config : Yaml.value) : string option =
+  (* TODO: maybe we should use a proper TOML parser *)
   match Yaml.Util.find "pyproject" config with
   | Ok (Some (`O fields)) ->
     let lines = Buffer.create 64 in
