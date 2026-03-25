@@ -3,7 +3,14 @@
  (package oystermark)
  (name main)
  (modules main)
- (libraries oystermark core core_unix core_unix.command_unix)
+ (libraries
+  oystermark
+  core
+  core_unix
+  core_unix.command_unix
+  cohttp-eio
+  eio_main
+  http)
  (preprocess
   (pps ppx_jane)))
 
