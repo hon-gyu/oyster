@@ -63,6 +63,145 @@ let pipeline_of_profile ~(cache : Cache.cache) (p : Config.pipeline_profile) : P
   | None_profile -> Pipeline.id
 ;;
 
+(** Render vault and write output files + copy assets. Returns unit. *)
+let do_render ~verbose ~pipeline ~theme ~vault_root ~output_dir =
+  let cache = Cache.load_cache ~dir:output_dir in
+  let pipeline : Pipeline.t = pipeline_of_profile ~cache pipeline in
+  let results =
+    render_vault ~pipeline ~theme ~backend_blocks:true ~safe:false vault_root
+  in
+  Cache.save_cache cache ~dir:output_dir;
+  List.iteri results ~f:(fun i (out_rel, html) ->
+    let out_path = Filename.concat output_dir out_rel in
+    let out_dir = Filename.dirname out_path in
+    Core_unix.mkdir_p out_dir;
+    Out_channel.write_all out_path ~data:html;
+    if verbose
+    then printf "  %s\n" out_rel
+    else (
+      let print_char c = Out_channel.output_char Out_channel.stdout c in
+      if i mod 60 = 0 && i > 0 then print_char '\n';
+      print_char '.';
+      Out_channel.flush Out_channel.stdout));
+  (* Copy non-markdown assets (images, etc.) to the output directory *)
+  let all_entries = Vault.list_entries vault_root in
+  let is_asset (p : string) : bool =
+    (not (String.is_suffix p ~suffix:".md")) && not (String.is_suffix p ~suffix:"/")
+  in
+  List.iter all_entries ~f:(fun rel_path ->
+    if is_asset rel_path
+    then (
+      let src = Filename.concat vault_root rel_path in
+      let dst = Filename.concat output_dir rel_path in
+      let dst_dir = Filename.dirname dst in
+      Core_unix.mkdir_p dst_dir;
+      let content = In_channel.read_all src in
+      Out_channel.write_all dst ~data:content))
+;;
+
+(** Content-type lookup for static file serving. *)
+let content_type_of_path (path : string) : string =
+  match Filename.split_extension path |> snd with
+  | Some "html" -> "text/html; charset=utf-8"
+  | Some "css" -> "text/css; charset=utf-8"
+  | Some "js" -> "application/javascript"
+  | Some "json" -> "application/json"
+  | Some "png" -> "image/png"
+  | Some ("jpg" | "jpeg") -> "image/jpeg"
+  | Some "gif" -> "image/gif"
+  | Some "svg" -> "image/svg+xml"
+  | Some "ico" -> "image/x-icon"
+  | Some "woff" -> "font/woff"
+  | Some "woff2" -> "font/woff2"
+  | Some "ttf" -> "font/ttf"
+  | Some "pdf" -> "application/pdf"
+  | _ -> "application/octet-stream"
+;;
+
+(** Serve static files from [dir] on [port] using cohttp-eio. *)
+let serve_static ~(env : Eio_unix.Stdenv.base) ~port ~dir =
+  let callback _conn (req : Http.Request.t) _body =
+    let resource = req.resource in
+    let path =
+      if String.is_suffix resource ~suffix:"/" then resource ^ "index.html" else resource
+    in
+    (* Prevent path traversal *)
+    let path = String.substr_replace_all path ~pattern:".." ~with_:"" in
+    let file_path = dir ^ path in
+    match Sys_unix.file_exists file_path with
+    | `Yes when Sys_unix.is_directory_exn file_path ->
+      (* Redirect to path with trailing slash *)
+      let headers = Http.Header.of_list [ "location", resource ^ "/" ] in
+      Cohttp_eio.Server.respond
+        ~headers
+        ~status:`Moved_permanently
+        ~body:(Cohttp_eio.Body.of_string "")
+        ()
+    | `Yes ->
+      let content = In_channel.read_all file_path in
+      let ct = content_type_of_path file_path in
+      let headers = Http.Header.of_list [ "content-type", ct ] in
+      Cohttp_eio.Server.respond
+        ~headers
+        ~status:`OK
+        ~body:(Cohttp_eio.Body.of_string content)
+        ()
+    | _ ->
+      Cohttp_eio.Server.respond
+        ~status:`Not_found
+        ~body:(Cohttp_eio.Body.of_string "Not Found")
+        ()
+  in
+  let server = Cohttp_eio.Server.make ~callback () in
+  Eio.Switch.run
+  @@ fun sw ->
+  let addr = `Tcp (Eio.Net.Ipaddr.V4.loopback, port) in
+  let socket =
+    Eio.Net.listen (Eio.Stdenv.net env) ~sw ~backlog:128 ~reuse_addr:true addr
+  in
+  printf "Serving %s on http://localhost:%d\n%!" dir port;
+  Cohttp_eio.Server.run
+    ~on_error:(fun exn -> eprintf "Server error: %s\n%!" (Exn.to_string exn))
+    socket
+    server
+;;
+
+(** Collect mtime map for all files under [dir], recursively. *)
+let rec scan_mtimes (dir : string) : (string * float) list =
+  match Sys_unix.ls_dir dir with
+  | entries ->
+    List.concat_map entries ~f:(fun entry ->
+      let path = Filename.concat dir entry in
+      match Sys_unix.is_directory path with
+      | `Yes -> scan_mtimes path
+      | _ ->
+        (match Core_unix.stat path with
+         | stat -> [ path, stat.st_mtime ]
+         | exception _ -> [])
+      | exception _ -> [])
+  | exception _ -> []
+;;
+
+(** Watch [vault_root] for changes and call [on_change] when detected. *)
+let watch_loop ~(env : Eio_unix.Stdenv.base) ~vault_root ~on_change =
+  let prev = ref (scan_mtimes vault_root) in
+  while true do
+    Eio.Time.sleep (Eio.Stdenv.clock env) 1.0;
+    let curr = scan_mtimes vault_root in
+    if
+      not
+        (List.equal
+           (fun (p1, t1) (p2, t2) -> String.equal p1 p2 && Float.equal t1 t2)
+           curr
+           !prev)
+    then (
+      prev := curr;
+      printf "\nChange detected, re-rendering...\n%!";
+      on_change ();
+      printf "Done.\n%!")
+  done
+;;
+
 let vault_cmd : Command.t =
   Command.basic
     ~summary:"Render all markdown files in a vault to HTML"
@@ -87,6 +226,15 @@ let vault_cmd : Command.t =
          "--pipeline"
          (optional string)
          ~doc:"NAME Pipeline profile (default, basic, none). Default: default"
+     and (serve : bool) =
+       flag "--serve" no_arg ~doc:"Serve the rendered output on a local HTTP port"
+     and (watch : bool) =
+       flag "--watch" no_arg ~doc:"Watch for changes and re-render automatically"
+     and (port : int) =
+       flag
+         "--port"
+         (optional_with_default 8080 int)
+         ~doc:"PORT Port for serve mode (default: 8080)"
      in
      fun () ->
        (* ::: config-resolving *)
@@ -126,39 +274,28 @@ let vault_cmd : Command.t =
            let curr_dir = Sys_unix.getcwd () in
            curr_dir ^ "/_site"
        in
-       (* Load cache and pass it to the pipeline builder *)
-       let cache = Cache.load_cache ~dir:output_dir in
-       let pipeline : Pipeline.t = pipeline_of_profile ~cache config.pipeline_profile in
-       let results =
-         render_vault ~pipeline ~theme ~backend_blocks:true ~safe:false vault_root
+       let render () =
+         do_render
+           ~verbose
+           ~pipeline:config.pipeline_profile
+           ~theme
+           ~vault_root
+           ~output_dir
        in
-       Cache.save_cache cache ~dir:output_dir;
-       List.iteri results ~f:(fun i (out_rel, html) ->
-         let out_path = Filename.concat output_dir out_rel in
-         let out_dir = Filename.dirname out_path in
-         Core_unix.mkdir_p out_dir;
-         Out_channel.write_all out_path ~data:html;
-         if verbose
-         then printf "  %s\n" out_rel
-         else (
-           let print_char c = Out_channel.output_char Out_channel.stdout c in
-           if i mod 60 = 0 && i > 0 then print_char '\n';
-           print_char '.';
-           Out_channel.flush Out_channel.stdout));
-       (* Copy non-markdown assets (images, etc.) to the output directory *)
-       let all_entries = Vault.list_entries vault_root in
-       let is_asset (p : string) : bool =
-         (not (String.is_suffix p ~suffix:".md")) && not (String.is_suffix p ~suffix:"/")
-       in
-       List.iter all_entries ~f:(fun rel_path ->
-         if is_asset rel_path
-         then (
-           let src = Filename.concat vault_root rel_path in
-           let dst = Filename.concat output_dir rel_path in
-           let dst_dir = Filename.dirname dst in
-           Core_unix.mkdir_p dst_dir;
-           let content = In_channel.read_all src in
-           Out_channel.write_all dst ~data:content)))
+       (* Initial render *)
+       render ();
+       (* Serve and/or watch *)
+       match serve, watch with
+       | false, false -> ()
+       | true, false -> Eio_main.run @@ fun env -> serve_static ~env ~port ~dir:output_dir
+       | false, true ->
+         Eio_main.run @@ fun env -> watch_loop ~env ~vault_root ~on_change:render
+       | true, true ->
+         Eio_main.run
+         @@ fun env ->
+         Eio.Fiber.both
+           (fun () -> serve_static ~env ~port ~dir:output_dir)
+           (fun () -> watch_loop ~env ~vault_root ~on_change:render))
 ;;
 
 let () =
