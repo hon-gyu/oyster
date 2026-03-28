@@ -1,0 +1,7 @@
+(executable
+ (name md_to_mld)
+ (libraries shexp.process core))
+
+(executable
+ (name note_toc)
+ (libraries shexp.process core))
