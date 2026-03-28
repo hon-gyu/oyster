@@ -1,3 +1,17 @@
+(** Development server for the [vault] subcommand.
+
+    Provides two capabilities that can be used independently or together:
+
+    - {b Serve}: a static HTTP file server (backed by [cohttp-eio]) that
+      serves rendered output from a directory on a local port.
+    - {b Watch}: a polling-based file watcher that monitors a vault directory
+      for mtime changes and invokes a callback when any file is added, removed,
+      or modified.
+
+    When both are combined the server and the watcher run as concurrent Eio
+    fibers, so the rendered site is always available while re-renders happen in
+    the background. *)
+
 open Core
 
 (** Content-type lookup for static file serving. *)
