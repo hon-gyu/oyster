@@ -1,3 +1,30 @@
+# 
+```
+- foo:
+
+bar
+```
+bar will not be child of foo. foo will have no child because the next element is empty
+
+
+#
+```
+- foo:
+```
+bar
+```
+
+the codeblock that contains bar will be a child of foo
+
+expected: this will generate different tree hierarhcy as ordinary commonmark
+
+
+# Goal: An OLOG can be extracted from a list
+
+How to declare path equilvalence?
+
+---
+
 ```mli
 (* Disallow single-line nesting*)
 module type Struct1 : sig
