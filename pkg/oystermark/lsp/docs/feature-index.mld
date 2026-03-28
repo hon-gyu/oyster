@@ -1,0 +1,5 @@
+{ul
+  {- all docs with prefix "feature-" is considered an active feature.}
+  {- an active feature should be tested against its spec. }
+  {- deprecated or superseded features are named differently}
+}
