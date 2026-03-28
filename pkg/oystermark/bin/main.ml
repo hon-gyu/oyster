@@ -63,6 +63,42 @@ let pipeline_of_profile ~(cache : Cache.cache) (p : Config.pipeline_profile) : P
   | None_profile -> Pipeline.id
 ;;
 
+(** Render vault and write output files + copy assets. Returns unit. *)
+let do_render ~verbose ~pipeline ~theme ~vault_root ~output_dir =
+  let cache = Cache.load_cache ~dir:output_dir in
+  let pipeline : Pipeline.t = pipeline_of_profile ~cache pipeline in
+  let results =
+    render_vault ~pipeline ~theme ~backend_blocks:true ~safe:false vault_root
+  in
+  Cache.save_cache cache ~dir:output_dir;
+  List.iteri results ~f:(fun i (out_rel, html) ->
+    let out_path = Filename.concat output_dir out_rel in
+    let out_dir = Filename.dirname out_path in
+    Core_unix.mkdir_p out_dir;
+    Out_channel.write_all out_path ~data:html;
+    if verbose
+    then printf "  %s\n" out_rel
+    else (
+      let print_char c = Out_channel.output_char Out_channel.stdout c in
+      if i mod 60 = 0 && i > 0 then print_char '\n';
+      print_char '.';
+      Out_channel.flush Out_channel.stdout));
+  (* Copy non-markdown assets (images, etc.) to the output directory *)
+  let all_entries = Vault.list_entries vault_root in
+  let is_asset (p : string) : bool =
+    (not (String.is_suffix p ~suffix:".md")) && not (String.is_suffix p ~suffix:"/")
+  in
+  List.iter all_entries ~f:(fun rel_path ->
+    if is_asset rel_path
+    then (
+      let src = Filename.concat vault_root rel_path in
+      let dst = Filename.concat output_dir rel_path in
+      let dst_dir = Filename.dirname dst in
+      Core_unix.mkdir_p dst_dir;
+      let content = In_channel.read_all src in
+      Out_channel.write_all dst ~data:content))
+;;
+
 let vault_cmd : Command.t =
   Command.basic
     ~summary:"Render all markdown files in a vault to HTML"
@@ -87,6 +123,15 @@ let vault_cmd : Command.t =
          "--pipeline"
          (optional string)
          ~doc:"NAME Pipeline profile (default, basic, none). Default: default"
+     and (serve : bool) =
+       flag "--serve" no_arg ~doc:"Serve the rendered output on a local HTTP port"
+     and (watch : bool) =
+       flag "--watch" no_arg ~doc:"Watch for changes and re-render automatically"
+     and (port : int) =
+       flag
+         "--port"
+         (optional_with_default 8080 int)
+         ~doc:"PORT Port for serve mode (default: 8080)"
      in
      fun () ->
        (* ::: config-resolving *)
@@ -126,39 +171,30 @@ let vault_cmd : Command.t =
            let curr_dir = Sys_unix.getcwd () in
            curr_dir ^ "/_site"
        in
-       (* Load cache and pass it to the pipeline builder *)
-       let cache = Cache.load_cache ~dir:output_dir in
-       let pipeline : Pipeline.t = pipeline_of_profile ~cache config.pipeline_profile in
-       let results =
-         render_vault ~pipeline ~theme ~backend_blocks:true ~safe:false vault_root
+       let render () =
+         do_render
+           ~verbose
+           ~pipeline:config.pipeline_profile
+           ~theme
+           ~vault_root
+           ~output_dir
        in
-       Cache.save_cache cache ~dir:output_dir;
-       List.iteri results ~f:(fun i (out_rel, html) ->
-         let out_path = Filename.concat output_dir out_rel in
-         let out_dir = Filename.dirname out_path in
-         Core_unix.mkdir_p out_dir;
-         Out_channel.write_all out_path ~data:html;
-         if verbose
-         then printf "  %s\n" out_rel
-         else (
-           let print_char c = Out_channel.output_char Out_channel.stdout c in
-           if i mod 60 = 0 && i > 0 then print_char '\n';
-           print_char '.';
-           Out_channel.flush Out_channel.stdout));
-       (* Copy non-markdown assets (images, etc.) to the output directory *)
-       let all_entries = Vault.list_entries vault_root in
-       let is_asset (p : string) : bool =
-         (not (String.is_suffix p ~suffix:".md")) && not (String.is_suffix p ~suffix:"/")
-       in
-       List.iter all_entries ~f:(fun rel_path ->
-         if is_asset rel_path
-         then (
-           let src = Filename.concat vault_root rel_path in
-           let dst = Filename.concat output_dir rel_path in
-           let dst_dir = Filename.dirname dst in
-           Core_unix.mkdir_p dst_dir;
-           let content = In_channel.read_all src in
-           Out_channel.write_all dst ~data:content)))
+       (* Initial render *)
+       render ();
+       (* Serve and/or watch *)
+       match serve, watch with
+       | false, false -> ()
+       | true, false ->
+         Eio_main.run @@ fun env -> Dev_server.serve ~env ~port ~dir:output_dir
+       | false, true ->
+         Eio_main.run
+         @@ fun env -> Dev_server.watch ~env ~watch_dir:vault_root ~on_change:render
+       | true, true ->
+         Eio_main.run
+         @@ fun env ->
+         Eio.Fiber.both
+           (fun () -> Dev_server.serve ~env ~port ~dir:output_dir)
+           (fun () -> Dev_server.watch ~env ~watch_dir:vault_root ~on_change:render))
 ;;
 
 let () =
