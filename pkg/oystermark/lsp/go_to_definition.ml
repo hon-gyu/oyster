@@ -6,7 +6,7 @@ open Core
 
 (** {1 Link detection}
 
-    See {!page-"feature-go-to-definition"} §{e Link detection}. *)
+    See {!page-"feature-go-to-definition".link_detection}. *)
 
 (** A link found in the AST together with its byte range.
     [first_byte] and [last_byte] are 0-based absolute byte positions. *)
@@ -78,7 +78,7 @@ let find_link_ref_at_offset (links : located_link list) (offset : int)
 
 (** {1 Heading / block-ID line lookup}
 
-    See {!page-"feature-go-to-definition"} §{e Resolution}. *)
+    See {!page-"feature-go-to-definition".resolution}. *)
 
 (** Find the 0-based line number of a heading with the given [slug] in [doc].
     Returns 0 if not found or if text locations are unavailable.
@@ -146,7 +146,7 @@ let find_block_id_line_in_doc (doc : Cmarkit.Doc.t) (block_id : string) : int =
 
 (** {1 End-to-end}
 
-    See {!page-"feature-go-to-definition"} §{e Resolution}. *)
+    See {!page-"feature-go-to-definition".resolution}. *)
 
 (** The result of a go-to-definition request: a relative path and a 0-based
     line number.  [None] means the link was unresolved or no link was found. *)

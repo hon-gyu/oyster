@@ -7,7 +7,7 @@ Jump from a link to its definition target within an Oystermark vault.
 A cursor position (0-based line and character) in a markdown file that
 belongs to a vault with a built index.
 
-{1 Link detection}
+{1:link_detection Link detection}
 
 The cursor must fall within the byte range of a recognized link form:
 
@@ -21,7 +21,7 @@ The cursor must fall within the byte range of a recognized link form:
 External URLs ([https://...], [http://...]) are {e not} recognized as
 navigable links and produce no result.
 
-{1 Resolution}
+{1:resolution Resolution}
 
 Once a link is detected, it is resolved against the vault index via
 {!Oystermark.Vault.Resolve.resolve}.  The resolution cases and their
@@ -58,7 +58,7 @@ node's [Cmarkit.Textloc] metadata.
 If the target heading or block ID is not found in the target file, or the
 target file cannot be read, the result falls back to line 0.
 
-{1 Edge cases}
+{1:edge_cases Edge cases}
 
 {ul
   {- {b Cursor outside any link}: no result.}

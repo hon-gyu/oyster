@@ -8,7 +8,7 @@ open Core
 (** Convert a 0-based (line, character) position to a byte offset in [content].
     [character] is treated as a byte offset within the line (correct for ASCII).
 
-    See {!page-"feature-go-to-definition"} §{e Edge cases} for clamping
+    See {!page-"feature-go-to-definition".edge_cases} for clamping
     behaviour. *)
 let byte_offset_of_position (content : string) ~(line : int) ~(character : int) : int =
   Trace_core.with_span ~__FILE__ ~__LINE__ "byte_offset_of_position"
