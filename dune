@@ -8,4 +8,4 @@
    (progn
     (cat CLAUDE.md.template)
     (echo "\n")
-    (cat pkg/oystermark/doc/index.mld)))))
+    (cat pkg/oystermark/docs/index.mld)))))
