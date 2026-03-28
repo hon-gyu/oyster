@@ -3,6 +3,7 @@
 open Core
 module Block_id = Block_id
 module Callout = Callout
+module Div = Div
 module Frontmatter = Frontmatter
 module Heading_slug = Heading_slug
 module Wikilink = Wikilink
@@ -84,8 +85,10 @@ let of_string ?(strict = false) ?(layout = false) ?(locs = false) (s : string)
   =
   let open Cmarkit in
   let yaml_opt, body = Frontmatter.of_string s in
+  let body = Div.ensure_fence_isolation body in
   let cmarkit_doc = Doc.of_string ~strict ~layout ~locs body in
   let body_doc = Mapper.map_doc (make_mapper ()) cmarkit_doc in
+  let body_doc = Div.rewrite_doc body_doc in
   match yaml_opt, Doc.block body_doc with
   | None, _ -> body_doc
   | Some yaml, Block.Blocks (blocks, meta) ->
@@ -106,6 +109,17 @@ let commonmark_of_doc (doc : Cmarkit.Doc.t) : string =
     let block (c : Cmarkit_renderer.context) = function
       | Frontmatter.Frontmatter y ->
         Cmarkit_renderer.Context.string c (Frontmatter.to_commonmark y);
+        true
+      | Div.Ext_div (div, body) ->
+        let fence = String.make div.colons ':' in
+        let class_suffix =
+          match div.class_name with
+          | Some cls -> " " ^ cls
+          | None -> ""
+        in
+        Cmarkit_renderer.Context.string c (fence ^ class_suffix ^ "\n");
+        Cmarkit_renderer.Context.block c body;
+        Cmarkit_renderer.Context.string c (fence ^ "\n");
         true
       | _ -> false
     in
@@ -224,6 +238,8 @@ and sexp_of_block (b : Cmarkit.Block.t) : Sexp.t =
   | Block.Link_reference_definition _ -> Sexp.Atom "Link_reference_definition"
   | Block.Thematic_break (_, meta) -> with_meta meta (Sexp.Atom "Thematic_break")
   | Frontmatter.Frontmatter _ -> Sexp.Atom "Frontmatter"
+  | Div.Ext_div (div, body) ->
+    Sexp.List [ Atom "Div"; Div.sexp_of_t div; sexp_of_block body ]
   | _ -> Sexp.Atom "<unknown-block>"
 ;;
 
@@ -425,6 +441,200 @@ Some text ^exists
     item
     ^inneritem
     |}]
+    ;;
+  end)
+;;
+
+(* Tests for module Div *)
+let%test_module "Div" =
+  (module struct
+    let parse = For_test.parse
+
+    let%expect_test "basic div with class" =
+      print_endline
+        (parse
+           {|::: warning
+Here is a paragraph.
+
+And here is another.
+:::|});
+      [%expect
+        {|
+        (Blocks
+          (Div ((class_name (warning)) (colons 3))
+            (Blocks Blank_line (Paragraph (Text "Here is a paragraph.")) Blank_line
+              (Paragraph (Text "And here is another.")) Blank_line))
+          Blank_line)
+        |}]
+    ;;
+
+    let%expect_test "div without class" =
+      print_endline
+        (parse
+           {|:::
+content
+:::|});
+      [%expect
+        {|
+        (Blocks
+          (Div ((class_name ()) (colons 3))
+            (Blocks Blank_line (Paragraph (Text content)) Blank_line))
+          Blank_line)
+        |}]
+    ;;
+
+    let%expect_test "nested divs with longer fences" =
+      print_endline
+        (parse
+           {|:::: outer
+::: inner
+content
+:::
+::::|});
+      [%expect
+        {|
+        (Blocks
+          (Div ((class_name (outer)) (colons 4))
+            (Blocks Blank_line
+              (Div ((class_name (inner)) (colons 3))
+                (Blocks Blank_line (Paragraph (Text content)) Blank_line))
+              Blank_line))
+          Blank_line)
+        |}]
+    ;;
+
+    let%expect_test "nested divs same length" =
+      print_endline
+        (parse
+           {|::: outer
+::: inner
+content
+:::
+:::|});
+      [%expect
+        {|
+        (Blocks
+          (Div ((class_name (outer)) (colons 3))
+            (Blocks Blank_line
+              (Div ((class_name (inner)) (colons 3))
+                (Blocks Blank_line (Paragraph (Text content)) Blank_line))
+              Blank_line))
+          Blank_line)
+        |}]
+    ;;
+
+    let%expect_test "unclosed div (EOF closes)" =
+      print_endline
+        (parse
+           {|::: warning
+unclosed content|});
+      [%expect
+        {|
+        (Blocks
+          (Div ((class_name (warning)) (colons 3))
+            (Blocks Blank_line (Paragraph (Text "unclosed content")))))
+        |}]
+    ;;
+
+    let%expect_test "unbalanced: extra closing fence" =
+      print_endline
+        (parse
+           {|::: warning
+content
+:::
+:::|});
+      [%expect
+        {|
+        (Blocks
+          (Div ((class_name (warning)) (colons 3))
+            (Blocks Blank_line (Paragraph (Text content)) Blank_line))
+          Blank_line (Div ((class_name ()) (colons 3)) Blank_line))
+        |}]
+    ;;
+
+    let%expect_test "ill-formed: less than 3 colons" =
+      print_endline (parse {|:: not-a-div
+content
+::|});
+      [%expect
+        {|
+        (Paragraph
+          (Inlines (Text ":: not-a-div") (Break soft) (Text content) (Break soft)
+            (Text ::)))
+        |}]
+    ;;
+
+    let%expect_test "ill-formed: extra words after class" =
+      print_endline (parse {|::: warning extra
+content
+:::|});
+      [%expect
+        {|
+        (Blocks
+          (Paragraph
+            (Inlines (Text "::: warning extra") (Break soft) (Text content)))
+          Blank_line (Div ((class_name ()) (colons 3)) Blank_line))
+        |}]
+    ;;
+
+    let%expect_test "div does not interfere with code blocks" =
+      print_endline
+        (parse
+           {|```
+::: not-a-div
+```|});
+      [%expect {| (Code_block no-info "::: not-a-div") |}]
+    ;;
+
+    let%expect_test "div does not interfere with blockquotes" =
+      print_endline
+        (parse
+           {|> a blockquote
+
+::: warning
+content
+:::|});
+      [%expect
+        {|
+        (Blocks (Block_quote (Paragraph (Text "a blockquote"))) Blank_line
+          (Div ((class_name (warning)) (colons 3))
+            (Blocks Blank_line (Paragraph (Text content)) Blank_line))
+          Blank_line)
+        |}]
+    ;;
+
+    let%expect_test "div does not interfere with headings" =
+      print_endline
+        (parse
+           {|# heading
+
+::: warning
+content
+:::|});
+      [%expect
+        {|
+        (Blocks ((Heading 1 (Text heading)) (meta (heading-slug heading))) Blank_line
+          (Div ((class_name (warning)) (colons 3))
+            (Blocks Blank_line (Paragraph (Text content)) Blank_line))
+          Blank_line)
+        |}]
+    ;;
+
+    let%expect_test "closing fence must be at least as long" =
+      print_endline
+        (parse
+           {|:::: warning
+content
+:::
+::::|});
+      [%expect
+        {|
+        (Blocks
+          (Div ((class_name (warning)) (colons 4))
+            (Blocks Blank_line (Paragraph (Text content)) Blank_line
+              (Div ((class_name ()) (colons 3)) Blank_line)))
+          Blank_line)
+        |}]
     ;;
   end)
 ;;
