@@ -1,6 +1,6 @@
 {0 oystermark-lsp}
 
-{b This is a living document}
+{b the grounding design doc of lsp}
 
 An LSP server for Oystermark vaults, built on [linol-eio].
 
