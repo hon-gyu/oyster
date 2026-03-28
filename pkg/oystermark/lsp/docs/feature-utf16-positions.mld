@@ -1,0 +1,89 @@
+{0 UTF-16 position encoding}
+
+Handle non-ASCII text correctly by converting between UTF-16 offsets
+(LSP wire format) and byte offsets (internal representation).
+
+{1 Background}
+
+The LSP specification defines [Position.character] as a UTF-16 code-unit
+offset within the line.  The current implementation treats [character] as
+a byte offset, which is correct only for ASCII content.  Any document
+containing multi-byte UTF-8 characters (e.g. CJK, emoji, accented
+letters) will produce incorrect cursor positions.
+
+{1 Scope}
+
+This is a cross-cutting concern that affects every feature that converts
+an LSP position to an internal byte offset or vice versa:
+
+{ul
+  {- {!page-"feature-go-to-definition"}: cursor-to-link matching}
+  {- {!page-"feature-hover"}: cursor-to-link matching}
+  {- {!page-"feature-find-references"}: result ranges}
+  {- {!page-"feature-diagnostics"}: diagnostic ranges}
+}
+
+{1 Conversion}
+
+{2 LSP position → byte offset}
+
+Given a 0-based [(line, character)] pair where [character] is a UTF-16
+code-unit count:
+
+{ol
+  {- Locate the start of the target [line] in the UTF-8 content (byte
+     scan for the [line]-th newline, as today).}
+  {- Walk the line byte-by-byte, decoding UTF-8 sequences.  For each
+     code point, add its UTF-16 length (1 unit for BMP, 2 units for
+     supplementary) to a running UTF-16 counter.  Stop when the
+     counter reaches [character].}
+  {- The current byte position is the result.}
+}
+
+{2 Byte offset → LSP position}
+
+The inverse: given a byte offset, compute the 0-based line and UTF-16
+character offset.
+
+{ol
+  {- Count newlines before the offset to determine [line].}
+  {- From the start of that line to the offset, decode UTF-8 sequences
+     and sum their UTF-16 lengths to determine [character].}
+}
+
+{1 Negotiation}
+
+LSP 3.17 introduced [positionEncoding] capability negotiation.  The
+server should advertise support for [utf-16] (mandatory baseline) and
+optionally [utf-32] or [utf-8].  If the client requests [utf-8], the
+conversion simplifies to a byte count (current behavior).
+
+{t
+  | Client encoding | character semantics | Conversion cost |
+  |-----------------|---------------------|-----------------|
+  | [utf-16]        | UTF-16 code units   | UTF-8 decode    |
+  | [utf-32]        | Unicode code points | UTF-8 decode    |
+  | [utf-8]         | bytes               | none (identity) |
+}
+
+{1 Implementation site}
+
+All conversion logic lives in [lsp_util.ml]:
+
+{ul
+  {- [byte_offset_of_position] gains a [~encoding] parameter
+     (default [utf-16]).}
+  {- A new [position_of_byte_offset] function is added for the
+     inverse direction.}
+}
+
+{1 Edge cases}
+
+{ul
+  {- {b Incomplete UTF-8 sequence at end of line}: clamp to end of
+     line (same as current clamping behavior).}
+  {- {b Surrogate pairs} (code points above U+FFFF): one code point
+     consumes 2 UTF-16 units and 4 UTF-8 bytes.}
+  {- {b ASCII-only content}: UTF-16 offsets coincide with byte
+     offsets; no behavioral change.}
+}

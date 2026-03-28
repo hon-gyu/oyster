@@ -1,0 +1,87 @@
+{0 Completion (wikilink suggestions)}
+
+Suggest note names, headings, and block IDs as the user types inside
+wikilink brackets.
+
+{1 Activation}
+
+The server advertises [completionProvider] with trigger characters
+[[\[] ].  Completion is requested via [textDocument/completion].
+
+{1 Trigger context}
+
+Completion activates when the cursor is inside an incomplete wikilink:
+
+{ul
+  {- [[\[<cursor>]]] — typing the note name}
+  {- [[\[note#<cursor>]]] — typing a heading or block-ID fragment}
+  {- [![\[<cursor>]]] — embed link, same behavior}
+}
+
+Detection: scan backwards from the cursor for an unmatched [[\[] ] (or
+[![\[] ]) on the same line.  If found, the text between [[\[] ] and the
+cursor is the {e prefix}.
+
+{1 Completion modes}
+
+{2 Note name completion}
+
+When the prefix contains no [#], suggest note names from the vault
+index.
+
+{ul
+  {- Each indexed file yields one completion item.}
+  {- [label]: the note's shortest unambiguous name (the same name the
+     vault resolver would accept).}
+  {- [detail]: the full relative path, e.g. ["folder/note.md"].}
+  {- [filterText]: the note name, so the client can narrow as the
+     user types.}
+  {- [kind]: [CompletionItemKind.File].}
+}
+
+Items are sorted alphabetically by label.
+
+{2 Fragment completion}
+
+When the prefix contains [#], the text before [#] identifies the target
+note (or the current file if empty, as in [[\[#<cursor>]]]).  The text
+after [#] is the fragment prefix.
+
+Suggestions come from the target file's AST:
+
+{ul
+  {- {b Headings}: one item per heading.
+     [label] is the heading text, [filterText] is the slug,
+     [kind] is [CompletionItemKind.Reference].
+     [insertText] is the slug (e.g. [section-one]).}
+  {- {b Block IDs}: one item per block ID.
+     [label] is [^blockid],
+     [kind] is [CompletionItemKind.Reference].}
+}
+
+If the target note cannot be resolved, no fragment suggestions are
+returned.
+
+{1 Completion item shape}
+
+{t
+  | Field      | Note name mode           | Fragment mode            |
+  |------------|--------------------------|--------------------------|
+  | label      | shortest unambiguous name | heading text or [^id]    |
+  | detail     | full relative path       | —                        |
+  | filterText | note name                | slug or block ID         |
+  | insertText | note name                | slug or [^blockid]       |
+  | kind       | File                     | Reference                |
+}
+
+{1 Edge cases}
+
+{ul
+  {- {b Cursor not inside [[\[...]]]}: no completions.}
+  {- {b Empty vault}: empty completion list.}
+  {- {b Ambiguous note name in fragment mode}: resolve using vault
+     resolution rules (same as go-to-definition); suggest fragments
+     from the first candidate.}
+  {- {b Markdown links}: completion inside [()] is not provided (wikilink
+     brackets only).}
+}

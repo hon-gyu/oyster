@@ -1,0 +1,62 @@
+{0 Inlay hints (reference counts)}
+
+Show the number of inbound references (backlinks) next to headings and
+link targets as inlay hints, giving the user an at-a-glance sense of
+how connected a section is.
+
+{1 Activation}
+
+The server advertises [inlayHintProvider] in its capabilities.  The
+client requests hints via [textDocument/inlayHint] for a visible range.
+
+{1 Hint placement}
+
+{2 Headings}
+
+For each heading in the requested range, emit an inlay hint {e after}
+the heading text showing the count of links across the vault that target
+this heading (path + fragment match).
+
+Example rendering: [{v # Introduction  3 refs v}]
+
+{2 Top of file}
+
+A single inlay hint at line 0, character 0 shows the total number of
+links that target the file (path-only match, ignoring fragment).
+
+Example rendering: [{v 12 refs v}]
+
+{1 Count computation}
+
+Counts are derived from the vault index — the same resolution used by
+{!page-"feature-find-references"}.
+
+{ul
+  {- {b File-level count}: number of links across all indexed documents
+     that resolve to this file (with or without fragment).}
+  {- {b Heading-level count}: number of links whose resolved path
+     matches this file {e and} whose fragment matches this heading
+     slug.}
+}
+
+A count of 0 produces no hint (avoid visual noise).
+
+{1 Hint shape}
+
+{t
+  | Field      | Value                                      |
+  |------------|--------------------------------------------|
+  | position   | end of heading text / start of file        |
+  | label      | ["{n} refs"] or ["{n} ref"] when n = 1     |
+  | kind       | [InlayHintKind.Parameter]                  |
+  | paddingLeft | [true]                                    |
+}
+
+{1 Edge cases}
+
+{ul
+  {- {b No references}: no hint emitted.}
+  {- {b Self-references}: a document linking to its own heading
+     counts toward that heading's total.}
+  {- {b Embed links} ([![[note]]]): counted as references.}
+}

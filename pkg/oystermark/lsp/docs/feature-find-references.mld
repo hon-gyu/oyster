@@ -1,0 +1,88 @@
+{0 Find references (backlinks)}
+
+Find all locations in the vault that link {e to} a given file or
+heading — the inverse of go-to-definition.
+
+{1 Input}
+
+A cursor position (0-based line and character) in a markdown file that
+belongs to a vault with a built index.
+
+{1 Activation}
+
+The request is [textDocument/references].  The server advertises
+[referencesProvider] in its capabilities.
+
+Two activation modes:
+
+{ol
+  {- {b Cursor on a link}: find all other references to the same
+     resolved target.}
+  {- {b Cursor on a heading or block ID}: find all links that target
+     this specific heading/block in this file.}
+}
+
+If the cursor is not on a link, heading, or block ID, no results are
+returned.
+
+{1 Collection}
+
+{2 Step 1 — Determine the reference target}
+
+{ul
+  {- If the cursor is on a link, resolve it via
+     {!Oystermark.Vault.Resolve.resolve} to obtain the target path
+     (and optional fragment).}
+  {- If the cursor is on a heading, the target is (current file,
+     heading slug).}
+  {- If the cursor is on a block ID, the target is (current file,
+     block ID).}
+}
+
+{2 Step 2 — Scan the vault}
+
+Walk every indexed document and collect links whose resolution matches
+the reference target:
+
+{ul
+  {- {b Path-only target}: collect links that resolve to the same
+     file, regardless of fragment.}
+  {- {b Path + fragment target}: collect links that resolve to the
+     same file {e and} whose fragment matches.}
+}
+
+{1 Result}
+
+A list of LSP [Location] objects, one per referring link.  Each
+location covers the full byte range of the link syntax (brackets
+included).
+
+{t
+  | Field | Value                              |
+  |-------|------------------------------------|
+  | uri   | file URI of the referring document |
+  | range | byte range of the link             |
+}
+
+Results are sorted by (uri, range.start) for determinism.
+
+{1 Edge cases}
+
+{ul
+  {- {b Unresolved link under cursor}: no results (cannot determine
+     target).}
+  {- {b No references found}: empty list.}
+  {- {b Self-references}: a document linking to itself is included
+     in results.}
+  {- {b Embed links} ([![[note]]]): included as references, same as
+     regular wikilinks.}
+}
+
+{1 Assumptions and limitations}
+
+{ul
+  {- Scanning all indexed documents on every request.  For large
+     vaults, a pre-built reverse index may be needed.}
+  {- Only links in the vault index are considered; files outside the
+     vault root are not scanned.}
+}

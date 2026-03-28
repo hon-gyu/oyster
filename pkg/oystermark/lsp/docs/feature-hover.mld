@@ -1,0 +1,46 @@
+{0 Hover}
+
+Show the link target on hover so the user can preview where a link
+points without navigating.
+
+{1 Input}
+
+A cursor position (0-based line and character) in a markdown file that
+belongs to a vault with a built index.
+
+{1 Link detection}
+
+Same link forms as {!page-"feature-go-to-definition"}: wikilinks,
+markdown links, markdown images.  External URLs are excluded.
+
+{1 Response}
+
+If the cursor falls on a recognized, resolved link, return a
+[textDocument/hover] response:
+
+{t
+  | Field          | Value                                            |
+  |----------------|--------------------------------------------------|
+  | contents       | Markdown string (see below)                      |
+  | range          | byte range of the link                           |
+}
+
+{2 Contents format}
+
+{ul
+  {- {b Resolved note link}: the resolved relative path, e.g.
+     [folder/note.md].  If a heading or block-ID fragment is present,
+     append it: [folder/note.md#section-one].}
+  {- {b Resolved embed link}: same as note link, prefixed with
+     ["Embed: "].}
+  {- {b Unresolved link}: ["Unresolved: target"].}
+}
+
+{1 Edge cases}
+
+{ul
+  {- {b Cursor outside any link}: no hover result.}
+  {- {b Multi-target ambiguity}: show the first candidate path and
+     note the number of candidates, e.g.
+     ["folder/note.md (1 of 2 matches)"].}
+}

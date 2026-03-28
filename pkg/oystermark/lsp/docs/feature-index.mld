@@ -3,3 +3,15 @@
   {- an active feature should be tested against its spec. }
   {- deprecated or superseded features are named differently}
 }
+
+{1 Active features}
+
+{ul
+  {- {!page-"feature-go-to-definition"}}
+  {- {!page-"feature-diagnostics"}}
+  {- {!page-"feature-hover"}}
+  {- {!page-"feature-find-references"}}
+  {- {!page-"feature-inlay-hints"}}
+  {- {!page-"feature-completion"}}
+  {- {!page-"feature-utf16-positions"}}
+}

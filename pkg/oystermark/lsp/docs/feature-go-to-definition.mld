@@ -66,11 +66,20 @@ target file cannot be read, the result falls back to line 0.
   {- {b Line past end of content}: clamped to end of content.}
 }
 
+{1 Multi-target ambiguity}
+
+When {!Oystermark.Vault.Resolve.resolve} returns multiple candidates,
+go-to-definition picks the first candidate (per vault resolution order).
+
+{1 Embed links}
+
+Embed links ([![[note]]]) are treated identically to regular wikilinks
+for navigation: the target is the embedded file at line 0.  No distinct
+behavior (e.g. inline preview) is provided by this feature.
+
 {1 Assumptions and limitations}
 
 {ul
-  {- Position-to-offset conversion treats [character] as a {e byte} offset
-     within the line.  This is correct for ASCII but does not handle
-     UTF-16 surrogate pairs as specified by the LSP protocol.}
+  {- Position encoding: see {!page-"feature-utf16-positions"}.}
   {- The document is re-parsed on every request (no caching).}
 }
