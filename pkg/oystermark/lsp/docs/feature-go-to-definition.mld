@@ -1,0 +1,76 @@
+{0 Go to definition}
+
+Jump from a link to its definition target within an Oystermark vault.
+
+{1 Input}
+
+A cursor position (0-based line and character) in a markdown file that
+belongs to a vault with a built index.
+
+{1 Link detection}
+
+The cursor must fall within the byte range of a recognized link form:
+
+{ul
+  {- {b Wikilinks}: [[[target]]], [[[target#heading]]],
+     [[[target#^blockid]]], [![[embed]]]}
+  {- {b Markdown links}: [[text](target)]}
+  {- {b Markdown images}: [![alt](img.png)]}
+}
+
+External URLs ([https://...], [http://...]) are {e not} recognized as
+navigable links and produce no result.
+
+{1 Resolution}
+
+Once a link is detected, it is resolved against the vault index via
+{!Oystermark.Vault.Resolve.resolve}.  The resolution cases and their
+results are:
+
+{t
+  | Link form                 | Target path       | Target line              |
+  |---------------------------|-------------------|--------------------------|
+  | [[[note]]]                | resolved file     | 0 (top of file)          |
+  | [[text](note)]            | resolved file     | 0                        |
+  | [![[file.png]]]           | resolved file     | 0                        |
+  | [[[note#Heading]]]        | resolved file     | line of matching heading |
+  | [[[note#^blockid]]]       | resolved file     | line of matching block   |
+  | [[[#Heading]]]            | current file      | line of heading          |
+  | [[[#^blockid]]]           | current file      | line of block            |
+  | unresolved link           | {e None}          | —                        |
+}
+
+{2 Heading lookup}
+
+Headings are matched by {e slug}: the heading text is slugified (e.g.
+"Section One" becomes [section-one]) and compared against the fragment.
+The line number is read from the heading AST node's [Cmarkit.Textloc]
+metadata.
+
+{2 Block-ID lookup}
+
+Block IDs ([^id] suffix on a paragraph) are matched by exact string
+comparison on the ID.  The line number is read from the paragraph AST
+node's [Cmarkit.Textloc] metadata.
+
+{2 Fallback}
+
+If the target heading or block ID is not found in the target file, or the
+target file cannot be read, the result falls back to line 0.
+
+{1 Edge cases}
+
+{ul
+  {- {b Cursor outside any link}: no result.}
+  {- {b Character offset past end of line}: clamped to content length.}
+  {- {b Line past end of content}: clamped to end of content.}
+}
+
+{1 Assumptions and limitations}
+
+{ul
+  {- Position-to-offset conversion treats [character] as a {e byte} offset
+     within the line.  This is correct for ASCII but does not handle
+     UTF-16 surrogate pairs as specified by the LSP protocol.}
+  {- The document is re-parsed on every request (no caching).}
+}

@@ -39,7 +39,7 @@ let%test_module "go_to_definition trace" =
       Trace_collect.with_collect t (fun () ->
         let content = List.Assoc.find_exn files ~equal:String.equal "note-c.md" in
         let _result =
-          Lsp_lib.go_to_definition
+          Lsp_lib.Go_to_definition.go_to_definition
             ~index
             ~rel_path:"note-c.md"
             ~content
@@ -52,7 +52,7 @@ let%test_module "go_to_definition trace" =
       [%expect
         {|
         (byte_offset_of_position parse_doc collect_links find_link_ref_at_offset
-         parse_target_doc find_heading_line_in_doc go_to_definition)
+         parse_doc find_heading_line_in_doc go_to_definition)
         |}];
       let go_span = Trace_collect.find_span t "go_to_definition" in
       (match go_span with
@@ -65,8 +65,8 @@ let%test_module "go_to_definition trace" =
         rel_path=note-c.md
         line=2
         character=8
-        code.filepath=pkg/oystermark/lsp/lsp_lib.ml
-        code.lineno=220
+        code.filepath=pkg/oystermark/lsp/go_to_definition.ml
+        code.lineno=173
         |}]
     ;;
   end)
