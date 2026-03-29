@@ -116,6 +116,10 @@ let commonmark_of_doc (doc : Cmarkit.Doc.t) : string =
           | Some cls -> " " ^ cls
           | None -> ""
         in
+        let buf = Cmarkit_renderer.Context.buffer c in
+        let len = Buffer.length buf in
+        let needs_nl = len > 0 && not (Char.equal (Buffer.nth buf (len - 1)) '\n') in
+        if needs_nl then Cmarkit_renderer.Context.byte c '\n';
         Cmarkit_renderer.Context.string c (fence ^ class_suffix ^ "\n\n");
         Cmarkit_renderer.Context.block c body;
         Cmarkit_renderer.Context.string c ("\n" ^ fence ^ "\n");
@@ -590,7 +594,7 @@ let%test_module "Div" =
           (Div ((class_name (warning)) (colons 4))
             (Blocks (Paragraph (Text content))
               (Div ((class_name ()) (colons 3)) (Blocks)))))
-        |}]
+        |}];
     ;;
 
     let%test_unit "roundtrip: commonmark output is idempotent" =
