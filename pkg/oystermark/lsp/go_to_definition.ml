@@ -222,7 +222,6 @@ let go_to_definition
      | Unresolved -> None)
 ;;
 
-
 (** {1:test Test} *)
 
 let%test_module "collect_links" =
