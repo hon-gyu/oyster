@@ -279,7 +279,7 @@ let rewrite_doc (doc : Cmarkit.Doc.t) : Cmarkit.Doc.t =
 ;;
 
 module For_test = struct
-  let example_1 =
+  let example_basic =
     {|::: warning
 Here is a paragraph.
 
@@ -342,8 +342,21 @@ content
 
   let example_closing_fence_must_be_at_least_as_long =
     {|:::: warning
-  content
-  :::
-  ::::|}
+content
+:::
+::::|}
+  ;;
+
+  let all_examples =
+    [ example_basic
+    ; example_no_class
+    ; example_nested_divs
+    ; example_nested_divs_same_length
+    ; example_EOF_closes
+    ; example_extra_closing_fence
+    ; non_example_less_than_3_colons
+    ; non_example_div_does_not_interfere_with_code_blocks
+    ; example_closing_fence_must_be_at_least_as_long
+    ]
   ;;
 end
