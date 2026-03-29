@@ -277,3 +277,73 @@ let rewrite_doc (doc : Cmarkit.Doc.t) : Cmarkit.Doc.t =
   let block' = rewrite_within_block block' in
   if phys_equal block block' then doc else Cmarkit.Doc.make block'
 ;;
+
+module For_test = struct
+  let example_1 =
+    {|::: warning
+Here is a paragraph.
+
+And here is another.
+:::|}
+  ;;
+
+  let example_no_class =
+    {|:::
+content
+:::
+|}
+  ;;
+
+  let example_nested_divs =
+    {|:::: outer
+::: inner
+content
+:::
+::::
+|}
+  ;;
+
+  let example_nested_divs_same_length =
+    {|::: warning
+content
+:::
+:::|}
+  ;;
+
+  let example_EOF_closes =
+    {|::: warning
+unclosed content|}
+  ;;
+
+  let example_extra_closing_fence =
+    {|::: warning
+    content
+    :::
+    :::|}
+  ;;
+
+  let non_example_less_than_3_colons =
+    {|:: not-a-div
+content
+::|}
+  ;;
+
+  let non_example_extra_words_after_class =
+    {|::: warning extra
+content
+:::|}
+  ;;
+
+  let non_example_div_does_not_interfere_with_code_blocks =
+    {|```
+::: not-a-div
+```|}
+  ;;
+
+  let example_closing_fence_must_be_at_least_as_long =
+    {|:::: warning
+  content
+  :::
+  ::::|}
+  ;;
+end
