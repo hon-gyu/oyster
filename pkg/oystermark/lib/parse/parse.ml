@@ -342,7 +342,7 @@ let%test_module "Attribute" =
     ;;
 
     let%expect_test _ =
-      let doc = of_string example_invalid_multiple_ids in
+      let doc = of_string non_example_invalid_multiple_ids in
       [%test_result: int] (count_attr doc) ~expect:0;
       pp_doc doc;
       [%expect
@@ -354,7 +354,7 @@ let%test_module "Attribute" =
     ;;
 
     let%expect_test _ =
-      let doc = of_string example_invalid_item in
+      let doc = of_string non_example_invalid_item in
       [%test_result: int] (count_attr doc) ~expect:0;
       pp_doc doc;
       [%expect
@@ -369,6 +369,10 @@ let%test_module "Attribute" =
       [%test_result: int] (count_attr doc) ~expect:0;
       pp_doc doc;
       [%expect {| (Code_block "{#myid .class_a .class_b}" II) |}]
+    ;;
+
+    let%test_unit "roundtrip: commonmark output is idempotent" =
+      List.iter all_examples ~f:commonmark_of_doc_idempotent
     ;;
   end)
 ;;

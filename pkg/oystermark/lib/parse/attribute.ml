@@ -135,13 +135,13 @@ II
 ```|}
   ;;
 
-  let example_invalid_multiple_ids =
+  let non_example_invalid_multiple_ids =
     {|```python {#myid #myid2 .class_a .class_b key1=val1 key2="val2"}
 II
 ```|}
   ;;
 
-  let example_invalid_item =
+  let non_example_invalid_item =
     {|```python {#myid .class_a .class_b hi}
 II
 ```|}
@@ -151,6 +151,15 @@ II
     {|```{#myid .class_a .class_b}
 II
 ```|}
+  ;;
+
+  let all_examples =
+    [ example_no_attribute
+    ; example_with_attribute
+    ; non_example_invalid_multiple_ids
+    ; non_example_invalid_item
+    ; non_example_no_info_string
+    ]
   ;;
 end
 
