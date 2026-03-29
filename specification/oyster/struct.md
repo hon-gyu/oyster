@@ -8,15 +8,29 @@ bar will not be child of foo. foo will have no child because the next element is
 
 
 #
-```
+````md
 - foo:
 ```
 bar
 ```
+````
 
 the codeblock that contains bar will be a child of foo
 
 expected: this will generate different tree hierarhcy as ordinary commonmark
+
+#
+```
+foo:
+- bar
+- baz
+
+bee
+```
+
+- the list bar and baz will be the children of foo
+- bee will be not
+- A rule that "cannot contain hardbreak"?
 
 
 # Goal: An OLOG can be extracted from a list
