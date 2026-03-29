@@ -246,6 +246,8 @@ and sexp_of_block (b : Cmarkit.Block.t) : Sexp.t =
   | _ -> Sexp.Atom "<unknown-block>"
 ;;
 
+(** {1:test Test} *)
+
 module For_test = struct
   let make_block (s : string) : Cmarkit.Block.t =
     let doc = of_string s in
@@ -262,9 +264,9 @@ module For_test = struct
     let folder =
       Cmarkit.Folder.make
         ~block:(fun f acc -> function
-          | Div.Ext_div (_div, body) ->
-            Cmarkit.Folder.ret (1 + Cmarkit.Folder.fold_block f acc body)
-          | _ -> Cmarkit.Folder.default)
+           | Div.Ext_div (_div, body) ->
+             Cmarkit.Folder.ret (1 + Cmarkit.Folder.fold_block f acc body)
+           | _ -> Cmarkit.Folder.default)
         ()
     in
     Cmarkit.Folder.fold_doc folder 0 doc
@@ -272,11 +274,16 @@ module For_test = struct
 
   let pp_doc (doc : Cmarkit.Doc.t) : unit =
     let block = Cmarkit.Doc.block doc in
-    block |> sexp_of_block |> (Sexp.to_string_hum ~indent:2) |> print_endline
+    block |> sexp_of_block |> Sexp.to_string_hum ~indent:2 |> print_endline
+  ;;
 
+  let commonmark_of_doc_idempotent s =
+    let normalize s = String.rstrip s in
+    let cm1 = commonmark_of_doc (of_string s) in
+    let cm2 = commonmark_of_doc (of_string cm1) in
+    [%test_eq: string] (normalize cm1) (normalize cm2)
+  ;;
 end
-
-(** {1:test Test} *)
 
 (** {2 Attribute}
 
@@ -487,7 +494,7 @@ let%test_module "Div" =
 
     let%expect_test _ =
       let doc = of_string example_basic in
-      [%test_result: int] (count_div doc) ~expect: 1;
+      [%test_result: int] (count_div doc) ~expect:1;
       pp_doc doc;
       [%expect
         {|
@@ -589,21 +596,17 @@ let%test_module "Div" =
     let%expect_test _ =
       let doc = of_string example_closing_fence_must_be_at_least_as_long in
       pp_doc doc;
-      [%expect {|
+      [%expect
+        {|
         (Blocks
           (Div ((class_name (warning)) (colons 4))
             (Blocks (Paragraph (Text content))
               (Div ((class_name ()) (colons 3)) (Blocks)))))
-        |}];
+        |}]
     ;;
 
     let%test_unit "roundtrip: commonmark output is idempotent" =
-      let normalize s = String.rstrip s in
-      List.iter all_examples ~f:(fun input ->
-        let cm1 = commonmark_of_doc (of_string input) in
-        let cm2 = commonmark_of_doc (of_string cm1) in
-        [%test_eq : string] (normalize cm1) (normalize cm2);
-      )
+      List.iter all_examples ~f:commonmark_of_doc_idempotent
     ;;
   end)
 ;;
