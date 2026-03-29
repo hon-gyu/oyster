@@ -4,7 +4,8 @@
 
 open Core
 
-(** {1 Link detection}
+(** {1:implementation Implementation}
+    {2 Link detection}
 
     See {!page-"feature-go-to-definition".link_detection}. *)
 
@@ -76,7 +77,7 @@ let find_link_ref_at_offset (links : located_link list) (offset : int)
   result
 ;;
 
-(** {1 Heading / block-ID line lookup}
+(** {2 Heading / block-ID line lookup}
 
     See {!page-"feature-go-to-definition".resolution}. *)
 
@@ -144,7 +145,7 @@ let find_block_id_line_in_doc (doc : Cmarkit.Doc.t) (block_id : string) : int =
   result
 ;;
 
-(** {1 End-to-end}
+(** {2 End-to-end}
 
     See {!page-"feature-go-to-definition".resolution}. *)
 
@@ -221,8 +222,8 @@ let go_to_definition
      | Unresolved -> None)
 ;;
 
-(* Tests
-==================== *)
+
+(** {1:test Test} *)
 
 let%test_module "collect_links" =
   (module struct
