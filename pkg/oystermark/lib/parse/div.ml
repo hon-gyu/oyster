@@ -172,6 +172,20 @@ and extract_fences_in_list (block : Cmarkit.Block.t) : Cmarkit.Block.t list =
   | other -> [ extract_fences other ]
 ;;
 
+let is_blank_line : Cmarkit.Block.t -> bool = function
+  | Cmarkit.Block.Blank_line _ -> true
+  | _ -> false
+;;
+
+(** Strip leading and trailing [Blank_line] nodes from a block list.
+    The commonmark renderer emits blank lines around div body content for
+    paragraph separation; re-parsing those produces [Blank_line] nodes that
+    would accumulate on each roundtrip without this normalization. *)
+let strip_surrounding_blanks (blocks : Cmarkit.Block.t list) : Cmarkit.Block.t list =
+  let blocks = List.drop_while blocks ~f:is_blank_line in
+  List.rev blocks |> List.drop_while ~f:is_blank_line |> List.rev
+;;
+
 (** Rewrite a list of sibling blocks, collecting div fences into [Ext_div] nodes.
     Pass 2 of 2: match fences and group children into Ext_div
 *)
@@ -187,6 +201,7 @@ let rec rewrite_block_list (blocks : Cmarkit.Block.t list) : Cmarkit.Block.t lis
       let body_blocks, new_i = collect_body colons arr !i len in
       i := new_i;
       let body_blocks = rewrite_block_list body_blocks in
+      let body_blocks = strip_surrounding_blanks body_blocks in
       let body =
         match body_blocks with
         | [] -> Cmarkit.Block.Blocks ([], Cmarkit.Meta.none)

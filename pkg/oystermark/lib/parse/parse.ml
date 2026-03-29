@@ -116,9 +116,9 @@ let commonmark_of_doc (doc : Cmarkit.Doc.t) : string =
           | Some cls -> " " ^ cls
           | None -> ""
         in
-        Cmarkit_renderer.Context.string c (fence ^ class_suffix ^ "\n");
+        Cmarkit_renderer.Context.string c (fence ^ class_suffix ^ "\n\n");
         Cmarkit_renderer.Context.block c body;
-        Cmarkit_renderer.Context.string c (fence ^ "\n");
+        Cmarkit_renderer.Context.string c ("\n" ^ fence ^ "\n");
         true
       | _ -> false
     in
@@ -536,7 +536,9 @@ content
     ;;
 
     let%expect_test "ill-formed: less than 3 colons" =
-      print_endline (parse {|:: not-a-div
+      print_endline
+        (parse
+           {|:: not-a-div
 content
 ::|});
       [%expect
@@ -548,7 +550,9 @@ content
     ;;
 
     let%expect_test "ill-formed: extra words after class" =
-      print_endline (parse {|::: warning extra
+      print_endline
+        (parse
+           {|::: warning extra
 content
 :::|});
       [%expect
@@ -611,6 +615,33 @@ content
             (Blocks (Paragraph (Text content))
               (Div ((class_name ()) (colons 3)) (Blocks)))))
         |}]
+    ;;
+
+    let%test_unit "roundtrip: commonmark output is idempotent" =
+      let inputs =
+        [ {|::: warning
+Here is a paragraph.
+
+And here is another.
+:::|}
+        ; {|:::
+content
+:::|}
+        ; {|:::: outer
+::: inner
+content
+:::
+::::|}
+        ; {|::: warning
+unclosed content|}
+        ]
+      in
+      let normalize s = String.rstrip s in
+      List.iter inputs ~f:(fun input ->
+        let cm1 = commonmark_of_doc (of_string input) in
+        let cm2 = commonmark_of_doc (of_string cm1) in
+        if not (String.equal (normalize cm1) (normalize cm2))
+        then failwithf "MISMATCH:\n  cm1: %s\n  cm2: %s" cm1 cm2 ())
     ;;
   end)
 ;;
