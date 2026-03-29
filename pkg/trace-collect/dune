@@ -1,7 +1,7 @@
 (library
  (name trace_collect)
  (public_name trace-collect)
- (modules trace_collect trace_pp otlp_receiver span_pipeline)
+ (modules otlp_receiver span_pipeline trace_collect trace_pp)
  (libraries
   core
   core_unix.core_thread
@@ -13,5 +13,13 @@
   trace.core
   ambient-context
   ambient-context.tls)
+ (preprocess
+  (pps ppx_jane ppx_string)))
+
+(library
+ (name trace_collect_test)
+ (modules test_trace)
+ (inline_tests)
+ (libraries core trace_collect trace.core trace)
  (preprocess
   (pps ppx_jane ppx_string)))

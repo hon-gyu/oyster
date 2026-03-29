@@ -18,29 +18,19 @@ let duration_nanos (sp : OT.span) =
 ;;
 
 (** Replace each span's duration with [rank * 1000] nanoseconds (i.e. rank
-    microseconds), where rank 1 is the shortest.  Ties within
-    [tie_tolerance_nano] share the same rank.  Start times are preserved. *)
-let normalize_duration
-      ?(tie_tolerance_nano : int64 = Int64.of_int 3)
-      (spans : OT.span list)
-  : OT.span list
-  =
-  let sorted =
-    List.map spans ~f:(fun sp -> span_id_hex sp.span_id, duration_nanos sp)
-    |> List.sort ~compare:(fun (_, a) (_, b) ->
-      let diff = Int64.(abs (a - b)) in
-      if Int64.(diff <= tie_tolerance_nano) then 0 else Int64.compare a b)
+    microseconds), where rank is determined by start time order (earliest
+    start → lowest rank).  Spans are ranked by when they start, so the
+    output is fully deterministic regardless of actual execution speed. *)
+let normalize_duration (spans : OT.span list) : OT.span list =
+  let indexed =
+    List.mapi spans ~f:(fun i sp -> i, sp)
+    |> List.sort ~compare:(fun (i, a) (j, b) ->
+      let c = Int64.compare a.OT.start_time_unix_nano b.OT.start_time_unix_nano in
+      if c <> 0 then c else Int.compare i j)
   in
   let ranks = Hashtbl.create (module String) in
-  let rank = ref 0 in
-  let prev = ref Int64.min_value in
-  List.iter sorted ~f:(fun (sid, dur) ->
-    let diff = Int64.(abs (dur - !prev)) in
-    if Int64.(diff > tie_tolerance_nano)
-    then (
-      Int.incr rank;
-      prev := dur);
-    Hashtbl.set ranks ~key:sid ~data:!rank);
+  List.iteri indexed ~f:(fun rank (_, sp) ->
+    Hashtbl.set ranks ~key:(span_id_hex sp.span_id) ~data:(rank + 1));
   List.map spans ~f:(fun sp ->
     let sp' = OT.copy_span sp in
     let r = Hashtbl.find_exn ranks (span_id_hex sp.span_id) in
