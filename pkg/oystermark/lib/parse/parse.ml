@@ -85,7 +85,6 @@ let of_string ?(strict = false) ?(layout = false) ?(locs = false) (s : string)
   =
   let open Cmarkit in
   let yaml_opt, body = Frontmatter.of_string s in
-  let body = Div.ensure_fence_isolation body in
   let cmarkit_doc = Doc.of_string ~strict ~layout ~locs body in
   let body_doc = Mapper.map_doc (make_mapper ()) cmarkit_doc in
   let body_doc = Div.rewrite_doc body_doc in
@@ -462,9 +461,8 @@ And here is another.
         {|
         (Blocks
           (Div ((class_name (warning)) (colons 3))
-            (Blocks Blank_line (Paragraph (Text "Here is a paragraph.")) Blank_line
-              (Paragraph (Text "And here is another.")) Blank_line))
-          Blank_line)
+            (Blocks (Paragraph (Text "Here is a paragraph.")) Blank_line
+              (Paragraph (Text "And here is another.")))))
         |}]
     ;;
 
@@ -475,12 +473,7 @@ And here is another.
 content
 :::|});
       [%expect
-        {|
-        (Blocks
-          (Div ((class_name ()) (colons 3))
-            (Blocks Blank_line (Paragraph (Text content)) Blank_line))
-          Blank_line)
-        |}]
+        {| (Blocks (Div ((class_name ()) (colons 3)) (Paragraph (Text content)))) |}]
     ;;
 
     let%expect_test "nested divs with longer fences" =
@@ -495,11 +488,7 @@ content
         {|
         (Blocks
           (Div ((class_name (outer)) (colons 4))
-            (Blocks Blank_line
-              (Div ((class_name (inner)) (colons 3))
-                (Blocks Blank_line (Paragraph (Text content)) Blank_line))
-              Blank_line))
-          Blank_line)
+            (Div ((class_name (inner)) (colons 3)) (Paragraph (Text content)))))
         |}]
     ;;
 
@@ -515,11 +504,7 @@ content
         {|
         (Blocks
           (Div ((class_name (outer)) (colons 3))
-            (Blocks Blank_line
-              (Div ((class_name (inner)) (colons 3))
-                (Blocks Blank_line (Paragraph (Text content)) Blank_line))
-              Blank_line))
-          Blank_line)
+            (Div ((class_name (inner)) (colons 3)) (Paragraph (Text content)))))
         |}]
     ;;
 
@@ -532,7 +517,7 @@ unclosed content|});
         {|
         (Blocks
           (Div ((class_name (warning)) (colons 3))
-            (Blocks Blank_line (Paragraph (Text "unclosed content")))))
+            (Paragraph (Text "unclosed content"))))
         |}]
     ;;
 
@@ -545,10 +530,8 @@ content
 :::|});
       [%expect
         {|
-        (Blocks
-          (Div ((class_name (warning)) (colons 3))
-            (Blocks Blank_line (Paragraph (Text content)) Blank_line))
-          Blank_line (Div ((class_name ()) (colons 3)) Blank_line))
+        (Blocks (Div ((class_name (warning)) (colons 3)) (Paragraph (Text content)))
+          (Div ((class_name ()) (colons 3)) (Blocks)))
         |}]
     ;;
 
@@ -570,10 +553,8 @@ content
 :::|});
       [%expect
         {|
-        (Blocks
-          (Paragraph
-            (Inlines (Text "::: warning extra") (Break soft) (Text content)))
-          Blank_line (Div ((class_name ()) (colons 3)) Blank_line))
+        (Blocks (Paragraph (Text "::: warning extra")) (Paragraph (Text content))
+          (Div ((class_name ()) (colons 3)) (Blocks)))
         |}]
     ;;
 
@@ -597,9 +578,7 @@ content
       [%expect
         {|
         (Blocks (Block_quote (Paragraph (Text "a blockquote"))) Blank_line
-          (Div ((class_name (warning)) (colons 3))
-            (Blocks Blank_line (Paragraph (Text content)) Blank_line))
-          Blank_line)
+          (Div ((class_name (warning)) (colons 3)) (Paragraph (Text content))))
         |}]
     ;;
 
@@ -614,9 +593,7 @@ content
       [%expect
         {|
         (Blocks ((Heading 1 (Text heading)) (meta (heading-slug heading))) Blank_line
-          (Div ((class_name (warning)) (colons 3))
-            (Blocks Blank_line (Paragraph (Text content)) Blank_line))
-          Blank_line)
+          (Div ((class_name (warning)) (colons 3)) (Paragraph (Text content))))
         |}]
     ;;
 
@@ -631,9 +608,8 @@ content
         {|
         (Blocks
           (Div ((class_name (warning)) (colons 4))
-            (Blocks Blank_line (Paragraph (Text content)) Blank_line
-              (Div ((class_name ()) (colons 3)) Blank_line)))
-          Blank_line)
+            (Blocks (Paragraph (Text content))
+              (Div ((class_name ()) (colons 3)) (Blocks)))))
         |}]
     ;;
   end)
