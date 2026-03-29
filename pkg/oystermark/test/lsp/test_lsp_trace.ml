@@ -54,19 +54,22 @@ let%test_module "go_to_definition trace" =
         (byte_offset_of_position parse_doc collect_links find_link_ref_at_offset
          parse_doc find_heading_line_in_doc go_to_definition)
         |}];
-      let go_span = Trace_collect.find_span t "go_to_definition" in
-      (match go_span with
-       | None -> print_endline "<no span>"
-       | Some sp ->
-         List.iter (Trace_collect.span_attrs sp) ~f:(fun (k, v) -> printf "%s=%s\n" k v));
+      let open Trace_collect in
+      let spans =
+        Trace_collect.spans t
+        |> Span_pipeline.normalize_duration
+        |> Span_pipeline.scrub_attributes ~scrub:[ [ "line" ]; [ "character" ] ]
+      in
+      print_endline (Trace_collect.format spans);
       [%expect
         {|
-        resolution=heading
-        rel_path=note-c.md
-        line=2
-        character=8
-        code.filepath=pkg/oystermark/lsp/go_to_definition.ml
-        code.lineno=173
+        go_to_definition 4us resolution=heading rel_path=note-c.md line=- character=-
+        ├── byte_offset_of_position 1us line=- character=- offset=17
+        ├── parse_doc 3us content_len=63
+        ├── collect_links 1us num_links=2
+        ├── find_link_ref_at_offset 1us offset=17 found=true
+        ├── parse_doc 2us content_len=43
+        └── find_heading_line_in_doc 1us result_line=2 slug=section-one
         |}]
     ;;
   end)
