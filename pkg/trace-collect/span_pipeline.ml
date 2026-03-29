@@ -35,7 +35,8 @@ let normalize_duration
   let rank = ref 0 in
   let prev = ref Int64.min_value in
   List.iter sorted ~f:(fun (sid, dur) ->
-    if Int64.( <> ) dur !prev
+    let diff = Int64.(abs (dur - !prev)) in
+    if Int64.(diff > tie_tolerance_nano)
     then (
       Int.incr rank;
       prev := dur);

@@ -61,7 +61,6 @@ let%test_module "go_to_definition trace" =
         |> Span_pipeline.scrub_attributes ~scrub:[ [ "line" ]; [ "character" ] ]
       in
       print_endline (Trace_collect.format spans);
-      (* TODO: this is flaky? *)
       [%expect
         {|
         go_to_definition 4us resolution=heading rel_path=note-c.md line=- character=-
