@@ -254,11 +254,6 @@ module For_test = struct
     Cmarkit.Doc.block doc
   ;;
 
-  let parse (s : string) : string =
-    let block = make_block s in
-    Sexp.to_string_hum ~indent:2 (sexp_of_block block)
-  ;;
-
   (** Count the number of div blocks in a doc  *)
   let count_div (doc : Cmarkit.Doc.t) : int =
     let folder =
@@ -283,6 +278,34 @@ module For_test = struct
     let cm2 = commonmark_of_doc (of_string cm1) in
     [%test_eq: string] (normalize cm1) (normalize cm2)
   ;;
+
+  (** Count code blocks that have a non-[None] attribute parsed *)
+  let count_attr (doc : Cmarkit.Doc.t) : int =
+    let folder =
+      Cmarkit.Folder.make
+        ~block:(fun _f acc -> function
+          | Cmarkit.Block.Code_block (_, meta) ->
+            (match Cmarkit.Meta.find Attribute.meta_key meta with
+             | Some { Attribute.attribute = Some _; _ } ->
+               Cmarkit.Folder.ret (acc + 1)
+             | _ -> Cmarkit.Folder.default)
+          | _ -> Cmarkit.Folder.default)
+        ()
+    in
+    Cmarkit.Folder.fold_doc folder 0 doc
+  ;;
+
+  let pp_section (blocks : Cmarkit.Block.t list) : unit =
+    print_endline
+      (commonmark_of_doc
+         (Cmarkit.Doc.make (Cmarkit.Block.Blocks (blocks, Cmarkit.Meta.none))))
+  ;;
+
+  let pp_block_opt (block : Cmarkit.Block.t option) : unit =
+    match block with
+    | None -> print_endline "<none>"
+    | Some b -> print_endline (commonmark_of_doc (Cmarkit.Doc.make b))
+  ;;
 end
 
 (** {2 Attribute}
@@ -291,24 +314,21 @@ Tests for {!module-"Attribute"}. *)
 
 let%test_module "Attribute" =
   (module struct
-    let parse = For_test.parse
+    open For_test
+    open Attribute.For_test
 
-    let%expect_test "no attribute" =
-      print_endline
-        (parse
-           {|```python
-II
-```|});
+    let%expect_test _ =
+      let doc = of_string example_no_attribute in
+      [%test_result: int] (count_attr doc) ~expect:0;
+      pp_doc doc;
       [%expect
         {| ((Code_block python II) (meta (attribute ((lang python) (attribute ()))))) |}]
     ;;
 
-    let%expect_test "attribute" =
-      print_endline
-        (parse
-           {|```python {#myid .class_a .class_b key1=val1 key2="val2"}
-II
-```|});
+    let%expect_test _ =
+      let doc = of_string example_with_attribute in
+      [%test_result: int] (count_attr doc) ~expect:1;
+      pp_doc doc;
       [%expect
         {|
         ((Code_block "python {#myid .class_a .class_b key1=val1 key2=\"val2\"}" II)
@@ -321,12 +341,10 @@ II
         |}]
     ;;
 
-    let%expect_test "invalid attribute: multiple ids" =
-      print_endline
-        (parse
-           {|```python {#myid #myid2 .class_a .class_b key1=val1 key2="val2"}
-II
-```|});
+    let%expect_test _ =
+      let doc = of_string example_invalid_multiple_ids in
+      [%test_result: int] (count_attr doc) ~expect:0;
+      pp_doc doc;
       [%expect
         {|
         ((Code_block
@@ -335,12 +353,10 @@ II
         |}]
     ;;
 
-    let%expect_test "invalid attribute: invalid item" =
-      print_endline
-        (parse
-           {|```python {#myid .class_a .class_b hi}
-II
-```|});
+    let%expect_test _ =
+      let doc = of_string example_invalid_item in
+      [%test_result: int] (count_attr doc) ~expect:0;
+      pp_doc doc;
       [%expect
         {|
         ((Code_block "python {#myid .class_a .class_b hi}" II)
@@ -348,12 +364,10 @@ II
         |}]
     ;;
 
-    let%expect_test "invalid attribute: no info string" =
-      print_endline
-        (parse
-           {|```{#myid .class_a .class_b}
-II
-```|});
+    let%expect_test _ =
+      let doc = of_string non_example_no_info_string in
+      [%test_result: int] (count_attr doc) ~expect:0;
+      pp_doc doc;
       [%expect {| (Code_block "{#myid .class_a .class_b}" II) |}]
     ;;
   end)
@@ -365,28 +379,12 @@ Tests for {!module-"Extract"}. *)
 
 let%test_module "Extract" =
   (module struct
-    let%expect_test "get_heading_section" =
-      let block =
-        For_test.make_block
-          {|\
-# Heading 1
-## Heading 2
-### Heading 3
-#### Heading 4
-##### Heading 5
-###### Heading 6
-# Heading 7
-## Heading 8
-### Heading 9
-## Heading 10
-#### Heading 11
-### Heading 12|}
-      in
-      let heading_id = "heading-1" in
-      let extracted = Extract.get_heading_section [ block ] heading_id in
-      print_endline
-        (commonmark_of_doc
-           (Cmarkit.Doc.make (Cmarkit.Block.Blocks (extracted, Cmarkit.Meta.none))));
+    open For_test
+    open Extract.For_test
+
+    let%expect_test "get_heading_section: heading-1" =
+      let block = make_block example_headings in
+      pp_section (Extract.get_heading_section [ block ] "heading-1");
       [%expect
         {|
     # Heading 1
@@ -395,12 +393,12 @@ let%test_module "Extract" =
     #### Heading 4
     ##### Heading 5
     ###### Heading 6
-    |}];
-      let heading_id = "heading-8" in
-      let extracted = Extract.get_heading_section [ block ] heading_id in
-      print_endline
-        (commonmark_of_doc
-           (Cmarkit.Doc.make (Cmarkit.Block.Blocks (extracted, Cmarkit.Meta.none))));
+    |}]
+    ;;
+
+    let%expect_test "get_heading_section: heading-8" =
+      let block = make_block example_headings in
+      pp_section (Extract.get_heading_section [ block ] "heading-8");
       [%expect
         {|
     ## Heading 8
@@ -408,70 +406,39 @@ let%test_module "Extract" =
     |}]
     ;;
 
-    let%expect_test "get_block_by_caret_id" =
-      let render_block (block : Cmarkit.Block.t option) : unit =
-        match block with
-        | None -> print_endline "<none>"
-        | Some b -> print_endline (commonmark_of_doc (Cmarkit.Doc.make b))
-      in
-      (* Case 1: inline block ID at end of paragraph *)
-      let doc1 =
-        of_string
-          {|\
-First paragraph.
+    let%expect_test "get_block_by_caret_id: inline" =
+      let doc = of_string example_inline_caret_id in
+      pp_block_opt (Extract.get_block_by_caret_id [ Cmarkit.Doc.block doc ] "abc123");
+      [%expect {| Second paragraph text ^abc123 |}]
+    ;;
 
-Second paragraph text ^abc123|}
-      in
-      render_block (Extract.get_block_by_caret_id [ Cmarkit.Doc.block doc1 ] "abc123");
-      [%expect {| Second paragraph text ^abc123 |}];
-      (* Case 2: standalone block ID referencing previous block (blockquote) *)
-      let doc2 =
-        of_string
-          {|\
-> A blockquote here.
+    let%expect_test "get_block_by_caret_id: standalone blockquote" =
+      let doc = of_string example_blockquote_caret_id in
+      pp_block_opt (Extract.get_block_by_caret_id [ Cmarkit.Doc.block doc ] "bq001");
+      [%expect {| > A blockquote here. |}]
+    ;;
 
-^bq001
-|}
-      in
-      render_block (Extract.get_block_by_caret_id [ Cmarkit.Doc.block doc2 ] "bq001");
-      [%expect {| > A blockquote here. |}];
-      (* Case 3: not found *)
-      let doc3 =
-        of_string
-          {|
-Some text ^exists
-|}
-      in
-      render_block (Extract.get_block_by_caret_id [ Cmarkit.Doc.block doc3 ] "nope");
-      [%expect {| <none> |}];
-      (* Case 4: standalone block ID referencing previous list *)
-      let doc4 =
-        of_string
-          {|
-- Item one
-- Item two
+    let%expect_test "get_block_by_caret_id: not found" =
+      let doc = of_string example_not_found in
+      pp_block_opt (Extract.get_block_by_caret_id [ Cmarkit.Doc.block doc ] "nope");
+      [%expect {| <none> |}]
+    ;;
 
-^lst001
-|}
-      in
-      render_block (Extract.get_block_by_caret_id [ Cmarkit.Doc.block doc4 ] "lst001");
+    let%expect_test "get_block_by_caret_id: standalone list" =
+      let doc = of_string example_list_caret_id in
+      pp_block_opt (Extract.get_block_by_caret_id [ Cmarkit.Doc.block doc ] "lst001");
       [%expect
         {|
     - Item one
     - Item two
-    |}];
-      (* Case 5: block ID inside a list item *)
-      let doc5 =
-        of_string
-          {|
-- a nested list ^firstline
-    - item
-      ^inneritem
-|}
-      in
-      render_block (Extract.get_block_by_caret_id [ Cmarkit.Doc.block doc5 ] "firstline");
+    |}]
+    ;;
+
+    let%expect_test "get_block_by_caret_id: nested list" =
+      let doc = of_string example_nested_list_caret_id in
+      pp_block_opt (Extract.get_block_by_caret_id [ Cmarkit.Doc.block doc ] "firstline");
       [%expect {| a nested list ^firstline |}];
-      render_block (Extract.get_block_by_caret_id [ Cmarkit.Doc.block doc5 ] "inneritem");
+      pp_block_opt (Extract.get_block_by_caret_id [ Cmarkit.Doc.block doc ] "inneritem");
       [%expect
         {|
     item
@@ -487,8 +454,6 @@ Tests for {!module-"Div"}. *)
 
 let%test_module "Div" =
   (module struct
-    let parse = For_test.parse
-
     open For_test
     open Div.For_test
 
