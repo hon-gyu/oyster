@@ -87,3 +87,8 @@ let span_attrs (sp : OT.span) : (string * string) list =
 let span_attr (sp : OT.span) (key : string) : string option =
   List.Assoc.find (span_attrs sp) ~equal:String.equal key
 ;;
+
+let (format : ?tree_chars:Trace_pp.tree_chars -> ?style:Trace_pp.style -> OT.span list -> string)
+  =
+  Trace_pp.format
+;;
