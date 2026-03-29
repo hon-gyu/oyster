@@ -30,13 +30,7 @@ v}
     A fence paragraph with a class name always opens a new div. A fence
     paragraph without a class name closes the nearest matching open div
     (i.e. one whose opening colon count {m \le} this fence's colon count).
-
-    {1 Data types}
-
-    {!type-t} holds the parsed div metadata:
-    {ul
-    {- [class_name] -- optional class from the opening fence}
-    {- [colons] -- number of colons in the opening fence}} *)
+*)
 
 open Core
 
@@ -82,68 +76,76 @@ let paragraph_fence (block : Cmarkit.Block.t) : (int * string option) option =
   | _ -> None
 ;;
 
-(* ── Pass 1: extract fence lines from paragraph inlines ────────────── *)
+(** Pass 1: extract fence lines from paragraph inlines *)
+include (
+struct
+  (** Flatten top-level [Inlines] wrappers. *)
+  let rec flatten_inlines (i : Cmarkit.Inline.t) : Cmarkit.Inline.t list =
+    match i with
+    | Cmarkit.Inline.Inlines (is, _) -> List.concat_map is ~f:flatten_inlines
+    | other -> [ other ]
+  ;;
 
-(** Flatten top-level [Inlines] wrappers. *)
-let rec flatten_inlines (i : Cmarkit.Inline.t) : Cmarkit.Inline.t list =
-  match i with
-  | Cmarkit.Inline.Inlines (is, _) -> List.concat_map is ~f:flatten_inlines
-  | other -> [ other ]
-;;
+  (** Split a flat inline list at [Break `Soft] boundaries into per-line groups. *)
+  let split_at_soft_breaks (nodes : Cmarkit.Inline.t list) : Cmarkit.Inline.t list list =
+    let rec go acc cur = function
+      | [] ->
+        let groups = List.rev (List.rev cur :: acc) in
+        List.filter groups ~f:(fun g -> not (List.is_empty g))
+      | Cmarkit.Inline.Break (b, _) :: rest
+        when [%equal: [ `Hard | `Soft ]] (Cmarkit.Inline.Break.type' b) `Soft ->
+        go (List.rev cur :: acc) [] rest
+      | node :: rest -> go acc (node :: cur) rest
+    in
+    go [] [] nodes
+  ;;
 
-(** Split a flat inline list at [Break `Soft] boundaries into per-line groups. *)
-let split_at_soft_breaks (nodes : Cmarkit.Inline.t list) : Cmarkit.Inline.t list list =
-  let rec go acc cur = function
-    | [] ->
-      let groups = List.rev (List.rev cur :: acc) in
-      List.filter groups ~f:(fun g -> not (List.is_empty g))
-    | Cmarkit.Inline.Break (b, _) :: rest
-      when [%equal: [ `Hard | `Soft ]] (Cmarkit.Inline.Break.type' b) `Soft ->
-      go (List.rev cur :: acc) [] rest
-    | node :: rest -> go acc (node :: cur) rest
-  in
-  go [] [] nodes
-;;
+  (** Turn a group of inline nodes back into a single inline. *)
+  let inline_of_group (group : Cmarkit.Inline.t list) : Cmarkit.Inline.t =
+    match group with
+    | [ single ] -> single
+    | multiple -> Cmarkit.Inline.Inlines (multiple, Cmarkit.Meta.none)
+  ;;
 
-(** Turn a group of inline nodes back into a single inline. *)
-let inline_of_group (group : Cmarkit.Inline.t list) : Cmarkit.Inline.t =
-  match group with
-  | [ single ] -> single
-  | multiple -> Cmarkit.Inline.Inlines (multiple, Cmarkit.Meta.none)
-;;
+  (** Check whether a single-line inline group is a fence. *)
+  let group_is_fence (group : Cmarkit.Inline.t list) : bool =
+    match group with
+    | [ Cmarkit.Inline.Text (s, _) ] -> Option.is_some (parse_fence s)
+    | _ -> false
+  ;;
 
-(** Check whether a single-line inline group is a fence. *)
-let group_is_fence (group : Cmarkit.Inline.t list) : bool =
-  match group with
-  | [ Cmarkit.Inline.Text (s, _) ] -> Option.is_some (parse_fence s)
-  | _ -> false
-;;
-
-(** Split a paragraph into multiple blocks when fence lines are mixed in
+  (** Split a paragraph into multiple blocks when fence lines are mixed in
     with regular content.  Returns [None] if no splitting is needed. *)
-let split_paragraph_fences (p : Cmarkit.Block.Paragraph.t) (meta : Cmarkit.Meta.t)
-  : Cmarkit.Block.t list option
-  =
-  let inline = Cmarkit.Block.Paragraph.inline p in
-  let flat = flatten_inlines inline in
-  let lines = split_at_soft_breaks flat in
-  if List.length lines <= 1
-  then None (* single-line paragraph — nothing to split *)
-  else (
-    let has_fence = List.exists lines ~f:group_is_fence in
-    if not has_fence
-    then None
-    else
-      Some
-        (List.mapi lines ~f:(fun i group ->
-           let para_inline = inline_of_group group in
-           let para = Cmarkit.Block.Paragraph.make para_inline in
-           (* Preserve original meta on the first sub-paragraph *)
-           let m = if i = 0 then meta else Cmarkit.Meta.none in
-           Cmarkit.Block.Paragraph (para, m))))
-;;
+  let split_paragraph_fences (p : Cmarkit.Block.Paragraph.t) (meta : Cmarkit.Meta.t)
+    : Cmarkit.Block.t list option
+    =
+    let inline = Cmarkit.Block.Paragraph.inline p in
+    let flat = flatten_inlines inline in
+    let lines = split_at_soft_breaks flat in
+    if List.length lines <= 1
+    then None (* single-line paragraph — nothing to split *)
+    else (
+      let has_fence = List.exists lines ~f:group_is_fence in
+      if not has_fence
+      then None
+      else
+        Some
+          (List.mapi lines ~f:(fun i group ->
+             let para_inline = inline_of_group group in
+             let para = Cmarkit.Block.Paragraph.make para_inline in
+             (* Preserve original meta on the first sub-paragraph *)
+             let m = if i = 0 then meta else Cmarkit.Meta.none in
+             Cmarkit.Block.Paragraph (para, m))))
+  ;;
+end :
+sig
+  val split_paragraph_fences
+    :  Cmarkit.Block.Paragraph.t
+    -> Cmarkit.Meta.t
+    -> Cmarkit.Block.t list option
+end)
 
-(** Pass 1: walk the block tree and split paragraphs that contain fence lines
+(** Pass 1 of 2: walk the block tree and split paragraphs that contain fence lines
     mixed with other content. After this pass every fence is a standalone
     single-[Text] paragraph. *)
 let rec extract_fences (block : Cmarkit.Block.t) : Cmarkit.Block.t =
@@ -170,9 +172,9 @@ and extract_fences_in_list (block : Cmarkit.Block.t) : Cmarkit.Block.t list =
   | other -> [ extract_fences other ]
 ;;
 
-(* ── Pass 2: match fences and group children into Ext_div ──────────── *)
-
-(** Rewrite a list of sibling blocks, collecting div fences into [Ext_div] nodes. *)
+(** Rewrite a list of sibling blocks, collecting div fences into [Ext_div] nodes.
+    Pass 2 of 2: match fences and group children into Ext_div
+*)
 let rec rewrite_block_list (blocks : Cmarkit.Block.t list) : Cmarkit.Block.t list =
   let arr = Array.of_list blocks in
   let len = Array.length arr in
@@ -239,7 +241,7 @@ and collect_body
       collected := arr.(!i) :: !collected;
       incr i
   done;
-  (List.rev !collected, !i)
+  List.rev !collected, !i
 
 (** Recurse into block containers to rewrite div fences in their children. *)
 and rewrite_within_block (block : Cmarkit.Block.t) : Cmarkit.Block.t =
