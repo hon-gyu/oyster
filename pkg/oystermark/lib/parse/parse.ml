@@ -284,12 +284,11 @@ module For_test = struct
     let folder =
       Cmarkit.Folder.make
         ~block:(fun _f acc -> function
-          | Cmarkit.Block.Code_block (_, meta) ->
-            (match Cmarkit.Meta.find Attribute.meta_key meta with
-             | Some { Attribute.attribute = Some _; _ } ->
-               Cmarkit.Folder.ret (acc + 1)
-             | _ -> Cmarkit.Folder.default)
-          | _ -> Cmarkit.Folder.default)
+           | Cmarkit.Block.Code_block (_, meta) ->
+             (match Cmarkit.Meta.find Attribute.meta_key meta with
+              | Some { Attribute.attribute = Some _; _ } -> Cmarkit.Folder.ret (acc + 1)
+              | _ -> Cmarkit.Folder.default)
+           | _ -> Cmarkit.Folder.default)
         ()
     in
     Cmarkit.Folder.fold_doc folder 0 doc

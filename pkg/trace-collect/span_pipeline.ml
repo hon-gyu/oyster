@@ -17,20 +17,22 @@ let duration_nanos (sp : OT.span) =
   Int64.(sp.end_time_unix_nano - sp.start_time_unix_nano)
 ;;
 
-(** Replace each span's duration with [rank * 1000] nanoseconds (i.e. rank
-    microseconds), where rank is determined by start time order (earliest
-    start → lowest rank).  Spans are ranked by when they start, so the
-    output is fully deterministic regardless of actual execution speed. *)
+(** Replace each span's duration with [rank * 1us], where rank is the
+    1-based position of the span in [spans].  No timing is read or compared,
+    so the output is deterministic given a fixed input order.
+
+    When used with {!Trace_collect.spans} on single-threaded sequential code
+    (and an unbatched exporter), spans arrive in completion order — innermost
+    first — so the innermost span gets [1us] and the outermost gets the
+    highest value.  This ordering is not guaranteed for concurrent or batched
+    traces.
+
+    Commonly used in tests to make spans determinsitic
+    *)
 let normalize_duration (spans : OT.span list) : OT.span list =
-  let indexed =
-    List.mapi spans ~f:(fun i sp -> i, sp)
-    |> List.sort ~compare:(fun (i, a) (j, b) ->
-      let c = Int64.compare a.OT.start_time_unix_nano b.OT.start_time_unix_nano in
-      if c <> 0 then c else Int.compare i j)
-  in
   let ranks = Hashtbl.create (module String) in
-  List.iteri indexed ~f:(fun rank (_, sp) ->
-    Hashtbl.set ranks ~key:(span_id_hex sp.span_id) ~data:(rank + 1));
+  List.iteri spans ~f:(fun i sp ->
+    Hashtbl.set ranks ~key:(span_id_hex sp.span_id) ~data:(i + 1));
   List.map spans ~f:(fun sp ->
     let sp' = OT.copy_span sp in
     let r = Hashtbl.find_exn ranks (span_id_hex sp.span_id) in

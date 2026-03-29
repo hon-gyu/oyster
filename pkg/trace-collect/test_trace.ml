@@ -26,36 +26,36 @@ let%expect_test "trace_pp" =
   print_string (Trace_collect.Trace_pp.format ~tree_chars:Utf8 ~style:Indented spans);
   [%expect
     {|
-    g 1us
+    g 3us
     └── right-before-f 2us y=5
-            └── inside-f 3us
+            └── inside-f 1us
     |}];
   print_string (Trace_collect.Trace_pp.format ~style:Flat spans);
   [%expect
     {|
-    g 1us
+    g 3us
     right-before-f 2us y=5
-    inside-f 3us
+    inside-f 1us
     |}];
   print_string (Trace_collect.Trace_pp.format ~style:Indented spans);
   [%expect
     {|
-    g 1us
+    g 3us
     └── right-before-f 2us y=5
-            └── inside-f 3us
+            └── inside-f 1us
     |}];
   print_string (Trace_collect.Trace_pp.format ~style:Show_parents spans);
   [%expect
     {|
-    g 1us
+    g 3us
     └── right-before-f 2us y=5
-        └── inside-f 3us
+        └── inside-f 1us
     |}];
   print_string (Trace_collect.Trace_pp.format ~tree_chars:Ascii ~style:Indented spans);
   [%expect
     {|
-    g 1us
+    g 3us
     `-- right-before-f 2us y=5
-            `-- inside-f 3us
+            `-- inside-f 1us
     |}]
 ;;
