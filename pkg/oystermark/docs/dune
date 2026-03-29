@@ -1,4 +1,6 @@
 (rule
+ (deps
+  (source_tree note/))
  (action
   (with-stdout-to
    index.mld.2of2

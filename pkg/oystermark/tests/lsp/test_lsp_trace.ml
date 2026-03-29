@@ -63,13 +63,13 @@ let%test_module "go_to_definition trace" =
       print_endline (Trace_collect.format spans);
       [%expect
         {|
-        go_to_definition 4us resolution=heading rel_path=note-c.md line=- character=-
+        go_to_definition 7us resolution=heading rel_path=note-c.md line=- character=-
         ├── byte_offset_of_position 1us line=- character=- offset=17
-        ├── parse_doc 3us content_len=63
-        ├── collect_links 1us num_links=2
-        ├── find_link_ref_at_offset 1us offset=17 found=true
-        ├── parse_doc 2us content_len=43
-        └── find_heading_line_in_doc 1us result_line=2 slug=section-one
+        ├── parse_doc 2us content_len=63
+        ├── collect_links 3us num_links=2
+        ├── find_link_ref_at_offset 4us offset=17 found=true
+        ├── parse_doc 5us content_len=43
+        └── find_heading_line_in_doc 6us result_line=2 slug=section-one
         |}]
     ;;
   end)

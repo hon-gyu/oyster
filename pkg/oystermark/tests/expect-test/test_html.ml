@@ -248,3 +248,52 @@ let%expect_test "callout: not a callout" =
     </blockquote>
     |}]
 ;;
+
+(* Div
+   ==================================================================== *)
+
+let%expect_test "div: basic with class" =
+  render
+    {|::: warning
+Here is a paragraph.
+
+And here is another.
+:::|};
+  [%expect
+    {|
+    <div class="warning">
+    <p>Here is a paragraph.</p>
+    <p>And here is another.</p>
+    </div>
+    |}]
+;;
+
+let%expect_test "div: no class" =
+  render
+    {|:::
+content
+:::|};
+  [%expect
+    {|
+    <div>
+    <p>content</p>
+    </div>
+    |}]
+;;
+
+let%expect_test "div: nested" =
+  render
+    {|:::: outer
+::: inner
+content
+:::
+::::|};
+  [%expect
+    {|
+    <div class="outer">
+    <div class="inner">
+    <p>content</p>
+    </div>
+    </div>
+    |}]
+;;

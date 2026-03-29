@@ -22,46 +22,36 @@ let%expect_test "trace_pp" =
     ());
   print_s [%sexp (Trace_collect.span_names t : string list)];
   [%expect {| (inside-f right-before-f g) |}];
-  let spans = Trace_collect.spans t in
-  print_string
-    (Trace_collect.Trace_pp.format
-       ~tree_chars:Utf8
-       ~normalize_duration:true
-       Indented
-       spans);
+  let spans = Trace_collect.spans t |> Trace_collect.Span_pipeline.normalize_duration in
+  print_string (Trace_collect.Trace_pp.format ~tree_chars:Utf8 ~style:Indented spans);
   [%expect
     {|
     g 3us
     └── right-before-f 2us y=5
             └── inside-f 1us
     |}];
-  print_string (Trace_collect.Trace_pp.format ~normalize_duration:true Flat spans);
+  print_string (Trace_collect.Trace_pp.format ~style:Flat spans);
   [%expect
     {|
     g 3us
     right-before-f 2us y=5
     inside-f 1us
     |}];
-  print_string (Trace_collect.Trace_pp.format ~normalize_duration:true Indented spans);
+  print_string (Trace_collect.Trace_pp.format ~style:Indented spans);
   [%expect
     {|
     g 3us
-      right-before-f 2us y=5
-        inside-f 1us
+    └── right-before-f 2us y=5
+            └── inside-f 1us
     |}];
-  print_string (Trace_collect.Trace_pp.format ~normalize_duration:true Show_parents spans);
+  print_string (Trace_collect.Trace_pp.format ~style:Show_parents spans);
   [%expect
     {|
     g 3us
-      right-before-f 2us y=5
-        inside-f 1us
+    └── right-before-f 2us y=5
+        └── inside-f 1us
     |}];
-  print_string
-    (Trace_collect.Trace_pp.format
-       ~tree_chars:Ascii
-       ~normalize_duration:true
-       Indented
-       spans);
+  print_string (Trace_collect.Trace_pp.format ~tree_chars:Ascii ~style:Indented spans);
   [%expect
     {|
     g 3us

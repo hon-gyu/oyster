@@ -113,3 +113,59 @@ let get_block_by_caret_id (blocks : Cmarkit.Block.t list) (id : string)
   in
   search None (flatten blocks)
 ;;
+
+module For_test = struct
+  let example_headings =
+    {|\
+# Heading 1
+## Heading 2
+### Heading 3
+#### Heading 4
+##### Heading 5
+###### Heading 6
+# Heading 7
+## Heading 8
+### Heading 9
+## Heading 10
+#### Heading 11
+### Heading 12|}
+  ;;
+
+  let example_inline_caret_id =
+    {|\
+First paragraph.
+
+Second paragraph text ^abc123|}
+  ;;
+
+  let example_blockquote_caret_id =
+    {|\
+> A blockquote here.
+
+^bq001
+|}
+  ;;
+
+  let example_not_found =
+    {|
+Some text ^exists
+|}
+  ;;
+
+  let example_list_caret_id =
+    {|
+- Item one
+- Item two
+
+^lst001
+|}
+  ;;
+
+  let example_nested_list_caret_id =
+    {|
+- a nested list ^firstline
+    - item
+      ^inneritem
+|}
+  ;;
+end
