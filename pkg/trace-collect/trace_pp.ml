@@ -269,7 +269,9 @@ let contents (t : t) : string =
   Buffer.contents buf
 ;;
 
-let format ?(tree_chars = Utf8) ?(style : style = Indented) (spans : OT.span list) : string =
+let format ?(tree_chars = Utf8) ?(style : style = Indented) (spans : OT.span list)
+  : string
+  =
   let t = create ~tree_chars style in
   List.iter spans ~f:(process t);
   contents t
