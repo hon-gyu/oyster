@@ -1,0 +1,11 @@
+Development of LSP is driven by specifications in docs/ dir.
+- Docs starting with `feature-...` is a specification that needs to be implemented.
+- All implementation needs to be tested.
+  - Tests can exists as inline expect tests in the same file that implements it.
+  - Or in the `./tests/` dir as a standalone file.
+- The implementation needs to reference the specification it is implementing using odoc syntax. The same is required for its test. If the test is not in the same file as its implementation, it needs to reference both the code and spec.
+- Use `dune build @doc-private @doc` regularly to make sure everything is in synced.
+- Encapsulation is important:
+  - Define module interface (`.mli` file and inline submodule) to explicitly control what should be exposed.
+  - For testing utils, define it as `module For_test ...`
+- Property-based testing is encouraged. Trace-based testing is encouraged.

@@ -1,0 +1,43 @@
+{0 Tracking of all features, their implementation and tests}
+
+Subsections are encouraged if needed.
+
+{1 go-to-definition}
+- Spec: {!page-"feature-go-to-definition"}
+- Implementation: {!module-Lsp_lib.Go_to_definition.implementation}
+- Test: {!module-Lsp_lib.Go_to_definition.test}
+
+{1 diagnostics}
+- Spec: {!page-"feature-diagnostics"}
+- Implementation: TODO
+- Test: TODO
+
+{1 hover}
+- Spec: {!page-"feature-hover"}
+- Implementation: TODO
+- Test: TODO
+
+{1 completion}
+- Spec: {!page-"feature-completion"}
+- Implementation: TODO
+- Test: TODO
+
+{1 find-references}
+- Spec: {!page-"feature-find-references"}
+- Implementation: TODO
+- Test: TODO
+
+{1 utf16-positions}
+- Spec: {!page-"feature-utf16-positions"}
+- Implementation: TODO
+- Test: TODO
+
+{1 inlay-hints}
+- Spec: {!page-"feature-inlay-hints"}
+- Implementation: TODO
+- Test: TODO
+
+{1 index}
+- Spec: {!page-"feature-index"}
+- Implementation: TODO
+- Test: TODO
