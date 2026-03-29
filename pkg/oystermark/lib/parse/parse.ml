@@ -252,6 +252,24 @@ module For_test = struct
     let block = make_block s in
     Sexp.to_string_hum ~indent:2 (sexp_of_block block)
   ;;
+
+  (** Count the number of div blocks in a doc  *)
+  let count_div (doc : Cmarkit.Doc.t) : int =
+    let folder =
+      Cmarkit.Folder.make
+        ~block:(fun f acc -> function
+          | Div.Ext_div (_div, body) ->
+            Cmarkit.Folder.ret (1 + Cmarkit.Folder.fold_block f acc body)
+          | _ -> Cmarkit.Folder.default)
+        ()
+    in
+    Cmarkit.Folder.fold_doc folder 0 doc
+  ;;
+
+  let pp_doc (doc : Cmarkit.Doc.t) : unit =
+    let block = Cmarkit.Doc.block doc in
+    block |> sexp_of_block |> (Sexp.to_string_hum ~indent:2) |> print_endline
+
 end
 
 (** {1:test Test} *)
@@ -460,14 +478,13 @@ let%test_module "Div" =
   (module struct
     let parse = For_test.parse
 
-    let%expect_test "basic div with class" =
-      print_endline
-        (parse
-           {|::: warning
-Here is a paragraph.
+    open For_test
+    open Div.For_test
 
-And here is another.
-:::|});
+    let%expect_test _ =
+      let doc = of_string example_basic in
+      [%test_result: int] (count_div doc) ~expect: 1;
+      pp_doc doc;
       [%expect
         {|
         (Blocks
@@ -477,53 +494,45 @@ And here is another.
         |}]
     ;;
 
-    let%expect_test "div without class" =
-      print_endline
-        (parse
-           {|:::
-content
-:::|});
+    let%expect_test _ =
+      let doc = of_string example_no_class in
+      [%test_result: int] (count_div doc) ~expect:1;
+      pp_doc doc;
       [%expect
-        {| (Blocks (Div ((class_name ()) (colons 3)) (Paragraph (Text content)))) |}]
+        {|
+        (Blocks (Div ((class_name ()) (colons 3)) (Paragraph (Text content)))
+          Blank_line)
+        |}]
     ;;
 
-    let%expect_test "nested divs with longer fences" =
-      print_endline
-        (parse
-           {|:::: outer
-::: inner
-content
-:::
-::::|});
+    let%expect_test _ =
+      let doc = of_string example_nested_divs in
+      [%test_result: int] (count_div doc) ~expect:2;
+      pp_doc doc;
       [%expect
         {|
         (Blocks
           (Div ((class_name (outer)) (colons 4))
-            (Div ((class_name (inner)) (colons 3)) (Paragraph (Text content)))))
+            (Div ((class_name (inner)) (colons 3)) (Paragraph (Text content))))
+          Blank_line)
         |}]
     ;;
 
-    let%expect_test "nested divs same length" =
-      print_endline
-        (parse
-           {|::: outer
-::: inner
-content
-:::
-:::|});
+    let%expect_test _ =
+      let doc = of_string example_nested_divs_same_length in
+      [%test_result: int] (count_div doc) ~expect:2;
+      pp_doc doc;
       [%expect
         {|
-        (Blocks
-          (Div ((class_name (outer)) (colons 3))
-            (Div ((class_name (inner)) (colons 3)) (Paragraph (Text content)))))
+        (Blocks (Div ((class_name (warning)) (colons 3)) (Paragraph (Text content)))
+          (Div ((class_name ()) (colons 3)) (Blocks)))
         |}]
     ;;
 
-    let%expect_test "unclosed div (EOF closes)" =
-      print_endline
-        (parse
-           {|::: warning
-unclosed content|});
+    let%expect_test _ =
+      let doc = of_string example_EOF_closes in
+      [%test_result: int] (count_div doc) ~expect:1;
+      pp_doc doc;
       [%expect
         {|
         (Blocks
@@ -532,13 +541,10 @@ unclosed content|});
         |}]
     ;;
 
-    let%expect_test "unbalanced: extra closing fence" =
-      print_endline
-        (parse
-           {|::: warning
-content
-:::
-:::|});
+    let%expect_test _ =
+      let doc = of_string example_extra_closing_fence in
+      [%test_result: int] (count_div doc) ~expect:2;
+      pp_doc doc;
       [%expect
         {|
         (Blocks (Div ((class_name (warning)) (colons 3)) (Paragraph (Text content)))
@@ -546,12 +552,10 @@ content
         |}]
     ;;
 
-    let%expect_test "ill-formed: less than 3 colons" =
-      print_endline
-        (parse
-           {|:: not-a-div
-content
-::|});
+    let%expect_test _ =
+      let doc = of_string non_example_less_than_3_colons in
+      [%test_result: int] (count_div doc) ~expect:0;
+      pp_doc doc;
       [%expect
         {|
         (Paragraph
@@ -560,12 +564,10 @@ content
         |}]
     ;;
 
-    let%expect_test "ill-formed: extra words after class" =
-      print_endline
-        (parse
-           {|::: warning extra
-content
-:::|});
+    let%expect_test _ =
+      let doc = of_string non_example_extra_words_after_class in
+      [%test_result: int] (count_div doc) ~expect:1;
+      pp_doc doc;
       [%expect
         {|
         (Blocks (Paragraph (Text "::: warning extra")) (Paragraph (Text content))
@@ -573,24 +575,17 @@ content
         |}]
     ;;
 
-    let%expect_test "div does not interfere with code blocks" =
-      print_endline
-        (parse
-           {|```
-::: not-a-div
-```|});
+    let%expect_test _ =
+      let doc = of_string non_example_div_does_not_interfere_with_code_blocks in
+      [%test_result: int] (count_div doc) ~expect:0;
+      pp_doc doc;
       [%expect {| (Code_block no-info "::: not-a-div") |}]
     ;;
 
-    let%expect_test "closing fence must be at least as long" =
-      print_endline
-        (parse
-           {|:::: warning
-content
-:::
-::::|});
-      [%expect
-        {|
+    let%expect_test _ =
+      let doc = of_string example_closing_fence_must_be_at_least_as_long in
+      pp_doc doc;
+      [%expect {|
         (Blocks
           (Div ((class_name (warning)) (colons 4))
             (Blocks (Paragraph (Text content))
@@ -599,30 +594,12 @@ content
     ;;
 
     let%test_unit "roundtrip: commonmark output is idempotent" =
-      let inputs =
-        [ {|::: warning
-Here is a paragraph.
-
-And here is another.
-:::|}
-        ; {|:::
-content
-:::|}
-        ; {|:::: outer
-::: inner
-content
-:::
-::::|}
-        ; {|::: warning
-unclosed content|}
-        ]
-      in
       let normalize s = String.rstrip s in
-      List.iter inputs ~f:(fun input ->
+      List.iter all_examples ~f:(fun input ->
         let cm1 = commonmark_of_doc (of_string input) in
         let cm2 = commonmark_of_doc (of_string cm1) in
-        if not (String.equal (normalize cm1) (normalize cm2))
-        then failwithf "MISMATCH:\n  cm1: %s\n  cm2: %s" cm1 cm2 ())
+        [%test_eq : string] (normalize cm1) (normalize cm2);
+      )
     ;;
   end)
 ;;
