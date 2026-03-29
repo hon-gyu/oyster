@@ -418,8 +418,8 @@ otel-cli exec --service oyster-test --name "parent-op" --tp-carrier $CARRIER -- 
       print_endline trace_output;
       [%expect
         {|
-        parent-op 2us process.command=otel-cli process.command_args=? process.owner=- process.pid=- process.parent_pid=-
-        └── child-step 1us process.command=echo process.command_args=? process.owner=- process.pid=- process.parent_pid=-
+        parent-op 1us process.command=otel-cli process.command_args=? process.owner=- process.pid=- process.parent_pid=-
+        └── child-step 2us process.command=echo process.command_args=? process.owner=- process.pid=- process.parent_pid=-
         |}]
     ;;
 
