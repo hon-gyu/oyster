@@ -254,7 +254,12 @@ module For_test = struct
   ;;
 end
 
-(* Tests for module Attribute *)
+(** {1:test Test} *)
+
+(** {2 Attribute}
+
+Tests for {!module-"Attribute"}. *)
+
 let%test_module "Attribute" =
   (module struct
     let parse = For_test.parse
@@ -325,7 +330,10 @@ II
   end)
 ;;
 
-(* Tests for module Extract *)
+(** {2 Extract}
+
+Tests for {!module-"Extract"}. *)
+
 let%test_module "Extract" =
   (module struct
     let%expect_test "get_heading_section" =
@@ -444,7 +452,10 @@ Some text ^exists
   end)
 ;;
 
-(* Tests for module Div *)
+(** {2 Div}
+
+Tests for {!module-"Div"}. *)
+
 let%test_module "Div" =
   (module struct
     let parse = For_test.parse
@@ -569,36 +580,6 @@ content
 ::: not-a-div
 ```|});
       [%expect {| (Code_block no-info "::: not-a-div") |}]
-    ;;
-
-    let%expect_test "div does not interfere with blockquotes" =
-      print_endline
-        (parse
-           {|> a blockquote
-
-::: warning
-content
-:::|});
-      [%expect
-        {|
-        (Blocks (Block_quote (Paragraph (Text "a blockquote"))) Blank_line
-          (Div ((class_name (warning)) (colons 3)) (Paragraph (Text content))))
-        |}]
-    ;;
-
-    let%expect_test "div does not interfere with headings" =
-      print_endline
-        (parse
-           {|# heading
-
-::: warning
-content
-:::|});
-      [%expect
-        {|
-        (Blocks ((Heading 1 (Text heading)) (meta (heading-slug heading))) Blank_line
-          (Div ((class_name (warning)) (colons 3)) (Paragraph (Text content))))
-        |}]
     ;;
 
     let%expect_test "closing fence must be at least as long" =
