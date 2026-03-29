@@ -317,9 +317,9 @@ unclosed content|}
 
   let example_extra_closing_fence =
     {|::: warning
-    content
-    :::
-    :::|}
+content
+:::
+:::|}
   ;;
 
   let non_example_less_than_3_colons =
