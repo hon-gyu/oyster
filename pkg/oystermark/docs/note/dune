@@ -6,7 +6,7 @@
   (promote (until-clean)))
  (alias doc)
  (deps
-  (:exe ../md_to_mld.exe))
+  (:exe ../utils/md_to_mld.exe))
  (action
   (progn
    (with-stdout-to

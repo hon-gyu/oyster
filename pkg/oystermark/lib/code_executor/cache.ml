@@ -7,7 +7,7 @@ let cache_file = "_exec_cache.json"
 
 type cache_entry =
   { hash : string
-  ; outputs : Common.output list
+  ; outputs : output list
   }
 
 (** Mutable map from vault-relative file path to its last execution result. *)

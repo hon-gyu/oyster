@@ -1,0 +1,59 @@
+{0 Diagnostics}
+
+Report unresolved links as diagnostics so the user can distinguish
+resolved from unresolved links without navigating.
+
+{1 Trigger}
+
+Diagnostics are published via [textDocument/publishDiagnostics] after
+every index rebuild (i.e. on {b didOpen} and {b didSave}, matching
+the current rebuild cadence).
+
+{1 Scope}
+
+Every recognized link form in the document is checked:
+
+{ul
+  {- {b Wikilinks}: [[[target]]], [[[target#heading]]],
+     [[[target#^blockid]]], [![[embed]]]}
+  {- {b Markdown links}: [[text](target)]}
+  {- {b Markdown images}: [![alt](img.png)]}
+}
+
+External URLs ([https://...], [http://...]) are skipped.
+
+{1 Resolution check}
+
+Each link is resolved against the vault index via
+{!Oystermark.Vault.Resolve.resolve}.  A link is {e unresolved} when:
+
+{ul
+  {- The target note does not exist in the index.}
+  {- A heading fragment ([#heading]) does not match any heading in the
+     target file (slugified comparison).}
+  {- A block-ID fragment ([#^blockid]) does not match any block in the
+     target file.}
+}
+
+{1 Diagnostic shape}
+
+{t
+  | Field        | Value                                               |
+  |--------------|-----------------------------------------------------|
+  | range        | byte range of the link (see {!page-"feature-utf16-positions"}) |
+  | severity     | Warning                                             |
+  | source       | ["oystermark"]                                      |
+  | message      | human-readable description, e.g. ["unresolved link: note"] |
+}
+
+Resolved links produce no diagnostic.
+
+{1 Edge cases}
+
+{ul
+  {- {b Empty document}: zero diagnostics.}
+  {- {b Self-referencing fragment} ([[[#heading]]]): resolved against
+     the current file; unresolved if heading/block not found.}
+  {- {b Embed links} ([![[note]]]): treated identically to regular
+     wikilinks for diagnostic purposes.}
+}

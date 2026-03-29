@@ -103,7 +103,7 @@ class oystermark_server =
           | _ -> None
         in
         (match
-           Lsp_lib.go_to_definition
+           Lsp_lib.Go_to_definition.go_to_definition
              ~index
              ~rel_path
              ~content:doc_st.content

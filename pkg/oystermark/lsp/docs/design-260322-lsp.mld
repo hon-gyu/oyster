@@ -1,6 +1,6 @@
 {0 oystermark-lsp}
 
-{b This is a living document}
+{b the grounding design doc of lsp}
 
 An LSP server for Oystermark vaults, built on [linol-eio].
 
@@ -104,7 +104,7 @@ v}
 
 {1 Tracing}
 
-See {!page-"lsp-tracing"} for full details on instrumentation,
+See {!page-"design-260322-tracing"} for full details on instrumentation,
 backends (OTEL / in-memory), design choices, and version constraints.
 
 {1 Testing}

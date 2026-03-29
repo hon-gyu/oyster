@@ -223,7 +223,7 @@ let traced_executor_of_executor
     |> Trace_collect.Span_pipeline.filter_attributes ~remove:filter_keys
     |> Trace_collect.Span_pipeline.scrub_attributes ~scrub:scrub_keys
   in
-  let trace_text = Trace_collect.Trace_pp.format Indented all_spans' in
+  let trace_text = Trace_collect.Trace_pp.format all_spans' in
   let trace_outputs =
     List.filter_map ctx.inputs ~f:(fun (cell : cell) ->
       match cell.lang with

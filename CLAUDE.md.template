@@ -1,1 +1,17 @@
+# Rules
+- When working in a dir that contains its own `CLAUDE.md`, read it first. They are important context that is specific to that dir.
+- All `CLAUDE.md` are considered source of truth and they are living documents. So if anything inside it is inconsistent or outdated, discuss with the user.
+
+
+# Tips
+
+## odoc escaping
+In most contexts, the characters { [ ] } @ all need to be escaped with a backslash. In inline source code style, only square brackets need to be escaped. However, as a convenience, matched square brackets need not be escaped to aid in typesetting code. For example, the following would be acceptable in a documentation comment:
+
+```odoc
+The list [ [1;2;3] ] needs no escaping
+```
+
+# Oystermark doc
+
 The following content is excerpted from pkg/oystermark/doc/index.mld
