@@ -435,6 +435,22 @@ let traced_code_exec
     ()
 ;;
 
+(** Run a Graphviz layout engine on [dot] code blocks and replace them with
+    inline SVG.  The layout engine defaults to ["dot"] but can be overridden
+    via the Pandoc attribute [layout], e.g. [```dot {layout=neato}].
+
+    @param on_error controls what is rendered when [dot] fails.
+    [`Keep_original] (default) leaves the code block unchanged.
+    [`Show_error] replaces it with an [=html] block showing the stderr. *)
+let dot_render ?(on_error : [ `Keep_original | `Show_error ] = `Keep_original) () : t =
+  code_exec
+    ~fm_filter:(fun _ -> true)
+    ~loc_map:(fun _ -> `Replace)
+    ~executor:(Code_executor.dot_executor ~on_error)
+    ~hash_fn:(Code_executor.hash_fn_of_lang "dot")
+    ()
+;;
+
 let default ?(cache : Cache.cache option) () : t =
   id
   >> exclude_draft_by_note_name
@@ -443,6 +459,7 @@ let default ?(cache : Cache.cache option) () : t =
   >> drop_keys_in_frontmatter [ "publish"; "draft" ]
   >> drop_emtpy_frontmatter
   >> py_executor ?cache ()
+  >> dot_render ()
   >> backlinks
   >> home_toc ~dir_link:true ()
   >> dir_index ()

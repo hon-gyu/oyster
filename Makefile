@@ -23,6 +23,10 @@ build:
 test:
 	dune test
 
+.PHONY: test-code-exec
+test-code-exec:  ## Run code execution tests
+	OYSTER_CODE_EXEC_TESTS=true dune test
+
 .PHONY: setup-hooks
 setup-hooks:  ## Install git hooks from scripts/pre-commit
 	git config core.hooksPath scripts/pre-commit

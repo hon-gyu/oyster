@@ -1,4 +1,4 @@
-(** Test for {!Trace_collect} and {!Trace_pp} *)
+(** Test for {!Trace_collect} and {!Trace_collect.Trace_pp} *)
 
 open Core
 

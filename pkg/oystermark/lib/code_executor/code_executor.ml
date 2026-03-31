@@ -192,6 +192,56 @@ let bash_executor
   outputs |> List.concat |> List.sort ~compare:(fun a b -> Int.compare a.id b.id)
 ;;
 
+(** Executor for [dot] code blocks. Pipes each cell through [dot -Tsvg] (or
+    the layout engine specified via the [layout] attribute) and returns inline
+    SVG.
+
+    @param on_error [`Keep_original] (default) omits the output so the source
+    block is left untouched; [`Show_error] returns an [Error] result so the
+    renderer shows the stderr message. *)
+let dot_executor ?(on_error : [ `Keep_original | `Show_error ] = `Keep_original)
+  : executor
+  =
+  fun ctx ->
+  List.filter_map ctx.inputs ~f:(fun cell ->
+    match cell.lang with
+    | Some l when String.equal (String.lowercase l) "dot" ->
+      let layout =
+        match cell.attr with
+        | Some { kvs; _ } ->
+          Option.value (List.Assoc.find kvs ~equal:String.equal "layout") ~default:"dot"
+        | None -> "dot"
+      in
+      let cmd = sprintf "%s -Tsvg" layout in
+      let env = Core_unix.environment () in
+      let pc = Core_unix.open_process_full ~env cmd in
+      Out_channel.output_string pc.stdin cell.content;
+      Out_channel.close pc.stdin;
+      let stdout = In_channel.input_all pc.stdout in
+      let stderr = In_channel.input_all pc.stderr in
+      let status = Core_unix.close_process_full pc in
+      (match status with
+       | Ok () ->
+         let svg =
+           String.split_lines stdout
+           |> List.drop_while ~f:(fun line ->
+             not (String.is_prefix (String.lstrip line) ~prefix:"<svg"))
+           |> String.concat ~sep:"\n"
+         in
+         Some { id = cell.id; res = `Html svg }
+       | Error _ ->
+         (match on_error with
+          | `Keep_original -> None
+          | `Show_error ->
+            let html =
+              sprintf
+                "<pre class=\"dot-error\"><code>%s</code></pre>"
+                (String.strip stderr)
+            in
+            Some { id = cell.id; res = `Error html }))
+    | _ -> None)
+;;
+
 (** Execute code blocks with trace collection, filling [trace] placeholder blocks
     with formatted span output.
 
@@ -418,8 +468,8 @@ otel-cli exec --service oyster-test --name "parent-op" --tp-carrier $CARRIER -- 
       print_endline trace_output;
       [%expect
         {|
-        parent-op 2us process.command=otel-cli process.command_args=? process.owner=- process.pid=- process.parent_pid=-
-        └── child-step 1us process.command=echo process.command_args=? process.owner=- process.pid=- process.parent_pid=-
+        parent-op 1us process.command=otel-cli process.command_args=? process.owner=- process.pid=- process.parent_pid=-
+        └── child-step 2us process.command=echo process.command_args=? process.owner=- process.pid=- process.parent_pid=-
         |}]
     ;;
 

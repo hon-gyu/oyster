@@ -1,0 +1,8 @@
+(library
+ (name test_oystermark_code_exec)
+ (libraries oystermark cmarkit core)
+ (inline_tests
+  (enabled_if
+   (= %{env:OYSTER_CODE_EXEC_TESTS=false} "true")))
+ (preprocess
+  (pps ppx_expect ppx_jane)))
