@@ -203,6 +203,35 @@ let%expect_test "dir_index: generated page has TOC with children" =
     |}]
 ;;
 
+(* transclude_code_files vault
+   ==================================================================== *)
+
+let code_embed_root = "../data/vault/code-embed"
+
+let%expect_test "transclude_code_files: wikilink embed replaced with code block" =
+  let pipeline = Pipeline.transclude_code_files in
+  let results =
+    Oystermark.render_vault ~pipeline ~backend_blocks:true ~safe:false code_embed_root
+  in
+  let html = List.Assoc.find_exn results ~equal:String.equal "note/index.html" in
+  printf "%s" html;
+  [%expect
+    {|
+    <!DOCTYPE html>
+    <html>
+    <head><meta charset="UTF-8"></head>
+    <body>
+    <nav class="breadcrumb"><a href="/home/">Home</a></nav><ul>
+    <li><a href="/note/">note</a></li>
+    </ul><div class="frontmatter"><table><tr><th>publish</th><td>true</td></tr></table></div>
+    <h1 id="note">Note</h1>
+    <pre><code class="language-py">print(&quot;hello&quot;)
+    </code></pre>
+    </body>
+    </html>
+    |}]
+;;
+
 let%expect_test "dir_index: skips dir when index.md already exists" =
   let results =
     Oystermark.render_vault
