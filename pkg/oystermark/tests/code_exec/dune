@@ -1,0 +1,6 @@
+(library
+ (name test_oystermark_code_exec)
+ (libraries oystermark cmarkit core)
+ (inline_tests)
+ (preprocess
+  (pps ppx_expect ppx_jane)))
