@@ -3,7 +3,9 @@ open Oystermark
 
 let run_dot ?on_error md =
   let doc = Parse.of_string md in
-  let doc' = (Pipeline.dot_render ?on_error ()).on_parse "test.md" doc |> List.hd_exn |> snd in
+  let doc' =
+    (Pipeline.dot_render ?on_error ()).on_parse "test.md" doc |> List.hd_exn |> snd
+  in
   print_endline (Parse.commonmark_of_doc doc')
 ;;
 
@@ -15,7 +17,8 @@ let%expect_test "basic dot graph" =
     {|```dot
 digraph { a -> b }
 ```|};
-  [%expect {|
+  [%expect
+    {|
     ```=html
     <svg width="62pt" height="116pt"
      viewBox="0.00 0.00 62.00 116.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
@@ -63,7 +66,8 @@ let%expect_test "error: keep_original (default)" =
     {|```dot
 invalid dot syntax {{{
 ```|};
-  [%expect {|
+  [%expect
+    {|
     ```dot
     invalid dot syntax {{{
     ```
@@ -76,7 +80,8 @@ let%expect_test "error: show_error" =
     {|```dot
 invalid dot syntax {{{
 ```|};
-  [%expect {|
+  [%expect
+    {|
     ```=html
     <pre class="dot-error"><code>Error: <stdin>: syntax error in line 1 near 'invalid'</code></pre>
     ```
