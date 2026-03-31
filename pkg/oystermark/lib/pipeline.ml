@@ -443,67 +443,12 @@ let traced_code_exec
     [`Keep_original] (default) leaves the code block unchanged.
     [`Show_error] replaces it with an [=html] block showing the stderr. *)
 let dot_render ?(on_error : [ `Keep_original | `Show_error ] = `Keep_original) () : t =
-  let open Cmarkit in
-  let block_mapper : Block.t Mapper.mapper =
-    fun _m b ->
-    match b with
-    | Block.Code_block (cb, meta) ->
-      let cb_info = Meta.find Parse.Attribute.meta_key meta in
-      (match cb_info with
-       | Some { lang; attribute; _ } when String.equal lang "dot" ->
-         let content =
-           List.map (Block.Code_block.code cb) ~f:Block_line.to_string
-           |> String.concat ~sep:"\n"
-         in
-         let layout =
-           match attribute with
-           | Some { kvs; _ } ->
-             (match List.Assoc.find kvs ~equal:String.equal "layout" with
-              | Some engine -> engine
-              | None -> "dot")
-           | None -> "dot"
-         in
-         let cmd = sprintf "%s -Tsvg" layout in
-         let env = Core_unix.environment () in
-         let pc = Core_unix.open_process_full ~env cmd in
-         Out_channel.output_string pc.stdin content;
-         Out_channel.close pc.stdin;
-         let stdout = In_channel.input_all pc.stdout in
-         let stderr = In_channel.input_all pc.stderr in
-         let status = Core_unix.close_process_full pc in
-         (match status with
-          | Ok () ->
-            (* Strip XML declaration and DOCTYPE, keep from <svg onward *)
-            let svg =
-              String.split_lines stdout
-              |> List.drop_while ~f:(fun line ->
-                let trimmed = String.lstrip line in
-                not (String.is_prefix trimmed ~prefix:"<svg"))
-              |> String.concat ~sep:"\n"
-            in
-            let out_cb =
-              Block.Code_block.make
-                ~info_string:("=html", Meta.none)
-                (Block_line.list_of_string svg)
-            in
-            Mapper.ret (Block.Code_block (out_cb, Meta.none))
-          | Error _ ->
-            (match on_error with
-             | `Keep_original -> Mapper.default
-             | `Show_error ->
-               let err_html =
-                 sprintf "<pre class=\"dot-error\"><code>%s</code></pre>" (String.strip stderr)
-               in
-               let out_cb =
-                 Block.Code_block.make
-                   ~info_string:("=html", Meta.none)
-                   (Block_line.list_of_string err_html)
-               in
-               Mapper.ret (Block.Code_block (out_cb, Meta.none))))
-       | _ -> Mapper.default)
-    | _ -> Mapper.default
-  in
-  of_block_mapper block_mapper
+  code_exec
+    ~fm_filter:(fun _ -> true)
+    ~loc_map:(fun _ -> `Replace)
+    ~executor:(Code_executor.dot_executor ~on_error)
+    ~hash_fn:(Code_executor.hash_fn_of_lang "dot")
+    ()
 ;;
 
 let default ?(cache : Cache.cache option) () : t =
@@ -610,9 +555,7 @@ let%test_module "dot_render" =
   (module struct
     let run_dot ?on_error md =
       let doc = Parse.of_string md in
-      let doc' =
-        (dot_render ?on_error ()).on_parse "test.md" doc |> List.hd_exn |> snd
-      in
+      let doc' = (dot_render ?on_error ()).on_parse "test.md" doc |> List.hd_exn |> snd in
       print_endline (Parse.commonmark_of_doc doc')
     ;;
 
@@ -621,7 +564,8 @@ let%test_module "dot_render" =
         {|```dot
 digraph { a -> b }
 ```|};
-      [%expect {|
+      [%expect
+        {|
         ```=html
         <svg width="62pt" height="116pt"
          viewBox="0.00 0.00 62.00 116.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
@@ -669,7 +613,8 @@ print("hello")
         {|```dot
 invalid dot syntax {{{
 ```|};
-      [%expect {|
+      [%expect
+        {|
         ```dot
         invalid dot syntax {{{
         ```
@@ -677,11 +622,13 @@ invalid dot syntax {{{
     ;;
 
     let%expect_test "error: show_error" =
-      run_dot ~on_error:`Show_error
+      run_dot
+        ~on_error:`Show_error
         {|```dot
 invalid dot syntax {{{
 ```|};
-      [%expect {|
+      [%expect
+        {|
         ```=html
         <pre class="dot-error"><code>Error: <stdin>: syntax error in line 1 near 'invalid'</code></pre>
         ```
