@@ -518,6 +518,7 @@ let default ?(cache : Cache.cache option) () : t =
   >> validate_no_duplicates
   >> drop_keys_in_frontmatter [ "publish"; "draft" ]
   >> drop_emtpy_frontmatter
+  >> transclude_code_files
   >> py_executor ?cache ()
   >> backlinks
   >> home_toc ~dir_link:true ()
