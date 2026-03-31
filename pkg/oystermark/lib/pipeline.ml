@@ -51,7 +51,11 @@ let ( >> ) a b = compose a b
 
 (** {1 Vault-stage helpers} *)
 
-(** Lift a per-doc concat_map into an [on_vault] hook. *)
+(** Lift a per-doc concat_map into an [on_vault] hook.
+    @param f A function that takes the vault context, path, and document, and
+           returns a list of (path, doc) pairs to replace the original doc with.
+    @return An [on_vault] hook that applies [f] to each document in the vault.
+*)
 let map_each_doc (f : Vault.t -> string -> Cmarkit.Doc.t -> (string * Cmarkit.Doc.t) list)
   : Vault.t -> Vault.t
   =
@@ -309,7 +313,7 @@ let dir_index ?(immediate_only : bool = false) () : t =
   make ~on_vault ()
 ;;
 
-(** Append backlinks to every note. *)
+(** Append backlink component to every note's last block. *)
 let backlinks : t =
   let on_vault : Vault.t -> Vault.t =
     map_each_doc (fun (ctx : Vault.t) (path : string) (doc : Cmarkit.Doc.t) ->
@@ -326,6 +330,78 @@ let backlinks : t =
             ()
         in
         [ path, Cmarkit.Mapper.map_doc mapper doc ])
+  in
+  make ~on_vault ()
+;;
+
+(** Transclude code files as codeblocks.
+    - Applicable to both markdown inline link and wikilink embed.
+    If the target file has a file extension in the list, replace it with a codeblock
+    with corresponding lang info.
+*)
+let transclude_code_files : t =
+  let lang_of_path (p : string) : string option =
+    match String.rsplit2 p ~on:'.' with
+    | Some (_, ext) ->
+      if
+        List.mem
+          ([ "py"; "ml"; "mli"; "rs"; "js"; "ts"; "sh"; "bash"
+           ; "json"; "yaml"; "yml"; "toml"; "css"; "sql"; "go"; "java"
+           ; "c"; "h"; "cpp"; "hpp"; "rb"; "lua"; "zig"; "nix"; "el"; "clj"
+           ] [@ocamlformat "disable"])
+          ext
+          ~equal:String.equal
+      then Some ext
+      else None
+    | None -> None
+  in
+  let extract_file_target (i : Cmarkit.Inline.t) : string option =
+    let meta =
+      match i with
+      | Parse.Wikilink.Ext_wikilink (w, m) when w.embed -> Some m
+      | Cmarkit.Inline.Image (_, m) -> Some m
+      | _ -> None
+    in
+    match meta with
+    | Some m ->
+      (match Cmarkit.Meta.find Vault.Resolve.resolved_key m with
+       | Some (Vault.Resolve.File { path }) ->
+         lang_of_path path |> Option.map ~f:(fun _ -> path)
+       | _ -> None)
+    | None -> None
+  in
+  let extract_from_inline (inline : Cmarkit.Inline.t) : string option =
+    match inline with
+    | Cmarkit.Inline.Inlines ([ i ], _) -> extract_file_target i
+    | i -> extract_file_target i
+  in
+  let on_vault : Vault.t -> Vault.t =
+    map_each_doc (fun (ctx : Vault.t) (path : string) (doc : Cmarkit.Doc.t) ->
+      let mapper =
+        Cmarkit.Mapper.make
+          ~inline_ext_default:(fun _m i -> Some i)
+          ~block_ext_default:(fun _m b -> Some b)
+          ~block:(fun _m block ->
+            match block with
+            | Cmarkit.Block.Paragraph (p, _) ->
+              (match extract_from_inline (Cmarkit.Block.Paragraph.inline p) with
+               | Some file_path ->
+                 (match lang_of_path file_path with
+                  | None -> Cmarkit.Mapper.default
+                  | Some lang ->
+                    let full_path = Filename.concat ctx.vault_root file_path in
+                    let content = In_channel.read_all full_path in
+                    let cb =
+                      Cmarkit.Block.Code_block.make
+                        ~info_string:(lang, Cmarkit.Meta.none)
+                        (Cmarkit.Block_line.list_of_string content)
+                    in
+                    Cmarkit.Mapper.ret (Cmarkit.Block.Code_block (cb, Cmarkit.Meta.none)))
+               | None -> Cmarkit.Mapper.default)
+            | _ -> Cmarkit.Mapper.default)
+          ()
+      in
+      [ path, Cmarkit.Mapper.map_doc mapper doc ])
   in
   make ~on_vault ()
 ;;
