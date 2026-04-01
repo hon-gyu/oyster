@@ -87,3 +87,77 @@ invalid dot syntax {{{
     ```
     |}]
 ;;
+
+
+let%test_module "code_exec with bash" =
+  (module struct
+    let code_exec = Pipeline.code_exec
+
+    let run_bash doc =
+      (code_exec
+         ~fm_filter:(fun _ -> true)
+         ~executor:Code_executor.bash_executor
+         ~hash_fn:(Code_executor.hash_fn_of_lang "bash")
+         ())
+        .on_parse
+        "test.md"
+        doc
+      |> List.hd_exn
+      |> snd
+    ;;
+
+    let%expect_test "error + non-matching lang + basic" =
+      let doc =
+        Parse.of_string
+          {|
+```bash
+echo hello
+```
+
+```sh {}
+gibberish_command_that_does_not_exist
+```
+
+```ts
+console.log("hello")
+```
+
+```bash
+echo 2
+```
+|}
+      in
+      print_endline (Parse.commonmark_of_doc (run_bash doc));
+      [%expect
+        {|
+        ```bash
+        echo hello
+        ```
+        ```
+        hello
+
+        ```
+
+        ```sh {}
+        gibberish_command_that_does_not_exist
+        ```
+        ```
+        /bin/bash: line 5: gibberish_command_that_does_not_exist: command not found
+
+        ```
+
+        ```ts
+        console.log("hello")
+        ```
+
+        ```bash
+        echo 2
+        ```
+        ```
+        2
+
+        ```
+        |}]
+    ;;
+  end)
+;;

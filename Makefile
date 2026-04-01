@@ -25,7 +25,7 @@ test:
 
 .PHONY: test-code-exec
 test-code-exec:  ## Run code execution tests
-	OYSTER_CODE_EXEC_TESTS=true dune test
+	OYSTER_CODE_EXEC_TESTS=true dune test pkg/oystermark/tests/code_exec
 
 .PHONY: setup-hooks
 setup-hooks:  ## Install git hooks from scripts/pre-commit
