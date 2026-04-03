@@ -110,6 +110,7 @@ class oystermark_server =
              ~line:pos.line
              ~character:pos.character
              ~read_file
+             ()
          with
          | None -> None
          | Some { path; line } ->

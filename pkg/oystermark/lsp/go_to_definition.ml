@@ -91,12 +91,14 @@ type definition_result =
     lookup; it receives a relative path and should return [Some content] or
     [None]. *)
 let go_to_definition
+      ?(config : Lsp_config.t = Lsp_config.default)
       ~(index : Oystermark.Vault.Index.t)
       ~(rel_path : string)
       ~(content : string)
       ~(line : int)
       ~(character : int)
       ~(read_file : string -> string option)
+      ()
   : definition_result option
   =
   Trace_core.with_span ~__FILE__ ~__LINE__ "go_to_definition"
@@ -127,7 +129,11 @@ let go_to_definition
     Trace_core.add_data_to_span _sp [ "resolution", `String resolution_tag ];
     let parse_target c = Lsp_util.parse_doc c in
     (match target with
-     | Oystermark.Vault.Resolve.Note { path } | File { path } -> Some { path; line = 0 }
+     | Oystermark.Vault.Resolve.Note { path } | File { path } ->
+       (* File found but fragment (if any) wasn't resolved — resolve fell back to the note. *)
+       (match config.gtd_unresolved_fragment, link_ref.fragment with
+        | Strict, Some _ -> None
+        | _ -> Some { path; line = 0 })
      | Heading { path; slug; _ } ->
        let line =
          match read_file path with
@@ -142,7 +148,11 @@ let go_to_definition
          | None -> 0
        in
        Some { path; line }
-     | Curr_file -> Some { path = rel_path; line = 0 }
+     | Curr_file ->
+       (* Self-reference but fragment (if any) wasn't resolved. *)
+       (match config.gtd_unresolved_fragment, link_ref.fragment with
+        | Strict, Some _ -> None
+        | _ -> Some { path = rel_path; line = 0 })
      | Curr_heading { slug; _ } ->
        Some { path = rel_path; line = find_heading_line_in_doc doc slug }
      | Curr_block { block_id } ->
@@ -218,7 +228,7 @@ let%test_module "go_to_definition" =
     let read_file rel_path = List.Assoc.find files ~equal:String.equal rel_path
 
     let show ~rel_path ~content ~line ~character =
-      let def_res_opt = go_to_definition ~index ~rel_path ~content ~line ~character ~read_file in
+      let def_res_opt = go_to_definition ~index ~rel_path ~content ~line ~character ~read_file () in
       print_s [%sexp (def_res_opt : definition_result option)]
     ;;
 

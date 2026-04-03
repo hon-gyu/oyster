@@ -1,7 +1,7 @@
 (library
  (name lsp_lib)
  (public_name oystermark.lsp_lib)
- (modules lsp_lib lsp_util link_collect go_to_definition diagnostics)
+ (modules lsp_lib lsp_util lsp_config link_collect go_to_definition diagnostics)
  (libraries oystermark core trace.core)
  (inline_tests)
  (preprocess

@@ -19,9 +19,11 @@ type diagnostic =
 
     See {!page-"feature-diagnostics".resolution_check}. *)
 let compute
+      ?(config : Lsp_config.t = Lsp_config.default)
       ~(index : Oystermark.Vault.Index.t)
       ~(rel_path : string)
       ~(content : string)
+      ()
   : diagnostic list
   =
   Trace_core.with_span ~__FILE__ ~__LINE__ "diagnostics.compute"
@@ -32,8 +34,25 @@ let compute
   let diagnostics =
     List.filter_map links ~f:(fun (ll : Link_collect.located_link) ->
       let target = Oystermark.Vault.Resolve.resolve ll.link_ref rel_path index in
-      match target with
-      | Oystermark.Vault.Resolve.Unresolved ->
+      (* A link is unresolved when: the target file doesn't exist, OR the file
+         exists but the heading/block fragment wasn't found (resolve falls back
+         to Note/File/Curr_file instead of Heading/Block/Curr_heading/Curr_block).
+         See {!page-"feature-diagnostics".resolution_check}. *)
+      let is_unresolved =
+        match target, ll.link_ref.fragment with
+        | Oystermark.Vault.Resolve.Unresolved, _ -> true
+        | (Note _ | File _), Some _ ->
+          Lsp_config.equal_fragment_behavior
+            config.diag_unresolved_fragment
+            Strict
+        | Curr_file, Some _ ->
+          Lsp_config.equal_fragment_behavior
+            config.diag_unresolved_fragment
+            Strict
+        | _ -> false
+      in
+      if is_unresolved
+      then (
         let target_str =
           match ll.link_ref.target with
           | Some t -> t
@@ -49,8 +68,8 @@ let compute
           { first_byte = ll.first_byte
           ; last_byte = ll.last_byte
           ; message = "unresolved link: " ^ target_str ^ fragment_str
-          }
-      | _ -> None)
+          })
+      else None)
   in
   Trace_core.add_data_to_span _sp [ "num_diagnostics", `Int (List.length diagnostics) ];
   diagnostics
@@ -85,7 +104,7 @@ let%test_module "compute" =
     let index = make_index files
 
     let show ~rel_path ~content : unit =
-      let (diags : diagnostic list) = compute ~index ~rel_path ~content in
+      let (diags : diagnostic list) = compute ~index ~rel_path ~content () in
       List.iter diags ~f:(fun d ->
         print_s [%sexp (d : diagnostic)]
       )
