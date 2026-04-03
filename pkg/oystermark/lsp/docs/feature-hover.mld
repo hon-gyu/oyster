@@ -1,7 +1,6 @@
 {0 Hover}
 
-Show the link target on hover so the user can preview where a link
-points without navigating.
+Show a preview of the link target's content on hover.
 
 {1 Input}
 
@@ -15,7 +14,7 @@ markdown links, markdown images.  External URLs are excluded.
 
 {1 Response}
 
-If the cursor falls on a recognized, resolved link, return a
+If the cursor falls on a recognized link, return a
 [textDocument/hover] response:
 
 {t
@@ -27,20 +26,34 @@ If the cursor falls on a recognized, resolved link, return a
 
 {2 Contents format}
 
+The hover content is a Markdown string with [MarkupKind.Markdown].
+
 {ul
-  {- {b Resolved note link}: the resolved relative path, e.g.
-     [folder/note.md].  If a heading or block-ID fragment is present,
-     append it: [folder/note.md#section-one].}
-  {- {b Resolved embed link}: same as note link, prefixed with
-     ["Embed: "].}
-  {- {b Unresolved link}: ["Unresolved: target"].}
+  {- {b Resolved note / file link} ([[[note]]]): the raw markdown
+     content of the target file.}
+  {- {b Resolved heading fragment} ([[[note#Heading]]]): the markdown
+     content of the section starting at the matched heading, up to (but
+     not including) the next heading of equal or higher level.}
+  {- {b Resolved block-ID fragment} ([[[note#^blockid]]]): the
+     paragraph that carries the block ID.}
+  {- {b Self-referencing fragments} ([[[#Heading]]], [[[#^blockid]]]):
+     same as above but sourced from the current file.}
+  {- {b Unresolved link}: no hover result (return [None]).}
 }
+
+{2 Truncation}
+
+If the content string exceeds {!Lsp_config.t.hover_max_chars} bytes,
+it is truncated at that boundary (snapped to the previous newline to
+avoid cutting mid-word) and the suffix ["\n\n*(truncated)*"] is
+appended.
 
 {1 Edge cases}
 
 {ul
   {- {b Cursor outside any link}: no hover result.}
-  {- {b Multi-target ambiguity}: show the first candidate path and
-     note the number of candidates, e.g.
-     ["folder/note.md (1 of 2 matches)"].}
+  {- {b Target file unreadable}: no hover result.}
+  {- {b Heading / block not found in target file}: fall back to the full
+     file content (subject to truncation), consistent with the
+     go-to-definition fallback.}
 }
