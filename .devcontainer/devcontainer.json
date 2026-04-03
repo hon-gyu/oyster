@@ -1,6 +1,7 @@
 {
   "name": "Oyster OCaml Dev",
   "build": {
+    "context": "..",
     "dockerfile": "Dockerfile"
   },
   "runArgs": [
