@@ -218,51 +218,50 @@ let%test_module "go_to_definition" =
     let read_file rel_path = List.Assoc.find files ~equal:String.equal rel_path
 
     let show ~rel_path ~content ~line ~character =
-      match go_to_definition ~index ~rel_path ~content ~line ~character ~read_file with
-      | None -> print_endline "<none>"
-      | Some r -> printf "%s:%d\n" r.path r.line
+      let def_res_opt = go_to_definition ~index ~rel_path ~content ~line ~character ~read_file in
+      print_s [%sexp (def_res_opt : definition_result option)]
     ;;
 
     let%expect_test "wikilink to note" =
       let content = List.Assoc.find_exn files ~equal:String.equal "note-b.md" in
       show ~rel_path:"note-b.md" ~content ~line:2 ~character:10;
-      [%expect {| note-a.md:0 |}]
+      [%expect {| (((path note-a.md) (line 0))) |}]
     ;;
 
     let%expect_test "wikilink to heading" =
       let content = List.Assoc.find_exn files ~equal:String.equal "note-c.md" in
       show ~rel_path:"note-c.md" ~content ~line:2 ~character:8;
-      [%expect {| note-a.md:2 |}]
+      [%expect {| (((path note-a.md) (line 2))) |}]
     ;;
 
     let%expect_test "wikilink to block id" =
       let content = List.Assoc.find_exn files ~equal:String.equal "note-c.md" in
       show ~rel_path:"note-c.md" ~content ~line:4 ~character:8;
-      [%expect {| note-a.md:4 |}]
+      [%expect {| (((path note-a.md) (line 4))) |}]
     ;;
 
     let%expect_test "markdown link to note" =
       let content = List.Assoc.find_exn files ~equal:String.equal "note-d.md" in
       show ~rel_path:"note-d.md" ~content ~line:2 ~character:12;
-      [%expect {| note-a.md:0 |}]
+      [%expect {| (((path note-a.md) (line 0))) |}]
     ;;
 
     let%expect_test "cursor not on link" =
       let content = List.Assoc.find_exn files ~equal:String.equal "note-b.md" in
       show ~rel_path:"note-b.md" ~content ~line:0 ~character:0;
-      [%expect {| <none> |}]
+      [%expect {| () |}]
     ;;
 
     let%expect_test "unresolved wikilink" =
       let content = "See [[nonexistent]]." in
       show ~rel_path:"note-b.md" ~content ~line:0 ~character:7;
-      [%expect {| <none> |}]
+      [%expect {| () |}]
     ;;
 
     let%expect_test "self-reference heading" =
       let content = List.Assoc.find_exn files ~equal:String.equal "note-e.md" in
       show ~rel_path:"note-e.md" ~content ~line:2 ~character:12;
-      [%expect {| note-e.md:0 |}]
+      [%expect {| (((path note-e.md) (line 0))) |}]
     ;;
   end)
 ;;

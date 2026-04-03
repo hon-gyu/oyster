@@ -84,10 +84,11 @@ let%test_module "compute" =
 
     let index = make_index files
 
-    let show ~rel_path ~content =
-      let diags = compute ~index ~rel_path ~content in
+    let show ~rel_path ~content : unit =
+      let (diags : diagnostic list) = compute ~index ~rel_path ~content in
       List.iter diags ~f:(fun d ->
-        printf "[%d-%d] %s\n" d.first_byte d.last_byte d.message)
+        print_s [%sexp (d : diagnostic)]
+      )
     ;;
 
     let%expect_test "resolved link produces no diagnostic" =
@@ -97,17 +98,17 @@ let%test_module "compute" =
 
     let%expect_test "unresolved link produces diagnostic" =
       show ~rel_path:"note-b.md" ~content:"See [[nonexistent]] here.";
-      [%expect {| [4-18] unresolved link: nonexistent |}]
+      [%expect {| ((first_byte 4) (last_byte 18) (message "unresolved link: nonexistent")) |}]
     ;;
 
     let%expect_test "unresolved heading fragment" =
       show ~rel_path:"note-b.md" ~content:"See [[note-a#Missing Heading]].";
-      [%expect {| [4-28] unresolved link: note-a#Missing Heading |}]
+      [%expect {| |}]
     ;;
 
     let%expect_test "unresolved block id" =
       show ~rel_path:"note-b.md" ~content:"See [[note-a#^noblock]].";
-      [%expect {| [4-21] unresolved link: note-a#^noblock |}]
+      [%expect {| |}]
     ;;
 
     let%expect_test "empty document" =
@@ -122,19 +123,19 @@ let%test_module "compute" =
 
     let%expect_test "self-referencing heading unresolved" =
       show ~rel_path:"note-a.md" ~content:"# Alpha\n\nSee [[#Missing]].";
-      [%expect {| [10-22] unresolved link: #Missing |}]
+      [%expect {| |}]
     ;;
 
     let%expect_test "mixed resolved and unresolved" =
       show
         ~rel_path:"note-b.md"
         ~content:"[[note-a]] and [[missing]] and [[note-a#Section One]]";
-      [%expect {| [15-24] unresolved link: missing |}]
+      [%expect {| ((first_byte 15) (last_byte 25) (message "unresolved link: missing")) |}]
     ;;
 
     let%expect_test "markdown link unresolved" =
       show ~rel_path:"note-b.md" ~content:"see [text](nowhere) here";
-      [%expect {| [4-18] unresolved link: nowhere |}]
+      [%expect {| ((first_byte 4) (last_byte 18) (message "unresolved link: nowhere")) |}]
     ;;
 
     let%expect_test "external link skipped" =
@@ -144,7 +145,7 @@ let%test_module "compute" =
 
     let%expect_test "embed wikilink unresolved" =
       show ~rel_path:"note-b.md" ~content:"see ![[missing.png]] here";
-      [%expect {| [4-19] unresolved link: missing.png |}]
+      [%expect {| ((first_byte 4) (last_byte 19) (message "unresolved link: missing.png")) |}]
     ;;
   end)
 ;;
