@@ -31,4 +31,21 @@ test-code-exec:  ## Run code execution tests
 setup-hooks:  ## Install git hooks from scripts/pre-commit
 	git config core.hooksPath scripts/pre-commit
 
+.PHONY: devc-up
+devc-up:  ## Spin up dev container
+	npx @devcontainers/cli up --workspace-folder .
+
+.PHONY: devc-attach
+devc-attach:  ## Attach to running dev container
+	npx @devcontainers/cli exec --workspace-folder . bash -l
+
+.PHONY: devc-down
+devc-down:  ## Kill and remove dev container
+	@id=$$(docker ps -q --filter "label=devcontainer.local_folder=$(CURDIR)"); \
+	if [ -n "$$id" ]; then \
+		docker rm -f $$id; \
+	else \
+		echo "No running dev container found"; \
+	fi
+
 -include Makefile.local
