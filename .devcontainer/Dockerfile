@@ -101,13 +101,26 @@ RUN sh -c "$(wget -O- https://github.com/deluan/zsh-in-docker/releases/download/
 # RUN npm install -g @anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}
 RUN curl -fsSL https://claude.ai/install.sh | bash
 
-COPY setup-ocaml.sh /usr/local/bin
+COPY .devcontainer/setup-ocaml.sh /usr/local/bin
 
 # Copy and set up firewall script and let node sudo to all (for opam depexts)
-COPY init-firewall.sh /usr/local/bin/
+COPY .devcontainer/init-firewall.sh /usr/local/bin/
 USER root
 RUN chmod +x /usr/local/bin/init-firewall.sh && \
   echo "node ALL=(root) NOPASSWD:ALL" > /etc/sudoers.d/node-firewall && \
   chmod 0440 /etc/sudoers.d/node-firewall
 USER node
 RUN /usr/local/bin/setup-ocaml.sh
+
+# Pin packages that need dev versions from git
+RUN eval $(opam env) && \
+  opam pin add -ny opentelemetry git+https://github.com/ocaml-tracing/ocaml-opentelemetry.git && \
+  opam pin add -ny opentelemetry-client git+https://github.com/ocaml-tracing/ocaml-opentelemetry.git && \
+  opam pin add -ny opentelemetry-client-cohttp-eio git+https://github.com/ocaml-tracing/ocaml-opentelemetry.git
+
+# Pre-install project dependencies (cached unless opam files change)
+COPY --chown=node:node ./oystermark.opam ./trace-collect.opam ./dune-project /tmp/opam-deps/
+RUN cd /tmp/opam-deps && eval $(opam env) && \
+  opam install . --deps-only --with-test --with-doc -y && \
+  opam clean -a && \
+  rm -rf /tmp/opam-deps

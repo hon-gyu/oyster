@@ -88,7 +88,6 @@ invalid dot syntax {{{
     |}]
 ;;
 
-
 let%test_module "code_exec with bash" =
   (module struct
     let code_exec = Pipeline.code_exec

@@ -19,6 +19,9 @@ jobs:
           ocaml-compiler: "5.4"
           dune-cache: true
           opam-pin: false
+      - run: opam pin add -yn opentelemetry git+https://github.com/ocaml-tracing/ocaml-opentelemetry.git
+      - run: opam pin add -yn opentelemetry-client git+https://github.com/ocaml-tracing/ocaml-opentelemetry.git
+      - run: opam pin add -yn opentelemetry-client-cohttp-eio git+https://github.com/ocaml-tracing/ocaml-opentelemetry.git
       - run: opam install . --deps-only
       - run: opam install ocamlformat
       - run: opam exec -- dune fmt
@@ -36,5 +39,8 @@ jobs:
           ocaml-compiler: "5.4"
           dune-cache: true
           opam-pin: false
+      - run: opam pin add -yn opentelemetry git+https://github.com/ocaml-tracing/ocaml-opentelemetry.git
+      - run: opam pin add -yn opentelemetry-client git+https://github.com/ocaml-tracing/ocaml-opentelemetry.git
+      - run: opam pin add -yn opentelemetry-client-cohttp-eio git+https://github.com/ocaml-tracing/ocaml-opentelemetry.git
       - run: opam install . --deps-only --with-doc --with-test
       - run: opam exec -- dune build @doc-private

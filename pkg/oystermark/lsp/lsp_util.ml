@@ -27,6 +27,23 @@ let byte_offset_of_position (content : string) ~(line : int) ~(character : int) 
   offset
 ;;
 
+(** Convert a byte [offset] in [content] to a 0-based [(line, character)]
+    position.  [character] is a byte offset within the line (correct for ASCII).
+    Clamps to the end of content if [offset] is out of range. *)
+let position_of_byte_offset (content : string) (offset : int) : int * int =
+  let len = String.length content in
+  let offset = min offset len in
+  let line = ref 0 in
+  let line_start = ref 0 in
+  for i = 0 to offset - 1 do
+    if Char.equal (String.get content i) '\n'
+    then (
+      incr line;
+      line_start := i + 1)
+  done;
+  !line, offset - !line_start
+;;
+
 (** {1 Parsing} *)
 
 (** Parse [content] into a [Cmarkit.Doc.t] with locations enabled. *)

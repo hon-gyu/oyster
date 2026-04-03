@@ -22,7 +22,7 @@ Every recognized link form in the document is checked:
 
 External URLs ([https://...], [http://...]) are skipped.
 
-{1 Resolution check}
+{1:resolution_check Resolution check}
 
 Each link is resolved against the vault index via
 {!Oystermark.Vault.Resolve.resolve}.  A link is {e unresolved} when:

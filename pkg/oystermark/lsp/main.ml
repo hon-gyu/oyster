@@ -37,6 +37,7 @@ class oystermark_server =
 
     method spawn_query_handler f = Linol_eio.spawn f
     method! config_definition = Some (`Bool true)
+    method! config_hover = Some (`Bool true)
 
     method! config_sync_opts =
       TextDocumentSyncOptions.create
@@ -76,6 +77,58 @@ class oystermark_server =
 
     method! on_notif_doc_did_save ~notify_back:_ _params = self#rebuild_index
 
+    method! on_req_hover
+      ~notify_back:_
+      ~id:_
+      ~uri
+      ~pos
+      ~workDoneToken:_
+      (doc_st : doc_state) =
+      match vault_root with
+      | None -> None
+      | Some root ->
+        let file_path = DocumentUri.to_path uri in
+        let rel_path =
+          let prefix = root ^ "/" in
+          let plen = String.length prefix in
+          if
+            String.length file_path >= plen
+            && String.equal (String.sub file_path ~pos:0 ~len:plen) prefix
+          then String.sub file_path ~pos:plen ~len:(String.length file_path - plen)
+          else file_path
+        in
+        let read_file rp =
+          let fp = Filename.concat root rp in
+          try Some (In_channel.read_all fp) with
+          | _ -> None
+        in
+        (match
+           Lsp_lib.Hover.hover
+             ~index
+             ~rel_path
+             ~content:doc_st.content
+             ~line:pos.line
+             ~character:pos.character
+             ~read_file
+             ()
+         with
+         | None -> None
+         | Some (text, first_byte, last_byte) ->
+           let contents =
+             `MarkupContent (MarkupContent.create ~kind:MarkupKind.Markdown ~value:text)
+           in
+           let range =
+             let start_pos =
+               Lsp_lib.Util.position_of_byte_offset doc_st.content first_byte
+             in
+             let end_pos =
+               Lsp_lib.Util.position_of_byte_offset doc_st.content last_byte
+             in
+             let to_lsp_pos (line, character) = Position.create ~line ~character in
+             Some (Range.create ~start:(to_lsp_pos start_pos) ~end_:(to_lsp_pos end_pos))
+           in
+           Some (Hover.create ~contents ?range ()))
+
     method! on_req_definition
       ~notify_back:_
       ~id:_
@@ -110,6 +163,7 @@ class oystermark_server =
              ~line:pos.line
              ~character:pos.character
              ~read_file
+             ()
          with
          | None -> None
          | Some { path; line } ->

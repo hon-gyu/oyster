@@ -5,4 +5,8 @@
     here. *)
 
 module Util = Lsp_util
+module Config = Lsp_config
+module Link_collect = Link_collect
 module Go_to_definition = Go_to_definition
+module Diagnostics = Diagnostics
+module Hover = Hover

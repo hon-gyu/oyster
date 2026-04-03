@@ -9,3 +9,7 @@ Development of LSP is driven by specifications in docs/ dir.
   - Define module interface (`.mli` file and inline submodule) to explicitly control what should be exposed.
   - For testing utils, define it as `module For_test ...`
 - Property-based testing is encouraged. Trace-based testing is encouraged.
+
+Design
+- The LSP is expected to be a glue layer on top of the core functionlities. In the long term, we would like most of the core calculations provided by upstream (oystermark/lib).
+  - It's fine to experiment with new features here in a self-contained way though.

@@ -40,6 +40,7 @@
   eio_main
   (textutils :with-test)
   (ppx_expect :with-test)
+  (ppx_trace :with-test)
   (shexp :with-doc)
   (odoc :with-doc))
  (tags
