@@ -43,7 +43,7 @@ The hover content is a Markdown string with [MarkupKind.Markdown].
 
 {2 Truncation}
 
-If the content string exceeds {!Lsp_config.t.hover_max_chars} bytes,
+If the content string exceeds {!Lsp_lib.Config.t.hover_max_chars} bytes,
 it is truncated at that boundary (snapped to the previous newline to
 avoid cutting mid-word) and the suffix ["\n\n*(truncated)*"] is
 appended.
