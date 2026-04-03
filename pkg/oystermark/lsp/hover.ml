@@ -47,10 +47,11 @@ let extract_section ~(heading_line : int) ~(heading_level : int) (content : stri
           String.lfindi line ~f:(fun _ c -> not (Char.equal c '#'))
           |> Option.value ~default:(String.length line)
         in
-        if hashes >= 1
-           && hashes <= heading_level
-           && String.length line > hashes
-           && Char.equal line.[hashes] ' '
+        if
+          hashes >= 1
+          && hashes <= heading_level
+          && String.length line > hashes
+          && Char.equal line.[hashes] ' '
         then i
         else find (i + 1))
     in
@@ -88,7 +89,9 @@ let extract_block ~(block_id : string) (content : string) : string option =
     (* Walk backwards to find the start of the paragraph. *)
     let start =
       let rec loop i =
-        if i < 0 || String.is_empty (String.strip lines_arr.(i)) then i + 1 else loop (i - 1)
+        if i < 0 || String.is_empty (String.strip lines_arr.(i))
+        then i + 1
+        else loop (i - 1)
       in
       loop (marker_line - 1)
     in
@@ -106,19 +109,18 @@ let heading_level_of_line (line : string) : int option =
     String.lfindi line ~f:(fun _ c -> not (Char.equal c '#'))
     |> Option.value ~default:(String.length line)
   in
-  if hashes >= 1
-     && hashes <= 6
-     && String.length line > hashes
-     && Char.equal line.[hashes] ' '
+  if
+    hashes >= 1
+    && hashes <= 6
+    && String.length line > hashes
+    && Char.equal line.[hashes] ' '
   then Some hashes
   else None
 ;;
 
 (** Find the 0-based line number and ATX level of the heading whose slug
     matches [slug] in [content].  Returns [None] if not found. *)
-let find_heading_in_content ~(slug : string) (content : string)
-  : (int * int) option
-  =
+let find_heading_in_content ~(slug : string) (content : string) : (int * int) option =
   let lines = String.split_lines content in
   List.findi lines ~f:(fun _i line ->
     match heading_level_of_line line with
@@ -166,9 +168,7 @@ let hover
   | None -> None
   | Some link_ref ->
     let ll =
-      List.find_exn
-        links
-        ~f:(fun ll -> ll.first_byte <= offset && offset <= ll.last_byte)
+      List.find_exn links ~f:(fun ll -> ll.first_byte <= offset && offset <= ll.last_byte)
     in
     let target = Oystermark.Vault.Resolve.resolve link_ref rel_path index in
     (* Determine which file to read and which portion to extract. *)
@@ -182,7 +182,11 @@ let hover
            (match link_ref.fragment with
             | Some (Oystermark.Vault.Link_ref.Heading hs) ->
               (* Fragment present but resolve fell back — try to find section. *)
-              let slug = String.concat ~sep:"-" (List.map hs ~f:Oystermark.Parse.Heading_slug.slugify) in
+              let slug =
+                String.concat
+                  ~sep:"-"
+                  (List.map hs ~f:Oystermark.Parse.Heading_slug.slugify)
+              in
               let section =
                 match find_heading_in_content ~slug file_content with
                 | Some (hline, hlevel) ->
@@ -222,7 +226,9 @@ let hover
       | Curr_file ->
         (match link_ref.fragment with
          | Some (Oystermark.Vault.Link_ref.Heading hs) ->
-           let slug = String.concat ~sep:"-" (List.map hs ~f:Oystermark.Parse.Heading_slug.slugify) in
+           let slug =
+             String.concat ~sep:"-" (List.map hs ~f:Oystermark.Parse.Heading_slug.slugify)
+           in
            let section =
              match find_heading_in_content ~slug content with
              | Some (hline, hlevel) ->
@@ -266,7 +272,8 @@ let%test_module "truncate" =
   (module struct
     let%expect_test "short string unchanged" =
       print_string (truncate ~max_chars:100 "hello\nworld");
-      [%expect {|
+      [%expect
+        {|
         hello
         world
         |}]
@@ -275,7 +282,8 @@ let%test_module "truncate" =
     let%expect_test "truncates at newline" =
       let s = "line one\nline two\nline three" in
       print_string (truncate ~max_chars:15 s);
-      [%expect {|
+      [%expect
+        {|
         line one
 
         *(truncated)* |}]
@@ -291,7 +299,8 @@ let%test_module "extract_section" =
 
     let%expect_test "extracts first section" =
       print_string (extract_section ~heading_line:4 ~heading_level:2 content);
-      [%expect {|
+      [%expect
+        {|
         ## Section One
 
         Body one.
@@ -300,7 +309,8 @@ let%test_module "extract_section" =
 
     let%expect_test "top-level heading stops at next h1" =
       print_string (extract_section ~heading_line:0 ~heading_level:1 content);
-      [%expect {|
+      [%expect
+        {|
         # Title
 
         Intro.
@@ -367,7 +377,8 @@ let%test_module "hover" =
     let%expect_test "plain note link" =
       let content = List.Assoc.find_exn files ~equal:String.equal "note-b.md" in
       show ~rel_path:"note-b.md" ~content ~line:2 ~character:8;
-      [%expect {|
+      [%expect
+        {|
         [12-21]
         # Alpha
 
@@ -384,7 +395,8 @@ let%test_module "hover" =
     let%expect_test "heading fragment" =
       let content = List.Assoc.find_exn files ~equal:String.equal "note-c.md" in
       show ~rel_path:"note-c.md" ~content ~line:2 ~character:8;
-      [%expect {|
+      [%expect
+        {|
         [13-34]
         ## Section One
 
@@ -395,7 +407,8 @@ let%test_module "hover" =
     let%expect_test "block fragment" =
       let content = List.Assoc.find_exn files ~equal:String.equal "note-d.md" in
       show ~rel_path:"note-d.md" ~content ~line:2 ~character:8;
-      [%expect {|
+      [%expect
+        {|
         [13-30]
         Body text. ^block1
         |}]
@@ -404,7 +417,8 @@ let%test_module "hover" =
     let%expect_test "self-referencing heading" =
       let content = List.Assoc.find_exn files ~equal:String.equal "note-e.md" in
       show ~rel_path:"note-e.md" ~content ~line:2 ~character:8;
-      [%expect {|
+      [%expect
+        {|
         [16-27]
         # Epsilon
 
@@ -427,10 +441,21 @@ let%test_module "hover" =
     let%expect_test "truncation" =
       let config = { Lsp_config.default with hover_max_chars = 20 } in
       let content = List.Assoc.find_exn files ~equal:String.equal "note-b.md" in
-      (match hover ~config ~index ~rel_path:"note-b.md" ~content ~line:2 ~character:8 ~read_file () with
+      (match
+         hover
+           ~config
+           ~index
+           ~rel_path:"note-b.md"
+           ~content
+           ~line:2
+           ~character:8
+           ~read_file
+           ()
+       with
        | None -> print_endline "<none>"
        | Some (text, _, _) -> print_string text);
-      [%expect {|
+      [%expect
+        {|
         # Alpha
 
 

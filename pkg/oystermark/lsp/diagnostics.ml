@@ -42,13 +42,9 @@ let compute
         match target, ll.link_ref.fragment with
         | Oystermark.Vault.Resolve.Unresolved, _ -> true
         | (Note _ | File _), Some _ ->
-          Lsp_config.equal_fragment_behavior
-            config.diag_unresolved_fragment
-            Strict
+          Lsp_config.equal_fragment_behavior config.diag_unresolved_fragment Strict
         | Curr_file, Some _ ->
-          Lsp_config.equal_fragment_behavior
-            config.diag_unresolved_fragment
-            Strict
+          Lsp_config.equal_fragment_behavior config.diag_unresolved_fragment Strict
         | _ -> false
       in
       if is_unresolved
@@ -105,9 +101,7 @@ let%test_module "compute" =
 
     let show ~rel_path ~content : unit =
       let (diags : diagnostic list) = compute ~index ~rel_path ~content () in
-      List.iter diags ~f:(fun d ->
-        print_s [%sexp (d : diagnostic)]
-      )
+      List.iter diags ~f:(fun d -> print_s [%sexp (d : diagnostic)])
     ;;
 
     let%expect_test "resolved link produces no diagnostic" =
@@ -117,7 +111,8 @@ let%test_module "compute" =
 
     let%expect_test "unresolved link produces diagnostic" =
       show ~rel_path:"note-b.md" ~content:"See [[nonexistent]] here.";
-      [%expect {| ((first_byte 4) (last_byte 18) (message "unresolved link: nonexistent")) |}]
+      [%expect
+        {| ((first_byte 4) (last_byte 18) (message "unresolved link: nonexistent")) |}]
     ;;
 
     let%expect_test "unresolved heading fragment" =
@@ -149,7 +144,8 @@ let%test_module "compute" =
       show
         ~rel_path:"note-b.md"
         ~content:"[[note-a]] and [[missing]] and [[note-a#Section One]]";
-      [%expect {| ((first_byte 15) (last_byte 25) (message "unresolved link: missing")) |}]
+      [%expect
+        {| ((first_byte 15) (last_byte 25) (message "unresolved link: missing")) |}]
     ;;
 
     let%expect_test "markdown link unresolved" =
@@ -164,7 +160,8 @@ let%test_module "compute" =
 
     let%expect_test "embed wikilink unresolved" =
       show ~rel_path:"note-b.md" ~content:"see ![[missing.png]] here";
-      [%expect {| ((first_byte 4) (last_byte 19) (message "unresolved link: missing.png")) |}]
+      [%expect
+        {| ((first_byte 4) (last_byte 19) (message "unresolved link: missing.png")) |}]
     ;;
   end)
 ;;

@@ -228,7 +228,9 @@ let%test_module "go_to_definition" =
     let read_file rel_path = List.Assoc.find files ~equal:String.equal rel_path
 
     let show ~rel_path ~content ~line ~character =
-      let def_res_opt = go_to_definition ~index ~rel_path ~content ~line ~character ~read_file () in
+      let def_res_opt =
+        go_to_definition ~index ~rel_path ~content ~line ~character ~read_file ()
+      in
       print_s [%sexp (def_res_opt : definition_result option)]
     ;;
 

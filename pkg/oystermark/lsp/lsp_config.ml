@@ -15,11 +15,11 @@ type fragment_behavior =
 
 type t =
   { gtd_unresolved_fragment : fragment_behavior
-  (** Fragment behavior for {!Go_to_definition}. *)
+    (** Fragment behavior for {!Go_to_definition}. *)
   ; diag_unresolved_fragment : fragment_behavior
-  (** Fragment behavior for {!Diagnostics}. *)
+    (** Fragment behavior for {!Diagnostics}. *)
   ; hover_max_chars : int
-  (** Maximum number of bytes of note content to include in a hover
+    (** Maximum number of bytes of note content to include in a hover
       response.  Content exceeding this limit is truncated at the
       previous newline and a [*(truncated)*] suffix is appended.
       See {!page-"feature-hover".truncation}. *)
@@ -34,3 +34,4 @@ let default =
   ; diag_unresolved_fragment = Fallback
   ; hover_max_chars = 2000
   }
+;;

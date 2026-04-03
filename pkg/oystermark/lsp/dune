@@ -1,7 +1,14 @@
 (library
  (name lsp_lib)
  (public_name oystermark.lsp_lib)
- (modules lsp_lib lsp_util lsp_config link_collect go_to_definition diagnostics hover)
+ (modules
+  lsp_lib
+  lsp_util
+  lsp_config
+  link_collect
+  go_to_definition
+  diagnostics
+  hover)
  (libraries oystermark core trace.core)
  (inline_tests)
  (preprocess
