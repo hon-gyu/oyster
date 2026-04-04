@@ -1,11 +1,9 @@
+(** Spec: {!page-"feature-diagnostics"}.
+    Impl: {!Lsp_lib.Diagnostics}. *)
+
 open Core
 open Lsp_helper
 
-(* Fixtures
-       ================ *)
-
-(** Vault root for integration (E2E) tests — points at the on-disk [data/]
-           directory. *)
 let vault_root =
   let cwd = Core_unix.getcwd () in
   Filename.concat cwd "data"
@@ -36,13 +34,13 @@ let read_file rel_path = List.Assoc.find files ~equal:String.equal rel_path
    The server publishes them as [textDocument/publishDiagnostics]
    notifications, which are push-based — no request/response E2E test
    is applicable here. *)
-let show ~rel_path ~content =
+let show ~(rel_path : string) ~(content : string) : unit =
   let diags = Lsp_lib.Diagnostics.compute ~index ~rel_path ~content () in
   List.iter diags ~f:(fun d -> print_s [%sexp (d : Lsp_lib.Diagnostics.diagnostic)])
 ;;
 
 (* In-process result
-       ------------------ *)
+------------------ *)
 
 let%expect_test "resolved link: no diagnostic" =
   show ~rel_path:"note-b.md" ~content:"Link to [[note-a]] here.";
@@ -81,8 +79,8 @@ let%expect_test "embed wikilink unresolved" =
   [%expect {| ((first_byte 4) (last_byte 19) (message "unresolved link: missing.png")) |}]
 ;;
 
-(* Trace-based
-       ------------ *)
+(* Trace
+------------ *)
 
 let%expect_test "trace: diagnostics spans" =
   let t = Trace_collect.create () in

@@ -175,14 +175,16 @@ let hover (s : session) ~(rel_path : string) ~(line : int) ~(character : int)
   Yojson.Safe.Util.member "result" resp
 ;;
 
-(* Pretty-printing helpers
-   ======================== *)
+(* Result parsers
+   ================ *)
 
-(** Extract a readable summary from a definition result.
-    Prints "rel/path.md:line" or "null". *)
-let pp_definition_result (vault_root : string) (result : Yojson.Safe.t) : string =
+(** Parse a JSON-RPC definition result into a typed value.
+    [vault_root] is stripped from the URI prefix to produce a relative path. *)
+let parse_definition_result (vault_root : string) (result : Yojson.Safe.t)
+  : Lsp_lib.Go_to_definition.definition_result option
+  =
   match result with
-  | `Null -> "null"
+  | `Null -> None
   | `List [ loc ] ->
     let uri = Yojson.Safe.Util.(member "uri" loc |> to_string) in
     let range = Yojson.Safe.Util.member "range" loc in
@@ -194,16 +196,16 @@ let pp_definition_result (vault_root : string) (result : Yojson.Safe.t) : string
       | Some rel -> rel
       | None -> raw
     in
-    sprintf "%s:%d" path line
-  | other -> Yojson.Safe.to_string other
+    Some { Lsp_lib.Go_to_definition.path; line }
+  | other ->
+    failwithf "unexpected definition result: %s" (Yojson.Safe.to_string other) ()
 ;;
 
-(** Extract a readable summary from a hover result.
-    Prints the markdown content or "null". *)
-let pp_hover_result (result : Yojson.Safe.t) : string =
+(** Parse a JSON-RPC hover result into the markdown content string. *)
+let parse_hover_result (result : Yojson.Safe.t) : string option =
   match result with
-  | `Null -> "null"
+  | `Null -> None
   | json ->
     let contents = Yojson.Safe.Util.member "contents" json in
-    Yojson.Safe.Util.(member "value" contents |> to_string)
+    Some Yojson.Safe.Util.(member "value" contents |> to_string)
 ;;
