@@ -14,6 +14,7 @@ module Pipeline = Pipeline
 module Theme = Theme
 module Config = Config
 module Code_executor = Code_executor
+module Vault_graph = Vault_graph
 
 (** Build and render a vault through the pipeline.
 
