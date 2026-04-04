@@ -292,10 +292,7 @@ let rec rewrite_block_list ~(source : string option) (blocks : Cmarkit.Block.t l
            let body = wrap_blocks children in
            let labels = labels_of_inline label_inline in
            let keyed =
-             build_nested_keyed
-               ~make_node:(fun t b -> Ext_keyed_block (t, b))
-               labels
-               body
+             build_nested_keyed ~make_node:(fun t b -> Ext_keyed_block (t, b)) labels body
            in
            result := keyed :: !result))
     (* List — process items, handle Rule 2/3 for last item *)
