@@ -64,7 +64,43 @@ class oystermark_server =
       | None -> ()
       | Some root -> index <- build_vault_index root
 
-    method on_notif_doc_did_open ~notify_back:_ _doc ~content:_ = self#rebuild_index
+    method private publish_diagnostics ~notify_back ~uri ~content =
+      match vault_root with
+      | None -> ()
+      | Some root ->
+        let file_path = DocumentUri.to_path uri in
+        let rel_path =
+          let prefix = root ^ "/" in
+          let plen = String.length prefix in
+          if
+            String.length file_path >= plen
+            && String.equal (String.sub file_path ~pos:0 ~len:plen) prefix
+          then String.sub file_path ~pos:plen ~len:(String.length file_path - plen)
+          else file_path
+        in
+        let diags = Lsp_lib.Diagnostics.compute ~index ~rel_path ~content () in
+        let lsp_diags =
+          List.map diags ~f:(fun (d : Lsp_lib.Diagnostics.diagnostic) ->
+            let start_pos = Lsp_lib.Util.position_of_byte_offset content d.first_byte in
+            let end_pos = Lsp_lib.Util.position_of_byte_offset content d.last_byte in
+            let to_lsp_pos (line, character) = Position.create ~line ~character in
+            let range =
+              Range.create ~start:(to_lsp_pos start_pos) ~end_:(to_lsp_pos end_pos)
+            in
+            Diagnostic.create
+              ~range
+              ~severity:DiagnosticSeverity.Warning
+              ~source:"oystermark"
+              ~message:(`String d.message)
+              ())
+        in
+        notify_back#send_diagnostic lsp_diags
+
+    method on_notif_doc_did_open ~notify_back doc ~content =
+      self#rebuild_index;
+      let uri = doc.TextDocumentItem.uri in
+      self#publish_diagnostics ~notify_back ~uri ~content
+
     method on_notif_doc_did_close ~notify_back:_ _doc = ()
 
     method on_notif_doc_did_change
@@ -75,7 +111,10 @@ class oystermark_server =
       ~new_content:_ =
       ()
 
-    method! on_notif_doc_did_save ~notify_back:_ _params = self#rebuild_index
+    method! on_notif_doc_did_save ~notify_back _params = self#rebuild_index
+    (* Re-publish diagnostics for all open documents would be ideal,
+         but linol doesn't expose the open doc set easily.  For now,
+         diagnostics refresh on didOpen. *)
 
     method! on_req_hover
       ~notify_back:_
