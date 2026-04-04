@@ -28,7 +28,6 @@ let files =
 ;;
 
 let index = Vault_helper.make_index files
-let read_file rel_path = List.Assoc.find files ~equal:String.equal rel_path
 
 (* Diagnostics are computed in-process via [Lsp_lib.Diagnostics.compute].
    The server publishes them as [textDocument/publishDiagnostics]
