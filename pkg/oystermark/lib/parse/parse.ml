@@ -9,6 +9,7 @@ module Heading_slug = Heading_slug
 module Wikilink = Wikilink
 module Extract = Extract
 module Attribute = Attribute
+module Struct = Struct
 
 type block_id =
   | Caret of Block_id.t
@@ -85,9 +86,10 @@ let of_string ?(strict = false) ?(layout = false) ?(locs = false) (s : string)
   =
   let open Cmarkit in
   let yaml_opt, body = Frontmatter.of_string s in
-  let cmarkit_doc = Doc.of_string ~strict ~layout ~locs body in
+  let cmarkit_doc = Doc.of_string ~strict ~layout ~locs:true body in
   let body_doc = Mapper.map_doc (make_mapper ()) cmarkit_doc in
   let body_doc = Div.rewrite_doc body_doc in
+  let body_doc = Struct.rewrite_doc ~source:(Some body) body_doc in
   match yaml_opt, Doc.block body_doc with
   | None, _ -> body_doc
   | Some yaml, Block.Blocks (blocks, meta) ->
@@ -123,6 +125,17 @@ let commonmark_of_doc (doc : Cmarkit.Doc.t) : string =
         Cmarkit_renderer.Context.string c (fence ^ class_suffix ^ "\n\n");
         Cmarkit_renderer.Context.block c body;
         Cmarkit_renderer.Context.string c ("\n" ^ fence ^ "\n");
+        true
+      | Struct.Ext_keyed_block ({ label }, body) ->
+        Cmarkit_renderer.Context.inline c label;
+        Cmarkit_renderer.Context.string c ":\n";
+        Cmarkit_renderer.Context.block c body;
+        true
+      | Struct.Ext_keyed_list_item ({ label }, body) ->
+        Cmarkit_renderer.Context.string c "- ";
+        Cmarkit_renderer.Context.inline c label;
+        Cmarkit_renderer.Context.string c ":\n";
+        Cmarkit_renderer.Context.block c body;
         true
       | _ -> false
     in
@@ -243,6 +256,10 @@ and sexp_of_block (b : Cmarkit.Block.t) : Sexp.t =
   | Frontmatter.Frontmatter _ -> Sexp.Atom "Frontmatter"
   | Div.Ext_div (div, body) ->
     Sexp.List [ Atom "Div"; Div.sexp_of_t div; sexp_of_block body ]
+  | Struct.Ext_keyed_list_item ({ label }, body) ->
+    Sexp.List [ Atom "Keyed_list_item"; sexp_of_inline label; sexp_of_block body ]
+  | Struct.Ext_keyed_block ({ label }, body) ->
+    Sexp.List [ Atom "Keyed_block"; sexp_of_inline label; sexp_of_block body ]
   | _ -> Sexp.Atom "<unknown-block>"
 ;;
 
@@ -575,6 +592,98 @@ let%test_module "Div" =
 
     let%test_unit "roundtrip: commonmark output is idempotent" =
       List.iter all_examples ~f:commonmark_of_doc_idempotent
+    ;;
+  end)
+;;
+
+(** {2 Struct}
+
+Tests for {!module-"Struct"}. *)
+
+let%test_module "Struct" =
+  (module struct
+    open For_test
+    open Struct.For_test
+
+    let%expect_test "rule 1: keyed list item with indented content" =
+      let doc = of_string example_rule1_indented in
+      pp_doc doc;
+      [%expect {|
+        (List
+          (Keyed_list_item (Text foo)
+            (List (Paragraph (Text bar)) (Paragraph (Text baz)))))
+        |}]
+    ;;
+
+    let%expect_test "rule 2: keyed list item followed by blank" =
+      let doc = of_string example_rule2_blank_after in
+      pp_doc doc;
+      [%expect {| (Blocks (List (Paragraph (Text foo:))) Blank_line (Paragraph (Text bar))) |}]
+    ;;
+
+    let%expect_test "rule 3: keyed list item with contiguous blocks after list" =
+      let doc = of_string example_rule3_contiguous_after_list in
+      pp_doc doc;
+      [%expect {| (Blocks (List (Keyed_list_item (Text foo) (Code_block no-info bar)))) |}]
+    ;;
+
+    let%expect_test "rule 4: keyed paragraph" =
+      let doc = of_string example_rule4_keyed_paragraph in
+      pp_doc doc;
+      [%expect {|
+        (Blocks
+          (Keyed_block (Text foo)
+            (List (Paragraph (Text bar)) (Paragraph (Text baz))))
+          Blank_line (Paragraph (Text bee)))
+        |}]
+    ;;
+
+    let%expect_test "rule 5: keyed paragraph with multiple children" =
+      let doc = of_string example_rule5_multiple_children in
+      pp_doc doc;
+      [%expect {|
+        (Blocks
+          (Keyed_block (Text foo)
+            (List (Paragraph (Text bar))
+              (Paragraph (Inlines (Text baz) (Break soft) (Text "some text"))))))
+        |}]
+    ;;
+
+    let%expect_test "rule 6: nesting" =
+      let doc = of_string example_rule6_nesting in
+      pp_doc doc;
+      [%expect {|
+        (Blocks
+          (Keyed_block (Text foo)
+            (List (Keyed_list_item (Text bar) (List (Paragraph (Text baz))))
+              (Paragraph (Text qux)))))
+        |}]
+    ;;
+
+    let%expect_test "colon chain" =
+      let doc = of_string example_colon_chain in
+      pp_doc doc;
+      [%expect {|
+        (List
+          (Keyed_list_item (Text foo)
+            (Keyed_list_item (Text bar) (List (Paragraph (Text baz))))))
+        |}]
+    ;;
+
+    let%expect_test "non-example: no colon" =
+      let doc = of_string non_example_no_colon in
+      pp_doc doc;
+      [%expect {| (List (Paragraph (Text foo)) (Paragraph (Text bar))) |}]
+    ;;
+
+    let%expect_test "non-example: colon in code span" =
+      let doc = of_string non_example_colon_in_code in
+      pp_doc doc;
+      [%expect {|
+        (Paragraph
+          (Inlines (Text "text with ") (Code_span code:) (Break soft)
+            (Text "following paragraph")))
+        |}]
     ;;
   end)
 ;;
