@@ -12,7 +12,7 @@ type diagnostic =
   ; last_byte : int
   ; message : string
   }
-[@@deriving sexp, equal]
+[@@deriving sexp, equal, compare]
 
 (** Compute diagnostics for unresolved links in [content] at [rel_path]
     within a vault [index].
