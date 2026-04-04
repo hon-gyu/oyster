@@ -271,13 +271,7 @@ let block (c : Cmarkit_renderer.context) : Block.t -> bool = function
     C.block c body;
     C.string c "</div>\n";
     true
-  | Parse.Struct.Ext_keyed_block ({ label }, body) ->
-    C.string c "<div class=\"keyed\">\n<p>";
-    C.inline c label;
-    C.string c "</p>\n";
-    C.block c body;
-    C.string c "</div>\n";
-    true
+  | Parse.Struct.Ext_keyed_block ({ label }, body)
   | Parse.Struct.Ext_keyed_list_item ({ label }, body) ->
     C.string c "<div class=\"keyed\">\n<p>";
     C.inline c label;
