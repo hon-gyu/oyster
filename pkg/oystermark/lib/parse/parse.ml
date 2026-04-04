@@ -608,7 +608,8 @@ let%test_module "Struct" =
     let%expect_test "rule 1: keyed list item with indented content" =
       let doc = of_string example_rule1_indented in
       pp_doc doc;
-      [%expect {|
+      [%expect
+        {|
         (List
           (Keyed_list_item (Text foo)
             (List (Paragraph (Text bar)) (Paragraph (Text baz)))))
@@ -618,19 +619,22 @@ let%test_module "Struct" =
     let%expect_test "rule 2: keyed list item followed by blank" =
       let doc = of_string example_rule2_blank_after in
       pp_doc doc;
-      [%expect {| (Blocks (List (Paragraph (Text foo:))) Blank_line (Paragraph (Text bar))) |}]
+      [%expect
+        {| (Blocks (List (Paragraph (Text foo:))) Blank_line (Paragraph (Text bar))) |}]
     ;;
 
     let%expect_test "rule 3: keyed list item with contiguous blocks after list" =
       let doc = of_string example_rule3_contiguous_after_list in
       pp_doc doc;
-      [%expect {| (Blocks (List (Keyed_list_item (Text foo) (Code_block no-info bar)))) |}]
+      [%expect
+        {| (Blocks (List (Keyed_list_item (Text foo) (Code_block no-info bar)))) |}]
     ;;
 
     let%expect_test "rule 4: keyed paragraph" =
       let doc = of_string example_rule4_keyed_paragraph in
       pp_doc doc;
-      [%expect {|
+      [%expect
+        {|
         (Blocks
           (Keyed_block (Text foo)
             (List (Paragraph (Text bar)) (Paragraph (Text baz))))
@@ -641,7 +645,8 @@ let%test_module "Struct" =
     let%expect_test "rule 5: keyed paragraph with multiple children" =
       let doc = of_string example_rule5_multiple_children in
       pp_doc doc;
-      [%expect {|
+      [%expect
+        {|
         (Blocks
           (Keyed_block (Text foo)
             (List (Paragraph (Text bar))
@@ -652,7 +657,8 @@ let%test_module "Struct" =
     let%expect_test "rule 6: nesting" =
       let doc = of_string example_rule6_nesting in
       pp_doc doc;
-      [%expect {|
+      [%expect
+        {|
         (Blocks
           (Keyed_block (Text foo)
             (List (Keyed_list_item (Text bar) (List (Paragraph (Text baz))))
@@ -663,7 +669,8 @@ let%test_module "Struct" =
     let%expect_test "colon chain" =
       let doc = of_string example_colon_chain in
       pp_doc doc;
-      [%expect {|
+      [%expect
+        {|
         (List
           (Keyed_list_item (Text foo)
             (Keyed_list_item (Text bar) (List (Paragraph (Text baz))))))
@@ -679,7 +686,8 @@ let%test_module "Struct" =
     let%expect_test "non-example: colon in code span" =
       let doc = of_string non_example_colon_in_code in
       pp_doc doc;
-      [%expect {|
+      [%expect
+        {|
         (Paragraph
           (Inlines (Text "text with ") (Code_span code:) (Break soft)
             (Text "following paragraph")))
