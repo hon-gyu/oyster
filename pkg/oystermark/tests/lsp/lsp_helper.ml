@@ -49,6 +49,18 @@ let read_response (ic : In_channel.t) ~(id : int) : Yojson.Safe.t =
   loop ()
 ;;
 
+(** Read messages until we find a notification with the given method name.
+    Discards responses and other notifications. *)
+let read_notification (ic : In_channel.t) ~(method_ : string) : Yojson.Safe.t =
+  let rec loop () =
+    let msg = read_message ic in
+    match Yojson.Safe.Util.member "method" msg with
+    | `String m when String.equal m method_ -> msg
+    | _ -> loop ()
+  in
+  loop ()
+;;
+
 (* Message constructors
    ===================== *)
 
@@ -197,8 +209,7 @@ let parse_definition_result (vault_root : string) (result : Yojson.Safe.t)
       | None -> raw
     in
     Some { Lsp_lib.Go_to_definition.path; line }
-  | other ->
-    failwithf "unexpected definition result: %s" (Yojson.Safe.to_string other) ()
+  | other -> failwithf "unexpected definition result: %s" (Yojson.Safe.to_string other) ()
 ;;
 
 (** Parse a JSON-RPC hover result into the markdown content string. *)
@@ -208,4 +219,23 @@ let parse_hover_result (result : Yojson.Safe.t) : string option =
   | json ->
     let contents = Yojson.Safe.Util.member "contents" json in
     Some Yojson.Safe.Util.(member "value" contents |> to_string)
+;;
+
+(** Parse a publishDiagnostics notification into a list of [(message, line, character)] triples,
+    sorted by line then character for stable output. *)
+let parse_diagnostics_notification (notif : Yojson.Safe.t) : (string * int * int) list =
+  let params = Yojson.Safe.Util.member "params" notif in
+  let diags = Yojson.Safe.Util.(member "diagnostics" params |> to_list) in
+  let parsed =
+    List.map diags ~f:(fun d ->
+      let message = Yojson.Safe.Util.(member "message" d |> to_string) in
+      let range = Yojson.Safe.Util.member "range" d in
+      let start = Yojson.Safe.Util.member "start" range in
+      let line = Yojson.Safe.Util.(member "line" start |> to_int) in
+      let character = Yojson.Safe.Util.(member "character" start |> to_int) in
+      message, line, character)
+  in
+  List.sort parsed ~compare:(fun (_, l1, c1) (_, l2, c2) ->
+    let cmp = Int.compare l1 l2 in
+    if cmp <> 0 then cmp else Int.compare c1 c2)
 ;;

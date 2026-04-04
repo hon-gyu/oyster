@@ -29,10 +29,6 @@ let files =
 
 let index = Vault_helper.make_index files
 
-(* Diagnostics are computed in-process via [Lsp_lib.Diagnostics.compute].
-   The server publishes them as [textDocument/publishDiagnostics]
-   notifications, which are push-based — no request/response E2E test
-   is applicable here. *)
 let show ~(rel_path : string) ~(content : string) : unit =
   let diags = Lsp_lib.Diagnostics.compute ~index ~rel_path ~content () in
   List.iter diags ~f:(fun d -> print_s [%sexp (d : Lsp_lib.Diagnostics.diagnostic)])
@@ -92,23 +88,43 @@ let%expect_test "trace: diagnostics spans" =
         ()
     in
     ());
-  print_s [%sexp (Trace_collect.span_names t : string list)];
-  [%expect {| (parse_doc collect_links diagnostics.compute) |}]
+  let open Trace_collect in
+  let spans =
+    Trace_collect.spans t
+    |> Span_pipeline.normalize_duration
+    |> Span_pipeline.scrub_attributes ~scrub:[ [ "line" ]; [ "character" ] ]
+  in
+  print_endline (Trace_collect.format spans);
+  [%expect
+    {|
+    diagnostics.compute 3us num_diagnostics=1 rel_path=note-b.md
+    ├── parse_doc 1us content_len=26
+    └── collect_links 2us num_links=2
+    |}]
 ;;
 
-let%expect_test "trace: num_diagnostics attribute" =
-  let t = Trace_collect.create () in
-  Trace_collect.with_collect t (fun () ->
-    let _result =
-      Lsp_lib.Diagnostics.compute
-        ~index
-        ~rel_path:"note-b.md"
-        ~content:"[[missing-a]] and [[missing-b]]"
-        ()
-    in
-    ());
-  let sp = Trace_collect.find_span t "diagnostics.compute" in
-  let n = Option.bind sp ~f:(fun s -> Trace_collect.span_attr s "num_diagnostics") in
-  print_s [%sexp (n : string option)];
-  [%expect {| (2) |}]
+(* E2E
+------------ *)
+
+let%expect_test "e2e: unresolved link produces diagnostic on didOpen" =
+  let s = start_server ~vault_root in
+  initialize s;
+  did_open s ~rel_path:"note-b.md";
+  (* The server publishes diagnostics as a notification after didOpen. *)
+  let notif = read_notification s.ic ~method_:"textDocument/publishDiagnostics" in
+  let diags = parse_diagnostics_notification notif in
+  List.iter diags ~f:(fun (msg, line, char) -> printf "%d:%d %s\n" line char msg);
+  shutdown s;
+  [%expect {| 10:11 unresolved link: missing-note |}]
+;;
+
+let%expect_test "e2e: resolved links produce no diagnostics" =
+  let s = start_server ~vault_root in
+  initialize s;
+  did_open s ~rel_path:"subdir/nested.md";
+  let notif = read_notification s.ic ~method_:"textDocument/publishDiagnostics" in
+  let diags = parse_diagnostics_notification notif in
+  printf "%d diagnostics\n" (List.length diags);
+  shutdown s;
+  [%expect {| 0 diagnostics |}]
 ;;

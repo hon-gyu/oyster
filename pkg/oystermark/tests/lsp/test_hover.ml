@@ -81,8 +81,7 @@ let%expect_test "e2e: hover on block fragment" =
   let result = parse_hover_result response in
   print_s [%sexp (result : string option)];
   shutdown s;
-  [%expect
-    {| ("Body text ^block1") |}]
+  [%expect {| ("Body text ^block1") |}]
 ;;
 
 let%expect_test "e2e: hover on unresolved link" =
