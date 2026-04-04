@@ -83,7 +83,7 @@ type definition_result =
   { path : string
   ; line : int
   }
-[@@deriving sexp, equal]
+[@@deriving sexp, equal, compare]
 
 (** Given file [content] at [rel_path] in a vault with [index], find the
     definition target at cursor position [(line, character)].

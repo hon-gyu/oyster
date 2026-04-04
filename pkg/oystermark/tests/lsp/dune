@@ -1,5 +1,6 @@
 (library
  (name test_lsp)
+ (package oystermark)
  (libraries core core_unix yojson lsp_lib trace_collect)
  (inline_tests
   (deps

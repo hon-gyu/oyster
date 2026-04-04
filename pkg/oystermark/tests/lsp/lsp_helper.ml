@@ -1,11 +1,12 @@
-(** Integration tests for the oystermark LSP server.
+(** Test harness for the oystermark LSP server.
 
-    Spawns the server as a subprocess, sends JSON-RPC messages over
-    stdin/stdout, and asserts on the responses. *)
+    Provides JSON-RPC helpers for spawning the server as a subprocess,
+    sending messages, and reading responses.  Used by {!Test_lsp}. *)
 
 open Core
 
-(** {1 JSON-RPC helpers} *)
+(* JSON-RPC framing
+   ================= *)
 
 let send_message (oc : Out_channel.t) (json : Yojson.Safe.t) : unit =
   let body = Yojson.Safe.to_string json in
@@ -16,7 +17,6 @@ let send_message (oc : Out_channel.t) (json : Yojson.Safe.t) : unit =
 
 (** Read one JSON-RPC message, consuming the Content-Length header. *)
 let read_message (ic : In_channel.t) : Yojson.Safe.t =
-  (* Read headers until blank line *)
   let content_length = ref 0 in
   let rec read_headers () =
     let line = In_channel.input_line_exn ic in
@@ -36,7 +36,7 @@ let read_message (ic : In_channel.t) : Yojson.Safe.t =
   Yojson.Safe.from_string (Bytes.to_string buf)
 ;;
 
-(** Read messages until we find one with the given request id. Discards
+(** Read messages until we find one with the given request id.  Discards
     notifications (messages without id) and logs (window/logMessage). *)
 let read_response (ic : In_channel.t) ~(id : int) : Yojson.Safe.t =
   let target_id = `Int id in
@@ -49,7 +49,20 @@ let read_response (ic : In_channel.t) ~(id : int) : Yojson.Safe.t =
   loop ()
 ;;
 
-(** {1 LSP message constructors} *)
+(** Read messages until we find a notification with the given method name.
+    Discards responses and other notifications. *)
+let read_notification (ic : In_channel.t) ~(method_ : string) : Yojson.Safe.t =
+  let rec loop () =
+    let msg = read_message ic in
+    match Yojson.Safe.Util.member "method" msg with
+    | `String m when String.equal m method_ -> msg
+    | _ -> loop ()
+  in
+  loop ()
+;;
+
+(* Message constructors
+   ===================== *)
 
 let make_request ~(id : int) ~(method_ : string) (params : Yojson.Safe.t) : Yojson.Safe.t =
   `Assoc
@@ -64,7 +77,8 @@ let make_notification ~(method_ : string) (params : Yojson.Safe.t) : Yojson.Safe
   `Assoc [ "jsonrpc", `String "2.0"; "method", `String method_; "params", params ]
 ;;
 
-(** {1 LSP session} *)
+(* Session management
+   =================== *)
 
 type session =
   { ic : In_channel.t
@@ -105,7 +119,6 @@ let initialize (s : session) : unit =
   in
   send_message s.oc (make_request ~id ~method_:"initialize" params);
   let _resp = read_response s.ic ~id in
-  (* Send initialized notification *)
   send_message s.oc (make_notification ~method_:"initialized" (`Assoc []))
 ;;
 
@@ -127,6 +140,17 @@ let did_open (s : session) ~(rel_path : string) : unit =
   send_message s.oc (make_notification ~method_:"textDocument/didOpen" params)
 ;;
 
+let shutdown (s : session) : unit =
+  let id = fresh_id s in
+  send_message s.oc (make_request ~id ~method_:"shutdown" `Null);
+  let _resp = read_response s.ic ~id in
+  send_message s.oc (make_notification ~method_:"exit" `Null);
+  Core_unix.close_process (s.ic, s.oc) |> ignore
+;;
+
+(* LSP request helpers
+   ==================== *)
+
 (** Send a textDocument/definition request and return just the result. *)
 let definition (s : session) ~(rel_path : string) ~(line : int) ~(character : int)
   : Yojson.Safe.t
@@ -145,120 +169,73 @@ let definition (s : session) ~(rel_path : string) ~(line : int) ~(character : in
   Yojson.Safe.Util.member "result" resp
 ;;
 
-let shutdown (s : session) : unit =
+(** Send a textDocument/hover request and return just the result. *)
+let hover (s : session) ~(rel_path : string) ~(line : int) ~(character : int)
+  : Yojson.Safe.t
+  =
   let id = fresh_id s in
-  send_message s.oc (make_request ~id ~method_:"shutdown" `Null);
-  let _resp = read_response s.ic ~id in
-  send_message s.oc (make_notification ~method_:"exit" `Null);
-  Core_unix.close_process (s.ic, s.oc) |> ignore
+  let full_path = Filename.concat s.vault_root rel_path in
+  let uri = sprintf "file://%s" full_path in
+  let params =
+    `Assoc
+      [ "textDocument", `Assoc [ "uri", `String uri ]
+      ; "position", `Assoc [ "line", `Int line; "character", `Int character ]
+      ]
+  in
+  send_message s.oc (make_request ~id ~method_:"textDocument/hover" params);
+  let resp = read_response s.ic ~id in
+  Yojson.Safe.Util.member "result" resp
 ;;
 
-(** {1 Pretty-printing helpers} *)
+(* Result parsers
+   ================ *)
 
-(** Extract a readable summary from a definition result.
-    Prints "rel/path.md:line" or "null". *)
-let pp_definition_result (vault_root : string) (result : Yojson.Safe.t) : string =
+(** Parse a JSON-RPC definition result into a typed value.
+    [vault_root] is stripped from the URI prefix to produce a relative path. *)
+let parse_definition_result (vault_root : string) (result : Yojson.Safe.t)
+  : Lsp_lib.Go_to_definition.definition_result option
+  =
   match result with
-  | `Null -> "null"
+  | `Null -> None
   | `List [ loc ] ->
     let uri = Yojson.Safe.Util.(member "uri" loc |> to_string) in
     let range = Yojson.Safe.Util.member "range" loc in
     let start = Yojson.Safe.Util.member "start" range in
     let line = Yojson.Safe.Util.(member "line" start |> to_int) in
-    (* Strip file:// prefix and vault root *)
     let path =
       let raw = String.chop_prefix_exn uri ~prefix:"file://" in
       match String.chop_prefix raw ~prefix:(vault_root ^ "/") with
       | Some rel -> rel
       | None -> raw
     in
-    sprintf "%s:%d" path line
-  | other -> Yojson.Safe.to_string other
+    Some { Lsp_lib.Go_to_definition.path; line }
+  | other -> failwithf "unexpected definition result: %s" (Yojson.Safe.to_string other) ()
 ;;
 
-(** {1 Tests} *)
-
-(** The test data dir is made available by the [(source_tree data)] dep
-    in the dune file. Dune runs inline tests from the library's source
-    directory inside the build sandbox, so "data" is a valid relative path. *)
-let vault_root =
-  let cwd = Core_unix.getcwd () in
-  Filename.concat cwd "data"
+(** Parse a JSON-RPC hover result into the markdown content string. *)
+let parse_hover_result (result : Yojson.Safe.t) : string option =
+  match result with
+  | `Null -> None
+  | json ->
+    let contents = Yojson.Safe.Util.member "contents" json in
+    Some Yojson.Safe.Util.(member "value" contents |> to_string)
 ;;
 
-let%expect_test "go-to-definition: wikilink to note" =
-  let s = start_server ~vault_root in
-  initialize s;
-  did_open s ~rel_path:"note-b.md";
-  (* Line 2: "Link to [[note-a]] here." — cursor on "note-a" *)
-  let result = definition s ~rel_path:"note-b.md" ~line:2 ~character:13 in
-  print_endline (pp_definition_result vault_root result);
-  shutdown s;
-  [%expect {| note-a.md:0 |}]
-;;
-
-let%expect_test "go-to-definition: wikilink to heading" =
-  let s = start_server ~vault_root in
-  initialize s;
-  did_open s ~rel_path:"note-b.md";
-  (* Line 4: "See [[note-a#Section One]]." — cursor inside the link *)
-  let result = definition s ~rel_path:"note-b.md" ~line:4 ~character:10 in
-  print_endline (pp_definition_result vault_root result);
-  shutdown s;
-  [%expect {| note-a.md:2 |}]
-;;
-
-let%expect_test "go-to-definition: wikilink to block id" =
-  let s = start_server ~vault_root in
-  initialize s;
-  did_open s ~rel_path:"note-b.md";
-  (* Line 6: "Also [[note-a#^block1]]." — cursor inside the link *)
-  let result = definition s ~rel_path:"note-b.md" ~line:6 ~character:10 in
-  print_endline (pp_definition_result vault_root result);
-  shutdown s;
-  [%expect {| note-a.md:4 |}]
-;;
-
-let%expect_test "go-to-definition: markdown link" =
-  let s = start_server ~vault_root in
-  initialize s;
-  did_open s ~rel_path:"note-b.md";
-  (* Line 8: "Markdown [link](note-a)." — cursor on "note-a" in URL *)
-  let result = definition s ~rel_path:"note-b.md" ~line:8 ~character:18 in
-  print_endline (pp_definition_result vault_root result);
-  shutdown s;
-  [%expect {| note-a.md:0 |}]
-;;
-
-let%expect_test "go-to-definition: unresolved link" =
-  let s = start_server ~vault_root in
-  initialize s;
-  did_open s ~rel_path:"note-b.md";
-  (* Line 10: "Unresolved [[missing-note]]." — cursor inside *)
-  let result = definition s ~rel_path:"note-b.md" ~line:10 ~character:16 in
-  print_endline (pp_definition_result vault_root result);
-  shutdown s;
-  [%expect {| null |}]
-;;
-
-let%expect_test "go-to-definition: cursor not on link" =
-  let s = start_server ~vault_root in
-  initialize s;
-  did_open s ~rel_path:"note-b.md";
-  (* Line 0: "# Beta" — no link here *)
-  let result = definition s ~rel_path:"note-b.md" ~line:0 ~character:2 in
-  print_endline (pp_definition_result vault_root result);
-  shutdown s;
-  [%expect {| null |}]
-;;
-
-let%expect_test "go-to-definition: cross-directory link" =
-  let s = start_server ~vault_root in
-  initialize s;
-  did_open s ~rel_path:"subdir/nested.md";
-  (* Line 2: "Link to [[note-a]] from subdirectory." *)
-  let result = definition s ~rel_path:"subdir/nested.md" ~line:2 ~character:13 in
-  print_endline (pp_definition_result vault_root result);
-  shutdown s;
-  [%expect {| note-a.md:0 |}]
+(** Parse a publishDiagnostics notification into a list of [(message, line, character)] triples,
+    sorted by line then character for stable output. *)
+let parse_diagnostics_notification (notif : Yojson.Safe.t) : (string * int * int) list =
+  let params = Yojson.Safe.Util.member "params" notif in
+  let diags = Yojson.Safe.Util.(member "diagnostics" params |> to_list) in
+  let parsed =
+    List.map diags ~f:(fun d ->
+      let message = Yojson.Safe.Util.(member "message" d |> to_string) in
+      let range = Yojson.Safe.Util.member "range" d in
+      let start = Yojson.Safe.Util.member "start" range in
+      let line = Yojson.Safe.Util.(member "line" start |> to_int) in
+      let character = Yojson.Safe.Util.(member "character" start |> to_int) in
+      message, line, character)
+  in
+  List.sort parsed ~compare:(fun (_, l1, c1) (_, l2, c2) ->
+    let cmp = Int.compare l1 l2 in
+    if cmp <> 0 then cmp else Int.compare c1 c2)
 ;;
