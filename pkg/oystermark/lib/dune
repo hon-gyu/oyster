@@ -8,6 +8,7 @@
   cmarkit
   core
   core_unix
+  ocamlgraph
   core_unix.filename_unix
   core_unix.sys_unix
   trace_collect
