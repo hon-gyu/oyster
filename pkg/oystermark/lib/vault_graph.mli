@@ -11,14 +11,14 @@ open Core
 
 (** What role this vertex plays in the graph. *)
 type vertex_kind =
-  | Src of Cmarkit.Textloc.t (** Source side of a link — position of the link syntax *)
-  | Tgt_note (** Target: the whole note *)
-  | Tgt_heading of
+  | Link of Cmarkit.Textloc.t (** Source side of a link — position of the link syntax *)
+  | Note (** Target: the whole note *)
+  | Heading of
       { heading : string
       ; slug : string
       ; loc : Cmarkit.Textloc.t option
       } (** Target: a heading within the note *)
-  | Tgt_block of
+  | Block of
       { block_id : string
       ; loc : Cmarkit.Textloc.t option
       } (** Target: a block reference *)
