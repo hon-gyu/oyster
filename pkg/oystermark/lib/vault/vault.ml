@@ -72,3 +72,15 @@ let of_root_path (vault_root : string) : t =
   let expanded_docs : (string * Cmarkit.Doc.t) list = Embed.expand_docs resolved_docs in
   { vault_root; index; docs = expanded_docs; vault_meta = Cmarkit.Meta.none }
 ;;
+
+(** [of_inmem_files] creates a vault from a list of in-memory files.
+  @param files A list of (path, content) pairs representing the files to include in the vault.
+*)
+let of_inmem_files ?(vault_root = "/tmp_vault") (files : (string * string) list) : t =
+  let docs =
+    List.map files ~f:(fun (path, content) -> path, Parse.of_string ~locs:true content)
+  in
+  let index = build_index ~md_docs:docs ~other_files:[] ~dirs:[] in
+  let resolved_docs = Resolve.resolve_docs docs index in
+  { vault_root; index; docs = resolved_docs; vault_meta = Cmarkit.Meta.none }
+;;

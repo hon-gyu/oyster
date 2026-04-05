@@ -202,21 +202,7 @@ let to_dot (g : t) : string =
 
 let%test_module "graph" =
   (module struct
-    (** Build a minimal resolved vault from markdown strings.
-        Uses [~locs:true] so that source locations are available. *)
-    let build_vault (files : (string * string) list) : Vault.t =
-      let docs =
-        List.map files ~f:(fun (path, content) ->
-          path, Parse.of_string ~locs:true content)
-      in
-      let index = Vault.build_index ~md_docs:docs ~other_files:[] ~dirs:[] in
-      let resolved_docs = Vault.Resolve.resolve_docs docs index in
-      { vault_root = "/test"
-      ; index
-      ; docs = resolved_docs
-      ; vault_meta = Cmarkit.Meta.none
-      }
-    ;;
+    let build_vault = Vault.of_inmem_files ~vault_root:"/tmp_vault"
 
     let show_edges (g : t) =
       let edges = G.fold_edges_e (fun e acc -> e :: acc) g [] in
