@@ -197,7 +197,26 @@ let vault_cmd : Command.t =
            (fun () -> Dev_server.watch ~env ~watch_dir:vault_root ~on_change:render))
 ;;
 
+
+let graph_cmd : Command.t =
+  Command.basic
+    ~summary:"Output an interactive graph view of a vault as HTML"
+    (let%map_open.Command (vault_root : string) = anon ("vault-root" %: string)
+     and (output : string option) =
+       flag "--output" (optional string) ~doc:"PATH Write HTML to file instead of stdout"
+     in
+     fun () ->
+       let vault = Vault.of_root_path vault_root in
+       let vg = Vault_graph.of_vault vault in
+       let html = Graph_view.to_html vg in
+       match output with
+       | Some path -> Out_channel.write_all path ~data:html
+       | None -> print_string html)
+;;
+
 let () =
-  Command.group ~summary:"Oystermark renderer" [ "file", file_cmd; "vault", vault_cmd ]
+  Command.group
+    ~summary:"Oystermark renderer"
+    [ "file", file_cmd; "vault", vault_cmd; "graph", graph_cmd ]
   |> Command_unix.run ~version:"0.1.0"
 ;;
