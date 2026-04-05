@@ -2,6 +2,11 @@
 
 open Core
 
+type textloc = Cmarkit.Textloc.t
+
+let sexp_of_textloc = Parse.Textloc_conv.sexp_of_t
+let textloc_of_sexp = Parse.Textloc_conv.t_of_sexp
+
 type target =
   | Note of { path : string }
   | File of { path : string }
@@ -10,18 +15,24 @@ type target =
       ; heading : string
       ; level : int
       ; slug : string
+      ; loc : textloc option [@sexp.option]
       }
   | Block of
       { path : string
       ; block_id : string
+      ; loc : textloc option [@sexp.option]
       }
   | Curr_file
   | Curr_heading of
       { heading : string
       ; level : int
       ; slug : string
+      ; loc : textloc option [@sexp.option]
       }
-  | Curr_block of { block_id : string }
+  | Curr_block of
+      { block_id : string
+      ; loc : textloc option [@sexp.option]
+      }
   | Unresolved
 [@@deriving sexp]
 
@@ -141,15 +152,17 @@ let resolve (link_ref : Link_ref.t) (curr_file : string) (index : Index.t) : tar
        (match current_entry with
         | Some entry ->
           (match resolve_headings entry.headings hs with
-           | Some h -> Curr_heading { heading = h.text; level = h.level; slug = h.slug }
+           | Some h ->
+             Curr_heading
+               { heading = h.text; level = h.level; slug = h.slug; loc = h.loc }
            | None -> Curr_file)
         | None -> Curr_file)
      | Some (Link_ref.Block_ref bid) ->
        (match current_entry with
         | Some entry ->
-          if List.exists entry.block_ids ~f:(String.equal bid)
-          then Curr_block { block_id = bid }
-          else Curr_file
+          (match List.find entry.blocks ~f:(fun b -> String.equal b.id bid) with
+           | Some b -> Curr_block { block_id = bid; loc = b.loc }
+           | None -> Curr_file)
         | None -> Curr_file))
   | Some target_str ->
     (match resolve_file index.files target_str with
@@ -164,12 +177,17 @@ let resolve (link_ref : Link_ref.t) (curr_file : string) (index : Index.t) : tar
           (match resolve_headings file.headings hs with
            | Some h ->
              Heading
-               { path = file.rel_path; heading = h.text; level = h.level; slug = h.slug }
+               { path = file.rel_path
+               ; heading = h.text
+               ; level = h.level
+               ; slug = h.slug
+               ; loc = h.loc
+               }
            | None -> file_or_note file.rel_path)
         | Some (Link_ref.Block_ref bid) ->
-          if List.exists file.block_ids ~f:(String.equal bid)
-          then Block { path = file.rel_path; block_id = bid }
-          else file_or_note file.rel_path))
+          (match List.find file.blocks ~f:(fun b -> String.equal b.id bid) with
+           | Some b -> Block { path = file.rel_path; block_id = bid; loc = b.loc }
+           | None -> file_or_note file.rel_path)))
 ;;
 
 (** Build a [Cmarkit.Mapper.t] that resolves links against the vault index. *)

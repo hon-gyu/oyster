@@ -33,12 +33,12 @@ let build_index
   let md_entries =
     List.map md_docs ~f:(fun (rel_path, doc) ->
       let headings = Index.extract_headings doc in
-      let block_ids = Index.extract_block_ids doc in
-      ({ rel_path; headings; block_ids } : Index.file_entry))
+      let blocks = Index.extract_block_ids doc in
+      ({ rel_path; headings; blocks } : Index.file_entry))
   in
   let non_md =
     List.map other_files ~f:(fun rel_path ->
-      ({ rel_path; headings = []; block_ids = [] } : Index.file_entry))
+      ({ rel_path; headings = []; blocks = [] } : Index.file_entry))
   in
   { files = md_entries @ non_md; dirs }
 ;;
