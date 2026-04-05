@@ -25,8 +25,8 @@ let loc_of_textloc (tl : Cmarkit.Textloc.t) : loc option =
       }
 ;;
 
-(* Vertex
-   ==================== *)
+(* Graph
+  ==================== *)
 
 type vertex_kind =
   | Src of loc
@@ -44,13 +44,7 @@ type vertex =
   }
 [@@deriving sexp, compare]
 
-(* Edge
-   ==================== *)
-
 type edge_kind = Link [@@deriving sexp, compare]
-
-(* Graph
-   ==================== *)
 
 module G =
   Graph.Persistent.Digraph.ConcreteBidirectionalLabeled
@@ -231,10 +225,10 @@ let%test_module "graph" =
           let c = compare_vertex s1 s2 in
           if c <> 0 then c else compare_vertex t1 t2)
       in
-      List.iter edges ~f:(fun (src, _kind, tgt) ->
-        let src_s = Sexp.to_string (sexp_of_vertex src) in
-        let tgt_s = Sexp.to_string (sexp_of_vertex tgt) in
-        printf "%s -> %s\n" src_s tgt_s)
+      List.iteri edges ~f:(fun i (src, _kind, tgt) ->
+        printf "%d\n" i;
+        print_s [%sexp ([ "Src", src; "Tgt", tgt ] : (string * vertex) list)];
+        printf "\n")
     ;;
 
     let%expect_test "simple wikilinks" =
@@ -246,8 +240,17 @@ let%test_module "graph" =
       show_edges g;
       [%expect
         {|
-        ((path a.md)(kind(Src((first_byte 8)(last_byte 12)(first_line 1)(last_line 1))))) -> ((path b.md)(kind Tgt_note))
-        ((path b.md)(kind(Src((first_byte 8)(last_byte 12)(first_line 1)(last_line 1))))) -> ((path a.md)(kind Tgt_note))
+        0
+        ((Src
+          ((path a.md)
+           (kind (Src ((first_byte 8) (last_byte 12) (first_line 1) (last_line 1))))))
+         (Tgt ((path b.md) (kind Tgt_note))))
+
+        1
+        ((Src
+          ((path b.md)
+           (kind (Src ((first_byte 8) (last_byte 12) (first_line 1) (last_line 1))))))
+         (Tgt ((path a.md) (kind Tgt_note))))
         |}]
     ;;
 
@@ -258,7 +261,13 @@ let%test_module "graph" =
       let g = of_vault vault in
       show_edges g;
       [%expect
-        {| ((path a.md)(kind(Src((first_byte 4)(last_byte 16)(first_line 1)(last_line 1))))) -> ((path b.md)(kind(Tgt_heading(heading Section)(slug section)))) |}]
+        {|
+        0
+        ((Src
+          ((path a.md)
+           (kind (Src ((first_byte 4) (last_byte 16) (first_line 1) (last_line 1))))))
+         (Tgt ((path b.md) (kind (Tgt_heading (heading Section) (slug section))))))
+        |}]
     ;;
 
     let%expect_test "self-links" =
@@ -267,8 +276,17 @@ let%test_module "graph" =
       show_edges g;
       [%expect
         {|
-        ((path a.md)(kind(Src((first_byte 10)(last_byte 14)(first_line 2)(last_line 2))))) -> ((path a.md)(kind Tgt_note))
-        ((path a.md)(kind(Src((first_byte 20)(last_byte 28)(first_line 2)(last_line 2))))) -> ((path a.md)(kind(Tgt_heading(heading Top)(slug top))))
+        0
+        ((Src
+          ((path a.md)
+           (kind (Src ((first_byte 10) (last_byte 14) (first_line 2) (last_line 2))))))
+         (Tgt ((path a.md) (kind Tgt_note))))
+
+        1
+        ((Src
+          ((path a.md)
+           (kind (Src ((first_byte 20) (last_byte 28) (first_line 2) (last_line 2))))))
+         (Tgt ((path a.md) (kind (Tgt_heading (heading Top) (slug top))))))
         |}]
     ;;
   end)
