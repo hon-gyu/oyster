@@ -9,48 +9,60 @@ let test_index : Index.t =
   { files =
       [ { rel_path = "Note 1.md"
         ; headings =
-            [ { text = "Level 3 title"; level = 3; slug = "level-3-title" }
-            ; { text = "Level 4 title"; level = 4; slug = "level-4-title" }
-            ; { text = "Example (level 3)"; level = 3; slug = "example-level-3" }
-            ; { text = "L2"; level = 2; slug = "l2" }
-            ; { text = "L3"; level = 3; slug = "l3" }
-            ; { text = "L4"; level = 4; slug = "l4" }
-            ; { text = "Another L3"; level = 3; slug = "another-l3" }
+            [ { text = "Level 3 title"; level = 3; slug = "level-3-title"; loc = None }
+            ; { text = "Level 4 title"; level = 4; slug = "level-4-title"; loc = None }
+            ; { text = "Example (level 3)"
+              ; level = 3
+              ; slug = "example-level-3"
+              ; loc = None
+              }
+            ; { text = "L2"; level = 2; slug = "l2"; loc = None }
+            ; { text = "L3"; level = 3; slug = "l3"; loc = None }
+            ; { text = "L4"; level = 4; slug = "l4"; loc = None }
+            ; { text = "Another L3"; level = 3; slug = "another-l3"; loc = None }
             ]
-        ; block_ids = [ "para1"; "block-2" ]
+        ; blocks = [ { id = "para1"; loc = None }; { id = "block-2"; loc = None } ]
         }
       ; { rel_path = "Note 2.md"
         ; headings =
-            [ { text = "Some level 2 title"; level = 2; slug = "some-level-2-title" }
-            ; { text = "L4"; level = 4; slug = "l4" }
-            ; { text = "Level 3 title"; level = 3; slug = "level-3-title" }
+            [ { text = "Some level 2 title"
+              ; level = 2
+              ; slug = "some-level-2-title"
+              ; loc = None
+              }
+            ; { text = "L4"; level = 4; slug = "l4"; loc = None }
+            ; { text = "Level 3 title"; level = 3; slug = "level-3-title"; loc = None }
             ; { text = "Another level 2 title"
               ; level = 2
               ; slug = "another-level-2-title"
+              ; loc = None
               }
             ]
-        ; block_ids = []
+        ; blocks = []
         }
-      ; { rel_path = "Three laws of motion.md"; headings = []; block_ids = [] }
-      ; { rel_path = "().md"; headings = []; block_ids = [] }
-      ; { rel_path = "ww.md"; headings = []; block_ids = [] }
-      ; { rel_path = "Figure1.jpg"; headings = []; block_ids = [] }
-      ; { rel_path = "Figure1.jpg.md"; headings = []; block_ids = [] }
-      ; { rel_path = "Figure1.jpg.md.md"; headings = []; block_ids = [] }
-      ; { rel_path = "Figure1.md"; headings = []; block_ids = [] }
-      ; { rel_path = "Figure1^2.jpg"; headings = []; block_ids = [] }
-      ; { rel_path = "image.png"; headings = []; block_ids = [] }
-      ; { rel_path = "empty_video.mp4"; headings = []; block_ids = [] }
-      ; { rel_path = "unsupported_text_file.txt"; headings = []; block_ids = [] }
-      ; { rel_path = "a.joiwduvqneoi"; headings = []; block_ids = [] }
-      ; { rel_path = "Something"; headings = []; block_ids = [] }
-      ; { rel_path = "Something.md"; headings = []; block_ids = [] }
-      ; { rel_path = "Note 1"; headings = []; block_ids = [] }
-      ; { rel_path = "indir_same_name.md"; headings = []; block_ids = [] }
-      ; { rel_path = "dir/indir_same_name.md"; headings = []; block_ids = [] }
-      ; { rel_path = "dir/indir2.md"; headings = []; block_ids = [] }
-      ; { rel_path = "dir/inner_dir/note_in_inner_dir.md"; headings = []; block_ids = [] }
-      ; { rel_path = "dir/inner_dir/deep.md"; headings = []; block_ids = [ "deep1" ] }
+      ; { rel_path = "Three laws of motion.md"; headings = []; blocks = [] }
+      ; { rel_path = "().md"; headings = []; blocks = [] }
+      ; { rel_path = "ww.md"; headings = []; blocks = [] }
+      ; { rel_path = "Figure1.jpg"; headings = []; blocks = [] }
+      ; { rel_path = "Figure1.jpg.md"; headings = []; blocks = [] }
+      ; { rel_path = "Figure1.jpg.md.md"; headings = []; blocks = [] }
+      ; { rel_path = "Figure1.md"; headings = []; blocks = [] }
+      ; { rel_path = "Figure1^2.jpg"; headings = []; blocks = [] }
+      ; { rel_path = "image.png"; headings = []; blocks = [] }
+      ; { rel_path = "empty_video.mp4"; headings = []; blocks = [] }
+      ; { rel_path = "unsupported_text_file.txt"; headings = []; blocks = [] }
+      ; { rel_path = "a.joiwduvqneoi"; headings = []; blocks = [] }
+      ; { rel_path = "Something"; headings = []; blocks = [] }
+      ; { rel_path = "Something.md"; headings = []; blocks = [] }
+      ; { rel_path = "Note 1"; headings = []; blocks = [] }
+      ; { rel_path = "indir_same_name.md"; headings = []; blocks = [] }
+      ; { rel_path = "dir/indir_same_name.md"; headings = []; blocks = [] }
+      ; { rel_path = "dir/indir2.md"; headings = []; blocks = [] }
+      ; { rel_path = "dir/inner_dir/note_in_inner_dir.md"; headings = []; blocks = [] }
+      ; { rel_path = "dir/inner_dir/deep.md"
+        ; headings = []
+        ; blocks = [ { id = "deep1"; loc = None } ]
+        }
       ]
   ; dirs = []
   }
