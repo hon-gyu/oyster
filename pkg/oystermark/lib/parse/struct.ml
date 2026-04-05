@@ -34,6 +34,8 @@ type Cmarkit.Block.t +=
 
 include (
 struct
+  (** Flatten an inline tree to plain text.  Simplified version that skips
+      wikilinks (returns [""] for unknown extensions). *)
   let rec inline_to_text (inline : Cmarkit.Inline.t) : string =
     match inline with
     | Cmarkit.Inline.Text (s, _) -> s
@@ -44,6 +46,8 @@ struct
     | _ -> ""
   ;;
 
+  (** [true] when the byte at [colon_byte] in [source] is preceded by ['\\'].
+      Returns [false] when [source] is [None] or the position is out of range. *)
   let is_escaped_in_source ~(source : string option) (colon_byte : int) : bool =
     match source with
     | None -> false
@@ -53,6 +57,8 @@ struct
       && Char.equal src.[colon_byte - 1] '\\'
   ;;
 
+  (** Strip a trailing [:] from a raw text string, consulting [source] byte
+      positions for escape detection.  Returns [Some stripped] or [None]. *)
   let strip_colon_from_text ~(source : string option) (s : string) (meta : Cmarkit.Meta.t)
     : string option
     =
@@ -73,6 +79,8 @@ struct
       else Some (String.rstrip (String.chop_suffix_exn s' ~suffix:":")))
   ;;
 
+  (** Walk the inline tree rightward; if the rightmost [Text] leaf ends with
+      an unescaped [:], return the tree with that colon removed. *)
   let rec strip_trailing_colon ~(source : string option) (inline : Cmarkit.Inline.t)
     : Cmarkit.Inline.t option
     =
@@ -101,6 +109,8 @@ struct
      Split [: ] (colon-space) boundaries into label segments.
      ["foo: bar"] → [["foo"; "bar"]]. *)
 
+  (** Split at [: ] (colon followed by space) boundaries.  Colons not
+      followed by a space are kept literal (e.g. URLs). *)
   let split_colon_chain (s : string) : string list =
     let parts = String.split_on_chars s ~on:[ ':' ] in
     match parts with
@@ -117,6 +127,8 @@ struct
       List.filter labels ~f:(fun s -> not (String.is_empty s))
   ;;
 
+  (** Extract label strings from a colon-stripped inline.  Returns a
+      singleton for simple labels, or multiple segments for colon chains. *)
   let labels_of_inline (inline : Cmarkit.Inline.t) : string list =
     let text = inline_to_text inline in
     let labels = split_colon_chain text in
@@ -248,6 +260,9 @@ let split_last (l : 'a list) : ('a list * 'a) option =
 
 include (
 struct
+  (** Decompose a list item into its leading paragraph and any indented
+      sub-blocks.  Returns [None] for items without a leading paragraph
+      (e.g. a bare code block inside a list item). *)
   let list_item_paragraph (item : Cmarkit.Block.List_item.t)
     : (Cmarkit.Block.Paragraph.t * Cmarkit.Meta.t * Cmarkit.Block.t list) option
     =
@@ -258,6 +273,8 @@ struct
     | _ -> None
   ;;
 
+  (** Reconstruct a [List_item] with new block content, preserving the
+      original marker layout (indentation, bullet character). *)
   let rebuild_item (item : Cmarkit.Block.List_item.t) (block : Cmarkit.Block.t)
     : Cmarkit.Block.List_item.t
     =
@@ -268,6 +285,9 @@ struct
       block
   ;;
 
+  (** Walk list items and tag keyed ones (Rule 1).  Returns rebuilt items
+      and, if the last item is keyed with no sub-blocks, its label info
+      for Rule 3 handling by the caller. *)
   let process_list_items
         ~(source : string option)
         (items : Cmarkit.Block.List_item.t Cmarkit.node list)
@@ -306,6 +326,7 @@ struct
     List.rev !rebuilt_items, !last_keyed
   ;;
 
+  (** Rebuild a [List] block preserving tightness and list type. *)
   let make_list
         (l : Cmarkit.Block.List'.t)
         (list_meta : Cmarkit.Meta.t)
@@ -320,6 +341,7 @@ struct
       , list_meta )
   ;;
 
+  (** Recursively rewrite the block content of each list item. *)
   let rec recurse_items ~source items =
     List.map items ~f:(fun (item, item_meta) ->
       let block = Cmarkit.Block.List_item.block item in
@@ -328,6 +350,8 @@ struct
       then item, item_meta
       else rebuild_item item block', item_meta)
 
+  (** Rewrite a flat list of sibling blocks left-to-right, consuming
+      contiguous followers when a keyed paragraph or list is found. *)
   and rewrite_block_list ~(source : string option) (blocks : Cmarkit.Block.t list)
     : Cmarkit.Block.t list
     =
@@ -408,6 +432,9 @@ struct
     done;
     List.rev !result
 
+  (** Recurse into container blocks ([Blocks], [Block_quote], [List],
+      [Ext_div], and our own keyed nodes).  Lists are delegated to
+      {!rewrite_block_list} so that [process_list_items] runs first. *)
   and rewrite_within_block ~(source : string option) (block : Cmarkit.Block.t)
     : Cmarkit.Block.t
     =
