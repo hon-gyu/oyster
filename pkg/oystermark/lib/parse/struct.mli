@@ -51,17 +51,60 @@ type Cmarkit.Block.t += Ext_keyed_block of t * Cmarkit.Block.t
     Pass [None] to skip escape checking. *)
 val rewrite_doc : source:string option -> Cmarkit.Doc.t -> Cmarkit.Doc.t
 
-(** {1 For testing} *)
+(** {1 Specification}
 
-module For_test : sig
-  val example_rule1_indented : string
-  val example_rule2_blank_after : string
-  val example_rule3_contiguous_after_list : string
-  val example_rule4_keyed_paragraph : string
-  val example_rule5_multiple_children : string
-  val example_rule6_nesting : string
-  val example_colon_chain : string
+    [Spec] codifies the struct rules as {b universal predicates} over
+    [Cmarkit.Doc.t] and a set of named example markdown strings —
+    one per rule in [specification/oyster/struct.md].
+
+    Predicates have varied signatures and are plain functions, not
+    wrapped in a uniform record.  The expected rewritten tree for
+    each example is pinned in expect-tests in [parse.ml], so we don't
+    encode expected output twice. *)
+
+module Spec : sig
+  (** {2 Universal predicates}
+
+      Each holds for every doc produced by {!rewrite_doc}.  A failure
+      means the rewriter violated the spec. *)
+
+  (** No keyed node has an empty body. *)
+  val keyed_bodies_non_empty : Cmarkit.Doc.t -> bool
+
+  (** Every keyed label is a plain [Inline.Text]. *)
+  val labels_are_plain_text : Cmarkit.Doc.t -> bool
+
+  (** No sibling-level keyed paragraph or keyed-last-item list is
+      immediately followed by a non-blank block — the rewriter has
+      absorbed every follower it could (Rules 3, 4, 5).  Needs
+      [~source] for escaped-colon detection. *)
+  val keying_is_maximal : source:string option -> Cmarkit.Doc.t -> bool
+
+  (** {2 Examples}
+
+      Named markdown strings corresponding to the rules in
+      [specification/oyster/struct.md]. *)
+
+  val rule1_keyed_list_item_with_indented_content : string
+  val rule2_keyed_list_item_followed_by_blank_line : string
+  val rule3_keyed_list_item_with_contiguous_blocks : string
+  val rule4_keyed_paragraph : string
+  val rule5_keyed_paragraph_multiple_children : string
+  val rule6_nesting : string
+  val colon_chain_inline_keying : string
   val non_example_no_colon : string
-  val non_example_colon_in_code : string
+  val non_example_colon_in_code_span : string
+
+  (** All examples as a list — passed as [~examples:] to
+      [Core.Quickcheck.test] so that hand-picked witnesses always run
+      and seed shrinking, and also usable for commonmark-roundtrip
+      checks in [parse.ml]. *)
   val all_examples : string list
+
+  (** {2 Generator}
+
+      A small line-based generator that samples from a vocabulary of
+      lines likely to exercise keying, nesting, blank lines, and
+      escape handling. *)
+  val gen_markdown : string Core.Quickcheck.Generator.t
 end

@@ -290,6 +290,10 @@ module For_test = struct
     block |> sexp_of_block |> Sexp.to_string_hum ~indent:2 |> print_endline
   ;;
 
+  (** Assert that the commonmark roundtrip of a doc is idempotent under normalization.
+    @return ()
+    @raise Failure if the roundtrip is not idempotent.
+  *)
   let commonmark_of_doc_idempotent s =
     let normalize s = String.rstrip s in
     let cm1 = commonmark_of_doc (of_string s) in
@@ -604,11 +608,10 @@ Tests for {!module-"Struct"}. *)
 let%test_module "Struct" =
   (module struct
     open For_test
-    open Struct.For_test
+    open Struct.Spec
 
     let%expect_test "rule 1: keyed list item with indented content" =
-      let doc = of_string example_rule1_indented in
-      pp_doc doc;
+      pp_doc (of_string rule1_keyed_list_item_with_indented_content);
       [%expect
         {|
         (List
@@ -618,22 +621,19 @@ let%test_module "Struct" =
     ;;
 
     let%expect_test "rule 2: keyed list item followed by blank" =
-      let doc = of_string example_rule2_blank_after in
-      pp_doc doc;
+      pp_doc (of_string rule2_keyed_list_item_followed_by_blank_line);
       [%expect
         {| (Blocks (List (Paragraph (Text foo:))) Blank_line (Paragraph (Text bar))) |}]
     ;;
 
     let%expect_test "rule 3: keyed list item with contiguous blocks after list" =
-      let doc = of_string example_rule3_contiguous_after_list in
-      pp_doc doc;
+      pp_doc (of_string rule3_keyed_list_item_with_contiguous_blocks);
       [%expect
         {| (Blocks (List (Keyed_list_item (Text foo) (Code_block no-info bar)))) |}]
     ;;
 
     let%expect_test "rule 4: keyed paragraph" =
-      let doc = of_string example_rule4_keyed_paragraph in
-      pp_doc doc;
+      pp_doc (of_string rule4_keyed_paragraph);
       [%expect
         {|
         (Blocks
@@ -644,8 +644,7 @@ let%test_module "Struct" =
     ;;
 
     let%expect_test "rule 5: keyed paragraph with multiple children" =
-      let doc = of_string example_rule5_multiple_children in
-      pp_doc doc;
+      pp_doc (of_string rule5_keyed_paragraph_multiple_children);
       [%expect
         {|
         (Blocks
@@ -656,8 +655,7 @@ let%test_module "Struct" =
     ;;
 
     let%expect_test "rule 6: nesting" =
-      let doc = of_string example_rule6_nesting in
-      pp_doc doc;
+      pp_doc (of_string rule6_nesting);
       [%expect
         {|
         (Blocks
@@ -668,8 +666,7 @@ let%test_module "Struct" =
     ;;
 
     let%expect_test "colon chain" =
-      let doc = of_string example_colon_chain in
-      pp_doc doc;
+      pp_doc (of_string colon_chain_inline_keying);
       [%expect
         {|
         (List
@@ -679,20 +676,55 @@ let%test_module "Struct" =
     ;;
 
     let%expect_test "non-example: no colon" =
-      let doc = of_string non_example_no_colon in
-      pp_doc doc;
+      pp_doc (of_string non_example_no_colon);
       [%expect {| (List (Paragraph (Text foo)) (Paragraph (Text bar))) |}]
     ;;
 
     let%expect_test "non-example: colon in code span" =
-      let doc = of_string non_example_colon_in_code in
-      pp_doc doc;
+      pp_doc (of_string non_example_colon_in_code_span);
       [%expect
         {|
         (Paragraph
           (Inlines (Text "text with ") (Code_span code:) (Break soft)
             (Text "following paragraph")))
         |}]
+    ;;
+
+    (* Universal predicates: driven by both the named examples
+       (regression) and a [Quickcheck] stream (property-based). *)
+
+    let check_universal_predicates (input : string) : unit =
+      let doc = of_string input in
+      let source = Some input in
+      let fail name =
+        Core.raise_s
+          [%message "universal predicate failed" (name : string) (input : string)]
+      in
+      if not (keyed_bodies_non_empty doc) then fail "keyed_bodies_non_empty";
+      if not (labels_are_plain_text doc) then fail "labels_are_plain_text";
+      if not (keying_is_maximal ~source doc) then fail "keying_is_maximal"
+    ;;
+
+    let%test_unit "examples: universal predicates hold" =
+      List.iter all_examples ~f:check_universal_predicates
+    ;;
+
+    let%test_unit "generated: universal predicates hold" =
+      Core.Quickcheck.test
+        ~sexp_of:[%sexp_of: string]
+        ~examples:all_examples
+        ~trials:200
+        gen_markdown
+        ~f:check_universal_predicates
+    ;;
+
+    (* Commonmark roundtrip (idempotence through serialization): the
+       rewritten tree serialized back to commonmark, then reparsed +
+       rewritten, serializes identically.  Strictly stronger than an
+       AST-level fixpoint check, and exercises the renderer too. *)
+
+    let%test_unit "examples: commonmark roundtrip is idempotent" =
+      List.iter all_examples ~f:commonmark_of_doc_idempotent
     ;;
   end)
 ;;

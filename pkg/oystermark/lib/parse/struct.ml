@@ -478,27 +478,166 @@ let rewrite_doc ~(source : string option) (doc : Cmarkit.Doc.t) : Cmarkit.Doc.t 
   if phys_equal block block' then doc else Cmarkit.Doc.make block'
 ;;
 
-module For_test = struct
-  let example_rule1_indented =
+(* Specification
+   ==============
+
+   [Spec] codifies the struct rules as:
+   {ul
+   {- boolean {e universal predicates} that hold for every [Cmarkit.Doc.t]
+      produced by {!rewrite_doc};}
+   {- named {e example} markdown strings, one per rule in
+      [specification/oyster/struct.md];}
+   {- a line-based [gen_markdown] generator for property-based testing.}}
+
+   The predicates are driven by two witness streams in [parse.ml]:
+   the named examples (hand-picked, act as regression tests) and
+   generator-driven strings via [Core.Quickcheck].  The expected
+   rewritten tree for each example is pinned in the expect-tests in
+   [parse.ml] via [pp_doc], so we don't encode expected output twice. *)
+
+module Spec = struct
+  (** Visit every block reachable through container blocks, including
+      keyed nodes and [Div.Ext_div]. *)
+  let rec iter_blocks (b : Cmarkit.Block.t) ~(f : Cmarkit.Block.t -> unit) : unit =
+    f b;
+    match b with
+    | Ext_keyed_block (_, body) | Ext_keyed_list_item (_, body) -> iter_blocks body ~f
+    | Cmarkit.Block.Blocks (bs, _) -> List.iter bs ~f:(iter_blocks ~f)
+    | Cmarkit.Block.List (l, _) ->
+      List.iter (Cmarkit.Block.List'.items l) ~f:(fun (item, _) ->
+        iter_blocks (Cmarkit.Block.List_item.block item) ~f)
+    | Cmarkit.Block.Block_quote (bq, _) ->
+      iter_blocks (Cmarkit.Block.Block_quote.block bq) ~f
+    | Div.Ext_div (_, body) -> iter_blocks body ~f
+    | _ -> ()
+  ;;
+
+  let iter_doc (d : Cmarkit.Doc.t) ~f = iter_blocks (Cmarkit.Doc.block d) ~f
+
+  (* Universal predicates
+     -------------------- *)
+
+  (** Every keyed node's body is non-empty.  Rule 2: if the next
+      element is blank, no keying happens — so an empty body would
+      indicate a bug. *)
+  let keyed_bodies_non_empty (doc : Cmarkit.Doc.t) : bool =
+    let ok = ref true in
+    iter_doc doc ~f:(fun b ->
+      match b with
+      | Ext_keyed_block (_, Cmarkit.Block.Blocks ([], _))
+      | Ext_keyed_list_item (_, Cmarkit.Block.Blocks ([], _)) -> ok := false
+      | _ -> ());
+    !ok
+  ;;
+
+  (** Every keyed label is a plain [Inline.Text].  The rewriter
+      reconstructs labels via {!build_nested_keyed} as [Text], and the
+      spec forbids hard breaks in labels. *)
+  let labels_are_plain_text (doc : Cmarkit.Doc.t) : bool =
+    let ok = ref true in
+    iter_doc doc ~f:(fun b ->
+      let check (label : Cmarkit.Inline.t) =
+        match label with
+        | Cmarkit.Inline.Text _ -> ()
+        | _ -> ok := false
+      in
+      match b with
+      | Ext_keyed_block ({ label }, _) | Ext_keyed_list_item ({ label }, _) -> check label
+      | _ -> ());
+    !ok
+  ;;
+
+  (** Does a list item's leading paragraph end with an unescaped
+      trailing colon, with no indented sub-blocks?  Such an item could
+      still be keyed under Rule 3 if not followed by a blank line. *)
+  let list_last_item_is_bare_keyed ~(source : string option) (l : Cmarkit.Block.List'.t)
+    : bool
+    =
+    match List.last (Cmarkit.Block.List'.items l) with
+    | None -> false
+    | Some (item, _) ->
+      let block = Cmarkit.Block.List_item.block item in
+      let leading_para =
+        match block with
+        | Cmarkit.Block.Paragraph (p, _) -> Some p
+        | _ -> None
+        (* With sub-blocks the item would be [Blocks (Paragraph :: rest)];
+           that path is Rule 1 and would have become [Ext_keyed_list_item]. *)
+      in
+      (match leading_para with
+       | None -> false
+       | Some p ->
+         let inline = Cmarkit.Block.Paragraph.inline p in
+         Option.is_some (strip_trailing_colon ~source inline))
+  ;;
+
+  (** The rewriter's maximality guarantee: no sibling-level keyed
+      paragraph or keyed-last-item list is immediately followed by a
+      non-blank block.  If this fires, the rewriter missed an
+      absorption (Rule 3, 4, or 5).  Needs [~source] for escaped-colon
+      detection. *)
+  let keying_is_maximal ~(source : string option) (doc : Cmarkit.Doc.t) : bool =
+    let ok = ref true in
+    let check_siblings (bs : Cmarkit.Block.t list) =
+      let arr = Array.of_list bs in
+      let len = Array.length arr in
+      for i = 0 to len - 1 do
+        let absorbable =
+          match arr.(i) with
+          | Cmarkit.Block.Paragraph (p, _) ->
+            Option.is_some
+              (strip_trailing_colon ~source (Cmarkit.Block.Paragraph.inline p))
+          | Cmarkit.Block.List (l, _) -> list_last_item_is_bare_keyed ~source l
+          | _ -> false
+        in
+        if absorbable && i + 1 < len && not (is_blank_line arr.(i + 1))
+        then ok := false
+      done
+    in
+    let rec walk (b : Cmarkit.Block.t) =
+      match b with
+      | Cmarkit.Block.Blocks (bs, _) ->
+        check_siblings bs;
+        List.iter bs ~f:walk
+      | Cmarkit.Block.List (l, _) ->
+        List.iter (Cmarkit.Block.List'.items l) ~f:(fun (item, _) ->
+          walk (Cmarkit.Block.List_item.block item))
+      | Cmarkit.Block.Block_quote (bq, _) -> walk (Cmarkit.Block.Block_quote.block bq)
+      | Ext_keyed_block (_, body) | Ext_keyed_list_item (_, body) -> walk body
+      | Div.Ext_div (_, body) -> walk body
+      | _ -> ()
+    in
+    walk (Cmarkit.Doc.block doc);
+    !ok
+  ;;
+
+  (* Examples
+     --------
+
+     One named string per example in [specification/oyster/struct.md].
+     The variable name encodes the rule number and a short description;
+     expected rewritten trees are pinned in [parse.ml] expect-tests. *)
+
+  let rule1_keyed_list_item_with_indented_content =
     {|- foo:
   - bar
   - baz|}
   ;;
 
-  let example_rule2_blank_after =
+  let rule2_keyed_list_item_followed_by_blank_line =
     {|- foo:
 
 bar|}
   ;;
 
-  let example_rule3_contiguous_after_list =
+  let rule3_keyed_list_item_with_contiguous_blocks =
     {|- foo:
 ```
 bar
 ```|}
   ;;
 
-  let example_rule4_keyed_paragraph =
+  let rule4_keyed_paragraph =
     {|foo:
 - bar
 - baz
@@ -506,21 +645,21 @@ bar
 bee|}
   ;;
 
-  let example_rule5_multiple_children =
+  let rule5_keyed_paragraph_multiple_children =
     {|foo:
 - bar
 - baz
 some text|}
   ;;
 
-  let example_rule6_nesting =
+  let rule6_nesting =
     {|foo:
 - bar:
   - baz
 - qux|}
   ;;
 
-  let example_colon_chain =
+  let colon_chain_inline_keying =
     {|- foo: bar:
   - baz|}
   ;;
@@ -530,21 +669,61 @@ some text|}
 - bar|}
   ;;
 
-  let non_example_colon_in_code =
+  let non_example_colon_in_code_span =
     {|text with `code:`
 following paragraph|}
   ;;
 
+  (** All examples, used as [~examples:] seed for
+      [Core.Quickcheck.test] and for commonmark-roundtrip checking in
+      [parse.ml]. *)
   let all_examples =
-    [ example_rule1_indented
-    ; example_rule2_blank_after
-    ; example_rule3_contiguous_after_list
-    ; example_rule4_keyed_paragraph
-    ; example_rule5_multiple_children
-    ; example_rule6_nesting
-    ; example_colon_chain
+    [ rule1_keyed_list_item_with_indented_content
+    ; rule2_keyed_list_item_followed_by_blank_line
+    ; rule3_keyed_list_item_with_contiguous_blocks
+    ; rule4_keyed_paragraph
+    ; rule5_keyed_paragraph_multiple_children
+    ; rule6_nesting
+    ; colon_chain_inline_keying
     ; non_example_no_colon
-    ; non_example_colon_in_code
+    ; non_example_colon_in_code_span
     ]
+  ;;
+
+  (* Generator for PBT
+     -----------------
+
+     A tiny line-based generator that samples from a vocabulary of
+     markdown lines likely to exercise keying, nesting, blank lines,
+     and escape handling.  The output is not always "valid" structurally
+     — that is the point: the rewriter must preserve invariants on
+     arbitrary inputs, not just well-formed ones. *)
+
+  let line_vocabulary =
+    [| "- foo:"
+     ; "- foo\\: bar:"
+     ; "- foo: bar:"
+     ; "- bar"
+     ; "  - nested"
+     ; "foo:"
+     ; "plain paragraph"
+     ; ""
+     ; "```"
+     ; "code line"
+     ; "> quoted"
+    |]
+  ;;
+
+  let gen_markdown : string Core.Quickcheck.Generator.t =
+    let open Core.Quickcheck.Generator in
+    let open Core.Quickcheck.Generator.Let_syntax in
+    let%bind n = Core.Int.gen_incl 1 8 in
+    let%map lines =
+      list_with_length
+        n
+        (Core.Int.gen_incl 0 (Array.length line_vocabulary - 1)
+         >>| fun i -> line_vocabulary.(i))
+    in
+    String.concat ~sep:"\n" lines
   ;;
 end
