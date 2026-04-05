@@ -7,28 +7,21 @@
 
 open Core
 
-(** {1 Location} *)
-
-(** Byte-range and line-range in a file. *)
-type loc =
-  { first_byte : int
-  ; last_byte : int
-  ; first_line : int (** 1-based *)
-  ; last_line : int (** 1-based *)
-  }
-[@@deriving sexp, compare]
-
 (** {1 Vertex} *)
 
 (** What role this vertex plays in the graph. *)
 type vertex_kind =
-  | Src of loc (** Source side of a link — position of the link syntax *)
+  | Src of Cmarkit.Textloc.t (** Source side of a link — position of the link syntax *)
   | Tgt_note (** Target: the whole note *)
   | Tgt_heading of
       { heading : string
       ; slug : string
+      ; loc : Cmarkit.Textloc.t option
       } (** Target: a heading within the note *)
-  | Tgt_block of { block_id : string } (** Target: a block reference *)
+  | Tgt_block of
+      { block_id : string
+      ; loc : Cmarkit.Textloc.t option
+      } (** Target: a block reference *)
 [@@deriving sexp, compare]
 
 (** A vertex in the link graph. *)

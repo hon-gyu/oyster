@@ -2,40 +2,35 @@
 
 open Core
 
-(* Location
+(* Textloc
    ==================== *)
 
-type loc =
-  { first_byte : int
-  ; last_byte : int
-  ; first_line : int
-  ; last_line : int
-  }
-[@@deriving sexp, compare]
+type textloc = Cmarkit.Textloc.t
 
-let loc_of_textloc (tl : Cmarkit.Textloc.t) : loc option =
-  if Cmarkit.Textloc.is_none tl
-  then None
-  else
-    Some
-      { first_byte = Cmarkit.Textloc.first_byte tl
-      ; last_byte = Cmarkit.Textloc.last_byte tl
-      ; first_line = fst (Cmarkit.Textloc.first_line tl)
-      ; last_line = fst (Cmarkit.Textloc.last_line tl)
-      }
+let sexp_of_textloc = Parse.Textloc_conv.sexp_of_t
+let textloc_of_sexp = Parse.Textloc_conv.t_of_sexp
+let compare_textloc = Parse.Textloc_conv.compare
+
+let textloc_of_meta (meta : Cmarkit.Meta.t) : textloc option =
+  let tl = Cmarkit.Meta.textloc meta in
+  if Cmarkit.Textloc.is_none tl then None else Some tl
 ;;
 
 (* Graph
   ==================== *)
 
 type vertex_kind =
-  | Src of loc
+  | Src of textloc
   | Tgt_note
   | Tgt_heading of
       { heading : string
       ; slug : string
+      ; loc : textloc option
       }
-  | Tgt_block of { block_id : string }
+  | Tgt_block of
+      { block_id : string
+      ; loc : textloc option
+      }
 [@@deriving sexp, compare]
 
 type vertex =
@@ -71,14 +66,15 @@ let vertex_of_resolved (target : Vault.Resolve.target) (src_path : string) : ver
   match target with
   | Vault.Resolve.Note { path } -> Some { path; kind = Tgt_note }
   | Vault.Resolve.File { path } -> Some { path; kind = Tgt_note }
-  | Vault.Resolve.Heading { path; heading; slug; _ } ->
-    Some { path; kind = Tgt_heading { heading; slug } }
-  | Vault.Resolve.Block { path; block_id } -> Some { path; kind = Tgt_block { block_id } }
+  | Vault.Resolve.Heading { path; heading; slug; loc; _ } ->
+    Some { path; kind = Tgt_heading { heading; slug; loc } }
+  | Vault.Resolve.Block { path; block_id; loc } ->
+    Some { path; kind = Tgt_block { block_id; loc } }
   | Vault.Resolve.Curr_file -> Some { path = src_path; kind = Tgt_note }
-  | Vault.Resolve.Curr_heading { heading; slug; _ } ->
-    Some { path = src_path; kind = Tgt_heading { heading; slug } }
-  | Vault.Resolve.Curr_block { block_id } ->
-    Some { path = src_path; kind = Tgt_block { block_id } }
+  | Vault.Resolve.Curr_heading { heading; slug; loc; _ } ->
+    Some { path = src_path; kind = Tgt_heading { heading; slug; loc } }
+  | Vault.Resolve.Curr_block { block_id; loc } ->
+    Some { path = src_path; kind = Tgt_block { block_id; loc } }
   | Vault.Resolve.Unresolved -> None
 ;;
 
@@ -93,12 +89,11 @@ let collect_edges_from_doc (src_path : string) (doc : Cmarkit.Doc.t)
       (match vertex_of_resolved resolved src_path with
        | None -> acc
        | Some tgt ->
-         let src_loc = loc_of_textloc (Cmarkit.Meta.textloc meta) in
-         (match src_loc with
+         (match textloc_of_meta meta with
           | None -> acc
-          | Some loc ->
+          | Some tl ->
             let _ = resolve_target in
-            let src = { path = src_path; kind = Src loc } in
+            let src = { path = src_path; kind = Src tl } in
             (src, tgt) :: acc))
   in
   let folder =
@@ -154,10 +149,14 @@ module Dot = Graph.Graphviz.Dot (struct
     let vertex_name (v : vertex) =
       let kind_suffix =
         match v.kind with
-        | Src loc -> Printf.sprintf ":src:%d-%d" loc.first_byte loc.last_byte
+        | Src tl ->
+          Printf.sprintf
+            ":src:%d-%d"
+            (Cmarkit.Textloc.first_byte tl)
+            (Cmarkit.Textloc.last_byte tl)
         | Tgt_note -> ":tgt:note"
         | Tgt_heading { slug; _ } -> ":tgt:h:" ^ slug
-        | Tgt_block { block_id } -> ":tgt:b:" ^ block_id
+        | Tgt_block { block_id; _ } -> ":tgt:b:" ^ block_id
       in
       Printf.sprintf "%S" (v.path ^ kind_suffix)
     ;;
@@ -169,8 +168,8 @@ module Dot = Graph.Graphviz.Dot (struct
         | None -> v.path
       in
       match v.kind with
-      | Src loc ->
-        [ `Label (Printf.sprintf "%s:%d" base_label loc.first_line)
+      | Src tl ->
+        [ `Label (Printf.sprintf "%s:%d" base_label (fst (Cmarkit.Textloc.first_line tl)))
         ; `Shape `Plaintext
         ; `Fontsize 8
         ]
@@ -229,13 +228,17 @@ let%test_module "graph" =
         0
         ((Src
           ((path a.md)
-           (kind (Src ((first_byte 8) (last_byte 12) (first_line 1) (last_line 1))))))
+           (kind
+            (Src
+             ((first_byte 8) (last_byte 12) (first_line (1 0)) (last_line (1 0)))))))
          (Tgt ((path b.md) (kind Tgt_note))))
 
         1
         ((Src
           ((path b.md)
-           (kind (Src ((first_byte 8) (last_byte 12) (first_line 1) (last_line 1))))))
+           (kind
+            (Src
+             ((first_byte 8) (last_byte 12) (first_line (1 0)) (last_line (1 0)))))))
          (Tgt ((path a.md) (kind Tgt_note))))
         |}]
     ;;
@@ -251,8 +254,15 @@ let%test_module "graph" =
         0
         ((Src
           ((path a.md)
-           (kind (Src ((first_byte 4) (last_byte 16) (first_line 1) (last_line 1))))))
-         (Tgt ((path b.md) (kind (Tgt_heading (heading Section) (slug section))))))
+           (kind
+            (Src
+             ((first_byte 4) (last_byte 16) (first_line (1 0)) (last_line (1 0)))))))
+         (Tgt
+          ((path b.md)
+           (kind
+            (Tgt_heading (heading Section) (slug section)
+             (loc
+              (((first_byte 0) (last_byte 8) (first_line (1 0)) (last_line (1 0))))))))))
         |}]
     ;;
 
@@ -265,14 +275,23 @@ let%test_module "graph" =
         0
         ((Src
           ((path a.md)
-           (kind (Src ((first_byte 10) (last_byte 14) (first_line 2) (last_line 2))))))
+           (kind
+            (Src
+             ((first_byte 10) (last_byte 14) (first_line (2 6)) (last_line (2 6)))))))
          (Tgt ((path a.md) (kind Tgt_note))))
 
         1
         ((Src
           ((path a.md)
-           (kind (Src ((first_byte 20) (last_byte 28) (first_line 2) (last_line 2))))))
-         (Tgt ((path a.md) (kind (Tgt_heading (heading Top) (slug top))))))
+           (kind
+            (Src
+             ((first_byte 20) (last_byte 28) (first_line (2 6)) (last_line (2 6)))))))
+         (Tgt
+          ((path a.md)
+           (kind
+            (Tgt_heading (heading Top) (slug top)
+             (loc
+              (((first_byte 0) (last_byte 4) (first_line (1 0)) (last_line (1 0))))))))))
         |}]
     ;;
   end)
