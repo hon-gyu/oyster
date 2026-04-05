@@ -45,7 +45,22 @@ module G :
    and type E.t = vertex * edge_kind * vertex
    and type E.label = edge_kind
 
-type t = G.t
+(** {1 Node metadata} *)
+
+(** Per-note metadata extracted from frontmatter and path. *)
+type node_meta =
+  { title : string (** Title from frontmatter, or file name without extension *)
+  ; tags : string list (** Tags from frontmatter *)
+  ; folder : string (** Parent directory derived from path *)
+  }
+[@@deriving sexp, compare]
+
+(** {1 Graph} *)
+
+type t =
+  { graph : G.t
+  ; meta : node_meta Map.M(String).t (** path → metadata *)
+  }
 
 (** Extract the link graph from a resolved vault.
     Walks all docs and collects resolved link targets.

@@ -55,7 +55,70 @@ module G =
       let default = Link
     end)
 
-type t = G.t
+(* Node metadata
+   ==================== *)
+
+type node_meta =
+  { title : string
+  ; tags : string list
+  ; folder : string
+  }
+[@@deriving sexp, compare]
+
+(** Extract metadata for a single document. *)
+let meta_of_doc (rel_path : string) (doc : Cmarkit.Doc.t) : node_meta =
+  let title_from_path (rel_path : string) : string =
+    let base = Filename.basename rel_path in
+    match String.chop_suffix base ~suffix:".md" with
+    | Some s -> s
+    | None -> base
+  in
+  let folder = Filename.dirname rel_path in
+  let default_title = title_from_path rel_path in
+  match Parse.Frontmatter.of_doc doc with
+  | None -> { title = default_title; tags = []; folder }
+  | Some yaml ->
+    let title =
+      match yaml with
+      | `O pairs ->
+        List.find_map pairs ~f:(fun (k, v) ->
+          if String.equal k "title"
+          then (
+            match v with
+            | `String s -> Some s
+            | _ -> None)
+          else None)
+        |> Option.value ~default:default_title
+      | _ -> default_title
+    in
+    let tags =
+      match yaml with
+      | `O pairs ->
+        List.find_map pairs ~f:(fun (k, v) ->
+          if String.equal k "tags"
+          then (
+            match v with
+            | `A items ->
+              Some
+                (List.filter_map items ~f:(fun item ->
+                   match item with
+                   | `String s -> Some s
+                   | _ -> None))
+            | _ -> None)
+          else None)
+        |> Option.value ~default:[]
+      | _ -> []
+    in
+    { title; tags; folder }
+;;
+
+(* Graph type
+   ==================== *)
+
+type t =
+  { graph : G.t
+  ; meta : node_meta Map.M(String).t
+  }
 
 (* Edge extraction
    ==================== *)
@@ -119,22 +182,30 @@ let collect_edges_from_doc (src_path : string) (doc : Cmarkit.Doc.t)
 
 let of_vault (vault : Vault.t) : t =
   let g = G.empty in
-  (* Add all notes as Tgt_note vertices *)
-  let g =
-    List.fold vault.docs ~init:g ~f:(fun g (rel_path, _doc) ->
-      G.add_vertex g { path = rel_path; kind = Note })
+  (* Add all notes as Tgt_note vertices and collect metadata *)
+  let g, meta =
+    List.fold
+      vault.docs
+      ~init:(g, Map.empty (module String))
+      ~f:(fun (g, meta) (rel_path, doc) ->
+        let g = G.add_vertex g { path = rel_path; kind = Note } in
+        let meta = Map.set meta ~key:rel_path ~data:(meta_of_doc rel_path doc) in
+        g, meta)
   in
   (* Add edges *)
-  List.fold vault.docs ~init:g ~f:(fun g (src_path, doc) ->
-    let edges = collect_edges_from_doc src_path doc in
-    List.fold edges ~init:g ~f:(fun g (src, tgt) -> G.add_edge_e g (src, Link, tgt)))
+  let g =
+    List.fold vault.docs ~init:g ~f:(fun g (src_path, doc) ->
+      let edges = collect_edges_from_doc src_path doc in
+      List.fold edges ~init:g ~f:(fun g (src, tgt) -> G.add_edge_e g (src, Link, tgt)))
+  in
+  { graph = g; meta }
 ;;
 
 (* DOT output
    ==================== *)
 
 module Dot = Graph.Graphviz.Dot (struct
-    type nonrec t = t
+    type t = G.t
 
     module V = G.V
     module E = G.E
@@ -188,10 +259,10 @@ module Dot = Graph.Graphviz.Dot (struct
     let edge_attributes _e = []
   end)
 
-let to_dot (g : t) : string =
+let to_dot (t : t) : string =
   let buf = Buffer.create 1024 in
   let fmt = Format.formatter_of_buffer buf in
-  Dot.fprint_graph fmt g;
+  Dot.fprint_graph fmt t.graph;
   Format.pp_print_flush fmt ();
   Buffer.contents buf
 ;;
@@ -203,8 +274,8 @@ let%test_module "graph" =
   (module struct
     let build_vault = Vault.of_inmem_files ~vault_root:"/tmp_vault"
 
-    let show_edges (g : t) =
-      let edges = G.fold_edges_e (fun e acc -> e :: acc) g [] in
+    let show_edges (t : t) =
+      let edges = G.fold_edges_e (fun e acc -> e :: acc) t.graph [] in
       let edges =
         List.sort edges ~compare:(fun (s1, _, t1) (s2, _, t2) ->
           let c = compare_vertex s1 s2 in
