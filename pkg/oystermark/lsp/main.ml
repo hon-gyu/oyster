@@ -18,7 +18,7 @@ let build_vault_index (vault_root : string) : Oystermark.Vault.Index.t =
         let full_path = Filename.concat vault_root rel_path in
         try
           let content = In_channel.read_all full_path in
-          let doc = Oystermark.Parse.of_string content in
+          let doc = Oystermark.Parse.of_string ~locs:true content in
           Some (rel_path, doc)
         with
         | _ -> None)
@@ -189,11 +189,6 @@ class oystermark_server =
           then String.sub file_path ~pos:plen ~len:(String.length file_path - plen)
           else file_path
         in
-        let read_file rp =
-          let fp = Filename.concat root rp in
-          try Some (In_channel.read_all fp) with
-          | _ -> None
-        in
         (match
            Lsp_lib.Go_to_definition.go_to_definition
              ~index
@@ -201,7 +196,6 @@ class oystermark_server =
              ~content:doc_st.content
              ~line:pos.line
              ~character:pos.character
-             ~read_file
              ()
          with
          | None -> None
