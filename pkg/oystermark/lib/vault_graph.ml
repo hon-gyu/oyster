@@ -137,16 +137,7 @@ let of_vault (vault : Vault.t) : t =
   (* Add edges *)
   List.fold vault.docs ~init:g ~f:(fun g (src_path, doc) ->
     let edges = collect_edges_from_doc src_path doc in
-    List.fold edges ~init:g ~f:(fun g (src, tgt) ->
-      (* Skip self-loops: src note links to itself as Tgt_note *)
-      let is_self_note_loop =
-        String.equal src.path tgt.path
-        &&
-        match tgt.kind with
-        | Tgt_note -> true
-        | _ -> false
-      in
-      if is_self_note_loop then g else G.add_edge_e g (src, Link, tgt)))
+    List.fold edges ~init:g ~f:(fun g (src, tgt) -> G.add_edge_e g (src, Link, tgt)))
 ;;
 
 (* DOT output
@@ -270,19 +261,15 @@ let%test_module "graph" =
         {| ((path a.md)(kind(Src((first_byte 4)(last_byte 16)(first_line 1)(last_line 1))))) -> ((path b.md)(kind(Tgt_heading(heading Section)(slug section)))) |}]
     ;;
 
-    let%expect_test "self note-links skipped" =
-      let vault = build_vault [ "a.md", "see [[a]]" ] in
-      let g = of_vault vault in
-      show_edges g;
-      [%expect {| |}]
-    ;;
-
-    let%expect_test "self heading-link kept" =
-      let vault = build_vault [ "a.md", "# Top\nsee [[a#Top]]" ] in
+    let%expect_test "self-links" =
+      let vault = build_vault [ "a.md", "# Top\nsee [[a]] and [[a#Top]]" ] in
       let g = of_vault vault in
       show_edges g;
       [%expect
-        {| ((path a.md)(kind(Src((first_byte 10)(last_byte 18)(first_line 2)(last_line 2))))) -> ((path a.md)(kind(Tgt_heading(heading Top)(slug top)))) |}]
+        {|
+        ((path a.md)(kind(Src((first_byte 10)(last_byte 14)(first_line 2)(last_line 2))))) -> ((path a.md)(kind Tgt_note))
+        ((path a.md)(kind(Src((first_byte 20)(last_byte 28)(first_line 2)(last_line 2))))) -> ((path a.md)(kind(Tgt_heading(heading Top)(slug top))))
+        |}]
     ;;
   end)
 ;;
