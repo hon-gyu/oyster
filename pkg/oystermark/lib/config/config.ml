@@ -54,6 +54,55 @@ let pipeline_profile_to_string (p : pipeline_profile) : string =
   canonical
 ;;
 
+module type Defaultable = sig
+  type t
+
+  val default : t
+end
+
+module Home_graph_view_config : Defaultable = struct
+  type dir =
+    | Include_all
+    | Exclude_all
+    | Include of string list (** Directories to include (supports glob patterns) *)
+    | Exclude of string list (** Directories to exclude (supports glob patterns) *)
+
+  type tag =
+    | Include_all
+    | Exclude_all
+    | Include of string list
+    | Exclude of string list
+
+  (** Dir cluster that are selected by default *)
+  type default_dir =
+    | Include_all
+    | Exclude_all
+    | Include of string list
+    | Exclude of string list
+
+  (** Tag cluster that are selected by default *)
+  type default_tag =
+    | Include_all
+    | Exclude_all
+    | Include of string list
+    | Exclude of string list
+
+  type t =
+    { dir : dir
+    ; tag : tag
+    ; default_dir : default_dir
+    ; default_tag : default_tag
+    }
+
+  let default : t =
+    { dir = Include_all
+    ; tag = Include_all
+    ; default_dir = Include [ "*" ]
+    ; default_tag = Exclude_all
+    }
+  ;;
+end
+
 type t =
   { theme : theme
   ; css_snippets : string list
@@ -62,7 +111,7 @@ type t =
 
 let default : t = { theme = Bluloco_dark; css_snippets = []; pipeline_profile = Default }
 
-let of_yaml_value (v : Yaml.value) : t =
+(* let of_yaml_value (v : Yaml.value) : t =
   match v with
   | `O pairs ->
     let theme : theme =
@@ -98,8 +147,9 @@ let of_yaml_string (s : string) : t =
   | Ok v -> of_yaml_value v
   | Error (`Msg msg) -> failwith ("config: failed to parse YAML: " ^ msg)
 ;;
+*)
 
-let of_file (path : string) : t =
+(* let of_file (path : string) : t =
   let contents : string = In_channel.with_open_text path In_channel.input_all in
   of_yaml_string contents
-;;
+;; *)
