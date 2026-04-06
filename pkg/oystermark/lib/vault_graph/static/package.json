@@ -3,9 +3,14 @@
   "private": true,
   "description": "Browser widget for the oystermark graph view. Compiled to widget.js by `tsc` via a dune rule.",
   "scripts": {
-    "build": "tsc -p tsconfig.json"
+    "build": "esbuild widget.ts --bundle --format=iife --outfile=widget.js --log-level=warning",
+    "typecheck": "tsc -p tsconfig.json",
+    "lint": "biome lint .",
+    "test": "vitest run"
   },
   "devDependencies": {
-    "typescript": "^5.4.0"
+    "esbuild": "^0.28.0",
+    "typescript": "^5.4.0",
+    "vitest": "^4.1.2"
   }
 }

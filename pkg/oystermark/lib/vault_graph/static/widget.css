@@ -98,6 +98,32 @@
     color: #bbb;
     font-weight: 600;
 }
+#graph-view .cluster-panel .panel-toggle {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px 12px;
+    cursor: pointer;
+    user-select: none;
+    background: #1f1f30;
+    border-bottom: 1px solid #444;
+    font-weight: 600;
+    color: #bbb;
+}
+#graph-view .cluster-panel .panel-toggle:hover {
+    background: #2a2a3e;
+}
+#graph-view .cluster-panel .panel-toggle-chevron {
+    font-size: 10px;
+    color: #888;
+}
+#graph-view .cluster-panel.collapsed .panel-row,
+#graph-view .cluster-panel.collapsed .panel-section {
+    display: none;
+}
+#graph-view .cluster-panel.collapsed .panel-toggle {
+    border-bottom: none;
+}
 #graph-view .cluster-panel .panel-actions {
     display: flex;
     gap: 4px;

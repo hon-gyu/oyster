@@ -1,92 +1,72 @@
-/**
- Graph view using D3.js.
- Precondition:
-    - graph JSON data is in window.__graphData
-    - Home_graph_view config in window.__graphConfig (optional)
- */
+"use strict";
 (() => {
-  // Home_graph_view config
-  // ====================
-  // Mirrors OCaml [Config.Home_graph_view.t]. Each of dir/tag/default_dir/
-  // default_tag is a [Selector] with the wire format:
-  //   "all"                   -> include everything
-  //   "none"                  -> exclude everything
-  //   { include: [..labels] } -> only these
-  //   { exclude: [..labels] } -> everything except these
-  //
-  // [dir]/[tag] decide which folder/tag clusters appear in the panel at
-  // all. [default_dir]/[default_tag] decide which of the visible ones are
-  // ticked on initial load.
-  const graphConfig = window.__graphConfig || {
-    dir: "all",
-    tag: "all",
-    default_dir: { include: ["*"] },
-    default_tag: { include: ["*"] },
-  };
-
-  /** Test [label] against a [Selector]. */
-  function selectorMatches(sel, label) {
+  // selector.ts
+  function selectorMatches(sel, label2) {
     if (sel === "all") return true;
     if (sel === "none") return false;
-    if (sel && Array.isArray(sel.include)) return sel.include.includes(label);
-    if (sel && Array.isArray(sel.exclude)) return !sel.exclude.includes(label);
+    if ("include" in sel) return sel.include.includes(label2);
+    if ("exclude" in sel) return !sel.exclude.includes(label2);
     return true;
   }
 
-  // Global config
-  // ====================
-  // Tunables for layout tightness. Lower link distance + stronger (less
-  // negative) charge + smaller seed radius all push nodes closer together,
-  // which means fit-to-screen zooms in further and labels stay legible.
-  const config = {
-    // Visual
-    nodeRadius: 14, // circle radius in px
-    labelFontSize: 16, // px
-    // Force simulation
-    linkDistance: 35, // target edge length; smaller = tighter graph
-    chargeStrength: -80, // node-node repulsion; less negative = tighter
-    collisionPadding: 6, // collision radius = nodeRadius + this
-    // Initial seed positions (folder-based pre-layout)
-    seedRadiusBase: 120, // minimum radius of the folder ring
-    seedRadiusPerFolder: 30, // extra radius per folder so big vaults spread out
-    seedJitter: 60, // px of random offset within each folder cluster
-    // Cluster attractive force
-    clusterStrength: 0.08, // initial pull strength when a cluster is active
+  // widget.ts
+  var graphConfig = window.__graphConfig ?? {
+    dir: "all",
+    tag: "all",
+    default_dir: { include: ["*"] },
+    default_tag: { include: ["*"] }
   };
-
-  const data = window.__graphData;
+  var config = {
+    // Visual
+    nodeRadius: 14,
+    // circle radius in px
+    labelFontSize: 16,
+    // px
+    // Force simulation
+    linkDistance: 35,
+    // target edge length; smaller = tighter graph
+    chargeStrength: -80,
+    // node-node repulsion; less negative = tighter
+    collisionPadding: 6,
+    // collision radius = nodeRadius + this
+    // Initial seed positions (folder-based pre-layout)
+    seedRadiusBase: 120,
+    // minimum radius of the folder ring
+    seedRadiusPerFolder: 30,
+    // extra radius per folder so big vaults spread out
+    seedJitter: 60,
+    // px of random offset within each folder cluster
+    // Cluster attractive force
+    clusterStrength: 0.08
+    // initial pull strength when a cluster is active
+  };
+  var data = window.__graphData;
   console.log(
     "[graph-view] nodes:",
     data.nodes.length,
     "edges:",
-    data.edges.length,
+    data.edges.length
   );
   console.log("[graph-view] sample edge:", data.edges[0]);
-  const container = document.getElementById("graph-view");
-  // When embedded, the container may have no explicit height yet.
-  // Fall back to a reasonable default so the widget is visible.
-  const width = container.clientWidth || container.parentElement.clientWidth || 800;
-  const height = container.clientHeight || Math.min(width * 0.6, 600);
-
-  // Visible debug counter
-  const debugEl = document.createElement("div");
+  var container = document.getElementById("graph-view");
+  var width = container.clientWidth || container.parentElement.clientWidth || 800;
+  var height = container.clientHeight || Math.min(width * 0.6, 600);
+  var debugEl = document.createElement("div");
   debugEl.className = "debug-info";
   debugEl.textContent = `nodes: ${data.nodes.length}  edges: ${data.edges.length}`;
   container.appendChild(debugEl);
-
-  // Adjacency for hover highlighting
-  const adj = new Map();
+  var adj = /* @__PURE__ */ new Map();
   data.nodes.forEach((n) => {
-    adj.set(n.id, new Set());
+    adj.set(n.id, /* @__PURE__ */ new Set());
   });
   data.edges.forEach((e) => {
-    adj.get(e.source).add(e.target);
-    adj.get(e.target).add(e.source);
+    const sid = typeof e.source === "string" ? e.source : e.source.id;
+    const tid = typeof e.target === "string" ? e.target : e.target.id;
+    adj.get(sid).add(tid);
+    adj.get(tid).add(sid);
   });
-
-  // Color by folder
-  const folders = [...new Set(data.nodes.map((n) => n.folder))];
-  const palette = [
+  var folders = [...new Set(data.nodes.map((n) => n.folder))];
+  var palette = [
     "#4e79a7",
     "#f28e2b",
     "#e15759",
@@ -96,36 +76,22 @@
     "#b07aa1",
     "#ff9da7",
     "#9c755f",
-    "#bab0ac",
+    "#bab0ac"
   ];
-  const folderColor = new Map(
-    folders.map((f, i) => [f, palette[i % palette.length]]),
+  var folderColor = new Map(
+    folders.map((f, i) => [f, palette[i % palette.length]])
   );
-
-  /**
-   * Pre-position nodes by folder so the initial layout already reflects
-   * cluster structure. Toggling cluster force later becomes a refinement
-   * rather than a full relayout.
-   *
-   * Folders are used (rather than tags) because they form a partition —
-   * every node has exactly one folder, so the seed is unambiguous. Tag
-   * clusters still pull nodes together when their force is enabled.
-   *
-   * Mutates [data.nodes] by setting [n.x] and [n.y]. Must run BEFORE
-   * [d3.forceSimulation] is called, since d3 only randomizes nodes that
-   * lack initial positions.
-   */
   function seedNodePositions() {
     const seedRadius = Math.max(
       config.seedRadiusBase,
-      folders.length * config.seedRadiusPerFolder,
+      folders.length * config.seedRadiusPerFolder
     );
-    const folderHome = new Map();
+    const folderHome = /* @__PURE__ */ new Map();
     folders.forEach((f, i) => {
-      const angle = (i / Math.max(folders.length, 1)) * 2 * Math.PI;
+      const angle = i / Math.max(folders.length, 1) * 2 * Math.PI;
       folderHome.set(f, [
         seedRadius * Math.cos(angle),
-        seedRadius * Math.sin(angle),
+        seedRadius * Math.sin(angle)
       ]);
     });
     data.nodes.forEach((n) => {
@@ -135,61 +101,16 @@
     });
   }
   seedNodePositions();
-
-  // SVG setup
-  const svg = d3
-    .select("#graph-view")
-    .append("svg")
-    .attr("width", width)
-    .attr("height", height);
-
-  // Defs go on the SVG itself (not inside the zoomed group)
-  svg
-    .append("defs")
-    .append("marker")
-    .attr("id", "arrow")
-    .attr("viewBox", "0 -3 6 6")
-    .attr("refX", 12)
-    .attr("refY", 0)
-    .attr("markerWidth", 6)
-    .attr("markerHeight", 6)
-    .attr("orient", "auto")
-    .append("path")
-    .attr("d", "M0,-3L6,0L0,3")
-    .attr("fill", "#e0e0e0");
-
-  // Root group — all content lives inside this so we can pan/zoom it
-  const root = svg.append("g").attr("class", "zoom-root");
-
-  // Force simulation
-  const simulation = d3
-    .forceSimulation(data.nodes)
-    .force(
-      "link",
-      d3
-        .forceLink(data.edges)
-        .id((d) => d.id)
-        .distance(config.linkDistance),
-    )
-    .force("charge", d3.forceManyBody().strength(config.chargeStrength))
-    .force("center", d3.forceCenter(0, 0))
-    .force(
-      "collision",
-      d3.forceCollide().radius(config.nodeRadius + config.collisionPadding),
-    )
-    .force("cluster", clusterForce());
-
-  /**
-   * Custom d3 force: for every active cluster, pull its members toward
-   * the cluster centroid.
-   *
-   * Multi-membership composes naturally — a node in N active clusters has
-   * the centroid pull from each cluster added into its [vx]/[vy] in the
-   * same tick, so it settles between them.
-   *
-   * The force is a no-op when no clusters are active or when
-   * [clusterStrength] is zero, so it costs nothing in the default state.
-   */
+  var svg = d3.select("#graph-view").append("svg").attr("width", width).attr("height", height);
+  svg.append("defs").append("marker").attr("id", "arrow").attr("viewBox", "0 -3 6 6").attr("refX", 12).attr("refY", 0).attr("markerWidth", 6).attr("markerHeight", 6).attr("orient", "auto").append("path").attr("d", "M0,-3L6,0L0,3").attr("fill", "#e0e0e0");
+  var root = svg.append("g").attr("class", "zoom-root");
+  var simulation = d3.forceSimulation(data.nodes).force(
+    "link",
+    d3.forceLink(data.edges).id((d) => d.id).distance(config.linkDistance)
+  ).force("charge", d3.forceManyBody().strength(config.chargeStrength)).force("center", d3.forceCenter(0, 0)).force(
+    "collision",
+    d3.forceCollide().radius(config.nodeRadius + config.collisionPadding)
+  ).force("cluster", clusterForce());
   function clusterForce() {
     function force(alpha) {
       if (clusterStrength === 0) return;
@@ -209,18 +130,11 @@
         }
       }
     }
-    // d3 calls force.initialize(nodes) when the force is added; we don't
-    // need per-node state, but the function must exist.
-    force.initialize = () => {};
+    force.initialize = () => {
+    };
     return force;
   }
-
-  // Clusters
-  // ====================
-  // A node may belong to multiple clusters (one per folder + one per tag).
-  // Hulls are rendered under links so nodes/edges remain readable.
-
-  const tagPalette = [
+  var tagPalette = [
     "#8dd3c7",
     "#ffffb3",
     "#bebada",
@@ -230,208 +144,129 @@
     "#b3de69",
     "#fccde5",
     "#d9d9d9",
-    "#bc80bd",
+    "#bc80bd"
   ];
-  const allTags = [...new Set(data.nodes.flatMap((n) => n.tags || []))];
-  const tagColor = new Map(
-    allTags.map((t, i) => [t, tagPalette[i % tagPalette.length]]),
+  var allTags = [
+    ...new Set(data.nodes.flatMap((n) => n.tags || []))
+  ];
+  var tagColor = new Map(
+    allTags.map((t, i) => [t, tagPalette[i % tagPalette.length]])
   );
-
-  const folderClusters = [...new Set(data.nodes.map((n) => n.folder))]
-    .filter((folder) => selectorMatches(graphConfig.dir, folder))
-    .map((folder) => ({
-      key: `folder:${folder}`,
-      kind: "folder",
-      label: folder,
-      color: folderColor.get(folder),
-      nodes: data.nodes.filter((n) => n.folder === folder),
-    }));
-  const tagClusters = allTags
-    .filter((tag) => selectorMatches(graphConfig.tag, tag))
-    .map((tag) => ({
-      key: `tag:${tag}`,
-      kind: "tag",
-      label: `#${tag}`,
-      color: tagColor.get(tag),
-      nodes: data.nodes.filter((n) => (n.tags || []).includes(tag)),
-    }));
-
-  // Visibility state — set of cluster keys currently shown.
-  // Seeded from default_dir / default_tag, restricted to clusters that
-  // actually passed the dir/tag filter above.
-  const visibleKeys = new Set();
+  var folderClusters = [
+    ...new Set(data.nodes.map((n) => n.folder))
+  ].filter((folder) => selectorMatches(graphConfig.dir, folder)).map((folder) => ({
+    key: `folder:${folder}`,
+    kind: "folder",
+    label: folder,
+    color: folderColor.get(folder),
+    nodes: data.nodes.filter((n) => n.folder === folder)
+  }));
+  var tagClusters = allTags.filter((tag) => selectorMatches(graphConfig.tag, tag)).map((tag) => ({
+    key: `tag:${tag}`,
+    kind: "tag",
+    label: `#${tag}`,
+    color: tagColor.get(tag),
+    nodes: data.nodes.filter((n) => (n.tags || []).includes(tag))
+  }));
+  var visibleKeys = /* @__PURE__ */ new Set();
   for (const c of folderClusters) {
-    if (selectorMatches(graphConfig.default_dir, c.label)) visibleKeys.add(c.key);
+    if (selectorMatches(graphConfig.default_dir, c.label))
+      visibleKeys.add(c.key);
   }
   for (const c of tagClusters) {
-    // c.label is "#tag"; default_tag is matched against the bare tag name
     const bare = c.label.replace(/^#/, "");
     if (selectorMatches(graphConfig.default_tag, bare)) visibleKeys.add(c.key);
   }
-  // Cluster attractive-force strength (0 = off). Mutable at runtime via
-  // the strength slider; initial value comes from config.
-  let clusterStrength = config.clusterStrength;
-
-  // Hull layer — under links
-  const hullLayer = root.insert("g", ":first-child").attr("class", "hulls");
-
-  const HULL_PAD = 24;
-  const hullPath = d3.line().curve(d3.curveCatmullRomClosed.alpha(1));
-
-  const allClusters = [...folderClusters, ...tagClusters];
-  const clusterByKey = new Map(allClusters.map((c) => [c.key, c]));
-
+  var clusterStrength = config.clusterStrength;
+  var hullLayer = root.insert("g", ":first-child").attr("class", "hulls");
+  var HULL_PAD = 24;
+  var hullPath = d3.line().curve(d3.curveCatmullRomClosed.alpha(1));
+  var allClusters = [...folderClusters, ...tagClusters];
   function activeClusters() {
     return allClusters.filter(
-      (c) => visibleKeys.has(c.key) && c.nodes.length >= 2,
+      (c) => visibleKeys.has(c.key) && c.nodes.length >= 2
     );
   }
-
   function renderHulls() {
-    const sel = hullLayer
-      .selectAll("path")
-      .data(activeClusters(), (c) => c.key);
+    const sel = hullLayer.selectAll("path").data(activeClusters(), (c) => c.key);
     sel.exit().remove();
-    const entered = sel
-      .enter()
-      .append("path")
-      .attr("fill-opacity", 0.12)
-      .attr("stroke-opacity", 0.55)
-      .attr("stroke-width", 2)
-      .attr("stroke-linejoin", "round");
-    entered
-      .merge(sel)
-      .attr("fill", (c) => c.color)
-      .attr("stroke", (c) => c.color);
+    const entered = sel.enter().append("path").attr("fill-opacity", 0.12).attr("stroke-opacity", 0.55).attr("stroke-width", 2).attr("stroke-linejoin", "round");
+    entered.merge(sel).attr("fill", (c) => c.color).attr("stroke", (c) => c.color);
     updateHullGeometry();
   }
-
   function updateHullGeometry() {
     hullLayer.selectAll("path").attr("d", (c) => {
-      // Expand each node into a small ring of points so the hull has padding
       const pts = c.nodes.flatMap((n) => [
         [n.x + HULL_PAD, n.y],
         [n.x - HULL_PAD, n.y],
         [n.x, n.y + HULL_PAD],
-        [n.x, n.y - HULL_PAD],
+        [n.x, n.y - HULL_PAD]
       ]);
       const hull = d3.polygonHull(pts);
-      return hull ? hullPath(hull) + "Z" : null;
+      return hull ? `${hullPath(hull)}Z` : null;
     });
   }
-
-  // Edges — drawn first so nodes render on top
-  const link = root
-    .append("g")
-    .attr("class", "links")
-    .attr("stroke", "#e0e0e0")
-    .attr("stroke-opacity", 0.8)
-    .selectAll("line")
-    .data(data.edges)
-    .join("line")
-    .attr("stroke-width", 1.5)
-    .attr("marker-end", "url(#arrow)");
-
-  // Nodes
-  const node = root
-    .append("g")
-    .attr("class", "nodes")
-    .selectAll("circle")
-    .data(data.nodes)
-    .join("circle")
-    .attr("r", config.nodeRadius)
-    .attr("fill", (d) => folderColor.get(d.folder))
-    .attr("stroke", "#fff")
-    .attr("stroke-width", 1.5)
-    .style("cursor", "pointer")
-    .call(drag(simulation));
-
-  // Labels
-  const label = root
-    .append("g")
-    .attr("class", "labels")
-    .selectAll("text")
-    .data(data.nodes)
-    .join("text")
-    .text((d) => d.title)
-    .attr("font-size", config.labelFontSize)
-    .attr("font-family", "sans-serif")
-    .attr("dx", config.nodeRadius + 4)
-    .attr("dy", 4);
-
-  // Hover: dim unrelated, highlight connected edges
-  node
-    .on("mouseenter", (_event, d) => {
-      const neighbors = adj.get(d.id);
-      node.attr("opacity", (n) =>
-        n.id === d.id || neighbors.has(n.id) ? 1 : 0.15,
-      );
-      label.attr("opacity", (n) =>
-        n.id === d.id || neighbors.has(n.id) ? 1 : 0.15,
-      );
-      link
-        .attr("stroke", (e) => {
-          const sid = e.source.id || e.source;
-          const tid = e.target.id || e.target;
-          return sid === d.id || tid === d.id ? "#ffcc00" : "#e0e0e0";
-        })
-        .attr("stroke-opacity", (e) => {
-          const sid = e.source.id || e.source;
-          const tid = e.target.id || e.target;
-          return sid === d.id || tid === d.id ? 1 : 0.15;
-        })
-        .attr("stroke-width", (e) => {
-          const sid = e.source.id || e.source;
-          const tid = e.target.id || e.target;
-          return sid === d.id || tid === d.id ? 2.5 : 1.5;
-        });
-    })
-    .on("mouseleave", () => {
-      node.attr("opacity", 1);
-      label.attr("opacity", 1);
-      link
-        .attr("stroke", "#e0e0e0")
-        .attr("stroke-opacity", 0.8)
-        .attr("stroke-width", 1.5);
+  var link = root.append("g").attr("class", "links").attr("stroke", "#e0e0e0").attr("stroke-opacity", 0.8).selectAll("line").data(data.edges).join("line").attr("stroke-width", 1.5).attr("marker-end", "url(#arrow)");
+  var node = root.append("g").attr("class", "nodes").selectAll("circle").data(data.nodes).join("circle").attr("r", config.nodeRadius).attr("fill", (d) => folderColor.get(d.folder)).attr("stroke", "#fff").attr("stroke-width", 1.5).style("cursor", "pointer").call(drag(simulation));
+  var label = root.append("g").attr("class", "labels").selectAll("text").data(data.nodes).join("text").text((d) => d.title).attr("font-size", config.labelFontSize).attr("font-family", "sans-serif").attr("dx", config.nodeRadius + 4).attr("dy", 4);
+  node.on("mouseenter", (_event, d) => {
+    const neighbors = adj.get(d.id);
+    node.attr(
+      "opacity",
+      (n) => n.id === d.id || neighbors.has(n.id) ? 1 : 0.15
+    );
+    label.attr(
+      "opacity",
+      (n) => n.id === d.id || neighbors.has(n.id) ? 1 : 0.15
+    );
+    link.attr("stroke", (e) => {
+      const sid = typeof e.source === "string" ? e.source : e.source.id;
+      const tid = typeof e.target === "string" ? e.target : e.target.id;
+      return sid === d.id || tid === d.id ? "#ffcc00" : "#e0e0e0";
+    }).attr("stroke-opacity", (e) => {
+      const sid = typeof e.source === "string" ? e.source : e.source.id;
+      const tid = typeof e.target === "string" ? e.target : e.target.id;
+      return sid === d.id || tid === d.id ? 1 : 0.15;
+    }).attr("stroke-width", (e) => {
+      const sid = typeof e.source === "string" ? e.source : e.source.id;
+      const tid = typeof e.target === "string" ? e.target : e.target.id;
+      return sid === d.id || tid === d.id ? 2.5 : 1.5;
     });
-
-  // Click: navigate
+  }).on("mouseleave", () => {
+    node.attr("opacity", 1);
+    label.attr("opacity", 1);
+    link.attr("stroke", "#e0e0e0").attr("stroke-opacity", 0.8).attr("stroke-width", 1.5);
+  });
   node.on("click", (_event, d) => {
     const url = d.id.replace(/\.md$/, ".html");
     window.location.href = url;
   });
-
-  // Tick
   simulation.on("tick", () => {
-    link
-      .attr("x1", (d) => d.source.x)
-      .attr("y1", (d) => d.source.y)
-      .attr("x2", (d) => d.target.x)
-      .attr("y2", (d) => d.target.y);
+    link.attr(
+      "x1",
+      (d) => typeof d.source === "string" ? 0 : d.source.x
+    ).attr(
+      "y1",
+      (d) => typeof d.source === "string" ? 0 : d.source.y
+    ).attr(
+      "x2",
+      (d) => typeof d.target === "string" ? 0 : d.target.x
+    ).attr(
+      "y2",
+      (d) => typeof d.target === "string" ? 0 : d.target.y
+    );
     node.attr("cx", (d) => d.x).attr("cy", (d) => d.y);
     label.attr("x", (d) => d.x).attr("y", (d) => d.y);
     updateHullGeometry();
   });
-
-  // Zoom + pan
-  const zoom = d3
-    .zoom()
-    .scaleExtent([0.1, 8])
-    .on("zoom", (event) => {
-      root.attr("transform", event.transform);
-    });
+  var zoom = d3.zoom().scaleExtent([0.1, 8]).on("zoom", (event) => {
+    root.attr("transform", event.transform);
+  });
   svg.call(zoom);
-
-  // Fit-to-screen: run simulation ahead, compute bounds, set transform
   function fitToScreen() {
-    // Tick until the layout is roughly settled
     for (let i = 0; i < 300; i++) simulation.tick();
     simulation.alpha(0.1).restart();
-
-    let minX = Infinity,
-      minY = Infinity,
-      maxX = -Infinity,
-      maxY = -Infinity;
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
     data.nodes.forEach((n) => {
       if (n.x < minX) minX = n.x;
       if (n.y < minY) minY = n.y;
@@ -449,153 +284,96 @@
     svg.call(zoom.transform, d3.zoomIdentity.translate(tx, ty).scale(scale));
   }
   fitToScreen();
-
-  // Zoom controls
-  const controls = d3
-    .select("#graph-view")
-    .append("div")
-    .attr("class", "zoom-controls");
-  controls
-    .append("button")
-    .text("+")
-    .on("click", () => {
-      svg.transition().duration(200).call(zoom.scaleBy, 1.4);
-    });
-  controls
-    .append("button")
-    .text("−")
-    .on("click", () => {
-      svg
-        .transition()
-        .duration(200)
-        .call(zoom.scaleBy, 1 / 1.4);
-    });
-  controls
-    .append("button")
-    .text("⤢")
-    .attr("title", "Fit")
-    .on("click", () => {
-      fitToScreen();
-    });
-
-  // Cluster filter panel
-  // ====================
-  const panel = d3
-    .select("#graph-view")
-    .append("div")
-    .attr("class", "cluster-panel");
-
-  // Strength slider
-  const strengthRow = panel.append("div").attr("class", "panel-row");
+  var controls = d3.select("#graph-view").append("div").attr("class", "zoom-controls");
+  controls.append("button").text("+").on("click", () => {
+    svg.transition().duration(200).call(zoom.scaleBy, 1.4);
+  });
+  controls.append("button").text("\u2212").on("click", () => {
+    svg.transition().duration(200).call(zoom.scaleBy, 1 / 1.4);
+  });
+  controls.append("button").text("\u2922").attr("title", "Fit").on("click", () => {
+    fitToScreen();
+  });
+  var panel = d3.select("#graph-view").append("div").attr("class", "cluster-panel collapsed");
+  var toggle = panel.append("div").attr("class", "panel-toggle");
+  toggle.append("span").attr("class", "panel-toggle-label").text("Clusters");
+  toggle.append("span").attr("class", "panel-toggle-chevron").text("\u25B2");
+  toggle.on("click", () => {
+    const collapsed = panel.classed("collapsed");
+    panel.classed("collapsed", !collapsed);
+    panel.select(".panel-toggle-chevron").text(collapsed ? "\u25BC" : "\u25B2");
+  });
+  var strengthRow = panel.append("div").attr("class", "panel-row");
   strengthRow.append("label").text("Cluster pull");
-  const strengthInput = strengthRow
-    .append("input")
-    .attr("type", "range")
-    .attr("min", 0)
-    .attr("max", 0.3)
-    .attr("step", 0.01)
-    .attr("value", clusterStrength)
-    .on("input", function () {
-      clusterStrength = +this.value;
-      simulation.alpha(0.5).restart();
-    });
-  strengthRow
-    .append("span")
-    .attr("class", "strength-val")
-    .text(clusterStrength);
-  strengthInput.on("input.label", function () {
+  var strengthInput = strengthRow.append("input").attr("type", "range").attr("min", 0).attr("max", 0.3).attr("step", 0.01).attr("value", clusterStrength).on("input", function() {
+    clusterStrength = +this.value;
+    simulation.alpha(0.5).restart();
+  });
+  strengthRow.append("span").attr("class", "strength-val").text(clusterStrength);
+  strengthInput.on("input.label", function() {
     strengthRow.select(".strength-val").text((+this.value).toFixed(2));
   });
-
   function setVisible(keys, on) {
     for (const k of keys) {
       if (on) visibleKeys.add(k);
       else visibleKeys.delete(k);
     }
-    panel.selectAll("input.cluster-cb").property("checked", function () {
+    panel.selectAll("input.cluster-cb").property("checked", function() {
       return visibleKeys.has(this.dataset.key);
     });
     renderHulls();
     simulation.alpha(0.5).restart();
   }
-
   function buildSection(title, clusters) {
     const section = panel.append("div").attr("class", "panel-section");
     const header = section.append("div").attr("class", "panel-header");
     header.append("span").text(title);
     const actions = header.append("span").attr("class", "panel-actions");
-    actions
-      .append("button")
-      .text("all")
-      .on("click", () =>
-        setVisible(
-          clusters.map((c) => c.key),
-          true,
-        ),
-      );
-    actions
-      .append("button")
-      .text("none")
-      .on("click", () =>
-        setVisible(
-          clusters.map((c) => c.key),
-          false,
-        ),
-      );
-
+    actions.append("button").text("all").on(
+      "click",
+      () => setVisible(
+        clusters.map((c) => c.key),
+        true
+      )
+    );
+    actions.append("button").text("none").on(
+      "click",
+      () => setVisible(
+        clusters.map((c) => c.key),
+        false
+      )
+    );
     const list = section.append("div").attr("class", "panel-list");
-    const items = list
-      .selectAll("label")
-      .data(clusters)
-      .join("label")
-      .attr("class", "cluster-item")
-      .attr("title", (c) => `${c.label} (${c.nodes.length} nodes)`);
-    items
-      .append("input")
-      .attr("type", "checkbox")
-      .attr("class", "cluster-cb")
-      .property("checked", (c) => visibleKeys.has(c.key))
-      .each(function (c) {
-        this.dataset.key = c.key;
-      })
-      .on("change", function (_event, c) {
+    const items = list.selectAll("label").data(clusters).join("label").attr("class", "cluster-item").attr("title", (c) => `${c.label} (${c.nodes.length} nodes)`);
+    items.append("input").attr("type", "checkbox").attr("class", "cluster-cb").property("checked", (c) => visibleKeys.has(c.key)).each(function(c) {
+      this.dataset.key = c.key;
+    }).on(
+      "change",
+      function(_event, c) {
         if (this.checked) visibleKeys.add(c.key);
         else visibleKeys.delete(c.key);
         renderHulls();
         simulation.alpha(0.5).restart();
-      });
-    items
-      .append("span")
-      .attr("class", "swatch")
-      .style("background", (c) => c.color);
-    items
-      .append("span")
-      .attr("class", "cluster-label")
-      .text((c) => `${c.label} (${c.nodes.length})`);
+      }
+    );
+    items.append("span").attr("class", "swatch").style("background", (c) => c.color);
+    items.append("span").attr("class", "cluster-label").text((c) => `${c.label} (${c.nodes.length})`);
   }
-
   buildSection("Folders", folderClusters);
   buildSection("Tags", tagClusters);
-  // Render hulls for any default-selected clusters
   renderHulls();
-
-  // Drag behavior — coords already in root's local space thanks to d3.zoom
-  function drag(simulation) {
-    return d3
-      .drag()
-      .on("start", (event, d) => {
-        if (!event.active) simulation.alphaTarget(0.3).restart();
-        d.fx = d.x;
-        d.fy = d.y;
-      })
-      .on("drag", (event, d) => {
-        d.fx = event.x;
-        d.fy = event.y;
-      })
-      .on("end", (event, d) => {
-        if (!event.active) simulation.alphaTarget(0);
-        d.fx = null;
-        d.fy = null;
-      });
+  function drag(simulation2) {
+    return d3.drag().on("start", (event, d) => {
+      if (!event.active) simulation2.alphaTarget(0.3).restart();
+      d.fx = d.x;
+      d.fy = d.y;
+    }).on("drag", (event, d) => {
+      d.fx = event.x;
+      d.fy = event.y;
+    }).on("end", (event, d) => {
+      if (!event.active) simulation2.alphaTarget(0);
+      d.fx = null;
+      d.fy = null;
+    });
   }
 })();
