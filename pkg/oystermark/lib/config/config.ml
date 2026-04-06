@@ -1,66 +1,84 @@
-type theme =
-  | Tokyonight
-  | Gruvbox
-  | Atom_one_light
-  | Atom_one_dark
-  | Bluloco_light
-  | Bluloco_dark
-  | No_theme
-
-(** Canonical name, variant, plus aliases (extra strings that also map to it). *)
-let theme_table : (string * theme * string list) list =
-  [ "tokyonight", Tokyonight, []
-  ; "gruvbox", Gruvbox, []
-  ; "atom_one_light", Atom_one_light, [ "atom-one-light" ]
-  ; "atom_one_dark", Atom_one_dark, [ "atom-one-dark" ]
-  ; "bluloco_light", Bluloco_light, [ "bluloco-light" ]
-  ; "bluloco_dark", Bluloco_dark, [ "bluloco-dark" ]
-  ; "no_theme", No_theme, [ "none" ]
-  ]
-;;
-
-let theme_of_string (s : string) : theme =
-  match
-    List.find_opt
-      (fun (canonical, _, aliases) -> String.equal s canonical || List.mem s aliases)
-      theme_table
-  with
-  | Some (_, t, _) -> t
-  | None -> failwith ("Invalid theme: " ^ s)
-;;
-
-let theme_to_string (t : theme) : string =
-  let canonical, _, _ = List.find (fun (_, t', _) -> t = t') theme_table in
-  canonical
-;;
-
-type pipeline_profile =
-  | Default
-  | Basic
-  | None_profile
-
-let pipeline_profile_table : (string * pipeline_profile) list =
-  [ "default", Default; "basic", Basic; "none", None_profile ]
-;;
-
-let pipeline_profile_of_string (s : string) : pipeline_profile =
-  match List.assoc_opt s pipeline_profile_table with
-  | Some p -> p
-  | None -> failwith ("Invalid pipeline profile: " ^ s)
-;;
-
-let pipeline_profile_to_string (p : pipeline_profile) : string =
-  let canonical, _ = List.find (fun (_, p') -> p = p') pipeline_profile_table in
-  canonical
-;;
-
 module type Defaultable = sig
   type t
 
   val default : t
 end
 
-module Home_graph_view_config : Defaultable = struct
+module Theme : sig
+  include Defaultable
+
+  val of_string : string -> t
+  val to_string : t -> string
+end = struct
+  type t =
+    | Tokyonight
+    | Gruvbox
+    | Atom_one_light
+    | Atom_one_dark
+    | Bluloco_light
+    | Bluloco_dark
+    | No_theme
+
+  (** Canonical name, variant, plus aliases (extra strings that also map to it). *)
+  let theme_table : (string * t * string list) list =
+    [ "tokyonight", Tokyonight, []
+    ; "gruvbox", Gruvbox, []
+    ; "atom_one_light", Atom_one_light, [ "atom-one-light" ]
+    ; "atom_one_dark", Atom_one_dark, [ "atom-one-dark" ]
+    ; "bluloco_light", Bluloco_light, [ "bluloco-light" ]
+    ; "bluloco_dark", Bluloco_dark, [ "bluloco-dark" ]
+    ; "no_theme", No_theme, [ "none" ]
+    ]
+  ;;
+
+  let of_string (s : string) : t =
+    match
+      List.find_opt
+        (fun (canonical, _, aliases) -> String.equal s canonical || List.mem s aliases)
+        theme_table
+    with
+    | Some (_, t, _) -> t
+    | None -> failwith ("Invalid theme: " ^ s)
+  ;;
+
+  let to_string (t : t) : string =
+    let canonical, _, _ = List.find (fun (_, t', _) -> t = t') theme_table in
+    canonical
+  ;;
+
+  let default = Bluloco_dark
+end
+
+module Pipeline_profile : sig
+  include Defaultable
+
+  val of_string : string -> t
+  val to_string : t -> string
+end = struct
+  type t =
+    | Default
+    | Basic
+    | None_profile
+
+  let pipeline_profile_table : (string * t) list =
+    [ "default", Default; "basic", Basic; "none", None_profile ]
+  ;;
+
+  let of_string (s : string) : t =
+    match List.assoc_opt s pipeline_profile_table with
+    | Some p -> p
+    | None -> failwith ("Invalid pipeline profile: " ^ s)
+  ;;
+
+  let to_string (p : t) : string =
+    let canonical, _ = List.find (fun (_, p') -> p = p') pipeline_profile_table in
+    canonical
+  ;;
+
+  let default = Default
+end
+
+module Home_graph_view : Defaultable = struct
   type dir =
     | Include_all
     | Exclude_all
@@ -104,12 +122,19 @@ module Home_graph_view_config : Defaultable = struct
 end
 
 type t =
-  { theme : theme
+  { theme : Theme.t
   ; css_snippets : string list
-  ; pipeline_profile : pipeline_profile
+  ; pipeline_profile : Pipeline_profile.t
+  ; home_graph_view : Home_graph_view.t
   }
 
-let default : t = { theme = Bluloco_dark; css_snippets = []; pipeline_profile = Default }
+let default : t =
+  { theme = Theme.default
+  ; css_snippets = []
+  ; pipeline_profile = Pipeline_profile.default
+  ; home_graph_view = Home_graph_view.default
+  }
+;;
 
 (* let of_yaml_value (v : Yaml.value) : t =
   match v with
