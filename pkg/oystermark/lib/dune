@@ -18,6 +18,7 @@
  (inline_tests)
  (preprocessor_deps
   (file static/theme.css)
-  (file static/graph_view.js))
+  (file static/graph_view/widget.js)
+  (file static/graph_view/style.css))
  (preprocess
   (pps ppx_jane ppx_string ppx_blob ppx_quick_test)))

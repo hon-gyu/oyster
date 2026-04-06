@@ -30,21 +30,21 @@ let to_json (t : Vault_graph.t) : string =
   let nodes : J.t list =
     Vault_graph.G.fold_vertex
       (fun (v : Vault_graph.vertex) acc ->
-        match v.kind with
-        | Note ->
-          let meta =
-            Map.find t.meta v.path
-            |> Option.value
-                 ~default:Vault_graph.{ title = v.path; tags = []; folder = "." }
-          in
-          `Assoc
-            [ "id", `String v.path
-            ; "title", `String meta.title
-            ; "tags", `List (List.map meta.tags ~f:(fun t -> `String t))
-            ; "folder", `String meta.folder
-            ]
-          :: acc
-        | _ -> acc)
+         match v.kind with
+         | Note ->
+           let meta =
+             Map.find t.meta v.path
+             |> Option.value
+                  ~default:Vault_graph.{ title = v.path; tags = []; folder = "." }
+           in
+           `Assoc
+             [ "id", `String v.path
+             ; "title", `String meta.title
+             ; "tags", `List (List.map meta.tags ~f:(fun t -> `String t))
+             ; "folder", `String meta.folder
+             ]
+           :: acc
+         | _ -> acc)
       t.graph
       []
   in
@@ -52,9 +52,7 @@ let to_json (t : Vault_graph.t) : string =
   let edge_set =
     Vault_graph.G.fold_edges_e
       (fun (src, _kind, tgt) acc ->
-        if String.equal src.path tgt.path
-        then acc
-        else Set.add acc (src.path, tgt.path))
+         if String.equal src.path tgt.path then acc else Set.add acc (src.path, tgt.path))
       t.graph
       (Set.empty (module String_pair))
   in
@@ -69,7 +67,8 @@ let to_json (t : Vault_graph.t) : string =
 (* HTML output
    ==================== *)
 
-let widget_js : string = [%blob "static/graph_view.js"];;
+let widget_js : string = [%blob "static/graph_view/widget.js"]
+let widget_css : string = [%blob "static/graph_view/style.css"]
 
 let%expect_test "to_json with cross-note links" =
   let vault =
@@ -103,130 +102,7 @@ let to_html (t : Vault_graph.t) : string =
 <meta charset="utf-8">
 <title>Graph View</title>
 <style>
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { background: #1a1a2e; overflow: hidden; font-family: sans-serif; }
-  #graph-view { width: 100vw; height: 100vh; position: relative; }
-  #graph-view svg { display: block; }
-  text { fill: #ccc; pointer-events: none; user-select: none; }
-  .zoom-controls {
-    position: absolute;
-    top: 16px;
-    right: 16px;
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    z-index: 10;
-  }
-  .zoom-controls button {
-    width: 32px;
-    height: 32px;
-    border: 1px solid #555;
-    background: #2a2a3e;
-    color: #eee;
-    font-size: 16px;
-    cursor: pointer;
-    border-radius: 4px;
-  }
-  .zoom-controls button:hover { background: #3a3a4e; }
-  .cluster-panel {
-    position: absolute;
-    bottom: 16px;
-    right: 16px;
-    width: 240px;
-    max-height: calc(100vh - 32px);
-    background: rgba(42, 42, 62, 0.92);
-    border: 1px solid #555;
-    border-radius: 6px;
-    color: #eee;
-    font-size: 12px;
-    z-index: 10;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-  }
-  .cluster-panel .panel-row {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 8px 12px;
-    border-bottom: 1px solid #444;
-  }
-  .cluster-panel .panel-row label { color: #ccc; }
-  .cluster-panel .panel-row input[type=range] { flex: 1; }
-  .cluster-panel .strength-val {
-    color: #aaa;
-    width: 28px;
-    text-align: right;
-    font-variant-numeric: tabular-nums;
-  }
-  .cluster-panel .panel-section {
-    border-bottom: 1px solid #444;
-    overflow: hidden;
-    display: flex;
-    flex-direction: column;
-    min-height: 0;
-  }
-  .cluster-panel .panel-section:last-child { border-bottom: none; }
-  .cluster-panel .panel-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 6px 12px;
-    background: #1f1f30;
-    color: #bbb;
-    font-weight: 600;
-  }
-  .cluster-panel .panel-actions { display: flex; gap: 4px; }
-  .cluster-panel .panel-actions button {
-    background: #3a3a4e;
-    border: 1px solid #555;
-    color: #ccc;
-    font-size: 10px;
-    padding: 2px 6px;
-    border-radius: 3px;
-    cursor: pointer;
-  }
-  .cluster-panel .panel-actions button:hover { background: #4a4a5e; }
-  .cluster-panel .panel-list {
-    overflow-y: auto;
-    max-height: 200px;
-    padding: 4px 0;
-  }
-  .cluster-panel .cluster-item {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 3px 12px;
-    cursor: pointer;
-  }
-  .cluster-panel .cluster-item:hover { background: #3a3a4e; }
-  .cluster-panel .cluster-item input { cursor: pointer; }
-  .cluster-panel .swatch {
-    display: inline-block;
-    width: 12px;
-    height: 12px;
-    border-radius: 2px;
-    flex-shrink: 0;
-  }
-  .cluster-panel .cluster-label {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    flex: 1;
-  }
-  .hulls path { pointer-events: none; }
-  .debug-info {
-    position: absolute;
-    top: 16px;
-    left: 16px;
-    color: #eee;
-    background: #2a2a3e;
-    padding: 6px 10px;
-    border-radius: 4px;
-    font-size: 12px;
-    font-family: monospace;
-    z-index: 10;
-  }
+%s
 </style>
 </head>
 <body>
@@ -240,6 +116,7 @@ window.__graphData = %s;
 </script>
 </body>
 </html>|}
+    widget_css
     json
     widget_js
 ;;
