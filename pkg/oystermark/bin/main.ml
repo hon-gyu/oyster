@@ -197,7 +197,6 @@ let vault_cmd : Command.t =
            (fun () -> Dev_server.watch ~env ~watch_dir:vault_root ~on_change:render))
 ;;
 
-
 let graph_cmd : Command.t =
   Command.basic
     ~summary:"Output an interactive graph view of a vault as HTML"

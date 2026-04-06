@@ -60,7 +60,13 @@ let extract_code_blocks (doc : Cmarkit.Doc.t) : cell list =
       Cmarkit.Folder.ret (cell :: acc)
     | _ -> Cmarkit.Folder.default
   in
-  let folder = Cmarkit.Folder.make ~inline_ext_default:(fun _f acc _i -> acc) ~block_ext_default:(fun _f acc _b -> acc) ~block () in
+  let folder =
+    Cmarkit.Folder.make
+      ~inline_ext_default:(fun _f acc _i -> acc)
+      ~block_ext_default:(fun _f acc _b -> acc)
+      ~block
+      ()
+  in
   Cmarkit.Folder.fold_doc folder [] doc |> List.rev
 ;;
 
