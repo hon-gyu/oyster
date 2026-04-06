@@ -7,4 +7,4 @@
   )
   (inline_tests)
   (preprocess
-   (pps ppx_jane ppx_string ppx_blob ppx_quick_test)))
+   (pps ppx_jane ppx_string ppx_blob ppx_quick_test ppx_yojson_conv)))
