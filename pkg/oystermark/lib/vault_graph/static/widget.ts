@@ -492,8 +492,16 @@ controls
 	.on("click", () => {
 		fitToScreen();
 	});
+// Backdrop for dimming the page behind the floating graph
+const backdrop = d3
+	.select("body")
+	.append("div")
+	.attr("id", "graph-view-backdrop")
+	.on("click", () => toggleMaximize());
+
 function toggleMaximize(): void {
 	const isMax = container.classList.toggle("maximized");
+	backdrop.classed("visible", isMax);
 	d3.select(".maximize-btn").text(isMax ? "\u2B8C" : "\u26F6");
 	const w = container.clientWidth;
 	const h = container.clientHeight;
@@ -503,13 +511,13 @@ function toggleMaximize(): void {
 controls
 	.append("button")
 	.text("\u26F6")
-	.attr("title", "Maximize")
+	.attr("title", "Expand")
 	.attr("class", "maximize-btn")
 	.on("click", toggleMaximize);
 d3.select("#graph-view")
 	.append("button")
 	.attr("class", "maximize-close")
-	.attr("title", "Exit fullscreen")
+	.attr("title", "Close")
 	.text("\u2715")
 	.on("click", toggleMaximize);
 document.addEventListener("keydown", (e: KeyboardEvent) => {

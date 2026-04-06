@@ -291,15 +291,18 @@
   controls.append("button").text("\u2922").attr("title", "Fit").on("click", () => {
     fitToScreen();
   });
+  var backdrop = d3.select("body").append("div").attr("id", "graph-view-backdrop").on("click", () => toggleMaximize());
   function toggleMaximize() {
     const isMax = container.classList.toggle("maximized");
+    backdrop.classed("visible", isMax);
     d3.select(".maximize-btn").text(isMax ? "\u2B8C" : "\u26F6");
     const w = container.clientWidth;
     const h = container.clientHeight;
     svg.attr("width", w).attr("height", h);
     fitToScreen();
   }
-  controls.append("button").text("\u26F6").attr("title", "Maximize").attr("class", "maximize-btn").on("click", toggleMaximize);
+  controls.append("button").text("\u26F6").attr("title", "Expand").attr("class", "maximize-btn").on("click", toggleMaximize);
+  d3.select("#graph-view").append("button").attr("class", "maximize-close").attr("title", "Close").text("\u2715").on("click", toggleMaximize);
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape" && container.classList.contains("maximized")) {
       toggleMaximize();
