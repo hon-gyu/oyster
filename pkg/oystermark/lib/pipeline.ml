@@ -49,8 +49,6 @@ let compose (a : t) (b : t) : t =
 
 let ( >> ) a b = compose a b
 
-(** {1 Vault-stage helpers} *)
-
 (** Lift a per-doc concat_map into an [on_vault] hook.
     @param f A function that takes the vault context, path, and document, and
            returns a list of (path, doc) pairs to replace the original doc with.
