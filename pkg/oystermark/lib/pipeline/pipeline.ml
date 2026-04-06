@@ -131,7 +131,7 @@ let home_graph : t =
         if not (String.equal path "home.md")
         then path, doc
         else (
-          let block_mapper = add_html_code_block `Append html in
+          let block_mapper = add_html_code_block `Prepend html in
           let mapper =
             Cmarkit.Mapper.make
               ~inline_ext_default:(fun _m i -> Some i)

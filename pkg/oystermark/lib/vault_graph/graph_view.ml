@@ -68,7 +68,8 @@ let to_json (t : t) : string =
    ==================== *)
 
 let widget_js : string = [%blob "../static/graph_view/widget.js"]
-let widget_css : string = [%blob "../static/graph_view/style.css"]
+let widget_css : string = [%blob "../static/graph_view/widget.css"]
+let standalone_css : string = [%blob "../static/graph_view/page.css"]
 
 let%expect_test "to_json with cross-note links" =
   let vault =
@@ -124,6 +125,7 @@ let to_html (t : t) : string =
 <title>Graph View</title>
 <style>
 %s
+%s
 </style>
 </head>
 <body>
@@ -137,6 +139,7 @@ window.__graphData = %s;
 </script>
 </body>
 </html>|}
+    standalone_css
     widget_css
     json
     widget_js

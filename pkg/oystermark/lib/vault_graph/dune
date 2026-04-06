@@ -20,6 +20,7 @@
  (preprocessor_deps
   (file ../static/theme.css)
   (file ../static/graph_view/widget.js)
-  (file ../static/graph_view/style.css))
+  (file ../static/graph_view/page.css)
+  (file ../static/graph_view/widget.css))
  (preprocess
   (pps ppx_jane ppx_string ppx_blob ppx_quick_test)))

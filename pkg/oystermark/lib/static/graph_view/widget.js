@@ -34,8 +34,10 @@
   );
   console.log("[graph-view] sample edge:", data.edges[0]);
   const container = document.getElementById("graph-view");
-  const width = container.clientWidth;
-  const height = container.clientHeight;
+  // When embedded, the container may have no explicit height yet.
+  // Fall back to a reasonable default so the widget is visible.
+  const width = container.clientWidth || container.parentElement.clientWidth || 800;
+  const height = container.clientHeight || Math.min(width * 0.6, 600);
 
   // Visible debug counter
   const debugEl = document.createElement("div");

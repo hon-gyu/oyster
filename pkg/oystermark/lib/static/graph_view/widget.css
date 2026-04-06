@@ -1,27 +1,28 @@
-* {
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
-}
-body {
+/* Widget-only styles — safe to embed in any page.
+   All rules scoped under #graph-view so they don't leak.
+   ==================== */
+
+#graph-view {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    min-height: 480px;
     background: #1a1a2e;
+    border-radius: 8px;
     overflow: hidden;
     font-family: sans-serif;
 }
-#graph-view {
-    width: 100vw;
-    height: 100vh;
-    position: relative;
-}
 #graph-view svg {
     display: block;
+    width: 100%;
+    height: 100%;
 }
-text {
+#graph-view text {
     fill: #ccc;
     pointer-events: none;
     user-select: none;
 }
-.zoom-controls {
+#graph-view .zoom-controls {
     position: absolute;
     top: 16px;
     right: 16px;
@@ -30,7 +31,7 @@ text {
     gap: 4px;
     z-index: 10;
 }
-.zoom-controls button {
+#graph-view .zoom-controls button {
     width: 32px;
     height: 32px;
     border: 1px solid #555;
@@ -40,15 +41,15 @@ text {
     cursor: pointer;
     border-radius: 4px;
 }
-.zoom-controls button:hover {
+#graph-view .zoom-controls button:hover {
     background: #3a3a4e;
 }
-.cluster-panel {
+#graph-view .cluster-panel {
     position: absolute;
     bottom: 16px;
     right: 16px;
     width: 240px;
-    max-height: calc(100vh - 32px);
+    max-height: calc(100% - 32px);
     background: rgba(42, 42, 62, 0.92);
     border: 1px solid #555;
     border-radius: 6px;
@@ -59,36 +60,36 @@ text {
     flex-direction: column;
     overflow: hidden;
 }
-.cluster-panel .panel-row {
+#graph-view .cluster-panel .panel-row {
     display: flex;
     align-items: center;
     gap: 8px;
     padding: 8px 12px;
     border-bottom: 1px solid #444;
 }
-.cluster-panel .panel-row label {
+#graph-view .cluster-panel .panel-row label {
     color: #ccc;
 }
-.cluster-panel .panel-row input[type="range"] {
+#graph-view .cluster-panel .panel-row input[type="range"] {
     flex: 1;
 }
-.cluster-panel .strength-val {
+#graph-view .cluster-panel .strength-val {
     color: #aaa;
     width: 28px;
     text-align: right;
     font-variant-numeric: tabular-nums;
 }
-.cluster-panel .panel-section {
+#graph-view .cluster-panel .panel-section {
     border-bottom: 1px solid #444;
     overflow: hidden;
     display: flex;
     flex-direction: column;
     min-height: 0;
 }
-.cluster-panel .panel-section:last-child {
+#graph-view .cluster-panel .panel-section:last-child {
     border-bottom: none;
 }
-.cluster-panel .panel-header {
+#graph-view .cluster-panel .panel-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -97,11 +98,11 @@ text {
     color: #bbb;
     font-weight: 600;
 }
-.cluster-panel .panel-actions {
+#graph-view .cluster-panel .panel-actions {
     display: flex;
     gap: 4px;
 }
-.cluster-panel .panel-actions button {
+#graph-view .cluster-panel .panel-actions button {
     background: #3a3a4e;
     border: 1px solid #555;
     color: #ccc;
@@ -110,44 +111,44 @@ text {
     border-radius: 3px;
     cursor: pointer;
 }
-.cluster-panel .panel-actions button:hover {
+#graph-view .cluster-panel .panel-actions button:hover {
     background: #4a4a5e;
 }
-.cluster-panel .panel-list {
+#graph-view .cluster-panel .panel-list {
     overflow-y: auto;
     max-height: 200px;
     padding: 4px 0;
 }
-.cluster-panel .cluster-item {
+#graph-view .cluster-panel .cluster-item {
     display: flex;
     align-items: center;
     gap: 8px;
     padding: 3px 12px;
     cursor: pointer;
 }
-.cluster-panel .cluster-item:hover {
+#graph-view .cluster-panel .cluster-item:hover {
     background: #3a3a4e;
 }
-.cluster-panel .cluster-item input {
+#graph-view .cluster-panel .cluster-item input {
     cursor: pointer;
 }
-.cluster-panel .swatch {
+#graph-view .cluster-panel .swatch {
     display: inline-block;
     width: 12px;
     height: 12px;
     border-radius: 2px;
     flex-shrink: 0;
 }
-.cluster-panel .cluster-label {
+#graph-view .cluster-panel .cluster-label {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
     flex: 1;
 }
-.hulls path {
+#graph-view .hulls path {
     pointer-events: none;
 }
-.debug-info {
+#graph-view .debug-info {
     position: absolute;
     top: 16px;
     left: 16px;
