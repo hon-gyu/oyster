@@ -1,4 +1,13 @@
-(** Graph view: visual rendering of a {!Vault_graph.t}. *)
+(** Graph view: visual rendering (d3.js) of a {!Vault_graph.t}. *)
+
+(* TODO: refactor graph_view
+  graph_view/
+    `- widget.js
+    `- style.css
+    `- test/
+       `- data.json
+  use blob for style css
+*)
 
 open Core
 module J = Yojson.Basic
