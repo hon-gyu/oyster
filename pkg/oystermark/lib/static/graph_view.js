@@ -5,9 +5,24 @@
  */
 (() => {
   // Global config
+  // ====================
+  // Tunables for layout tightness. Lower link distance + stronger (less
+  // negative) charge + smaller seed radius all push nodes closer together,
+  // which means fit-to-screen zooms in further and labels stay legible.
   const config = {
-    nodeRadius: 14,
-    labelFontSize: 16,
+    // Visual
+    nodeRadius: 14, // circle radius in px
+    labelFontSize: 16, // px
+    // Force simulation
+    linkDistance: 35, // target edge length; smaller = tighter graph
+    chargeStrength: -80, // node-node repulsion; less negative = tighter
+    collisionPadding: 6, // collision radius = nodeRadius + this
+    // Initial seed positions (folder-based pre-layout)
+    seedRadiusBase: 120, // minimum radius of the folder ring
+    seedRadiusPerFolder: 30, // extra radius per folder so big vaults spread out
+    seedJitter: 60, // px of random offset within each folder cluster
+    // Cluster attractive force
+    clusterStrength: 0.08, // initial pull strength when a cluster is active
   };
 
   const data = window.__graphData;
@@ -56,6 +71,40 @@
     folders.map((f, i) => [f, palette[i % palette.length]]),
   );
 
+  /**
+   * Pre-position nodes by folder so the initial layout already reflects
+   * cluster structure. Toggling cluster force later becomes a refinement
+   * rather than a full relayout.
+   *
+   * Folders are used (rather than tags) because they form a partition —
+   * every node has exactly one folder, so the seed is unambiguous. Tag
+   * clusters still pull nodes together when their force is enabled.
+   *
+   * Mutates [data.nodes] by setting [n.x] and [n.y]. Must run BEFORE
+   * [d3.forceSimulation] is called, since d3 only randomizes nodes that
+   * lack initial positions.
+   */
+  function seedNodePositions() {
+    const seedRadius = Math.max(
+      config.seedRadiusBase,
+      folders.length * config.seedRadiusPerFolder,
+    );
+    const folderHome = new Map();
+    folders.forEach((f, i) => {
+      const angle = (i / Math.max(folders.length, 1)) * 2 * Math.PI;
+      folderHome.set(f, [
+        seedRadius * Math.cos(angle),
+        seedRadius * Math.sin(angle),
+      ]);
+    });
+    data.nodes.forEach((n) => {
+      const [hx, hy] = folderHome.get(n.folder);
+      n.x = hx + (Math.random() - 0.5) * config.seedJitter;
+      n.y = hy + (Math.random() - 0.5) * config.seedJitter;
+    });
+  }
+  seedNodePositions();
+
   // SVG setup
   const svg = d3
     .select("#graph-view")
@@ -89,16 +138,27 @@
       d3
         .forceLink(data.edges)
         .id((d) => d.id)
-        .distance(80),
+        .distance(config.linkDistance),
     )
-    .force("charge", d3.forceManyBody().strength(-150))
+    .force("charge", d3.forceManyBody().strength(config.chargeStrength))
     .force("center", d3.forceCenter(0, 0))
-    .force("collision", d3.forceCollide().radius(18))
+    .force(
+      "collision",
+      d3.forceCollide().radius(config.nodeRadius + config.collisionPadding),
+    )
     .force("cluster", clusterForce());
 
-  // Custom force: for every active cluster, pull its members toward the
-  // cluster centroid. Multi-membership composes naturally because each
-  // application accumulates into vx/vy.
+  /**
+   * Custom d3 force: for every active cluster, pull its members toward
+   * the cluster centroid.
+   *
+   * Multi-membership composes naturally — a node in N active clusters has
+   * the centroid pull from each cluster added into its [vx]/[vy] in the
+   * same tick, so it settles between them.
+   *
+   * The force is a no-op when no clusters are active or when
+   * [clusterStrength] is zero, so it costs nothing in the default state.
+   */
   function clusterForce() {
     function force(alpha) {
       if (clusterStrength === 0) return;
@@ -130,8 +190,16 @@
   // Hulls are rendered under links so nodes/edges remain readable.
 
   const tagPalette = [
-    "#8dd3c7", "#ffffb3", "#bebada", "#fb8072", "#80b1d3",
-    "#fdb462", "#b3de69", "#fccde5", "#d9d9d9", "#bc80bd",
+    "#8dd3c7",
+    "#ffffb3",
+    "#bebada",
+    "#fb8072",
+    "#80b1d3",
+    "#fdb462",
+    "#b3de69",
+    "#fccde5",
+    "#d9d9d9",
+    "#bc80bd",
   ];
   const allTags = [...new Set(data.nodes.flatMap((n) => n.tags || []))];
   const tagColor = new Map(
@@ -157,8 +225,9 @@
 
   // Visibility state — set of cluster keys currently shown
   const visibleKeys = new Set();
-  // Cluster attractive-force strength (0 = off)
-  let clusterStrength = 0.08;
+  // Cluster attractive-force strength (0 = off). Mutable at runtime via
+  // the strength slider; initial value comes from config.
+  let clusterStrength = config.clusterStrength;
 
   // Hull layer — under links
   const hullLayer = root.insert("g", ":first-child").attr("class", "hulls");
@@ -387,7 +456,10 @@
       clusterStrength = +this.value;
       simulation.alpha(0.5).restart();
     });
-  strengthRow.append("span").attr("class", "strength-val").text(clusterStrength);
+  strengthRow
+    .append("span")
+    .attr("class", "strength-val")
+    .text(clusterStrength);
   strengthInput.on("input.label", function () {
     strengthRow.select(".strength-val").text((+this.value).toFixed(2));
   });
@@ -412,11 +484,21 @@
     actions
       .append("button")
       .text("all")
-      .on("click", () => setVisible(clusters.map((c) => c.key), true));
+      .on("click", () =>
+        setVisible(
+          clusters.map((c) => c.key),
+          true,
+        ),
+      );
     actions
       .append("button")
       .text("none")
-      .on("click", () => setVisible(clusters.map((c) => c.key), false));
+      .on("click", () =>
+        setVisible(
+          clusters.map((c) => c.key),
+          false,
+        ),
+      );
 
     const list = section.append("div").attr("class", "panel-list");
     const items = list
