@@ -122,7 +122,9 @@ let backlinks : t =
 (** Append an interactive graph widget to [home.md].
     [view] controls which dir/tag clusters appear and which are selected by
     default. *)
-let home_graph ?(config : Config.Home_graph_view.t = Config.Home_graph_view.default) () : t =
+let home_graph ?(config : Config.Home_graph_view.t = Config.Home_graph_view.default) ()
+  : t
+  =
   let open Vault_graph in
   let open Graph_view in
   let on_vault (ctx : Vault.t) : Vault.t =

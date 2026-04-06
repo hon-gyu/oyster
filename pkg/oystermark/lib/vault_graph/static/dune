@@ -21,7 +21,9 @@
  (enabled_if
   (<> %{bin-available:tsc} false))
  (mode
-  (promote (until-clean) (only widget.js)))
+  (promote
+   (until-clean)
+   (only widget.js)))
  (targets widget.js)
  (deps widget.ts config.d.ts tsconfig.json)
  (action

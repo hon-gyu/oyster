@@ -1,13 +1,7 @@
 (library
  (name component)
  (public_name oystermark.component)
- (libraries
-  parse
-  vault
-  cmarkit
-  core
-  tyxml
-  )
+ (libraries parse vault cmarkit core tyxml)
  (inline_tests)
  (preprocess
   (pps ppx_jane ppx_string ppx_blob ppx_quick_test)))

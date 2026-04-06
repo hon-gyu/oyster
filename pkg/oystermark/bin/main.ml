@@ -130,7 +130,10 @@ let vault_cmd : Command.t =
          | None ->
            { Config.default with
              theme =
-               Option.value_map theme ~default:Config.default.theme ~f:Config.Theme.of_string
+               Option.value_map
+                 theme
+                 ~default:Config.default.theme
+                 ~f:Config.Theme.of_string
            ; css_snippets =
                (match css_snippets with
                 | [] -> Config.default.css_snippets
@@ -156,9 +159,7 @@ let vault_cmd : Command.t =
            let curr_dir = Sys_unix.getcwd () in
            curr_dir ^ "/_site"
        in
-       let render () =
-         do_render ~verbose ~config ~theme ~vault_root ~output_dir
-       in
+       let render () = do_render ~verbose ~config ~theme ~vault_root ~output_dir in
        (* Initial render *)
        render ();
        (* Serve and/or watch *)

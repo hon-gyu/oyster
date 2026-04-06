@@ -142,8 +142,8 @@ end
 
 module Home_graph_view : sig
   type t =
-    { dir : Selector.t  (** Dir to use as clusters *)
-    ; tag : Selector.t  (** Tag to use as clusters *)
+    { dir : Selector.t (** Dir to use as clusters *)
+    ; tag : Selector.t (** Tag to use as clusters *)
     ; default_dir : Selector.t (** Dir to be selected by default *)
     ; default_tag : Selector.t (** Tag to be selected by default *)
     }
@@ -217,10 +217,7 @@ let%expect_test "Home_graph_view wire format" =
     ; default_tag = Exclude_all
     }
   in
-  example
-  |> Home_graph_view.yojson_of_t
-  |> J.pretty_to_string
-  |> print_endline;
+  example |> Home_graph_view.yojson_of_t |> J.pretty_to_string |> print_endline;
   [%expect
     {|
     {

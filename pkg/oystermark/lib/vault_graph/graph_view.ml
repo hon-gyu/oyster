@@ -96,7 +96,9 @@ let%expect_test "to_json with cross-note links" =
 
 (** Embeddable widget HTML fragment (style + container + scripts).
     Suitable for inlining into an existing page via an [=html] code block. *)
-let to_widget_html ?(config : Config.Home_graph_view.t = Config.Home_graph_view.default) (t : t)
+let to_widget_html
+      ?(config : Config.Home_graph_view.t = Config.Home_graph_view.default)
+      (t : t)
   : string
   =
   let json = to_json t in
