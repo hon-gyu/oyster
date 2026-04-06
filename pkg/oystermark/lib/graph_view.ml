@@ -128,6 +128,30 @@ let to_html (t : Vault_graph.t) : string =
     border-radius: 4px;
   }
   .zoom-controls button:hover { background: #3a3a4e; }
+  .cluster-controls {
+    position: absolute;
+    bottom: 16px;
+    right: 16px;
+    display: flex;
+    gap: 4px;
+    z-index: 10;
+  }
+  .cluster-controls button {
+    height: 28px;
+    padding: 0 12px;
+    border: 1px solid #555;
+    background: #2a2a3e;
+    color: #eee;
+    font-size: 12px;
+    cursor: pointer;
+    border-radius: 4px;
+  }
+  .cluster-controls button:hover { background: #3a3a4e; }
+  .cluster-controls button.active {
+    background: #4a6a8e;
+    border-color: #6a8aae;
+  }
+  .hulls path { pointer-events: none; }
   .debug-info {
     position: absolute;
     top: 16px;

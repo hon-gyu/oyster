@@ -95,6 +95,86 @@
     .force("center", d3.forceCenter(0, 0))
     .force("collision", d3.forceCollide().radius(18));
 
+  // Clusters
+  // ====================
+  // A node may belong to multiple clusters (one per folder + one per tag).
+  // Hulls are rendered under links so nodes/edges remain readable.
+
+  const tagPalette = [
+    "#8dd3c7", "#ffffb3", "#bebada", "#fb8072", "#80b1d3",
+    "#fdb462", "#b3de69", "#fccde5", "#d9d9d9", "#bc80bd",
+  ];
+  const allTags = [...new Set(data.nodes.flatMap((n) => n.tags || []))];
+  const tagColor = new Map(
+    allTags.map((t, i) => [t, tagPalette[i % tagPalette.length]]),
+  );
+
+  const folderClusters = [...new Set(data.nodes.map((n) => n.folder))].map(
+    (folder) => ({
+      key: `folder:${folder}`,
+      kind: "folder",
+      label: folder,
+      color: folderColor.get(folder),
+      nodes: data.nodes.filter((n) => n.folder === folder),
+    }),
+  );
+  const tagClusters = allTags.map((tag) => ({
+    key: `tag:${tag}`,
+    kind: "tag",
+    label: `#${tag}`,
+    color: tagColor.get(tag),
+    nodes: data.nodes.filter((n) => (n.tags || []).includes(tag)),
+  }));
+
+  // Visibility state — toggled by the legend buttons
+  const visible = { folder: false, tag: false };
+
+  // Hull layer — under links
+  const hullLayer = root.insert("g", ":first-child").attr("class", "hulls");
+
+  const HULL_PAD = 24;
+  const hullPath = d3.line().curve(d3.curveCatmullRomClosed.alpha(1));
+
+  function activeClusters() {
+    const out = [];
+    if (visible.folder) out.push(...folderClusters);
+    if (visible.tag) out.push(...tagClusters);
+    return out.filter((c) => c.nodes.length >= 2);
+  }
+
+  function renderHulls() {
+    const sel = hullLayer
+      .selectAll("path")
+      .data(activeClusters(), (c) => c.key);
+    sel.exit().remove();
+    const entered = sel
+      .enter()
+      .append("path")
+      .attr("fill-opacity", 0.12)
+      .attr("stroke-opacity", 0.55)
+      .attr("stroke-width", 2)
+      .attr("stroke-linejoin", "round");
+    entered
+      .merge(sel)
+      .attr("fill", (c) => c.color)
+      .attr("stroke", (c) => c.color);
+    updateHullGeometry();
+  }
+
+  function updateHullGeometry() {
+    hullLayer.selectAll("path").attr("d", (c) => {
+      // Expand each node into a small ring of points so the hull has padding
+      const pts = c.nodes.flatMap((n) => [
+        [n.x + HULL_PAD, n.y],
+        [n.x - HULL_PAD, n.y],
+        [n.x, n.y + HULL_PAD],
+        [n.x, n.y - HULL_PAD],
+      ]);
+      const hull = d3.polygonHull(pts);
+      return hull ? hullPath(hull) + "Z" : null;
+    });
+  }
+
   // Edges — drawn first so nodes render on top
   const link = root
     .append("g")
@@ -185,6 +265,7 @@
       .attr("y2", (d) => d.target.y);
     node.attr("cx", (d) => d.x).attr("cy", (d) => d.y);
     label.attr("x", (d) => d.x).attr("y", (d) => d.y);
+    updateHullGeometry();
   });
 
   // Zoom + pan
@@ -251,6 +332,28 @@
     .on("click", () => {
       fitToScreen();
     });
+
+  // Cluster toggle controls
+  const clusterControls = d3
+    .select("#graph-view")
+    .append("div")
+    .attr("class", "cluster-controls");
+
+  function makeToggle(kind, label) {
+    const btn = clusterControls
+      .append("button")
+      .text(label)
+      .attr("title", `Toggle ${kind} clusters`)
+      .classed("active", visible[kind])
+      .on("click", () => {
+        visible[kind] = !visible[kind];
+        btn.classed("active", visible[kind]);
+        renderHulls();
+      });
+    return btn;
+  }
+  makeToggle("folder", "Folders");
+  makeToggle("tag", "Tags");
 
   // Drag behavior — coords already in root's local space thanks to d3.zoom
   function drag(simulation) {
