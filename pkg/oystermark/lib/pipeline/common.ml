@@ -1,4 +1,6 @@
 open Core
+module Cache = Code_executor.Cache
+
 (** Pipeline: a record of hooks, one per stage. *)
 type t =
   { on_discover : string -> string list -> bool
@@ -58,4 +60,53 @@ let of_block_mapper (block_mapper : Cmarkit.Block.t Cmarkit.Mapper.mapper) : t =
     Mapper.make ~inline_ext_default:(fun _m i -> Some i) ~block:block_mapper ()
   in
   make ~on_parse:(fun path doc -> [ path, Mapper.map_doc mapper doc ]) ()
+;;
+
+let add_block
+      ?(after_frontmatter = true)
+      (loc : [ `Prepend | `Append ])
+      (new_b : Cmarkit.Block.t)
+  : Cmarkit.Block.t Cmarkit.Mapper.mapper
+  =
+  let open Cmarkit in
+  let fired = ref false in
+  fun _m (b : Block.t) ->
+    if !fired
+    then Mapper.default
+    else (
+      fired := true;
+      match b with
+      | Block.Blocks (blocks, meta) ->
+        let blocks' =
+          match after_frontmatter, blocks with
+          | true, (Parse.Frontmatter.Frontmatter _ as fm) :: body ->
+            (match loc with
+             | `Prepend -> fm :: new_b :: body
+             | `Append -> (fm :: body) @ [ new_b ])
+          | _ ->
+            (match loc with
+             | `Prepend -> new_b :: blocks
+             | `Append -> blocks @ [ new_b ])
+        in
+        Mapper.ret (Block.Blocks (blocks', meta))
+      | _ ->
+        Mapper.ret
+          (match loc with
+           | `Prepend -> Block.Blocks ([ new_b; b ], Meta.none)
+           | `Append -> Block.Blocks ([ b; new_b ], Meta.none)))
+;;
+
+let add_html_code_block
+      ?(after_frontmatter = true)
+      (loc : [ `Prepend | `Append ])
+      (content : string)
+  : Cmarkit.Block.t Cmarkit.Mapper.mapper
+  =
+  let open Cmarkit in
+  let cb : Block.Code_block.t =
+    Block.Code_block.make
+      ~info_string:("=html", Meta.none)
+      (Block_line.list_of_string content)
+  in
+  add_block ~after_frontmatter loc (Block.Code_block (cb, Meta.none))
 ;;
