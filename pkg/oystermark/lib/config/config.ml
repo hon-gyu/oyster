@@ -228,3 +228,19 @@ let%expect_test "Home_graph_view wire format" =
     }
     |}]
 ;;
+
+let%expect_test "Config default" =
+  default |> yojson_of_t |> J.pretty_to_string |> print_endline;
+  [%expect {|
+    {
+      "theme": "bluloco_dark",
+      "css_snippets": [],
+      "pipeline_profile": "default",
+      "home_graph_view": {
+        "dir": "all",
+        "tag": "all",
+        "default_dir": { "include": [ "*" ] },
+        "default_tag": "none"
+      }
+    }
+    |}];
