@@ -141,29 +141,3 @@ window.__graphData = %s;
     json
     widget_js
 ;;
-
-(*
-(** Pipeline step: append an interactive graph widget to [home.md]. *)
-let home_graph : Pipeline.t =
-  let on_vault (ctx : Vault.t) : Vault.t =
-    let g = of_vault ctx in
-    let html = to_widget_html g in
-    let docs =
-      List.map ctx.docs ~f:(fun (path, doc) ->
-        if not (String.equal path "home.md")
-        then path, doc
-        else (
-          let block_mapper = Pipeline.add_html_code_block `Append html in
-          let mapper =
-            Cmarkit.Mapper.make
-              ~inline_ext_default:(fun _m i -> Some i)
-              ~block_ext_default:(fun _m b -> Some b)
-              ~block:block_mapper
-              ()
-          in
-          path, Cmarkit.Mapper.map_doc mapper doc))
-    in
-    { ctx with docs }
-  in
-  Pipeline.make ~on_vault ()
-;; *)

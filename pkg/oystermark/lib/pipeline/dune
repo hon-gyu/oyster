@@ -6,6 +6,7 @@
   vault
   code_executor
   component
+  vault_graph
   cmarkit
   core
   core_unix

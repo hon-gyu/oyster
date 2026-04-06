@@ -119,6 +119,32 @@ let backlinks : t =
   make ~on_vault ()
 ;;
 
+(** Append an interactive graph widget to [home.md]. *)
+let home_graph : t =
+  let open Vault_graph in
+  let open Graph_view in
+  let on_vault (ctx : Vault.t) : Vault.t =
+    let g = of_vault ctx in
+    let html = to_widget_html g in
+    let docs =
+      List.map ctx.docs ~f:(fun (path, doc) ->
+        if not (String.equal path "home.md")
+        then path, doc
+        else (
+          let block_mapper = add_html_code_block `Append html in
+          let mapper =
+            Cmarkit.Mapper.make
+              ~inline_ext_default:(fun _m i -> Some i)
+              ~block_ext_default:(fun _m b -> Some b)
+              ~block:block_mapper
+              ()
+          in
+          path, Cmarkit.Mapper.map_doc mapper doc))
+    in
+    { ctx with docs }
+  in
+  make ~on_vault ()
+;;
 
 let default ?(cache : Cache.cache option) () : t =
   id
@@ -133,6 +159,7 @@ let default ?(cache : Cache.cache option) () : t =
   >> backlinks
   >> home_toc ~dir_link:true ()
   >> dir_index ()
+  >> home_graph
 ;;
 
 let basic : t = id >> backlinks
