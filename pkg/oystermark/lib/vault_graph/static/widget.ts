@@ -541,6 +541,10 @@ toggle.on("click", () => {
 	const collapsed = panel.classed("collapsed");
 	panel.classed("collapsed", !collapsed);
 	panel.select(".panel-toggle-chevron").text(collapsed ? "\u25BC" : "\u25B2");
+	// Clear inline dimensions left by CSS resize so collapse/expand works
+	const el = panel.node() as HTMLElement;
+	el.style.width = "";
+	el.style.height = "";
 });
 
 // Strength slider

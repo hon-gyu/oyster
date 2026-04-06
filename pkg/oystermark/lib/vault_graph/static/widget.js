@@ -316,6 +316,9 @@
     const collapsed = panel.classed("collapsed");
     panel.classed("collapsed", !collapsed);
     panel.select(".panel-toggle-chevron").text(collapsed ? "\u25BC" : "\u25B2");
+    const el = panel.node();
+    el.style.width = "";
+    el.style.height = "";
   });
   var strengthRow = panel.append("div").attr("class", "panel-row");
   strengthRow.append("label").text("Cluster pull");
