@@ -128,28 +128,91 @@ let to_html (t : Vault_graph.t) : string =
     border-radius: 4px;
   }
   .zoom-controls button:hover { background: #3a3a4e; }
-  .cluster-controls {
+  .cluster-panel {
     position: absolute;
     bottom: 16px;
     right: 16px;
-    display: flex;
-    gap: 4px;
-    z-index: 10;
-  }
-  .cluster-controls button {
-    height: 28px;
-    padding: 0 12px;
+    width: 240px;
+    max-height: calc(100vh - 32px);
+    background: rgba(42, 42, 62, 0.92);
     border: 1px solid #555;
-    background: #2a2a3e;
+    border-radius: 6px;
     color: #eee;
     font-size: 12px;
-    cursor: pointer;
-    border-radius: 4px;
+    z-index: 10;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
   }
-  .cluster-controls button:hover { background: #3a3a4e; }
-  .cluster-controls button.active {
-    background: #4a6a8e;
-    border-color: #6a8aae;
+  .cluster-panel .panel-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    border-bottom: 1px solid #444;
+  }
+  .cluster-panel .panel-row label { color: #ccc; }
+  .cluster-panel .panel-row input[type=range] { flex: 1; }
+  .cluster-panel .strength-val {
+    color: #aaa;
+    width: 28px;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+  .cluster-panel .panel-section {
+    border-bottom: 1px solid #444;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+  .cluster-panel .panel-section:last-child { border-bottom: none; }
+  .cluster-panel .panel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px 12px;
+    background: #1f1f30;
+    color: #bbb;
+    font-weight: 600;
+  }
+  .cluster-panel .panel-actions { display: flex; gap: 4px; }
+  .cluster-panel .panel-actions button {
+    background: #3a3a4e;
+    border: 1px solid #555;
+    color: #ccc;
+    font-size: 10px;
+    padding: 2px 6px;
+    border-radius: 3px;
+    cursor: pointer;
+  }
+  .cluster-panel .panel-actions button:hover { background: #4a4a5e; }
+  .cluster-panel .panel-list {
+    overflow-y: auto;
+    max-height: 200px;
+    padding: 4px 0;
+  }
+  .cluster-panel .cluster-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 3px 12px;
+    cursor: pointer;
+  }
+  .cluster-panel .cluster-item:hover { background: #3a3a4e; }
+  .cluster-panel .cluster-item input { cursor: pointer; }
+  .cluster-panel .swatch {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    border-radius: 2px;
+    flex-shrink: 0;
+  }
+  .cluster-panel .cluster-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1;
   }
   .hulls path { pointer-events: none; }
   .debug-info {

@@ -93,7 +93,36 @@
     )
     .force("charge", d3.forceManyBody().strength(-150))
     .force("center", d3.forceCenter(0, 0))
-    .force("collision", d3.forceCollide().radius(18));
+    .force("collision", d3.forceCollide().radius(18))
+    .force("cluster", clusterForce());
+
+  // Custom force: for every active cluster, pull its members toward the
+  // cluster centroid. Multi-membership composes naturally because each
+  // application accumulates into vx/vy.
+  function clusterForce() {
+    function force(alpha) {
+      if (clusterStrength === 0) return;
+      for (const c of activeClusters()) {
+        let cx = 0;
+        let cy = 0;
+        for (const n of c.nodes) {
+          cx += n.x;
+          cy += n.y;
+        }
+        cx /= c.nodes.length;
+        cy /= c.nodes.length;
+        const k = clusterStrength * alpha;
+        for (const n of c.nodes) {
+          n.vx += (cx - n.x) * k;
+          n.vy += (cy - n.y) * k;
+        }
+      }
+    }
+    // d3 calls force.initialize(nodes) when the force is added; we don't
+    // need per-node state, but the function must exist.
+    force.initialize = () => {};
+    return force;
+  }
 
   // Clusters
   // ====================
@@ -126,8 +155,10 @@
     nodes: data.nodes.filter((n) => (n.tags || []).includes(tag)),
   }));
 
-  // Visibility state — toggled by the legend buttons
-  const visible = { folder: false, tag: false };
+  // Visibility state — set of cluster keys currently shown
+  const visibleKeys = new Set();
+  // Cluster attractive-force strength (0 = off)
+  let clusterStrength = 0.08;
 
   // Hull layer — under links
   const hullLayer = root.insert("g", ":first-child").attr("class", "hulls");
@@ -135,11 +166,13 @@
   const HULL_PAD = 24;
   const hullPath = d3.line().curve(d3.curveCatmullRomClosed.alpha(1));
 
+  const allClusters = [...folderClusters, ...tagClusters];
+  const clusterByKey = new Map(allClusters.map((c) => [c.key, c]));
+
   function activeClusters() {
-    const out = [];
-    if (visible.folder) out.push(...folderClusters);
-    if (visible.tag) out.push(...tagClusters);
-    return out.filter((c) => c.nodes.length >= 2);
+    return allClusters.filter(
+      (c) => visibleKeys.has(c.key) && c.nodes.length >= 2,
+    );
   }
 
   function renderHulls() {
@@ -333,27 +366,91 @@
       fitToScreen();
     });
 
-  // Cluster toggle controls
-  const clusterControls = d3
+  // Cluster filter panel
+  // ====================
+  const panel = d3
     .select("#graph-view")
     .append("div")
-    .attr("class", "cluster-controls");
+    .attr("class", "cluster-panel");
 
-  function makeToggle(kind, label) {
-    const btn = clusterControls
-      .append("button")
-      .text(label)
-      .attr("title", `Toggle ${kind} clusters`)
-      .classed("active", visible[kind])
-      .on("click", () => {
-        visible[kind] = !visible[kind];
-        btn.classed("active", visible[kind]);
-        renderHulls();
-      });
-    return btn;
+  // Strength slider
+  const strengthRow = panel.append("div").attr("class", "panel-row");
+  strengthRow.append("label").text("Cluster pull");
+  const strengthInput = strengthRow
+    .append("input")
+    .attr("type", "range")
+    .attr("min", 0)
+    .attr("max", 0.3)
+    .attr("step", 0.01)
+    .attr("value", clusterStrength)
+    .on("input", function () {
+      clusterStrength = +this.value;
+      simulation.alpha(0.5).restart();
+    });
+  strengthRow.append("span").attr("class", "strength-val").text(clusterStrength);
+  strengthInput.on("input.label", function () {
+    strengthRow.select(".strength-val").text((+this.value).toFixed(2));
+  });
+
+  function setVisible(keys, on) {
+    for (const k of keys) {
+      if (on) visibleKeys.add(k);
+      else visibleKeys.delete(k);
+    }
+    panel.selectAll("input.cluster-cb").property("checked", function () {
+      return visibleKeys.has(this.dataset.key);
+    });
+    renderHulls();
+    simulation.alpha(0.5).restart();
   }
-  makeToggle("folder", "Folders");
-  makeToggle("tag", "Tags");
+
+  function buildSection(title, clusters) {
+    const section = panel.append("div").attr("class", "panel-section");
+    const header = section.append("div").attr("class", "panel-header");
+    header.append("span").text(title);
+    const actions = header.append("span").attr("class", "panel-actions");
+    actions
+      .append("button")
+      .text("all")
+      .on("click", () => setVisible(clusters.map((c) => c.key), true));
+    actions
+      .append("button")
+      .text("none")
+      .on("click", () => setVisible(clusters.map((c) => c.key), false));
+
+    const list = section.append("div").attr("class", "panel-list");
+    const items = list
+      .selectAll("label")
+      .data(clusters)
+      .join("label")
+      .attr("class", "cluster-item")
+      .attr("title", (c) => `${c.label} (${c.nodes.length} nodes)`);
+    items
+      .append("input")
+      .attr("type", "checkbox")
+      .attr("class", "cluster-cb")
+      .property("data-key", (c) => c.key)
+      .each(function (c) {
+        this.dataset.key = c.key;
+      })
+      .on("change", function (_event, c) {
+        if (this.checked) visibleKeys.add(c.key);
+        else visibleKeys.delete(c.key);
+        renderHulls();
+        simulation.alpha(0.5).restart();
+      });
+    items
+      .append("span")
+      .attr("class", "swatch")
+      .style("background", (c) => c.color);
+    items
+      .append("span")
+      .attr("class", "cluster-label")
+      .text((c) => `${c.label} (${c.nodes.length})`);
+  }
+
+  buildSection("Folders", folderClusters);
+  buildSection("Tags", tagClusters);
 
   // Drag behavior — coords already in root's local space thanks to d3.zoom
   function drag(simulation) {
