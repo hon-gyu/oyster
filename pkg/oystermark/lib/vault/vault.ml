@@ -57,7 +57,7 @@ let of_root_path (vault_root : string) : t =
       then (
         let full_path = Filename.concat vault_root rel_path in
         let content = In_channel.read_all full_path in
-        let parsed = Parse.of_string content in
+        let parsed = Parse.of_string ~locs:true content in
         Some (rel_path, parsed))
       else None)
   in

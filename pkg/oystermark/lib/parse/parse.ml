@@ -81,7 +81,7 @@ let make_mapper () : Cmarkit.Mapper.t =
     [Cmarkit.Doc.t] with frontmatter embedded as a {!Frontmatter.Frontmatter}
     block and wikilinks/block IDs parsed. Heading slugs are stamped onto
     heading block metadata. *)
-let of_string ?(strict = false) ?(layout = false) ?(locs = false) (s : string)
+let of_string ?(strict = false) ?(layout = false) ?(locs = true) (s : string)
   : Cmarkit.Doc.t
   =
   let open Cmarkit in
