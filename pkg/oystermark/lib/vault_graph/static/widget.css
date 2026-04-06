@@ -12,6 +12,38 @@
     overflow: hidden;
     font-family: sans-serif;
 }
+#graph-view.maximized {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    min-height: unset;
+    border-radius: 0;
+    z-index: 9999;
+}
+#graph-view .maximize-close {
+    display: none;
+}
+#graph-view.maximized .maximize-close {
+    display: block;
+    position: absolute;
+    top: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 36px;
+    height: 36px;
+    border: 1px solid #555;
+    background: #2a2a3e;
+    color: #eee;
+    font-size: 18px;
+    cursor: pointer;
+    border-radius: 4px;
+    z-index: 10;
+}
+#graph-view.maximized .maximize-close:hover {
+    background: #4a4a5e;
+}
 #graph-view svg {
     display: block;
     width: 100%;

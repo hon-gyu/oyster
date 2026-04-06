@@ -440,6 +440,9 @@ function fitToScreen(): void {
 	for (let i = 0; i < 300; i++) simulation.tick();
 	simulation.alpha(0.1).restart();
 
+	const curW = container.clientWidth || width;
+	const curH = container.clientHeight || height;
+
 	let minX = Infinity,
 		minY = Infinity,
 		maxX = -Infinity,
@@ -455,9 +458,9 @@ function fitToScreen(): void {
 	const dy = maxY - minY + pad * 2;
 	const cx = (minX + maxX) / 2;
 	const cy = (minY + maxY) / 2;
-	const scale = Math.min(width / dx, height / dy, 2);
-	const tx = width / 2 - scale * cx;
-	const ty = height / 2 - scale * cy;
+	const scale = Math.min(curW / dx, curH / dy, 2);
+	const tx = curW / 2 - scale * cx;
+	const ty = curH / 2 - scale * cy;
 	svg.call(zoom.transform, d3.zoomIdentity.translate(tx, ty).scale(scale));
 }
 fitToScreen();
@@ -489,6 +492,31 @@ controls
 	.on("click", () => {
 		fitToScreen();
 	});
+function toggleMaximize(): void {
+	const isMax = container.classList.toggle("maximized");
+	d3.select(".maximize-btn").text(isMax ? "\u2B8C" : "\u26F6");
+	const w = container.clientWidth;
+	const h = container.clientHeight;
+	svg.attr("width", w).attr("height", h);
+	fitToScreen();
+}
+controls
+	.append("button")
+	.text("\u26F6")
+	.attr("title", "Maximize")
+	.attr("class", "maximize-btn")
+	.on("click", toggleMaximize);
+d3.select("#graph-view")
+	.append("button")
+	.attr("class", "maximize-close")
+	.attr("title", "Exit fullscreen")
+	.text("\u2715")
+	.on("click", toggleMaximize);
+document.addEventListener("keydown", (e: KeyboardEvent) => {
+	if (e.key === "Escape" && container.classList.contains("maximized")) {
+		toggleMaximize();
+	}
+});
 
 // Cluster filter panel
 // ====================

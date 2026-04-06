@@ -146,15 +146,11 @@
     "#d9d9d9",
     "#bc80bd"
   ];
-  var allTags = [
-    ...new Set(data.nodes.flatMap((n) => n.tags || []))
-  ];
+  var allTags = [...new Set(data.nodes.flatMap((n) => n.tags || []))];
   var tagColor = new Map(
     allTags.map((t, i) => [t, tagPalette[i % tagPalette.length]])
   );
-  var folderClusters = [
-    ...new Set(data.nodes.map((n) => n.folder))
-  ].filter((folder) => selectorMatches(graphConfig.dir, folder)).map((folder) => ({
+  var folderClusters = [...new Set(data.nodes.map((n) => n.folder))].filter((folder) => selectorMatches(graphConfig.dir, folder)).map((folder) => ({
     key: `folder:${folder}`,
     kind: "folder",
     label: folder,
@@ -170,8 +166,7 @@
   }));
   var visibleKeys = /* @__PURE__ */ new Set();
   for (const c of folderClusters) {
-    if (selectorMatches(graphConfig.default_dir, c.label))
-      visibleKeys.add(c.key);
+    if (selectorMatches(graphConfig.default_dir, c.label)) visibleKeys.add(c.key);
   }
   for (const c of tagClusters) {
     const bare = c.label.replace(/^#/, "");
@@ -266,6 +261,8 @@
   function fitToScreen() {
     for (let i = 0; i < 300; i++) simulation.tick();
     simulation.alpha(0.1).restart();
+    const curW = container.clientWidth || width;
+    const curH = container.clientHeight || height;
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
     data.nodes.forEach((n) => {
       if (n.x < minX) minX = n.x;
@@ -278,9 +275,9 @@
     const dy = maxY - minY + pad * 2;
     const cx = (minX + maxX) / 2;
     const cy = (minY + maxY) / 2;
-    const scale = Math.min(width / dx, height / dy, 2);
-    const tx = width / 2 - scale * cx;
-    const ty = height / 2 - scale * cy;
+    const scale = Math.min(curW / dx, curH / dy, 2);
+    const tx = curW / 2 - scale * cx;
+    const ty = curH / 2 - scale * cy;
     svg.call(zoom.transform, d3.zoomIdentity.translate(tx, ty).scale(scale));
   }
   fitToScreen();
@@ -293,6 +290,20 @@
   });
   controls.append("button").text("\u2922").attr("title", "Fit").on("click", () => {
     fitToScreen();
+  });
+  function toggleMaximize() {
+    const isMax = container.classList.toggle("maximized");
+    d3.select(".maximize-btn").text(isMax ? "\u2B8C" : "\u26F6");
+    const w = container.clientWidth;
+    const h = container.clientHeight;
+    svg.attr("width", w).attr("height", h);
+    fitToScreen();
+  }
+  controls.append("button").text("\u26F6").attr("title", "Maximize").attr("class", "maximize-btn").on("click", toggleMaximize);
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && container.classList.contains("maximized")) {
+      toggleMaximize();
+    }
   });
   var panel = d3.select("#graph-view").append("div").attr("class", "cluster-panel collapsed");
   var toggle = panel.append("div").attr("class", "panel-toggle");
@@ -347,15 +358,12 @@
     const items = list.selectAll("label").data(clusters).join("label").attr("class", "cluster-item").attr("title", (c) => `${c.label} (${c.nodes.length} nodes)`);
     items.append("input").attr("type", "checkbox").attr("class", "cluster-cb").property("checked", (c) => visibleKeys.has(c.key)).each(function(c) {
       this.dataset.key = c.key;
-    }).on(
-      "change",
-      function(_event, c) {
-        if (this.checked) visibleKeys.add(c.key);
-        else visibleKeys.delete(c.key);
-        renderHulls();
-        simulation.alpha(0.5).restart();
-      }
-    );
+    }).on("change", function(_event, c) {
+      if (this.checked) visibleKeys.add(c.key);
+      else visibleKeys.delete(c.key);
+      renderHulls();
+      simulation.alpha(0.5).restart();
+    });
     items.append("span").attr("class", "swatch").style("background", (c) => c.color);
     items.append("span").attr("class", "cluster-label").text((c) => `${c.label} (${c.nodes.length})`);
   }
