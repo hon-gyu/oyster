@@ -1,3 +1,5 @@
+open Common
+
 (** Graph view: visual rendering of a {!Vault_graph.t}.
 
     Produces JSON or self-contained HTML with an interactive
@@ -13,8 +15,12 @@
 
     Vertices are collapsed to note-level: only [Note] vertices appear as nodes,
     and edges are deduplicated to note→note. *)
-val to_json : Vault_graph.t -> string
+val to_json : t -> string
 
 (** Produce a self-contained HTML page with an interactive graph widget.
     The JSON data is inlined; no external fetches required. *)
-val to_html : Vault_graph.t -> string
+(** Embeddable widget HTML fragment (style + container + scripts).
+    Suitable for inlining into an existing page via an [=html] code block. *)
+val to_widget_html : t -> string
+
+val to_html : t -> string

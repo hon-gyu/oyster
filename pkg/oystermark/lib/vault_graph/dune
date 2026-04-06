@@ -1,12 +1,10 @@
 (library
- (name oystermark)
- (public_name oystermark)
+ (name vault_graph)
+ (public_name oystermark.vault_graph)
  (libraries
   parse
   vault
   code_executor
-  pipeline
-  vault_graph
   component
   cmarkit
   core
@@ -20,6 +18,8 @@
   yojson)
  (inline_tests)
  (preprocessor_deps
-  (file static/theme.css))
+  (file ../static/theme.css)
+  (file ../static/graph_view/widget.js)
+  (file ../static/graph_view/style.css))
  (preprocess
   (pps ppx_jane ppx_string ppx_blob ppx_quick_test)))

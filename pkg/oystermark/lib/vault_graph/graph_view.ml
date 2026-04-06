@@ -1,4 +1,4 @@
-(** Graph view: visual rendering (d3.js) of a {!Vault_graph.t}. *)
+(** Graph view: visual rendering (d3.js) of a {!Common.t}. *)
 
 (* TODO: refactor graph_view
   graph_view/
@@ -10,6 +10,7 @@
 *)
 
 open Core
+open Common
 module J = Yojson.Basic
 
 module String_pair = struct
@@ -25,17 +26,16 @@ end
    ==================== *)
 
 (** Collapse the graph to note-level: one node per path, deduplicated edges. *)
-let to_json (t : Vault_graph.t) : string =
+let to_json (t : t) : string =
   (* Collect note-level nodes *)
   let nodes : J.t list =
-    Vault_graph.G.fold_vertex
-      (fun (v : Vault_graph.vertex) acc ->
+    G.fold_vertex
+      (fun (v : vertex) acc ->
          match v.kind with
          | Note ->
            let meta =
              Map.find t.meta v.path
-             |> Option.value
-                  ~default:Vault_graph.{ title = v.path; tags = []; folder = "." }
+             |> Option.value ~default:{ title = v.path; tags = []; folder = "." }
            in
            `Assoc
              [ "id", `String v.path
@@ -50,7 +50,7 @@ let to_json (t : Vault_graph.t) : string =
   in
   (* Collect note-level edges (deduplicated) *)
   let edge_set =
-    Vault_graph.G.fold_edges_e
+    G.fold_edges_e
       (fun (src, _kind, tgt) acc ->
          if String.equal src.path tgt.path then acc else Set.add acc (src.path, tgt.path))
       t.graph
@@ -67,8 +67,8 @@ let to_json (t : Vault_graph.t) : string =
 (* HTML output
    ==================== *)
 
-let widget_js : string = [%blob "static/graph_view/widget.js"]
-let widget_css : string = [%blob "static/graph_view/style.css"]
+let widget_js : string = [%blob "../static/graph_view/widget.js"]
+let widget_css : string = [%blob "../static/graph_view/style.css"]
 
 let%expect_test "to_json with cross-note links" =
   let vault =
@@ -76,7 +76,7 @@ let%expect_test "to_json with cross-note links" =
       ~vault_root:"/tmp_vault"
       [ "a.md", "link to [[b]]"; "b.md", "link to [[a]]" ]
   in
-  let g = Vault_graph.of_vault vault in
+  let g = of_vault vault in
   print_endline (to_json g);
   [%expect
     {|
@@ -93,7 +93,28 @@ let%expect_test "to_json with cross-note links" =
     |}]
 ;;
 
-let to_html (t : Vault_graph.t) : string =
+(** Embeddable widget HTML fragment (style + container + scripts).
+    Suitable for inlining into an existing page via an [=html] code block. *)
+let to_widget_html (t : t) : string =
+  let json = to_json t in
+  Printf.sprintf
+    {|<style>
+%s
+</style>
+<div id="graph-view"></div>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<script>
+window.__graphData = %s;
+</script>
+<script>
+%s
+</script>|}
+    widget_css
+    json
+    widget_js
+;;
+
+let to_html (t : t) : string =
   let json = to_json t in
   Printf.sprintf
     {|<!DOCTYPE html>
@@ -120,3 +141,29 @@ window.__graphData = %s;
     json
     widget_js
 ;;
+
+(*
+(** Pipeline step: append an interactive graph widget to [home.md]. *)
+let home_graph : Pipeline.t =
+  let on_vault (ctx : Vault.t) : Vault.t =
+    let g = of_vault ctx in
+    let html = to_widget_html g in
+    let docs =
+      List.map ctx.docs ~f:(fun (path, doc) ->
+        if not (String.equal path "home.md")
+        then path, doc
+        else (
+          let block_mapper = Pipeline.add_html_code_block `Append html in
+          let mapper =
+            Cmarkit.Mapper.make
+              ~inline_ext_default:(fun _m i -> Some i)
+              ~block_ext_default:(fun _m b -> Some b)
+              ~block:block_mapper
+              ()
+          in
+          path, Cmarkit.Mapper.map_doc mapper doc))
+    in
+    { ctx with docs }
+  in
+  Pipeline.make ~on_vault ()
+;; *)
