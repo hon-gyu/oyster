@@ -1,4 +1,15 @@
+/**
+ Graph view using D3.js.
+ Precondition:
+    - graph JSON data is in window.__graphData
+ */
 (() => {
+  // Global config
+  const config = {
+    nodeRadius: 14,
+    labelFontSize: 16,
+  };
+
   const data = window.__graphData;
   console.log(
     "[graph-view] nodes:",
@@ -103,7 +114,7 @@
     .selectAll("circle")
     .data(data.nodes)
     .join("circle")
-    .attr("r", 6)
+    .attr("r", config.nodeRadius)
     .attr("fill", (d) => folderColor.get(d.folder))
     .attr("stroke", "#fff")
     .attr("stroke-width", 1.5)
@@ -118,10 +129,10 @@
     .data(data.nodes)
     .join("text")
     .text((d) => d.title)
-    .attr("font-size", 10)
+    .attr("font-size", config.labelFontSize)
     .attr("font-family", "sans-serif")
-    .attr("dx", 10)
-    .attr("dy", 3);
+    .attr("dx", config.nodeRadius + 4)
+    .attr("dy", 4);
 
   // Hover: dim unrelated, highlight connected edges
   node
