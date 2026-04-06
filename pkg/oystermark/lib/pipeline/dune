@@ -1,0 +1,23 @@
+(library
+  (name pipeline)
+  (public_name oystermark.pipeline)
+  (libraries
+   parse
+   vault
+   code_executor
+   component
+   cmarkit
+   core
+   core_unix
+   ocamlgraph
+   core_unix.filename_unix
+   core_unix.sys_unix
+   trace_collect
+   tyxml
+   yaml
+   yojson)
+  (inline_tests)
+  (preprocess
+   (pps ppx_jane ppx_string ppx_blob ppx_quick_test)
+  )
+)

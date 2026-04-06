@@ -5,6 +5,8 @@
   parse
   vault
   code_executor
+  pipeline
+  component
   cmarkit
   core
   core_unix

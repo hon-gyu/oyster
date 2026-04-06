@@ -9,7 +9,7 @@
 open Core
 module Parse = Parse
 module Vault = Vault
-module Html = Html
+module Html = Component.Html
 module Pipeline = Pipeline
 module Theme = Theme
 module Config = Config
