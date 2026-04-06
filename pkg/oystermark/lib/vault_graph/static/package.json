@@ -1,0 +1,11 @@
+{
+  "name": "oystermark-graph-view",
+  "private": true,
+  "description": "Browser widget for the oystermark graph view. Compiled to widget.js by `tsc` via a dune rule.",
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0"
+  }
+}

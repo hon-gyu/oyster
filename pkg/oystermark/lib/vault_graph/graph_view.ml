@@ -67,9 +67,9 @@ let to_json (t : t) : string =
 (* HTML output
    ==================== *)
 
-let widget_js : string = [%blob "../static/graph_view/widget.js"]
-let widget_css : string = [%blob "../static/graph_view/widget.css"]
-let standalone_css : string = [%blob "../static/graph_view/page.css"]
+let widget_js : string = [%blob "../vault_graph/static/widget.js"]
+let widget_css : string = [%blob "../vault_graph/static/widget.css"]
+let standalone_css : string = [%blob "../vault_graph/static/page.css"]
 
 let%expect_test "to_json with cross-note links" =
   let vault =

@@ -142,10 +142,10 @@ end
 
 module Home_graph_view : sig
   type t =
-    { dir : Selector.t
-    ; tag : Selector.t
-    ; default_dir : Selector.t (** Dir cluster selected by default *)
-    ; default_tag : Selector.t (** Tag cluster selected by default *)
+    { dir : Selector.t  (** Dir to use as clusters *)
+    ; tag : Selector.t  (** Tag to use as clusters *)
+    ; default_dir : Selector.t (** Dir to be selected by default *)
+    ; default_tag : Selector.t (** Tag to be selected by default *)
     }
 
   val default : t
@@ -157,11 +157,15 @@ end = struct
   let default_default_dir : Selector.t = Include [ "*" ]
   let default_default_tag : Selector.t = Exclude_all
 
+  (* No [@yojson_drop_default]: this type is serialized as the wire
+     format consumed by [static/graph_view/widget.ts], which expects every
+     field present. [@default] is kept so user-written config files can
+     omit fields. *)
   type t =
-    { dir : Selector.t [@default default_dir] [@yojson_drop_default ( = )]
-    ; tag : Selector.t [@default default_tag] [@yojson_drop_default ( = )]
-    ; default_dir : Selector.t [@default default_default_dir] [@yojson_drop_default ( = )]
-    ; default_tag : Selector.t [@default default_default_tag] [@yojson_drop_default ( = )]
+    { dir : Selector.t [@default default_dir]
+    ; tag : Selector.t [@default default_tag]
+    ; default_dir : Selector.t [@default default_default_dir]
+    ; default_tag : Selector.t [@default default_default_tag]
     }
   [@@deriving yojson] [@@yojson.allow_extra_fields]
 
@@ -198,4 +202,32 @@ let default : t =
 let of_file (path : string) : t =
   let contents : string = In_channel.with_open_text path In_channel.input_all in
   or_default ~default t_of_yojson (J.from_string contents)
+;;
+
+(* Wire-format contract with [static/graph_view/config.d.ts]
+   ----------
+   This expect-test pins the JSON shape that the OCaml side serializes for
+   the browser widget. If it fails, update [config.d.ts] in the same commit
+   so the TypeScript wire types stay in sync. *)
+let%expect_test "Home_graph_view wire format" =
+  let example : Home_graph_view.t =
+    { dir = Include_all
+    ; tag = Exclude [ "draft" ]
+    ; default_dir = Include [ "notes"; "blog" ]
+    ; default_tag = Exclude_all
+    }
+  in
+  example
+  |> Home_graph_view.yojson_of_t
+  |> J.pretty_to_string
+  |> print_endline;
+  [%expect
+    {|
+    {
+      "dir": "all",
+      "tag": { "exclude": [ "draft" ] },
+      "default_dir": { "include": [ "notes", "blog" ] },
+      "default_tag": "none"
+    }
+    |}]
 ;;

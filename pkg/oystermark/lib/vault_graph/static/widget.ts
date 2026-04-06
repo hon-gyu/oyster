@@ -1,9 +1,39 @@
 /**
- Graph view using D3.js.
- Precondition:
-    - graph JSON data is in window.__graphData
+ * Graph view using D3.js.
+ *
+ * Preconditions:
+ *  - graph JSON data is in `window.__graphData`
+ *  - optional `window.__graphConfig` of type [HomeGraphViewConfig]
+ *    (see config.d.ts — that file is the wire-format contract with OCaml)
  */
 (() => {
+  // Home_graph_view config
+  // ====================
+  // Each of dir/tag/default_dir/default_tag is a [Selector]:
+  //   "all"                   -> include everything
+  //   "none"                  -> exclude everything
+  //   { include: [..labels] } -> only these
+  //   { exclude: [..labels] } -> everything except these
+  //
+  // [dir]/[tag] decide which folder/tag clusters appear in the panel at
+  // all. [default_dir]/[default_tag] decide which of the visible ones are
+  // ticked on initial load.
+  const graphConfig: HomeGraphViewConfig = window.__graphConfig ?? {
+    dir: "all",
+    tag: "all",
+    default_dir: { include: ["*"] },
+    default_tag: { include: ["*"] },
+  };
+
+  /** Test [label] against a [Selector]. */
+  function selectorMatches(sel: Selector, label: string): boolean {
+    if (sel === "all") return true;
+    if (sel === "none") return false;
+    if ("include" in sel) return sel.include.includes(label);
+    if ("exclude" in sel) return !sel.exclude.includes(label);
+    return true;
+  }
+
   // Global config
   // ====================
   // Tunables for layout tightness. Lower link distance + stronger (less
@@ -25,7 +55,7 @@
     clusterStrength: 0.08, // initial pull strength when a cluster is active
   };
 
-  const data = window.__graphData;
+  const data: GraphData = window.__graphData;
   console.log(
     "[graph-view] nodes:",
     data.nodes.length,
@@ -33,10 +63,11 @@
     data.edges.length,
   );
   console.log("[graph-view] sample edge:", data.edges[0]);
-  const container = document.getElementById("graph-view");
+  const container = document.getElementById("graph-view")!;
   // When embedded, the container may have no explicit height yet.
   // Fall back to a reasonable default so the widget is visible.
-  const width = container.clientWidth || container.parentElement.clientWidth || 800;
+  const width =
+    container.clientWidth || container.parentElement!.clientWidth || 800;
   const height = container.clientHeight || Math.min(width * 0.6, 600);
 
   // Visible debug counter
@@ -46,17 +77,19 @@
   container.appendChild(debugEl);
 
   // Adjacency for hover highlighting
-  const adj = new Map();
+  const adj = new Map<string, Set<string>>();
   data.nodes.forEach((n) => {
     adj.set(n.id, new Set());
   });
   data.edges.forEach((e) => {
-    adj.get(e.source).add(e.target);
-    adj.get(e.target).add(e.source);
+    const sid = typeof e.source === "string" ? e.source : e.source.id;
+    const tid = typeof e.target === "string" ? e.target : e.target.id;
+    adj.get(sid)!.add(tid);
+    adj.get(tid)!.add(sid);
   });
 
   // Color by folder
-  const folders = [...new Set(data.nodes.map((n) => n.folder))];
+  const folders: string[] = [...new Set(data.nodes.map((n) => n.folder))];
   const palette = [
     "#4e79a7",
     "#f28e2b",
@@ -69,8 +102,8 @@
     "#9c755f",
     "#bab0ac",
   ];
-  const folderColor = new Map(
-    folders.map((f, i) => [f, palette[i % palette.length]]),
+  const folderColor = new Map<string, string>(
+    folders.map((f, i) => [f, palette[i % palette.length]] as const),
   );
 
   /**
@@ -86,12 +119,12 @@
    * [d3.forceSimulation] is called, since d3 only randomizes nodes that
    * lack initial positions.
    */
-  function seedNodePositions() {
+  function seedNodePositions(): void {
     const seedRadius = Math.max(
       config.seedRadiusBase,
       folders.length * config.seedRadiusPerFolder,
     );
-    const folderHome = new Map();
+    const folderHome = new Map<string, [number, number]>();
     folders.forEach((f, i) => {
       const angle = (i / Math.max(folders.length, 1)) * 2 * Math.PI;
       folderHome.set(f, [
@@ -100,7 +133,7 @@
       ]);
     });
     data.nodes.forEach((n) => {
-      const [hx, hy] = folderHome.get(n.folder);
+      const [hx, hy] = folderHome.get(n.folder)!;
       n.x = hx + (Math.random() - 0.5) * config.seedJitter;
       n.y = hy + (Math.random() - 0.5) * config.seedJitter;
     });
@@ -139,7 +172,7 @@
       "link",
       d3
         .forceLink(data.edges)
-        .id((d) => d.id)
+        .id((d: GraphNode) => d.id)
         .distance(config.linkDistance),
     )
     .force("charge", d3.forceManyBody().strength(config.chargeStrength))
@@ -162,27 +195,27 @@
    * [clusterStrength] is zero, so it costs nothing in the default state.
    */
   function clusterForce() {
-    function force(alpha) {
+    function force(alpha: number): void {
       if (clusterStrength === 0) return;
       for (const c of activeClusters()) {
         let cx = 0;
         let cy = 0;
         for (const n of c.nodes) {
-          cx += n.x;
-          cy += n.y;
+          cx += n.x!;
+          cy += n.y!;
         }
         cx /= c.nodes.length;
         cy /= c.nodes.length;
         const k = clusterStrength * alpha;
         for (const n of c.nodes) {
-          n.vx += (cx - n.x) * k;
-          n.vy += (cy - n.y) * k;
+          n.vx! += (cx - n.x!) * k;
+          n.vy! += (cy - n.y!) * k;
         }
       }
     }
     // d3 calls force.initialize(nodes) when the force is added; we don't
     // need per-node state, but the function must exist.
-    force.initialize = () => {};
+    (force as any).initialize = () => {};
     return force;
   }
 
@@ -190,6 +223,14 @@
   // ====================
   // A node may belong to multiple clusters (one per folder + one per tag).
   // Hulls are rendered under links so nodes/edges remain readable.
+
+  interface Cluster {
+    key: string;
+    kind: "folder" | "tag";
+    label: string;
+    color: string;
+    nodes: GraphNode[];
+  }
 
   const tagPalette = [
     "#8dd3c7",
@@ -203,30 +244,47 @@
     "#d9d9d9",
     "#bc80bd",
   ];
-  const allTags = [...new Set(data.nodes.flatMap((n) => n.tags || []))];
-  const tagColor = new Map(
-    allTags.map((t, i) => [t, tagPalette[i % tagPalette.length]]),
+  const allTags: string[] = [
+    ...new Set(data.nodes.flatMap((n) => n.tags || [])),
+  ];
+  const tagColor = new Map<string, string>(
+    allTags.map((t, i) => [t, tagPalette[i % tagPalette.length]] as const),
   );
 
-  const folderClusters = [...new Set(data.nodes.map((n) => n.folder))].map(
-    (folder) => ({
+  const folderClusters: Cluster[] = [
+    ...new Set(data.nodes.map((n) => n.folder)),
+  ]
+    .filter((folder) => selectorMatches(graphConfig.dir, folder))
+    .map((folder) => ({
       key: `folder:${folder}`,
       kind: "folder",
       label: folder,
-      color: folderColor.get(folder),
+      color: folderColor.get(folder)!,
       nodes: data.nodes.filter((n) => n.folder === folder),
-    }),
-  );
-  const tagClusters = allTags.map((tag) => ({
-    key: `tag:${tag}`,
-    kind: "tag",
-    label: `#${tag}`,
-    color: tagColor.get(tag),
-    nodes: data.nodes.filter((n) => (n.tags || []).includes(tag)),
-  }));
+    }));
+  const tagClusters: Cluster[] = allTags
+    .filter((tag) => selectorMatches(graphConfig.tag, tag))
+    .map((tag) => ({
+      key: `tag:${tag}`,
+      kind: "tag",
+      label: `#${tag}`,
+      color: tagColor.get(tag)!,
+      nodes: data.nodes.filter((n) => (n.tags || []).includes(tag)),
+    }));
 
-  // Visibility state — set of cluster keys currently shown
-  const visibleKeys = new Set();
+  // Visibility state — set of cluster keys currently shown.
+  // Seeded from default_dir / default_tag, restricted to clusters that
+  // actually passed the dir/tag filter above.
+  const visibleKeys = new Set<string>();
+  for (const c of folderClusters) {
+    if (selectorMatches(graphConfig.default_dir, c.label))
+      visibleKeys.add(c.key);
+  }
+  for (const c of tagClusters) {
+    // c.label is "#tag"; default_tag is matched against the bare tag name
+    const bare = c.label.replace(/^#/, "");
+    if (selectorMatches(graphConfig.default_tag, bare)) visibleKeys.add(c.key);
+  }
   // Cluster attractive-force strength (0 = off). Mutable at runtime via
   // the strength slider; initial value comes from config.
   let clusterStrength = config.clusterStrength;
@@ -237,19 +295,18 @@
   const HULL_PAD = 24;
   const hullPath = d3.line().curve(d3.curveCatmullRomClosed.alpha(1));
 
-  const allClusters = [...folderClusters, ...tagClusters];
-  const clusterByKey = new Map(allClusters.map((c) => [c.key, c]));
+  const allClusters: Cluster[] = [...folderClusters, ...tagClusters];
 
-  function activeClusters() {
+  function activeClusters(): Cluster[] {
     return allClusters.filter(
       (c) => visibleKeys.has(c.key) && c.nodes.length >= 2,
     );
   }
 
-  function renderHulls() {
+  function renderHulls(): void {
     const sel = hullLayer
       .selectAll("path")
-      .data(activeClusters(), (c) => c.key);
+      .data(activeClusters(), (c: Cluster) => c.key);
     sel.exit().remove();
     const entered = sel
       .enter()
@@ -260,19 +317,19 @@
       .attr("stroke-linejoin", "round");
     entered
       .merge(sel)
-      .attr("fill", (c) => c.color)
-      .attr("stroke", (c) => c.color);
+      .attr("fill", (c: Cluster) => c.color)
+      .attr("stroke", (c: Cluster) => c.color);
     updateHullGeometry();
   }
 
-  function updateHullGeometry() {
-    hullLayer.selectAll("path").attr("d", (c) => {
+  function updateHullGeometry(): void {
+    hullLayer.selectAll("path").attr("d", (c: Cluster) => {
       // Expand each node into a small ring of points so the hull has padding
       const pts = c.nodes.flatMap((n) => [
-        [n.x + HULL_PAD, n.y],
-        [n.x - HULL_PAD, n.y],
-        [n.x, n.y + HULL_PAD],
-        [n.x, n.y - HULL_PAD],
+        [n.x! + HULL_PAD, n.y!],
+        [n.x! - HULL_PAD, n.y!],
+        [n.x!, n.y! + HULL_PAD],
+        [n.x!, n.y! - HULL_PAD],
       ]);
       const hull = d3.polygonHull(pts);
       return hull ? hullPath(hull) + "Z" : null;
@@ -299,7 +356,7 @@
     .data(data.nodes)
     .join("circle")
     .attr("r", config.nodeRadius)
-    .attr("fill", (d) => folderColor.get(d.folder))
+    .attr("fill", (d: GraphNode) => folderColor.get(d.folder)!)
     .attr("stroke", "#fff")
     .attr("stroke-width", 1.5)
     .style("cursor", "pointer")
@@ -312,7 +369,7 @@
     .selectAll("text")
     .data(data.nodes)
     .join("text")
-    .text((d) => d.title)
+    .text((d: GraphNode) => d.title)
     .attr("font-size", config.labelFontSize)
     .attr("font-family", "sans-serif")
     .attr("dx", config.nodeRadius + 4)
@@ -320,28 +377,28 @@
 
   // Hover: dim unrelated, highlight connected edges
   node
-    .on("mouseenter", (_event, d) => {
-      const neighbors = adj.get(d.id);
-      node.attr("opacity", (n) =>
+    .on("mouseenter", (_event: Event, d: GraphNode) => {
+      const neighbors = adj.get(d.id)!;
+      node.attr("opacity", (n: GraphNode) =>
         n.id === d.id || neighbors.has(n.id) ? 1 : 0.15,
       );
-      label.attr("opacity", (n) =>
+      label.attr("opacity", (n: GraphNode) =>
         n.id === d.id || neighbors.has(n.id) ? 1 : 0.15,
       );
       link
-        .attr("stroke", (e) => {
-          const sid = e.source.id || e.source;
-          const tid = e.target.id || e.target;
+        .attr("stroke", (e: GraphEdge) => {
+          const sid = typeof e.source === "string" ? e.source : e.source.id;
+          const tid = typeof e.target === "string" ? e.target : e.target.id;
           return sid === d.id || tid === d.id ? "#ffcc00" : "#e0e0e0";
         })
-        .attr("stroke-opacity", (e) => {
-          const sid = e.source.id || e.source;
-          const tid = e.target.id || e.target;
+        .attr("stroke-opacity", (e: GraphEdge) => {
+          const sid = typeof e.source === "string" ? e.source : e.source.id;
+          const tid = typeof e.target === "string" ? e.target : e.target.id;
           return sid === d.id || tid === d.id ? 1 : 0.15;
         })
-        .attr("stroke-width", (e) => {
-          const sid = e.source.id || e.source;
-          const tid = e.target.id || e.target;
+        .attr("stroke-width", (e: GraphEdge) => {
+          const sid = typeof e.source === "string" ? e.source : e.source.id;
+          const tid = typeof e.target === "string" ? e.target : e.target.id;
           return sid === d.id || tid === d.id ? 2.5 : 1.5;
         });
     })
@@ -355,7 +412,7 @@
     });
 
   // Click: navigate
-  node.on("click", (_event, d) => {
+  node.on("click", (_event: Event, d: GraphNode) => {
     const url = d.id.replace(/\.md$/, ".html");
     window.location.href = url;
   });
@@ -363,12 +420,20 @@
   // Tick
   simulation.on("tick", () => {
     link
-      .attr("x1", (d) => d.source.x)
-      .attr("y1", (d) => d.source.y)
-      .attr("x2", (d) => d.target.x)
-      .attr("y2", (d) => d.target.y);
-    node.attr("cx", (d) => d.x).attr("cy", (d) => d.y);
-    label.attr("x", (d) => d.x).attr("y", (d) => d.y);
+      .attr("x1", (d: GraphEdge) =>
+        typeof d.source === "string" ? 0 : d.source.x,
+      )
+      .attr("y1", (d: GraphEdge) =>
+        typeof d.source === "string" ? 0 : d.source.y,
+      )
+      .attr("x2", (d: GraphEdge) =>
+        typeof d.target === "string" ? 0 : d.target.x,
+      )
+      .attr("y2", (d: GraphEdge) =>
+        typeof d.target === "string" ? 0 : d.target.y,
+      );
+    node.attr("cx", (d: GraphNode) => d.x!).attr("cy", (d: GraphNode) => d.y!);
+    label.attr("x", (d: GraphNode) => d.x!).attr("y", (d: GraphNode) => d.y!);
     updateHullGeometry();
   });
 
@@ -376,13 +441,13 @@
   const zoom = d3
     .zoom()
     .scaleExtent([0.1, 8])
-    .on("zoom", (event) => {
+    .on("zoom", (event: any) => {
       root.attr("transform", event.transform);
     });
   svg.call(zoom);
 
   // Fit-to-screen: run simulation ahead, compute bounds, set transform
-  function fitToScreen() {
+  function fitToScreen(): void {
     // Tick until the layout is roughly settled
     for (let i = 0; i < 300; i++) simulation.tick();
     simulation.alpha(0.1).restart();
@@ -392,10 +457,10 @@
       maxX = -Infinity,
       maxY = -Infinity;
     data.nodes.forEach((n) => {
-      if (n.x < minX) minX = n.x;
-      if (n.y < minY) minY = n.y;
-      if (n.x > maxX) maxX = n.x;
-      if (n.y > maxY) maxY = n.y;
+      if (n.x! < minX) minX = n.x!;
+      if (n.y! < minY) minY = n.y!;
+      if (n.x! > maxX) maxX = n.x!;
+      if (n.y! > maxY) maxY = n.y!;
     });
     const pad = 60;
     const dx = maxX - minX + pad * 2;
@@ -454,7 +519,7 @@
     .attr("max", 0.3)
     .attr("step", 0.01)
     .attr("value", clusterStrength)
-    .on("input", function () {
+    .on("input", function (this: HTMLInputElement) {
       clusterStrength = +this.value;
       simulation.alpha(0.5).restart();
     });
@@ -462,23 +527,25 @@
     .append("span")
     .attr("class", "strength-val")
     .text(clusterStrength);
-  strengthInput.on("input.label", function () {
+  strengthInput.on("input.label", function (this: HTMLInputElement) {
     strengthRow.select(".strength-val").text((+this.value).toFixed(2));
   });
 
-  function setVisible(keys, on) {
+  function setVisible(keys: string[], on: boolean): void {
     for (const k of keys) {
       if (on) visibleKeys.add(k);
       else visibleKeys.delete(k);
     }
-    panel.selectAll("input.cluster-cb").property("checked", function () {
-      return visibleKeys.has(this.dataset.key);
-    });
+    panel
+      .selectAll("input.cluster-cb")
+      .property("checked", function (this: HTMLInputElement) {
+        return visibleKeys.has(this.dataset.key!);
+      });
     renderHulls();
     simulation.alpha(0.5).restart();
   }
 
-  function buildSection(title, clusters) {
+  function buildSection(title: string, clusters: Cluster[]): void {
     const section = panel.append("div").attr("class", "panel-section");
     const header = section.append("div").attr("class", "panel-header");
     header.append("span").text(title);
@@ -508,16 +575,16 @@
       .data(clusters)
       .join("label")
       .attr("class", "cluster-item")
-      .attr("title", (c) => `${c.label} (${c.nodes.length} nodes)`);
+      .attr("title", (c: Cluster) => `${c.label} (${c.nodes.length} nodes)`);
     items
       .append("input")
       .attr("type", "checkbox")
       .attr("class", "cluster-cb")
-      .property("data-key", (c) => c.key)
-      .each(function (c) {
+      .property("checked", (c: Cluster) => visibleKeys.has(c.key))
+      .each(function (this: HTMLInputElement, c: Cluster) {
         this.dataset.key = c.key;
       })
-      .on("change", function (_event, c) {
+      .on("change", function (this: HTMLInputElement, _event: Event, c: Cluster) {
         if (this.checked) visibleKeys.add(c.key);
         else visibleKeys.delete(c.key);
         renderHulls();
@@ -526,30 +593,32 @@
     items
       .append("span")
       .attr("class", "swatch")
-      .style("background", (c) => c.color);
+      .style("background", (c: Cluster) => c.color);
     items
       .append("span")
       .attr("class", "cluster-label")
-      .text((c) => `${c.label} (${c.nodes.length})`);
+      .text((c: Cluster) => `${c.label} (${c.nodes.length})`);
   }
 
   buildSection("Folders", folderClusters);
   buildSection("Tags", tagClusters);
+  // Render hulls for any default-selected clusters
+  renderHulls();
 
   // Drag behavior — coords already in root's local space thanks to d3.zoom
-  function drag(simulation) {
+  function drag(simulation: any) {
     return d3
       .drag()
-      .on("start", (event, d) => {
+      .on("start", (event: any, d: GraphNode) => {
         if (!event.active) simulation.alphaTarget(0.3).restart();
         d.fx = d.x;
         d.fy = d.y;
       })
-      .on("drag", (event, d) => {
+      .on("drag", (event: any, d: GraphNode) => {
         d.fx = event.x;
         d.fy = event.y;
       })
-      .on("end", (event, d) => {
+      .on("end", (event: any, d: GraphNode) => {
         if (!event.active) simulation.alphaTarget(0);
         d.fx = null;
         d.fy = null;

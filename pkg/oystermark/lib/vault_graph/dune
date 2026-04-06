@@ -11,9 +11,8 @@
   yojson)
  (inline_tests)
  (preprocessor_deps
-  (file ../static/theme.css)
-  (file ../static/graph_view/widget.js)
-  (file ../static/graph_view/page.css)
-  (file ../static/graph_view/widget.css))
+  (file static/widget.js)
+  (file static/page.css)
+  (file static/widget.css))
  (preprocess
   (pps ppx_jane ppx_string ppx_blob ppx_quick_test)))
