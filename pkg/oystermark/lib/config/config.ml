@@ -1,3 +1,13 @@
+(** User-facing configuration for an Oystermark vault build.
+
+    A {!t} bundles every knob the renderer exposes — theme, CSS snippets,
+    pipeline profile, and home-page graph view — and is typically loaded from
+    a JSON file via {!of_file}. Unknown fields and malformed values are
+    tolerated: parsing falls back to {!default} (or per-field defaults via
+    [\[@default\]]) rather than raising, so a partial or slightly stale config
+    file still produces a usable build.
+*)
+
 open Ppx_yojson_conv_lib.Yojson_conv.Primitives
 module J = Yojson.Safe
 
@@ -23,15 +33,7 @@ module type String_enum = sig
   val default : t
 end
 
-module Make_string_enum (E : String_enum) : sig
-  type t = E.t
-
-  val default : t
-  val of_string : string -> t
-  val to_string : t -> string
-  val t_of_yojson : J.t -> t
-  val yojson_of_t : t -> J.t
-end = struct
+module Make_string_enum (E : String_enum) = struct
   type t = E.t
 
   let default = E.default
@@ -63,39 +65,43 @@ end = struct
   let yojson_of_t (t : t) : J.t = `String (to_string t)
 end
 
-module Theme = Make_string_enum (struct
-    type t =
-      | Tokyonight
-      | Gruvbox
-      | Atom_one_light
-      | Atom_one_dark
-      | Bluloco_light
-      | Bluloco_dark
-      | No_theme
+module Theme_def = struct
+  type t =
+    | Tokyonight
+    | Gruvbox
+    | Atom_one_light
+    | Atom_one_dark
+    | Bluloco_light
+    | Bluloco_dark
+    | No_theme
 
-    let table =
-      [ "tokyonight", Tokyonight, []
-      ; "gruvbox", Gruvbox, []
-      ; "atom_one_light", Atom_one_light, [ "atom-one-light" ]
-      ; "atom_one_dark", Atom_one_dark, [ "atom-one-dark" ]
-      ; "bluloco_light", Bluloco_light, [ "bluloco-light" ]
-      ; "bluloco_dark", Bluloco_dark, [ "bluloco-dark" ]
-      ; "no_theme", No_theme, [ "none" ]
-      ]
-    ;;
+  let table =
+    [ "tokyonight", Tokyonight, []
+    ; "gruvbox", Gruvbox, []
+    ; "atom_one_light", Atom_one_light, [ "atom-one-light" ]
+    ; "atom_one_dark", Atom_one_dark, [ "atom-one-dark" ]
+    ; "bluloco_light", Bluloco_light, [ "bluloco-light" ]
+    ; "bluloco_dark", Bluloco_dark, [ "bluloco-dark" ]
+    ; "no_theme", No_theme, [ "none" ]
+    ]
+  ;;
 
-    let default = Bluloco_dark
-  end)
+  let default = Bluloco_dark
+end
 
-module Pipeline_profile = Make_string_enum (struct
-    type t =
-      | Default
-      | Basic
-      | None_profile
+module Theme = Make_string_enum (Theme_def)
 
-    let table = [ "default", Default, []; "basic", Basic, []; "none", None_profile, [] ]
-    let default = Default
-  end)
+module Pipeline_profile_def = struct
+  type t =
+    | Default
+    | Basic
+    | None_profile
+
+  let table = [ "default", Default, []; "basic", Basic, []; "none", None_profile, [] ]
+  let default = Default
+end
+
+module Pipeline_profile = Make_string_enum (Pipeline_profile_def)
 
 (** A selector for include/exclude lists. JSON shape:
     - [`String "all"] -> [Include_all]
@@ -144,6 +150,7 @@ module Home_graph_view : sig
 
   val default : t
   val t_of_yojson : J.t -> t
+  val yojson_of_t : t -> J.t
 end = struct
   let default_dir : Selector.t = Include_all
   let default_tag : Selector.t = Include_all
@@ -178,7 +185,7 @@ type t =
   ; pipeline_profile : Pipeline_profile.t [@default Pipeline_profile.default]
   ; home_graph_view : Home_graph_view.t [@default Home_graph_view.default]
   }
-[@@deriving of_yojson] [@@yojson.allow_extra_fields]
+[@@deriving yojson] [@@yojson.allow_extra_fields]
 
 let default : t =
   { theme = Theme.default

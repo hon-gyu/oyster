@@ -119,13 +119,15 @@ let backlinks : t =
   make ~on_vault ()
 ;;
 
-(** Append an interactive graph widget to [home.md]. *)
-let home_graph : t =
+(** Append an interactive graph widget to [home.md].
+    [view] controls which dir/tag clusters appear and which are selected by
+    default. *)
+let home_graph ?(config : Config.Home_graph_view.t = Config.Home_graph_view.default) () : t =
   let open Vault_graph in
   let open Graph_view in
   let on_vault (ctx : Vault.t) : Vault.t =
     let g = of_vault ctx in
-    let html = to_widget_html g in
+    let html = to_widget_html ~config g in
     let docs =
       List.map ctx.docs ~f:(fun (path, doc) ->
         if not (String.equal path "home.md")
@@ -146,7 +148,7 @@ let home_graph : t =
   make ~on_vault ()
 ;;
 
-let default ?(cache : Cache.cache option) () : t =
+let default ?(cache : Cache.cache option) ?(config : Config.t = Config.default) () : t =
   id
   >> exclude_draft_by_note_name
   >> exclude_unpublish
@@ -159,10 +161,18 @@ let default ?(cache : Cache.cache option) () : t =
   >> backlinks
   >> home_toc ~dir_link:true ()
   >> dir_index ()
-  >> home_graph
+  >> home_graph ~config:config.home_graph_view ()
 ;;
 
 let basic : t = id >> backlinks
+
+(** Build a pipeline from a {!Config.t}, dispatching on [pipeline_profile]. *)
+let of_config ?(cache : Cache.cache option) ~(config : Config.t) () : t =
+  match config.pipeline_profile with
+  | Config.Pipeline_profile_def.Default -> default ?cache ~config ()
+  | Basic -> basic
+  | None_profile -> id
+;;
 
 (* Test
 ==================== *)

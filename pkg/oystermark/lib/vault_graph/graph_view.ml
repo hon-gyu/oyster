@@ -96,8 +96,11 @@ let%expect_test "to_json with cross-note links" =
 
 (** Embeddable widget HTML fragment (style + container + scripts).
     Suitable for inlining into an existing page via an [=html] code block. *)
-let to_widget_html (t : t) : string =
+let to_widget_html ?(config : Config.Home_graph_view.t = Config.Home_graph_view.default) (t : t)
+  : string
+  =
   let json = to_json t in
+  let config_json = Yojson.Safe.to_string (Config.Home_graph_view.yojson_of_t config) in
   Printf.sprintf
     {|<style>
 %s
@@ -106,12 +109,14 @@ let to_widget_html (t : t) : string =
 <script src="https://d3js.org/d3.v7.min.js"></script>
 <script>
 window.__graphData = %s;
+window.__graphConfig = %s;
 </script>
 <script>
 %s
 </script>|}
     widget_css
     json
+    config_json
     widget_js
 ;;
 
