@@ -23,7 +23,7 @@
     labelFontSize: 16,
     // px
     // Force simulation
-    linkDistance: 35,
+    linkDistance: 70,
     // target edge length; smaller = tighter graph
     chargeStrength: -80,
     // node-node repulsion; less negative = tighter
@@ -42,7 +42,7 @@
   var linkDistance = config.linkDistance;
   var chargeStrength = config.chargeStrength;
   var collisionPadding = config.collisionPadding;
-  var clusterStrength = 0.02;
+  var clusterStrength = 0.04;
   var containmentRadius = 600;
   var containmentStrength = 0.05;
   var data = window.__graphData;
@@ -263,8 +263,7 @@
     link.attr("stroke", "#e0e0e0").attr("stroke-opacity", 0.8).attr("stroke-width", 1.5);
   });
   node.on("click", (_event, d) => {
-    const url = d.id.replace(/\.md$/, ".html");
-    window.location.href = url;
+    window.location.href = d.href;
   });
   simulation.on("tick", () => {
     link.attr(

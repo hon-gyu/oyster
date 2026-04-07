@@ -478,8 +478,7 @@ node
 
 // Click: navigate
 node.on("click", (_event: Event, d: GraphNode) => {
-	const url = d.id.replace(/\.md$/, ".html");
-	window.location.href = url;
+	window.location.href = d.href;
 });
 
 // Tick

@@ -36,6 +36,7 @@ interface GraphNode {
   title: string;
   tags: string[];
   folder: string;
+  href: string;
   // Mutated by d3.forceSimulation
   x?: number;
   y?: number;

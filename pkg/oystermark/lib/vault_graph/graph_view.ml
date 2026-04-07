@@ -39,6 +39,7 @@ let to_json (t : t) : string =
              ; "title", `String meta.title
              ; "tags", `List (List.map meta.tags ~f:(fun t -> `String t))
              ; "folder", `String meta.folder
+             ; "href", `String meta.href
              ]
            :: acc
          | _ -> acc)
@@ -80,8 +81,8 @@ let%expect_test "to_json with cross-note links" =
     {|
     {
       "nodes": [
-        { "id": "b.md", "title": "b", "tags": [], "folder": "." },
-        { "id": "a.md", "title": "a", "tags": [], "folder": "." }
+        { "id": "b.md", "title": "b", "tags": [], "folder": ".", "href": "/b/" },
+        { "id": "a.md", "title": "a", "tags": [], "folder": ".", "href": "/a/" }
       ],
       "edges": [
         { "source": "a.md", "target": "b.md" },

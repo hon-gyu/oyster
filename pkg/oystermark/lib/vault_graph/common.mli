@@ -52,6 +52,7 @@ type node_meta =
   { title : string (** Title from frontmatter, or file name without extension *)
   ; tags : string list (** Tags from frontmatter *)
   ; folder : string (** Parent directory derived from path *)
+  ; href : string (** URL path for linking to this note's rendered HTML *)
   }
 [@@deriving sexp, compare]
 

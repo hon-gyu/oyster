@@ -1,7 +1,7 @@
 (library
  (name vault_graph)
  (public_name oystermark.vault_graph)
- (libraries parse vault cmarkit core ocamlgraph config yojson)
+ (libraries parse vault component cmarkit core ocamlgraph config yojson)
  (inline_tests)
  (preprocessor_deps
   (file static/widget.js)

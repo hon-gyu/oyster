@@ -62,6 +62,7 @@ type node_meta =
   { title : string
   ; tags : string list
   ; folder : string
+  ; href : string
   }
 [@@deriving sexp, compare]
 
@@ -74,9 +75,10 @@ let meta_of_doc (rel_path : string) (doc : Cmarkit.Doc.t) : node_meta =
     | None -> base
   in
   let folder = Filename.dirname rel_path in
+  let href = Component.Html.note_url_path rel_path in
   let default_title = title_from_path rel_path in
   match Parse.Frontmatter.of_doc doc with
-  | None -> { title = default_title; tags = []; folder }
+  | None -> { title = default_title; tags = []; folder; href }
   | Some yaml ->
     let title =
       match yaml with
@@ -109,7 +111,7 @@ let meta_of_doc (rel_path : string) (doc : Cmarkit.Doc.t) : node_meta =
         |> Option.value ~default:[]
       | _ -> []
     in
-    { title; tags; folder }
+    { title; tags; folder; href }
 ;;
 
 (* Graph type
