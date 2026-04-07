@@ -5,6 +5,43 @@
  *  - graph JSON data is in `window.__graphData`
  *  - optional `window.__graphConfig` of type [HomeGraphViewConfig]
  *    (see config.d.ts — that file is the wire-format contract with OCaml)
+
+ Specification
+ =========
+
+ Config / sliders panel
+ ---------
+ - Config values in widget.ts must be adjustable from the frontend (not just source
+ constants).
+ - Sliders live in a single panel (rename as appropriate); no separate per-control panels.
+ - No persistence of slider values across reloads.
+ - Do not expose a "seed radius" / seed-related slider.
+ - Each slider must visibly show its current numeric value.
+ - Numeric value label goes on the left of the tick/handle area — not the right.
+ - Slider element must not exceed the panel container width.
+
+ Panel behavior / styling
+ ---------
+ - Panel must be togglable (collapse/expand).
+ - Resize must work.
+ - When collapsed, there must be no stray white area below the settings header.
+
+ Force simulation behavior
+ ---------
+ - Sliders must remain effective even after energy settles — simulation needs a minimum energy
+  / re-heat so new rules take effect (dragging a node shouldn't be the only way to apply
+ them).
+ - A global central/containment force constrains nodes within a circle to prevent drift.
+   - Containment must be exposed as a slider (radius and/or strength), not hard-coded.
+   - Default must be gentle, and actually visible in effect.
+ - A reset button restores layout according to current slider settings.
+
+ Vault graph data (related, non-widget but raised in session)
+ ---------
+ - A parent folder's cluster (e.g. "digital garden") must include nodes from all
+ subdirectories recursively, not just direct children.
+
+
  */
 
 import { selectorMatches } from "./selector";
