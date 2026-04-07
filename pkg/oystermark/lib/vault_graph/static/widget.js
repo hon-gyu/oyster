@@ -9,6 +9,60 @@
     return true;
   }
 
+  // graph_model.ts
+  function buildAdjacency(nodes, edges) {
+    const adj2 = /* @__PURE__ */ new Map();
+    for (const n of nodes) adj2.set(n.id, /* @__PURE__ */ new Set());
+    for (const e of edges) {
+      const sid = typeof e.source === "string" ? e.source : e.source.id;
+      const tid = typeof e.target === "string" ? e.target : e.target.id;
+      adj2.get(sid).add(tid);
+      adj2.get(tid).add(sid);
+    }
+    return adj2;
+  }
+  function assignColors(labels, palette2) {
+    return new Map(labels.map((l, i) => [l, palette2[i % palette2.length]]));
+  }
+  function buildFolderClusters(nodes, dirSelector, folderColor2) {
+    const folders2 = [...new Set(nodes.map((n) => n.folder))];
+    return folders2.filter((folder) => selectorMatches(dirSelector, folder)).map((folder) => ({
+      key: `folder:${folder}`,
+      kind: "folder",
+      label: folder,
+      color: folderColor2.get(folder),
+      nodes: nodes.filter(
+        (n) => n.folder === folder || n.folder.startsWith(`${folder}/`)
+      )
+    }));
+  }
+  function buildTagClusters(nodes, tagSelector, tagColor2) {
+    const allTags2 = [...new Set(nodes.flatMap((n) => n.tags || []))];
+    return allTags2.filter((tag) => selectorMatches(tagSelector, tag)).map((tag) => ({
+      key: `tag:${tag}`,
+      kind: "tag",
+      label: `#${tag}`,
+      color: tagColor2.get(tag),
+      nodes: nodes.filter((n) => (n.tags || []).includes(tag))
+    }));
+  }
+  function initialVisibleKeys(folderClusters2, tagClusters2, defaultDir, defaultTag) {
+    const keys = /* @__PURE__ */ new Set();
+    for (const c of folderClusters2) {
+      if (selectorMatches(defaultDir, c.label)) keys.add(c.key);
+    }
+    for (const c of tagClusters2) {
+      const bare = c.label.replace(/^#/, "");
+      if (selectorMatches(defaultTag, bare)) keys.add(c.key);
+    }
+    return keys;
+  }
+  function activeClusters(allClusters2, visibleKeys2) {
+    return allClusters2.filter(
+      (c) => visibleKeys2.has(c.key) && c.nodes.length >= 2
+    );
+  }
+
   // widget.ts
   var graphConfig = window.__graphConfig ?? {
     dir: "all",
@@ -60,16 +114,7 @@
   debugEl.className = "debug-info";
   debugEl.textContent = `nodes: ${data.nodes.length}  edges: ${data.edges.length}`;
   container.appendChild(debugEl);
-  var adj = /* @__PURE__ */ new Map();
-  data.nodes.forEach((n) => {
-    adj.set(n.id, /* @__PURE__ */ new Set());
-  });
-  data.edges.forEach((e) => {
-    const sid = typeof e.source === "string" ? e.source : e.source.id;
-    const tid = typeof e.target === "string" ? e.target : e.target.id;
-    adj.get(sid).add(tid);
-    adj.get(tid).add(sid);
-  });
+  var adj = buildAdjacency(data.nodes, data.edges);
   var folders = [...new Set(data.nodes.map((n) => n.folder))];
   var palette = [
     "#4e79a7",
@@ -83,9 +128,7 @@
     "#9c755f",
     "#bab0ac"
   ];
-  var folderColor = new Map(
-    folders.map((f, i) => [f, palette[i % palette.length]])
-  );
+  var folderColor = assignColors(folders, palette);
   function seedNodePositions() {
     const seedRadius = Math.max(
       config.seedRadiusBase,
@@ -143,7 +186,7 @@
   function clusterForce() {
     function force(alpha) {
       if (clusterStrength === 0) return;
-      for (const c of activeClusters()) {
+      for (const c of activeClusters2()) {
         let cx = 0;
         let cy = 0;
         for (const n of c.nodes) {
@@ -176,44 +219,32 @@
     "#bc80bd"
   ];
   var allTags = [...new Set(data.nodes.flatMap((n) => n.tags || []))];
-  var tagColor = new Map(
-    allTags.map((t, i) => [t, tagPalette[i % tagPalette.length]])
+  var tagColor = assignColors(allTags, tagPalette);
+  var folderClusters = buildFolderClusters(
+    data.nodes,
+    graphConfig.dir,
+    folderColor
   );
-  var folderClusters = [...new Set(data.nodes.map((n) => n.folder))].filter((folder) => selectorMatches(graphConfig.dir, folder)).map((folder) => ({
-    key: `folder:${folder}`,
-    kind: "folder",
-    label: folder,
-    color: folderColor.get(folder),
-    nodes: data.nodes.filter(
-      (n) => n.folder === folder || n.folder.startsWith(folder + "/")
-    )
-  }));
-  var tagClusters = allTags.filter((tag) => selectorMatches(graphConfig.tag, tag)).map((tag) => ({
-    key: `tag:${tag}`,
-    kind: "tag",
-    label: `#${tag}`,
-    color: tagColor.get(tag),
-    nodes: data.nodes.filter((n) => (n.tags || []).includes(tag))
-  }));
-  var visibleKeys = /* @__PURE__ */ new Set();
-  for (const c of folderClusters) {
-    if (selectorMatches(graphConfig.default_dir, c.label)) visibleKeys.add(c.key);
-  }
-  for (const c of tagClusters) {
-    const bare = c.label.replace(/^#/, "");
-    if (selectorMatches(graphConfig.default_tag, bare)) visibleKeys.add(c.key);
-  }
+  var tagClusters = buildTagClusters(
+    data.nodes,
+    graphConfig.tag,
+    tagColor
+  );
+  var visibleKeys = initialVisibleKeys(
+    folderClusters,
+    tagClusters,
+    graphConfig.default_dir,
+    graphConfig.default_tag
+  );
   var hullLayer = root.insert("g", ":first-child").attr("class", "hulls");
   var HULL_PAD = 24;
   var hullPath = d3.line().curve(d3.curveCatmullRomClosed.alpha(1));
   var allClusters = [...folderClusters, ...tagClusters];
-  function activeClusters() {
-    return allClusters.filter(
-      (c) => visibleKeys.has(c.key) && c.nodes.length >= 2
-    );
+  function activeClusters2() {
+    return activeClusters(allClusters, visibleKeys);
   }
   function renderHulls() {
-    const sel = hullLayer.selectAll("path").data(activeClusters(), (c) => c.key);
+    const sel = hullLayer.selectAll("path").data(activeClusters2(), (c) => c.key);
     sel.exit().remove();
     const entered = sel.enter().append("path").attr("fill-opacity", 0.12).attr("stroke-opacity", 0.55).attr("stroke-width", 2).attr("stroke-linejoin", "round");
     entered.merge(sel).attr("fill", (c) => c.color).attr("stroke", (c) => c.color);

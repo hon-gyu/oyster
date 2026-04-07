@@ -44,7 +44,15 @@
 
  */
 
-import { selectorMatches } from "./selector";
+import {
+	activeClusters as computeActiveClusters,
+	assignColors,
+	buildAdjacency,
+	buildFolderClusters,
+	buildTagClusters,
+	type Cluster,
+	initialVisibleKeys,
+} from "./graph_model";
 
 // Home_graph_view config
 // ====================
@@ -116,16 +124,7 @@ debugEl.textContent = `nodes: ${data.nodes.length}  edges: ${data.edges.length}`
 container.appendChild(debugEl);
 
 // Adjacency for hover highlighting
-const adj = new Map<string, Set<string>>();
-data.nodes.forEach((n) => {
-	adj.set(n.id, new Set());
-});
-data.edges.forEach((e) => {
-	const sid = typeof e.source === "string" ? e.source : e.source.id;
-	const tid = typeof e.target === "string" ? e.target : e.target.id;
-	adj.get(sid)!.add(tid);
-	adj.get(tid)!.add(sid);
-});
+const adj = buildAdjacency(data.nodes, data.edges);
 
 // Color by folder
 const folders: string[] = [...new Set(data.nodes.map((n) => n.folder))];
@@ -141,9 +140,7 @@ const palette = [
 	"#9c755f",
 	"#bab0ac",
 ];
-const folderColor = new Map<string, string>(
-	folders.map((f, i) => [f, palette[i % palette.length]] as const),
-);
+const folderColor = assignColors(folders, palette);
 
 /**
  * Pre-position nodes by folder so the initial layout already reflects
@@ -299,14 +296,6 @@ function clusterForce() {
 // A node may belong to multiple clusters (one per folder + one per tag).
 // Hulls are rendered under links so nodes/edges remain readable.
 
-interface Cluster {
-	key: string;
-	kind: "folder" | "tag";
-	label: string;
-	color: string;
-	nodes: GraphNode[];
-}
-
 const tagPalette = [
 	"#8dd3c7",
 	"#ffffb3",
@@ -320,43 +309,26 @@ const tagPalette = [
 	"#bc80bd",
 ];
 const allTags: string[] = [...new Set(data.nodes.flatMap((n) => n.tags || []))];
-const tagColor = new Map<string, string>(
-	allTags.map((t, i) => [t, tagPalette[i % tagPalette.length]] as const),
+const tagColor = assignColors(allTags, tagPalette);
+
+const folderClusters: Cluster[] = buildFolderClusters(
+	data.nodes,
+	graphConfig.dir,
+	folderColor,
+);
+const tagClusters: Cluster[] = buildTagClusters(
+	data.nodes,
+	graphConfig.tag,
+	tagColor,
 );
 
-const folderClusters: Cluster[] = [...new Set(data.nodes.map((n) => n.folder))]
-	.filter((folder) => selectorMatches(graphConfig.dir, folder))
-	.map((folder) => ({
-		key: `folder:${folder}`,
-		kind: "folder",
-		label: folder,
-		color: folderColor.get(folder)!,
-		nodes: data.nodes.filter(
-			(n) => n.folder === folder || n.folder.startsWith(folder + "/"),
-		),
-	}));
-const tagClusters: Cluster[] = allTags
-	.filter((tag) => selectorMatches(graphConfig.tag, tag))
-	.map((tag) => ({
-		key: `tag:${tag}`,
-		kind: "tag",
-		label: `#${tag}`,
-		color: tagColor.get(tag)!,
-		nodes: data.nodes.filter((n) => (n.tags || []).includes(tag)),
-	}));
-
 // Visibility state — set of cluster keys currently shown.
-// Seeded from default_dir / default_tag, restricted to clusters that
-// actually passed the dir/tag filter above.
-const visibleKeys = new Set<string>();
-for (const c of folderClusters) {
-	if (selectorMatches(graphConfig.default_dir, c.label)) visibleKeys.add(c.key);
-}
-for (const c of tagClusters) {
-	// c.label is "#tag"; default_tag is matched against the bare tag name
-	const bare = c.label.replace(/^#/, "");
-	if (selectorMatches(graphConfig.default_tag, bare)) visibleKeys.add(c.key);
-}
+const visibleKeys = initialVisibleKeys(
+	folderClusters,
+	tagClusters,
+	graphConfig.default_dir,
+	graphConfig.default_tag,
+);
 
 // Hull layer — under links
 const hullLayer = root.insert("g", ":first-child").attr("class", "hulls");
@@ -367,9 +339,7 @@ const hullPath = d3.line().curve(d3.curveCatmullRomClosed.alpha(1));
 const allClusters: Cluster[] = [...folderClusters, ...tagClusters];
 
 function activeClusters(): Cluster[] {
-	return allClusters.filter(
-		(c) => visibleKeys.has(c.key) && c.nodes.length >= 2,
-	);
+	return computeActiveClusters(allClusters, visibleKeys);
 }
 
 function renderHulls(): void {
