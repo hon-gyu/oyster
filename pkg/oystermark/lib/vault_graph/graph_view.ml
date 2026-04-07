@@ -33,10 +33,7 @@ let to_json (t : t) : string =
       (fun (v : vertex) acc ->
          match v.kind with
          | Note ->
-           let meta =
-             Map.find t.meta v.path
-             |> Option.value ~default:{ title = v.path; tags = []; folder = "." }
-           in
+           let meta = Map.find_exn t.meta v.path in
            `Assoc
              [ "id", `String v.path
              ; "title", `String meta.title
