@@ -34,12 +34,15 @@
     // minimum radius of the folder ring
     seedRadiusPerFolder: 30,
     // extra radius per folder so big vaults spread out
-    seedJitter: 60,
+    seedJitter: 60
     // px of random offset within each folder cluster
-    // Cluster attractive force
-    clusterStrength: 0.08
-    // initial pull strength when a cluster is active
   };
+  var nodeRadius = config.nodeRadius;
+  var labelFontSize = config.labelFontSize;
+  var linkDistance = config.linkDistance;
+  var chargeStrength = config.chargeStrength;
+  var collisionPadding = config.collisionPadding;
+  var clusterStrength = 0.08;
   var data = window.__graphData;
   console.log(
     "[graph-view] nodes:",
@@ -106,10 +109,10 @@
   var root = svg.append("g").attr("class", "zoom-root");
   var simulation = d3.forceSimulation(data.nodes).force(
     "link",
-    d3.forceLink(data.edges).id((d) => d.id).distance(config.linkDistance)
-  ).force("charge", d3.forceManyBody().strength(config.chargeStrength)).force("center", d3.forceCenter(0, 0)).force(
+    d3.forceLink(data.edges).id((d) => d.id).distance(() => linkDistance)
+  ).force("charge", d3.forceManyBody().strength(() => chargeStrength)).force("center", d3.forceCenter(0, 0)).force(
     "collision",
-    d3.forceCollide().radius(config.nodeRadius + config.collisionPadding)
+    d3.forceCollide().radius(() => nodeRadius + collisionPadding)
   ).force("cluster", clusterForce());
   function clusterForce() {
     function force(alpha) {
@@ -172,7 +175,6 @@
     const bare = c.label.replace(/^#/, "");
     if (selectorMatches(graphConfig.default_tag, bare)) visibleKeys.add(c.key);
   }
-  var clusterStrength = config.clusterStrength;
   var hullLayer = root.insert("g", ":first-child").attr("class", "hulls");
   var HULL_PAD = 24;
   var hullPath = d3.line().curve(d3.curveCatmullRomClosed.alpha(1));
@@ -202,8 +204,8 @@
     });
   }
   var link = root.append("g").attr("class", "links").attr("stroke", "#e0e0e0").attr("stroke-opacity", 0.8).selectAll("line").data(data.edges).join("line").attr("stroke-width", 1.5).attr("marker-end", "url(#arrow)");
-  var node = root.append("g").attr("class", "nodes").selectAll("circle").data(data.nodes).join("circle").attr("r", config.nodeRadius).attr("fill", (d) => folderColor.get(d.folder)).attr("stroke", "#fff").attr("stroke-width", 1.5).style("cursor", "pointer").call(drag(simulation));
-  var label = root.append("g").attr("class", "labels").selectAll("text").data(data.nodes).join("text").text((d) => d.title).attr("font-size", config.labelFontSize).attr("font-family", "sans-serif").attr("dx", config.nodeRadius + 4).attr("dy", 4);
+  var node = root.append("g").attr("class", "nodes").selectAll("circle").data(data.nodes).join("circle").attr("r", () => nodeRadius).attr("fill", (d) => folderColor.get(d.folder)).attr("stroke", "#fff").attr("stroke-width", 1.5).style("cursor", "pointer").call(drag(simulation));
+  var label = root.append("g").attr("class", "labels").selectAll("text").data(data.nodes).join("text").text((d) => d.title).attr("font-size", () => labelFontSize).attr("font-family", "sans-serif").attr("dx", () => nodeRadius + 4).attr("dy", 4);
   node.on("mouseenter", (_event, d) => {
     const neighbors = adj.get(d.id);
     node.attr(
@@ -308,9 +310,9 @@
       toggleMaximize();
     }
   });
-  var panel = d3.select("#graph-view").append("div").attr("class", "cluster-panel collapsed");
+  var panel = d3.select("#graph-view").append("div").attr("class", "settings-panel collapsed");
   var toggle = panel.append("div").attr("class", "panel-toggle");
-  toggle.append("span").attr("class", "panel-toggle-label").text("Clusters");
+  toggle.append("span").attr("class", "panel-toggle-label").text("Settings");
   toggle.append("span").attr("class", "panel-toggle-chevron").text("\u25B2");
   toggle.on("click", () => {
     const collapsed = panel.classed("collapsed");
@@ -320,16 +322,61 @@
     el.style.width = "";
     el.style.height = "";
   });
-  var strengthRow = panel.append("div").attr("class", "panel-row");
-  strengthRow.append("label").text("Cluster pull");
-  var strengthInput = strengthRow.append("input").attr("type", "range").attr("min", 0).attr("max", 0.3).attr("step", 0.01).attr("value", clusterStrength).on("input", function() {
+  var radiusRow = panel.append("div").attr("class", "panel-row");
+  radiusRow.append("label").text("Node radius");
+  var radiusInput = radiusRow.append("input").attr("type", "range").attr("min", 5).attr("max", 25).attr("step", 1).attr("value", nodeRadius).on("input", function() {
+    nodeRadius = +this.value;
+    node.attr("r", () => nodeRadius);
+    label.attr("dx", () => nodeRadius + 4);
+    simulation.force("collision", d3.forceCollide().radius(() => nodeRadius + collisionPadding));
+    simulation.alpha(0.5).restart();
+    radiusRow.select(".slider-val").text(nodeRadius.toFixed(0));
+  });
+  radiusRow.append("span").attr("class", "slider-val").text(nodeRadius.toFixed(0));
+  var labelRow = panel.append("div").attr("class", "panel-row");
+  labelRow.append("label").text("Label size");
+  var labelInput = labelRow.append("input").attr("type", "range").attr("min", 10).attr("max", 24).attr("step", 1).attr("value", labelFontSize).on("input", function() {
+    labelFontSize = +this.value;
+    label.attr("font-size", () => labelFontSize);
+    simulation.alpha(0.5).restart();
+    labelRow.select(".slider-val").text(labelFontSize.toFixed(0));
+  });
+  labelRow.append("span").attr("class", "slider-val").text(labelFontSize.toFixed(0));
+  var linkRow = panel.append("div").attr("class", "panel-row");
+  linkRow.append("label").text("Link distance");
+  var linkInput = linkRow.append("input").attr("type", "range").attr("min", 10).attr("max", 100).attr("step", 1).attr("value", linkDistance).on("input", function() {
+    linkDistance = +this.value;
+    simulation.force("link", d3.forceLink(data.edges).id((d) => d.id).distance(() => linkDistance));
+    simulation.alpha(0.5).restart();
+    linkRow.select(".slider-val").text(linkDistance.toFixed(0));
+  });
+  linkRow.append("span").attr("class", "slider-val").text(linkDistance.toFixed(0));
+  var chargeRow = panel.append("div").attr("class", "panel-row");
+  chargeRow.append("label").text("Charge strength");
+  var chargeInput = chargeRow.append("input").attr("type", "range").attr("min", -200).attr("max", -20).attr("step", 5).attr("value", chargeStrength).on("input", function() {
+    chargeStrength = +this.value;
+    simulation.force("charge", d3.forceManyBody().strength(() => chargeStrength));
+    simulation.alpha(0.5).restart();
+    chargeRow.select(".slider-val").text(chargeStrength.toFixed(0));
+  });
+  chargeRow.append("span").attr("class", "slider-val").text(chargeStrength.toFixed(0));
+  var collisionRow = panel.append("div").attr("class", "panel-row");
+  collisionRow.append("label").text("Collision padding");
+  var collisionInput = collisionRow.append("input").attr("type", "range").attr("min", 0).attr("max", 20).attr("step", 1).attr("value", collisionPadding).on("input", function() {
+    collisionPadding = +this.value;
+    simulation.force("collision", d3.forceCollide().radius(() => nodeRadius + collisionPadding));
+    simulation.alpha(0.5).restart();
+    collisionRow.select(".slider-val").text(collisionPadding.toFixed(0));
+  });
+  collisionRow.append("span").attr("class", "slider-val").text(collisionPadding.toFixed(0));
+  var pullRow = panel.append("div").attr("class", "panel-row");
+  pullRow.append("label").text("Cluster pull");
+  var pullInput = pullRow.append("input").attr("type", "range").attr("min", 0).attr("max", 0.3).attr("step", 0.01).attr("value", clusterStrength).on("input", function() {
     clusterStrength = +this.value;
     simulation.alpha(0.5).restart();
+    pullRow.select(".slider-val").text((+this.value).toFixed(2));
   });
-  strengthRow.append("span").attr("class", "strength-val").text(clusterStrength);
-  strengthInput.on("input.label", function() {
-    strengthRow.select(".strength-val").text((+this.value).toFixed(2));
-  });
+  pullRow.append("span").attr("class", "slider-val").text(clusterStrength.toFixed(2));
   function setVisible(keys, on) {
     for (const k of keys) {
       if (on) visibleKeys.add(k);

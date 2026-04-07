@@ -90,7 +90,7 @@
 #graph-view .zoom-controls button:hover {
     background: #3a3a4e;
 }
-#graph-view .cluster-panel {
+#graph-view .settings-panel {
     position: absolute;
     bottom: 16px;
     right: 16px;
@@ -108,41 +108,46 @@
     flex-direction: column;
     overflow: hidden;
     resize: both;
-    direction: rtl;
 }
-#graph-view .cluster-panel > * {
+#graph-view .settings-panel > * {
     direction: ltr;
 }
-#graph-view .cluster-panel .panel-row {
+#graph-view .settings-panel .panel-row {
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 8px 12px;
+    gap: 6px;
+    padding: 8px 8px;
     border-bottom: 1px solid #444;
+    min-width: 0;
 }
-#graph-view .cluster-panel .panel-row label {
+#graph-view .settings-panel .panel-row label {
     color: #ccc;
+    flex-shrink: 0;
+    width: 70px;
+    font-size: 11px;
 }
-#graph-view .cluster-panel .panel-row input[type="range"] {
+#graph-view .settings-panel .panel-row input[type="range"] {
     flex: 1;
+    min-width: 0;
 }
-#graph-view .cluster-panel .strength-val {
-    color: #aaa;
-    width: 28px;
-    text-align: right;
+#graph-view .settings-panel .slider-val {
+    color: #fff;
+    width: 32px;
+    text-align: left;
     font-variant-numeric: tabular-nums;
+    flex-shrink: 0;
 }
-#graph-view .cluster-panel .panel-section {
+#graph-view .settings-panel .panel-section {
     border-bottom: 1px solid #444;
     overflow: hidden;
     display: flex;
     flex-direction: column;
     min-height: 0;
 }
-#graph-view .cluster-panel .panel-section:last-child {
+#graph-view .settings-panel .panel-section:last-child {
     border-bottom: none;
 }
-#graph-view .cluster-panel .panel-header {
+#graph-view .settings-panel .panel-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -151,7 +156,7 @@
     color: #bbb;
     font-weight: 600;
 }
-#graph-view .cluster-panel .panel-toggle {
+#graph-view .settings-panel .panel-toggle {
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -163,25 +168,25 @@
     font-weight: 600;
     color: #bbb;
 }
-#graph-view .cluster-panel .panel-toggle:hover {
+#graph-view .settings-panel .panel-toggle:hover {
     background: #2a2a3e;
 }
-#graph-view .cluster-panel .panel-toggle-chevron {
+#graph-view .settings-panel .panel-toggle-chevron {
     font-size: 10px;
     color: #888;
 }
-#graph-view .cluster-panel.collapsed .panel-row,
-#graph-view .cluster-panel.collapsed .panel-section {
+#graph-view .settings-panel.collapsed .panel-row,
+#graph-view .settings-panel.collapsed .panel-section {
     display: none;
 }
-#graph-view .cluster-panel.collapsed .panel-toggle {
+#graph-view .settings-panel.collapsed .panel-toggle {
     border-bottom: none;
 }
-#graph-view .cluster-panel .panel-actions {
+#graph-view .settings-panel .panel-actions {
     display: flex;
     gap: 4px;
 }
-#graph-view .cluster-panel .panel-actions button {
+#graph-view .settings-panel .panel-actions button {
     background: #3a3a4e;
     border: 1px solid #555;
     color: #ccc;
@@ -190,35 +195,35 @@
     border-radius: 3px;
     cursor: pointer;
 }
-#graph-view .cluster-panel .panel-actions button:hover {
+#graph-view .settings-panel .panel-actions button:hover {
     background: #4a4a5e;
 }
-#graph-view .cluster-panel .panel-list {
+#graph-view .settings-panel .panel-list {
     overflow-y: auto;
     max-height: 200px;
     padding: 4px 0;
 }
-#graph-view .cluster-panel .cluster-item {
+#graph-view .settings-panel .cluster-item {
     display: flex;
     align-items: center;
     gap: 8px;
     padding: 3px 12px;
     cursor: pointer;
 }
-#graph-view .cluster-panel .cluster-item:hover {
+#graph-view .settings-panel .cluster-item:hover {
     background: #3a3a4e;
 }
-#graph-view .cluster-panel .cluster-item input {
+#graph-view .settings-panel .cluster-item input {
     cursor: pointer;
 }
-#graph-view .cluster-panel .swatch {
+#graph-view .settings-panel .swatch {
     display: inline-block;
     width: 12px;
     height: 12px;
     border-radius: 2px;
     flex-shrink: 0;
 }
-#graph-view .cluster-panel .cluster-label {
+#graph-view .settings-panel .cluster-label {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
