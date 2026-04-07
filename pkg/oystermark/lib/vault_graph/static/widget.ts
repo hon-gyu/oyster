@@ -564,7 +564,7 @@ const radiusInput = radiusRow
 		node.attr("r", () => nodeRadius);
 		label.attr("dx", () => nodeRadius + 4);
 		simulation.force("collision", d3.forceCollide().radius(() => nodeRadius + collisionPadding));
-		simulation.tick();
+		simulation.alpha(0.1).restart();
 		radiusRow.select(".slider-val").text(nodeRadius.toFixed(0));
 	});
 radiusRow.append("span").attr("class", "slider-val").text(nodeRadius.toFixed(0));
@@ -582,7 +582,7 @@ const labelInput = labelRow
 	.on("input", function (this: HTMLInputElement) {
 		labelFontSize = +this.value;
 		label.attr("font-size", () => labelFontSize);
-		simulation.tick();
+		simulation.alpha(0.1).restart();
 		labelRow.select(".slider-val").text(labelFontSize.toFixed(0));
 	});
 labelRow.append("span").attr("class", "slider-val").text(labelFontSize.toFixed(0));
@@ -599,7 +599,7 @@ const linkInput = linkRow
 	.attr("value", linkDistance)
 	.on("input", function (this: HTMLInputElement) {
 		linkDistance = +this.value;
-		simulation.tick();
+		simulation.alpha(0.1).restart();
 		linkRow.select(".slider-val").text(linkDistance.toFixed(0));
 	});
 linkRow.append("span").attr("class", "slider-val").text(linkDistance.toFixed(0));
@@ -616,7 +616,7 @@ const chargeInput = chargeRow
 	.attr("value", chargeStrength)
 	.on("input", function (this: HTMLInputElement) {
 		chargeStrength = +this.value;
-		simulation.tick();
+		simulation.alpha(0.1).restart();
 		chargeRow.select(".slider-val").text(chargeStrength.toFixed(0));
 	});
 chargeRow.append("span").attr("class", "slider-val").text(chargeStrength.toFixed(0));
@@ -633,7 +633,7 @@ const collisionInput = collisionRow
 	.attr("value", collisionPadding)
 	.on("input", function (this: HTMLInputElement) {
 		collisionPadding = +this.value;
-		simulation.tick();
+		simulation.alpha(0.1).restart();
 		collisionRow.select(".slider-val").text(collisionPadding.toFixed(0));
 	});
 collisionRow.append("span").attr("class", "slider-val").text(collisionPadding.toFixed(0));
@@ -650,7 +650,7 @@ const pullInput = pullRow
 	.attr("value", clusterStrength)
 	.on("input", function (this: HTMLInputElement) {
 		clusterStrength = +this.value;
-		simulation.tick();
+		simulation.alpha(0.1).restart();
 		pullRow.select(".slider-val").text((+this.value).toFixed(2));
 	});
 pullRow.append("span").attr("class", "slider-val").text(clusterStrength.toFixed(2));
@@ -712,7 +712,7 @@ function buildSection(title: string, clusters: Cluster[]): void {
 			if (this.checked) visibleKeys.add(c.key);
 			else visibleKeys.delete(c.key);
 			renderHulls();
-			simulation.tick();
+			simulation.alpha(0.1).restart();
 		});
 	items
 		.append("span")

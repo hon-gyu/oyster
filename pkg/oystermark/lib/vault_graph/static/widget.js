@@ -326,7 +326,7 @@
     node.attr("r", () => nodeRadius);
     label.attr("dx", () => nodeRadius + 4);
     simulation.force("collision", d3.forceCollide().radius(() => nodeRadius + collisionPadding));
-    simulation.tick();
+    simulation.alpha(0.1).restart();
     radiusRow.select(".slider-val").text(nodeRadius.toFixed(0));
   });
   radiusRow.append("span").attr("class", "slider-val").text(nodeRadius.toFixed(0));
@@ -335,7 +335,7 @@
   var labelInput = labelRow.append("input").attr("type", "range").attr("min", 10).attr("max", 24).attr("step", 1).attr("value", labelFontSize).on("input", function() {
     labelFontSize = +this.value;
     label.attr("font-size", () => labelFontSize);
-    simulation.tick();
+    simulation.alpha(0.1).restart();
     labelRow.select(".slider-val").text(labelFontSize.toFixed(0));
   });
   labelRow.append("span").attr("class", "slider-val").text(labelFontSize.toFixed(0));
@@ -343,7 +343,7 @@
   linkRow.append("label").text("Link distance");
   var linkInput = linkRow.append("input").attr("type", "range").attr("min", 10).attr("max", 100).attr("step", 1).attr("value", linkDistance).on("input", function() {
     linkDistance = +this.value;
-    simulation.tick();
+    simulation.alpha(0.1).restart();
     linkRow.select(".slider-val").text(linkDistance.toFixed(0));
   });
   linkRow.append("span").attr("class", "slider-val").text(linkDistance.toFixed(0));
@@ -351,7 +351,7 @@
   chargeRow.append("label").text("Charge strength");
   var chargeInput = chargeRow.append("input").attr("type", "range").attr("min", -200).attr("max", -20).attr("step", 5).attr("value", chargeStrength).on("input", function() {
     chargeStrength = +this.value;
-    simulation.tick();
+    simulation.alpha(0.1).restart();
     chargeRow.select(".slider-val").text(chargeStrength.toFixed(0));
   });
   chargeRow.append("span").attr("class", "slider-val").text(chargeStrength.toFixed(0));
@@ -359,7 +359,7 @@
   collisionRow.append("label").text("Collision padding");
   var collisionInput = collisionRow.append("input").attr("type", "range").attr("min", 0).attr("max", 20).attr("step", 1).attr("value", collisionPadding).on("input", function() {
     collisionPadding = +this.value;
-    simulation.tick();
+    simulation.alpha(0.1).restart();
     collisionRow.select(".slider-val").text(collisionPadding.toFixed(0));
   });
   collisionRow.append("span").attr("class", "slider-val").text(collisionPadding.toFixed(0));
@@ -367,7 +367,7 @@
   pullRow.append("label").text("Cluster pull");
   var pullInput = pullRow.append("input").attr("type", "range").attr("min", 0).attr("max", 0.3).attr("step", 0.01).attr("value", clusterStrength).on("input", function() {
     clusterStrength = +this.value;
-    simulation.tick();
+    simulation.alpha(0.1).restart();
     pullRow.select(".slider-val").text((+this.value).toFixed(2));
   });
   pullRow.append("span").attr("class", "slider-val").text(clusterStrength.toFixed(2));
@@ -409,7 +409,7 @@
       if (this.checked) visibleKeys.add(c.key);
       else visibleKeys.delete(c.key);
       renderHulls();
-      simulation.tick();
+      simulation.alpha(0.1).restart();
     });
     items.append("span").attr("class", "swatch").style("background", (c) => c.color);
     items.append("span").attr("class", "cluster-label").text((c) => `${c.label} (${c.nodes.length})`);
