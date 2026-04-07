@@ -254,7 +254,7 @@ const folderClusters: Cluster[] = [...new Set(data.nodes.map((n) => n.folder))]
 		kind: "folder",
 		label: folder,
 		color: folderColor.get(folder)!,
-		nodes: data.nodes.filter((n) => n.folder === folder),
+		nodes: data.nodes.filter((n) => n.folder === folder || n.folder.startsWith(folder + "/")),
 	}));
 const tagClusters: Cluster[] = allTags
 	.filter((tag) => selectorMatches(graphConfig.tag, tag))

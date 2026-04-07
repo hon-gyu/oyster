@@ -155,7 +155,7 @@
     kind: "folder",
     label: folder,
     color: folderColor.get(folder),
-    nodes: data.nodes.filter((n) => n.folder === folder)
+    nodes: data.nodes.filter((n) => n.folder === folder || n.folder.startsWith(folder + "/"))
   }));
   var tagClusters = allTags.filter((tag) => selectorMatches(graphConfig.tag, tag)).map((tag) => ({
     key: `tag:${tag}`,
