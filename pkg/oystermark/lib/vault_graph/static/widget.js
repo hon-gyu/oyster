@@ -139,7 +139,7 @@
     };
     return force;
   }
-  var simulation = d3.forceSimulation(data.nodes).force("link", linkForce).force("charge", chargeForce).force("center", d3.forceCenter(0, 0)).force("collision", collisionForce).force("cluster", clusterForce()).force("containment", containmentForce());
+  var simulation = d3.forceSimulation(data.nodes).force("link", linkForce).force("charge", chargeForce).force("center", d3.forceCenter(0, 0)).force("collision", collisionForce).force("cluster", clusterForce()).force("containment", containmentForce()).alpha(0.5);
   function clusterForce() {
     function force(alpha) {
       if (clusterStrength === 0) return;

@@ -252,7 +252,11 @@ const simulation = d3
 	.force("center", d3.forceCenter(0, 0))
 	.force("collision", collisionForce)
 	.force("cluster", clusterForce())
-	.force("containment", containmentForce());
+	.force("containment", containmentForce())
+	// Match resetLayout: starting at the default alpha=1 lets charge/link
+	// forces fling nodes outward hard enough to hit the containment edge
+	// before anything settles, where the position-clamp then pins them.
+	.alpha(0.5);
 
 /**
  * Custom d3 force: for every active cluster, pull its members toward
