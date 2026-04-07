@@ -107,13 +107,10 @@
   var svg = d3.select("#graph-view").append("svg").attr("width", width).attr("height", height);
   svg.append("defs").append("marker").attr("id", "arrow").attr("viewBox", "0 -3 6 6").attr("refX", 12).attr("refY", 0).attr("markerWidth", 6).attr("markerHeight", 6).attr("orient", "auto").append("path").attr("d", "M0,-3L6,0L0,3").attr("fill", "#e0e0e0");
   var root = svg.append("g").attr("class", "zoom-root");
-  var simulation = d3.forceSimulation(data.nodes).force(
-    "link",
-    d3.forceLink(data.edges).id((d) => d.id).distance(() => linkDistance)
-  ).force("charge", d3.forceManyBody().strength(() => chargeStrength)).force("center", d3.forceCenter(0, 0)).force(
-    "collision",
-    d3.forceCollide().radius(() => nodeRadius + collisionPadding)
-  ).force("cluster", clusterForce());
+  var linkForce = d3.forceLink(data.edges).id((d) => d.id).distance(() => linkDistance);
+  var chargeForce = d3.forceManyBody().strength(() => chargeStrength);
+  var collisionForce = d3.forceCollide().radius(() => nodeRadius + collisionPadding);
+  var simulation = d3.forceSimulation(data.nodes).force("link", linkForce).force("charge", chargeForce).force("center", d3.forceCenter(0, 0)).force("collision", collisionForce).force("cluster", clusterForce());
   function clusterForce() {
     function force(alpha) {
       if (clusterStrength === 0) return;
@@ -297,7 +294,7 @@
   function toggleMaximize() {
     const isMax = container.classList.toggle("maximized");
     backdrop.classed("visible", isMax);
-    d3.select(".maximize-btn").text(isMax ? "\u2B8C" : "\u26F6");
+    d3.select(".maximize-btn").text(isMax ? "\u2212" : "\u26F6");
     const w = container.clientWidth;
     const h = container.clientHeight;
     svg.attr("width", w).attr("height", h);
@@ -329,7 +326,7 @@
     node.attr("r", () => nodeRadius);
     label.attr("dx", () => nodeRadius + 4);
     simulation.force("collision", d3.forceCollide().radius(() => nodeRadius + collisionPadding));
-    simulation.alpha(0.5).restart();
+    simulation.tick();
     radiusRow.select(".slider-val").text(nodeRadius.toFixed(0));
   });
   radiusRow.append("span").attr("class", "slider-val").text(nodeRadius.toFixed(0));
@@ -338,7 +335,7 @@
   var labelInput = labelRow.append("input").attr("type", "range").attr("min", 10).attr("max", 24).attr("step", 1).attr("value", labelFontSize).on("input", function() {
     labelFontSize = +this.value;
     label.attr("font-size", () => labelFontSize);
-    simulation.alpha(0.5).restart();
+    simulation.tick();
     labelRow.select(".slider-val").text(labelFontSize.toFixed(0));
   });
   labelRow.append("span").attr("class", "slider-val").text(labelFontSize.toFixed(0));
@@ -346,8 +343,7 @@
   linkRow.append("label").text("Link distance");
   var linkInput = linkRow.append("input").attr("type", "range").attr("min", 10).attr("max", 100).attr("step", 1).attr("value", linkDistance).on("input", function() {
     linkDistance = +this.value;
-    simulation.force("link", d3.forceLink(data.edges).id((d) => d.id).distance(() => linkDistance));
-    simulation.alpha(0.5).restart();
+    simulation.tick();
     linkRow.select(".slider-val").text(linkDistance.toFixed(0));
   });
   linkRow.append("span").attr("class", "slider-val").text(linkDistance.toFixed(0));
@@ -355,8 +351,7 @@
   chargeRow.append("label").text("Charge strength");
   var chargeInput = chargeRow.append("input").attr("type", "range").attr("min", -200).attr("max", -20).attr("step", 5).attr("value", chargeStrength).on("input", function() {
     chargeStrength = +this.value;
-    simulation.force("charge", d3.forceManyBody().strength(() => chargeStrength));
-    simulation.alpha(0.5).restart();
+    simulation.tick();
     chargeRow.select(".slider-val").text(chargeStrength.toFixed(0));
   });
   chargeRow.append("span").attr("class", "slider-val").text(chargeStrength.toFixed(0));
@@ -364,8 +359,7 @@
   collisionRow.append("label").text("Collision padding");
   var collisionInput = collisionRow.append("input").attr("type", "range").attr("min", 0).attr("max", 20).attr("step", 1).attr("value", collisionPadding).on("input", function() {
     collisionPadding = +this.value;
-    simulation.force("collision", d3.forceCollide().radius(() => nodeRadius + collisionPadding));
-    simulation.alpha(0.5).restart();
+    simulation.tick();
     collisionRow.select(".slider-val").text(collisionPadding.toFixed(0));
   });
   collisionRow.append("span").attr("class", "slider-val").text(collisionPadding.toFixed(0));
@@ -373,7 +367,7 @@
   pullRow.append("label").text("Cluster pull");
   var pullInput = pullRow.append("input").attr("type", "range").attr("min", 0).attr("max", 0.3).attr("step", 0.01).attr("value", clusterStrength).on("input", function() {
     clusterStrength = +this.value;
-    simulation.alpha(0.5).restart();
+    simulation.tick();
     pullRow.select(".slider-val").text((+this.value).toFixed(2));
   });
   pullRow.append("span").attr("class", "slider-val").text(clusterStrength.toFixed(2));
@@ -415,7 +409,7 @@
       if (this.checked) visibleKeys.add(c.key);
       else visibleKeys.delete(c.key);
       renderHulls();
-      simulation.alpha(0.5).restart();
+      simulation.tick();
     });
     items.append("span").attr("class", "swatch").style("background", (c) => c.color);
     items.append("span").attr("class", "cluster-label").text((c) => `${c.label} (${c.nodes.length})`);

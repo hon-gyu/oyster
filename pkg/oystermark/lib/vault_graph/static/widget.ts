@@ -166,21 +166,19 @@ svg
 const root = svg.append("g").attr("class", "zoom-root");
 
 // Force simulation
+const linkForce = d3
+	.forceLink(data.edges)
+	.id((d: GraphNode) => d.id)
+	.distance(() => linkDistance);
+const chargeForce = d3.forceManyBody().strength(() => chargeStrength);
+const collisionForce = d3.forceCollide().radius(() => nodeRadius + collisionPadding);
+
 const simulation = d3
 	.forceSimulation(data.nodes)
-	.force(
-		"link",
-		d3
-			.forceLink(data.edges)
-			.id((d: GraphNode) => d.id)
-			.distance(() => linkDistance),
-	)
-	.force("charge", d3.forceManyBody().strength(() => chargeStrength))
+	.force("link", linkForce)
+	.force("charge", chargeForce)
 	.force("center", d3.forceCenter(0, 0))
-	.force(
-		"collision",
-		d3.forceCollide().radius(() => nodeRadius + collisionPadding),
-	)
+	.force("collision", collisionForce)
 	.force("cluster", clusterForce());
 
 /**
@@ -506,7 +504,7 @@ const backdrop = d3
 function toggleMaximize(): void {
 	const isMax = container.classList.toggle("maximized");
 	backdrop.classed("visible", isMax);
-	d3.select(".maximize-btn").text(isMax ? "\u2B8C" : "\u26F6");
+	d3.select(".maximize-btn").text(isMax ? "−" : "\u26F6");
 	const w = container.clientWidth;
 	const h = container.clientHeight;
 	svg.attr("width", w).attr("height", h);
@@ -566,7 +564,7 @@ const radiusInput = radiusRow
 		node.attr("r", () => nodeRadius);
 		label.attr("dx", () => nodeRadius + 4);
 		simulation.force("collision", d3.forceCollide().radius(() => nodeRadius + collisionPadding));
-		simulation.alpha(0.5).restart();
+		simulation.tick();
 		radiusRow.select(".slider-val").text(nodeRadius.toFixed(0));
 	});
 radiusRow.append("span").attr("class", "slider-val").text(nodeRadius.toFixed(0));
@@ -584,7 +582,7 @@ const labelInput = labelRow
 	.on("input", function (this: HTMLInputElement) {
 		labelFontSize = +this.value;
 		label.attr("font-size", () => labelFontSize);
-		simulation.alpha(0.5).restart();
+		simulation.tick();
 		labelRow.select(".slider-val").text(labelFontSize.toFixed(0));
 	});
 labelRow.append("span").attr("class", "slider-val").text(labelFontSize.toFixed(0));
@@ -601,8 +599,7 @@ const linkInput = linkRow
 	.attr("value", linkDistance)
 	.on("input", function (this: HTMLInputElement) {
 		linkDistance = +this.value;
-		simulation.force("link", d3.forceLink(data.edges).id((d: GraphNode) => d.id).distance(() => linkDistance));
-		simulation.alpha(0.5).restart();
+		simulation.tick();
 		linkRow.select(".slider-val").text(linkDistance.toFixed(0));
 	});
 linkRow.append("span").attr("class", "slider-val").text(linkDistance.toFixed(0));
@@ -619,8 +616,7 @@ const chargeInput = chargeRow
 	.attr("value", chargeStrength)
 	.on("input", function (this: HTMLInputElement) {
 		chargeStrength = +this.value;
-		simulation.force("charge", d3.forceManyBody().strength(() => chargeStrength));
-		simulation.alpha(0.5).restart();
+		simulation.tick();
 		chargeRow.select(".slider-val").text(chargeStrength.toFixed(0));
 	});
 chargeRow.append("span").attr("class", "slider-val").text(chargeStrength.toFixed(0));
@@ -637,8 +633,7 @@ const collisionInput = collisionRow
 	.attr("value", collisionPadding)
 	.on("input", function (this: HTMLInputElement) {
 		collisionPadding = +this.value;
-		simulation.force("collision", d3.forceCollide().radius(() => nodeRadius + collisionPadding));
-		simulation.alpha(0.5).restart();
+		simulation.tick();
 		collisionRow.select(".slider-val").text(collisionPadding.toFixed(0));
 	});
 collisionRow.append("span").attr("class", "slider-val").text(collisionPadding.toFixed(0));
@@ -655,7 +650,7 @@ const pullInput = pullRow
 	.attr("value", clusterStrength)
 	.on("input", function (this: HTMLInputElement) {
 		clusterStrength = +this.value;
-		simulation.alpha(0.5).restart();
+		simulation.tick();
 		pullRow.select(".slider-val").text((+this.value).toFixed(2));
 	});
 pullRow.append("span").attr("class", "slider-val").text(clusterStrength.toFixed(2));
@@ -717,7 +712,7 @@ function buildSection(title: string, clusters: Cluster[]): void {
 			if (this.checked) visibleKeys.add(c.key);
 			else visibleKeys.delete(c.key);
 			renderHulls();
-			simulation.alpha(0.5).restart();
+			simulation.tick();
 		});
 	items
 		.append("span")
