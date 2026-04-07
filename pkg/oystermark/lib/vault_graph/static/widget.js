@@ -463,8 +463,22 @@
     el.style.width = "";
     el.style.height = "";
   });
+  function makeCollapsibleSection(title, { collapsed: startCollapsed = false } = {}) {
+    const section = panel.append("div").attr("class", "panel-section");
+    const header = section.append("div").attr("class", "panel-header panel-header-toggle");
+    header.append("span").text(title);
+    const chevron = header.append("span").attr("class", "panel-toggle-chevron").text(startCollapsed ? "\u25B6" : "\u25BC");
+    const body = section.append("div").attr("class", "panel-section-body").style("display", startCollapsed ? "none" : null);
+    header.on("click", () => {
+      const isHidden = body.style("display") === "none";
+      body.style("display", isHidden ? null : "none");
+      chevron.text(isHidden ? "\u25BC" : "\u25B6");
+    });
+    return body;
+  }
+  var sliderBody = makeCollapsibleSection("Sliders", { collapsed: true });
   function makeSlider(p, onChange) {
-    const row = panel.append("div").attr("class", "panel-row");
+    const row = sliderBody.append("div").attr("class", "panel-row");
     row.append("label").text(p.label);
     const input = row.append("input").attr("type", "range").attr("min", p.min).attr("max", p.max).attr("step", p.step).attr("value", p.value);
     const valSpan = row.append("span").attr("class", "slider-val").text(p.value.toFixed(p.decimals));
@@ -505,24 +519,32 @@
   }
   function buildSection(title, clusters) {
     const section = panel.append("div").attr("class", "panel-section");
-    const header = section.append("div").attr("class", "panel-header");
+    const header = section.append("div").attr("class", "panel-header panel-header-toggle");
     header.append("span").text(title);
-    const actions = header.append("span").attr("class", "panel-actions");
-    actions.append("button").text("all").on(
-      "click",
-      () => setVisible(
+    const rightGroup = header.append("span").style("display", "flex").style("align-items", "center").style("gap", "6px");
+    const actions = rightGroup.append("span").attr("class", "panel-actions");
+    actions.append("button").text("all").on("click", (event) => {
+      event.stopPropagation();
+      setVisible(
         clusters.map((c) => c.key),
         true
-      )
-    );
-    actions.append("button").text("none").on(
-      "click",
-      () => setVisible(
+      );
+    });
+    actions.append("button").text("none").on("click", (event) => {
+      event.stopPropagation();
+      setVisible(
         clusters.map((c) => c.key),
         false
-      )
-    );
-    const list = section.append("div").attr("class", "panel-list");
+      );
+    });
+    const chevron = rightGroup.append("span").attr("class", "panel-toggle-chevron").text("\u25BC");
+    const body = section.append("div").attr("class", "panel-section-body");
+    header.on("click", () => {
+      const isHidden = body.style("display") === "none";
+      body.style("display", isHidden ? null : "none");
+      chevron.text(isHidden ? "\u25BC" : "\u25B6");
+    });
+    const list = body.append("div").attr("class", "panel-list");
     const items = list.selectAll("label").data(clusters).join("label").attr("class", "cluster-item").attr("title", (c) => `${c.label} (${c.nodes.length} nodes)`);
     items.append("input").attr("type", "checkbox").attr("class", "cluster-cb").property("checked", (c) => visibleKeys.has(c.key)).each(function(c) {
       this.dataset.key = c.key;

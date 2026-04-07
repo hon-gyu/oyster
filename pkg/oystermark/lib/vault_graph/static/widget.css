@@ -105,7 +105,7 @@
     z-index: 10;
     display: flex;
     flex-direction: column;
-    overflow: hidden;
+    overflow-y: auto;
     resize: both;
 }
 #graph-view .settings-panel:not(.collapsed) {
@@ -158,6 +158,13 @@
     color: #bbb;
     font-weight: 600;
 }
+#graph-view .settings-panel .panel-header-toggle {
+    cursor: pointer;
+    user-select: none;
+}
+#graph-view .settings-panel .panel-header-toggle:hover {
+    background: #2a2a3e;
+}
 #graph-view .settings-panel .panel-toggle {
     display: flex;
     justify-content: space-between;
@@ -169,6 +176,9 @@
     border-bottom: 1px solid #444;
     font-weight: 600;
     color: #bbb;
+    position: sticky;
+    top: 0;
+    z-index: 1;
 }
 #graph-view .settings-panel .panel-toggle:hover {
     background: #2a2a3e;

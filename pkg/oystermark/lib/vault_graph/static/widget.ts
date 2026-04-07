@@ -16,7 +16,8 @@
  *   7. Settings panel (sliders + cluster toggles)
  *
  * Spec (what must hold, not how it's done):
- *  - Sliders live in one collapsible panel. No persistence.
+ *  - Sliders, folders, and tags each live in their own collapsible
+ *    section inside one settings panel. No persistence.
  *  - Every slider shows its current numeric value.
  *  - Containment (radius and strength) is slider-adjustable, not hard-coded.
  *  - Sliders reheat the simulation so changes take effect without
@@ -689,13 +690,44 @@ toggleBar.on("click", () => {
 	el.style.height = "";
 });
 
+// Collapsible section factory
+// --------------------
+
+/** Build a collapsible section inside the panel. Returns the body
+ *  selection so callers can append content into it. */
+function makeCollapsibleSection(
+	title: string,
+	{ collapsed: startCollapsed = false } = {},
+): d3.Selection<HTMLDivElement, unknown, HTMLElement, unknown> {
+	const section = panel.append("div").attr("class", "panel-section");
+	const header = section.append("div").attr("class", "panel-header panel-header-toggle");
+	header.append("span").text(title);
+	const chevron = header
+		.append("span")
+		.attr("class", "panel-toggle-chevron")
+		.text(startCollapsed ? "\u25B6" : "\u25BC");
+	const body = section
+		.append("div")
+		.attr("class", "panel-section-body")
+		.style("display", startCollapsed ? "none" : null);
+	header.on("click", () => {
+		const isHidden = body.style("display") === "none";
+		body.style("display", isHidden ? null : "none");
+		chevron.text(isHidden ? "\u25BC" : "\u25B6");
+	});
+	return body;
+}
+
+// Slider section (collapsed by default to save space)
+const sliderBody = makeCollapsibleSection("Sliders", { collapsed: true });
+
 // Slider factory
 // --------------------
 
 /** Build one slider row backed by a [Param] record.
  *  [onChange] runs on every input event before the simulation is reheated. */
 function makeSlider(p: Param, onChange?: (v: number) => void): void {
-	const row = panel.append("div").attr("class", "panel-row");
+	const row = sliderBody.append("div").attr("class", "panel-row");
 	row.append("label").text(p.label);
 	const input = row
 		.append("input")
@@ -756,29 +788,44 @@ function setVisible(keys: string[], on: boolean): void {
 
 function buildSection(title: string, clusters: Cluster[]): void {
 	const section = panel.append("div").attr("class", "panel-section");
-	const header = section.append("div").attr("class", "panel-header");
+	const header = section.append("div").attr("class", "panel-header panel-header-toggle");
 	header.append("span").text(title);
-	const actions = header.append("span").attr("class", "panel-actions");
+	const rightGroup = header.append("span").style("display", "flex").style("align-items", "center").style("gap", "6px");
+	const actions = rightGroup.append("span").attr("class", "panel-actions");
 	actions
 		.append("button")
 		.text("all")
-		.on("click", () =>
+		.on("click", (event: Event) => {
+			event.stopPropagation();
 			setVisible(
 				clusters.map((c) => c.key),
 				true,
-			),
-		);
+			);
+		});
 	actions
 		.append("button")
 		.text("none")
-		.on("click", () =>
+		.on("click", (event: Event) => {
+			event.stopPropagation();
 			setVisible(
 				clusters.map((c) => c.key),
 				false,
-			),
-		);
+			);
+		});
+	const chevron = rightGroup
+		.append("span")
+		.attr("class", "panel-toggle-chevron")
+		.text("\u25BC");
+	const body = section
+		.append("div")
+		.attr("class", "panel-section-body");
+	header.on("click", () => {
+		const isHidden = body.style("display") === "none";
+		body.style("display", isHidden ? null : "none");
+		chevron.text(isHidden ? "\u25BC" : "\u25B6");
+	});
 
-	const list = section.append("div").attr("class", "panel-list");
+	const list = body.append("div").attr("class", "panel-list");
 	const items = list
 		.selectAll("label")
 		.data(clusters)
