@@ -140,6 +140,19 @@ let did_open (s : session) ~(rel_path : string) : unit =
   send_message s.oc (make_notification ~method_:"textDocument/didOpen" params)
 ;;
 
+let did_change (s : session) ~(rel_path : string) ~(version : int) ~(text : string) : unit =
+  let full_path = Filename.concat s.vault_root rel_path in
+  let uri = sprintf "file://%s" full_path in
+  let params =
+    `Assoc
+      [ ( "textDocument"
+        , `Assoc [ "uri", `String uri; "version", `Int version ] )
+      ; "contentChanges", `List [ `Assoc [ "text", `String text ] ]
+      ]
+  in
+  send_message s.oc (make_notification ~method_:"textDocument/didChange" params)
+;;
+
 let shutdown (s : session) : unit =
   let id = fresh_id s in
   send_message s.oc (make_request ~id ~method_:"shutdown" `Null);

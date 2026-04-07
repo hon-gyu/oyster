@@ -103,13 +103,9 @@ class oystermark_server =
 
     method on_notif_doc_did_close ~notify_back:_ _doc = ()
 
-    method on_notif_doc_did_change
-      ~notify_back:_
-      _doc
-      _changes
-      ~old_content:_
-      ~new_content:_ =
-      ()
+    method on_notif_doc_did_change ~notify_back doc _changes ~old_content:_ ~new_content =
+      let uri = doc.VersionedTextDocumentIdentifier.uri in
+      self#publish_diagnostics ~notify_back ~uri ~content:new_content
 
     method! on_notif_doc_did_save ~notify_back _params = self#rebuild_index
     (* Re-publish diagnostics for all open documents would be ideal,
