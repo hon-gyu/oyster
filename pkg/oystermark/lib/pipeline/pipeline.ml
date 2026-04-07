@@ -162,8 +162,8 @@ let default ?(cache : Cache.cache option) ?(config : Config.t = Config.default) 
   >> dot_render ()
   >> backlinks
   >> home_toc ~dir_link:true ()
-  >> dir_index ()
   >> home_graph ~config:config.home_graph_view ()
+  >> dir_index ()
 ;;
 
 let basic : t = id >> backlinks
