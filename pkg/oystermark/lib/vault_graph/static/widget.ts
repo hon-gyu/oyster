@@ -37,7 +37,7 @@ const config = {
 	nodeRadius: 14, // circle radius in px
 	labelFontSize: 16, // px
 	// Force simulation
-	linkDistance: 35, // target edge length; smaller = tighter graph
+	linkDistance: 70, // target edge length; smaller = tighter graph
 	chargeStrength: -80, // node-node repulsion; less negative = tighter
 	collisionPadding: 6, // collision radius = nodeRadius + this
 	// Initial seed positions (folder-based pre-layout)
@@ -53,9 +53,9 @@ let labelFontSize = config.labelFontSize;
 let linkDistance = config.linkDistance;
 let chargeStrength = config.chargeStrength;
 let collisionPadding = config.collisionPadding;
-let clusterStrength = 0.08; // initial pull strength when a cluster is active
-let containmentRadius = 400; // containment force radius (0 = disabled)
-let containmentStrength = 0.3; // containment force strength (0-1)
+let clusterStrength = 0.04; // initial pull strength when a cluster is active
+let containmentRadius = 600; // containment force radius (0 = disabled)
+let containmentStrength = 0.05; // containment force strength (0-1)
 
 const data: GraphData = window.__graphData;
 console.log(
@@ -142,6 +142,18 @@ function seedNodePositions(): void {
 }
 seedNodePositions();
 
+function resetLayout(): void {
+	// Re-seed positions
+	seedNodePositions();
+	// Clear velocities
+	data.nodes.forEach((n) => {
+		n.vx = 0;
+		n.vy = 0;
+	});
+	// Restart with energy to recompute layout
+	simulation.alpha(0.5).restart();
+}
+
 // SVG setup
 const svg = d3
 	.select("#graph-view")
@@ -173,10 +185,12 @@ const linkForce = d3
 	.id((d: GraphNode) => d.id)
 	.distance(() => linkDistance);
 const chargeForce = d3.forceManyBody().strength(() => chargeStrength);
-const collisionForce = d3.forceCollide().radius(() => nodeRadius + collisionPadding);
+const collisionForce = d3
+	.forceCollide()
+	.radius(() => nodeRadius + collisionPadding);
 
 function containmentForce() {
-	function force(alpha: number): void {
+	function force(): void {
 		if (containmentRadius <= 0 || containmentStrength <= 0) return;
 		for (const n of data.nodes) {
 			const r = Math.sqrt(n.x! * n.x! + n.y! * n.y!);
@@ -185,15 +199,14 @@ function containmentForce() {
 				const k = containmentStrength;
 				n.x! += (n.x! * ratio - n.x!) * k;
 				n.y! += (n.y! * ratio - n.y!) * k;
-				n.vx! *= (1 - k);
-				n.vy! *= (1 - k);
+				n.vx! *= 1 - k;
+				n.vy! *= 1 - k;
 			}
 		}
 	}
 	(force as any).initialize = () => {};
 	return force;
 }
-
 
 const simulation = d3
 	.forceSimulation(data.nodes)
@@ -277,7 +290,9 @@ const folderClusters: Cluster[] = [...new Set(data.nodes.map((n) => n.folder))]
 		kind: "folder",
 		label: folder,
 		color: folderColor.get(folder)!,
-		nodes: data.nodes.filter((n) => n.folder === folder || n.folder.startsWith(folder + "/")),
+		nodes: data.nodes.filter(
+			(n) => n.folder === folder || n.folder.startsWith(folder + "/"),
+		),
 	}));
 const tagClusters: Cluster[] = allTags
 	.filter((tag) => selectorMatches(graphConfig.tag, tag))
@@ -517,6 +532,13 @@ controls
 	.on("click", () => {
 		fitToScreen();
 	});
+controls
+	.append("button")
+	.text("↻")
+	.attr("title", "Reset layout")
+	.on("click", () => {
+		resetLayout();
+	});
 // Backdrop for dimming the page behind the floating graph
 const backdrop = d3
 	.select("body")
@@ -586,11 +608,17 @@ const radiusInput = radiusRow
 		nodeRadius = +this.value;
 		node.attr("r", () => nodeRadius);
 		label.attr("dx", () => nodeRadius + 4);
-		simulation.force("collision", d3.forceCollide().radius(() => nodeRadius + collisionPadding));
+		simulation.force(
+			"collision",
+			d3.forceCollide().radius(() => nodeRadius + collisionPadding),
+		);
 		simulation.alpha(0.1).restart();
 		radiusRow.select(".slider-val").text(nodeRadius.toFixed(0));
 	});
-radiusRow.append("span").attr("class", "slider-val").text(nodeRadius.toFixed(0));
+radiusRow
+	.append("span")
+	.attr("class", "slider-val")
+	.text(nodeRadius.toFixed(0));
 
 // Label size slider
 const labelRow = panel.append("div").attr("class", "panel-row");
@@ -608,7 +636,10 @@ const labelInput = labelRow
 		simulation.alpha(0.1).restart();
 		labelRow.select(".slider-val").text(labelFontSize.toFixed(0));
 	});
-labelRow.append("span").attr("class", "slider-val").text(labelFontSize.toFixed(0));
+labelRow
+	.append("span")
+	.attr("class", "slider-val")
+	.text(labelFontSize.toFixed(0));
 
 // Link distance slider
 const linkRow = panel.append("div").attr("class", "panel-row");
@@ -625,7 +656,10 @@ const linkInput = linkRow
 		simulation.alpha(0.1).restart();
 		linkRow.select(".slider-val").text(linkDistance.toFixed(0));
 	});
-linkRow.append("span").attr("class", "slider-val").text(linkDistance.toFixed(0));
+linkRow
+	.append("span")
+	.attr("class", "slider-val")
+	.text(linkDistance.toFixed(0));
 
 // Charge strength slider
 const chargeRow = panel.append("div").attr("class", "panel-row");
@@ -642,7 +676,10 @@ const chargeInput = chargeRow
 		simulation.alpha(0.1).restart();
 		chargeRow.select(".slider-val").text(chargeStrength.toFixed(0));
 	});
-chargeRow.append("span").attr("class", "slider-val").text(chargeStrength.toFixed(0));
+chargeRow
+	.append("span")
+	.attr("class", "slider-val")
+	.text(chargeStrength.toFixed(0));
 
 // Collision padding slider
 const collisionRow = panel.append("div").attr("class", "panel-row");
@@ -659,7 +696,10 @@ const collisionInput = collisionRow
 		simulation.alpha(0.1).restart();
 		collisionRow.select(".slider-val").text(collisionPadding.toFixed(0));
 	});
-collisionRow.append("span").attr("class", "slider-val").text(collisionPadding.toFixed(0));
+collisionRow
+	.append("span")
+	.attr("class", "slider-val")
+	.text(collisionPadding.toFixed(0));
 
 // Cluster pull slider
 const pullRow = panel.append("div").attr("class", "panel-row");
@@ -668,15 +708,18 @@ const pullInput = pullRow
 	.append("input")
 	.attr("type", "range")
 	.attr("min", 0)
-	.attr("max", 0.3)
-	.attr("step", 0.01)
+	.attr("max", 0.2)
+	.attr("step", 0.005)
 	.attr("value", clusterStrength)
 	.on("input", function (this: HTMLInputElement) {
 		clusterStrength = +this.value;
 		simulation.alpha(0.1).restart();
 		pullRow.select(".slider-val").text((+this.value).toFixed(2));
 	});
-pullRow.append("span").attr("class", "slider-val").text(clusterStrength.toFixed(2));
+pullRow
+	.append("span")
+	.attr("class", "slider-val")
+	.text(clusterStrength.toFixed(2));
 
 // Containment radius slider
 const containRow = panel.append("div").attr("class", "panel-row");
@@ -685,7 +728,7 @@ const containInput = containRow
 	.append("input")
 	.attr("type", "range")
 	.attr("min", 0)
-	.attr("max", 800)
+	.attr("max", 1200)
 	.attr("step", 50)
 	.attr("value", containmentRadius)
 	.on("input", function (this: HTMLInputElement) {
@@ -693,7 +736,10 @@ const containInput = containRow
 		simulation.alpha(0.1).restart();
 		containRow.select(".slider-val").text(containmentRadius.toFixed(0));
 	});
-containRow.append("span").attr("class", "slider-val").text(containmentRadius.toFixed(0));
+containRow
+	.append("span")
+	.attr("class", "slider-val")
+	.text(containmentRadius.toFixed(0));
 
 // Containment strength slider
 const strengthRow = panel.append("div").attr("class", "panel-row");
@@ -702,15 +748,18 @@ const strengthInput = strengthRow
 	.append("input")
 	.attr("type", "range")
 	.attr("min", 0)
-	.attr("max", 1)
-	.attr("step", 0.05)
+	.attr("max", 0.5)
+	.attr("step", 0.0025)
 	.attr("value", containmentStrength)
 	.on("input", function (this: HTMLInputElement) {
 		containmentStrength = +this.value;
 		simulation.alpha(0.1).restart();
 		strengthRow.select(".slider-val").text(containmentStrength.toFixed(2));
 	});
-strengthRow.append("span").attr("class", "slider-val").text(containmentStrength.toFixed(2));
+strengthRow
+	.append("span")
+	.attr("class", "slider-val")
+	.text(containmentStrength.toFixed(2));
 
 function setVisible(keys: string[], on: boolean): void {
 	for (const k of keys) {
