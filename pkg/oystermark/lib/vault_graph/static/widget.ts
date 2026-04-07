@@ -54,6 +54,8 @@ let linkDistance = config.linkDistance;
 let chargeStrength = config.chargeStrength;
 let collisionPadding = config.collisionPadding;
 let clusterStrength = 0.08; // initial pull strength when a cluster is active
+let containmentRadius = 400; // containment force radius (0 = disabled)
+let containmentStrength = 0.3; // containment force strength (0-1)
 
 const data: GraphData = window.__graphData;
 console.log(
@@ -173,13 +175,34 @@ const linkForce = d3
 const chargeForce = d3.forceManyBody().strength(() => chargeStrength);
 const collisionForce = d3.forceCollide().radius(() => nodeRadius + collisionPadding);
 
+function containmentForce() {
+	function force(alpha: number): void {
+		if (containmentRadius <= 0 || containmentStrength <= 0) return;
+		for (const n of data.nodes) {
+			const r = Math.sqrt(n.x! * n.x! + n.y! * n.y!);
+			if (r > containmentRadius) {
+				const ratio = containmentRadius / r;
+				const k = containmentStrength;
+				n.x! += (n.x! * ratio - n.x!) * k;
+				n.y! += (n.y! * ratio - n.y!) * k;
+				n.vx! *= (1 - k);
+				n.vy! *= (1 - k);
+			}
+		}
+	}
+	(force as any).initialize = () => {};
+	return force;
+}
+
+
 const simulation = d3
 	.forceSimulation(data.nodes)
 	.force("link", linkForce)
 	.force("charge", chargeForce)
 	.force("center", d3.forceCenter(0, 0))
 	.force("collision", collisionForce)
-	.force("cluster", clusterForce());
+	.force("cluster", clusterForce())
+	.force("containment", containmentForce());
 
 /**
  * Custom d3 force: for every active cluster, pull its members toward
@@ -654,6 +677,40 @@ const pullInput = pullRow
 		pullRow.select(".slider-val").text((+this.value).toFixed(2));
 	});
 pullRow.append("span").attr("class", "slider-val").text(clusterStrength.toFixed(2));
+
+// Containment radius slider
+const containRow = panel.append("div").attr("class", "panel-row");
+containRow.append("label").text("Containment");
+const containInput = containRow
+	.append("input")
+	.attr("type", "range")
+	.attr("min", 0)
+	.attr("max", 800)
+	.attr("step", 50)
+	.attr("value", containmentRadius)
+	.on("input", function (this: HTMLInputElement) {
+		containmentRadius = +this.value;
+		simulation.alpha(0.1).restart();
+		containRow.select(".slider-val").text(containmentRadius.toFixed(0));
+	});
+containRow.append("span").attr("class", "slider-val").text(containmentRadius.toFixed(0));
+
+// Containment strength slider
+const strengthRow = panel.append("div").attr("class", "panel-row");
+strengthRow.append("label").text("Contain strength");
+const strengthInput = strengthRow
+	.append("input")
+	.attr("type", "range")
+	.attr("min", 0)
+	.attr("max", 1)
+	.attr("step", 0.05)
+	.attr("value", containmentStrength)
+	.on("input", function (this: HTMLInputElement) {
+		containmentStrength = +this.value;
+		simulation.alpha(0.1).restart();
+		strengthRow.select(".slider-val").text(containmentStrength.toFixed(2));
+	});
+strengthRow.append("span").attr("class", "slider-val").text(containmentStrength.toFixed(2));
 
 function setVisible(keys: string[], on: boolean): void {
 	for (const k of keys) {
