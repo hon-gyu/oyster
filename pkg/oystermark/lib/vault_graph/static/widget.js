@@ -21,8 +21,8 @@
     }
     return adj2;
   }
-  function assignColors(labels, palette2) {
-    return new Map(labels.map((l, i) => [l, palette2[i % palette2.length]]));
+  function assignColors(labels, palette) {
+    return new Map(labels.map((l, i) => [l, palette[i % palette.length]]));
   }
   function buildFolderClusters(nodes, dirSelector, folderColor2) {
     const folders2 = [...new Set(nodes.map((n) => n.folder))];
@@ -64,41 +64,135 @@
   }
 
   // widget.ts
+  var C = {
+    // Seed layout (folder ring)
+    seedRadiusBase: 120,
+    seedRadiusPerFolder: 30,
+    seedJitter: 60,
+    // Hull padding around each node, in svg units
+    hullPad: 24,
+    // Zoom
+    zoomScaleExtent: [0.1, 8],
+    zoomButtonFactor: 1.4,
+    zoomTransitionMs: 200,
+    // Fit-to-screen
+    fitPad: 60,
+    fitMaxScale: 2,
+    fitSettleTicks: 300,
+    // Simulation reheat alphas
+    alphaSlider: 0.1,
+    // gentle reheat on a slider nudge
+    alphaReset: 0.5,
+    // stronger reheat on reset / initial load
+    alphaDragTarget: 0.3,
+    // alphaTarget while a node is being dragged
+    // Link appearance
+    linkColorBase: "#e0e0e0",
+    linkColorHover: "#ffcc00",
+    linkOpacityBase: 0.8,
+    linkOpacityDim: 0.15,
+    linkWidthBase: 1.5,
+    linkWidthHover: 2.5,
+    // Node hover dimming
+    nodeDimOpacity: 0.15,
+    // Palettes
+    folderPalette: [
+      "#4e79a7",
+      "#f28e2b",
+      "#e15759",
+      "#76b7b2",
+      "#59a14f",
+      "#edc948",
+      "#b07aa1",
+      "#ff9da7",
+      "#9c755f",
+      "#bab0ac"
+    ],
+    tagPalette: [
+      "#8dd3c7",
+      "#ffffb3",
+      "#bebada",
+      "#fb8072",
+      "#80b1d3",
+      "#fdb462",
+      "#b3de69",
+      "#fccde5",
+      "#d9d9d9",
+      "#bc80bd"
+    ]
+  };
+  var P = {
+    nodeRadius: {
+      label: "Node radius",
+      value: 14,
+      min: 5,
+      max: 25,
+      step: 1,
+      decimals: 0
+    },
+    labelFontSize: {
+      label: "Label size",
+      value: 16,
+      min: 10,
+      max: 24,
+      step: 1,
+      decimals: 0
+    },
+    linkDistance: {
+      label: "Link distance",
+      value: 70,
+      min: 10,
+      max: 100,
+      step: 1,
+      decimals: 0
+    },
+    chargeStrength: {
+      label: "Charge strength",
+      value: -80,
+      min: -200,
+      max: -20,
+      step: 5,
+      decimals: 0
+    },
+    collisionPadding: {
+      label: "Collision padding",
+      value: 6,
+      min: 0,
+      max: 20,
+      step: 1,
+      decimals: 0
+    },
+    clusterStrength: {
+      label: "Cluster pull",
+      value: 0.04,
+      min: 0,
+      max: 0.2,
+      step: 5e-3,
+      decimals: 2
+    },
+    containmentRadius: {
+      label: "Containment",
+      value: 600,
+      min: 0,
+      max: 1200,
+      step: 50,
+      decimals: 0
+    },
+    containmentStrength: {
+      label: "Contain strength",
+      value: 0.05,
+      min: 0,
+      max: 0.5,
+      step: 25e-4,
+      decimals: 2
+    }
+  };
   var graphConfig = window.__graphConfig ?? {
     dir: "all",
     tag: "all",
     default_dir: { include: ["*"] },
     default_tag: { include: ["*"] }
   };
-  var config = {
-    // Visual
-    nodeRadius: 14,
-    // circle radius in px
-    labelFontSize: 16,
-    // px
-    // Force simulation
-    linkDistance: 70,
-    // target edge length; smaller = tighter graph
-    chargeStrength: -80,
-    // node-node repulsion; less negative = tighter
-    collisionPadding: 6,
-    // collision radius = nodeRadius + this
-    // Initial seed positions (folder-based pre-layout)
-    seedRadiusBase: 120,
-    // minimum radius of the folder ring
-    seedRadiusPerFolder: 30,
-    // extra radius per folder so big vaults spread out
-    seedJitter: 60
-    // px of random offset within each folder cluster
-  };
-  var nodeRadius = config.nodeRadius;
-  var labelFontSize = config.labelFontSize;
-  var linkDistance = config.linkDistance;
-  var chargeStrength = config.chargeStrength;
-  var collisionPadding = config.collisionPadding;
-  var clusterStrength = 0.04;
-  var containmentRadius = 600;
-  var containmentStrength = 0.05;
   var data = window.__graphData;
   console.log(
     "[graph-view] nodes:",
@@ -116,23 +210,33 @@
   container.appendChild(debugEl);
   var adj = buildAdjacency(data.nodes, data.edges);
   var folders = [...new Set(data.nodes.map((n) => n.folder))];
-  var palette = [
-    "#4e79a7",
-    "#f28e2b",
-    "#e15759",
-    "#76b7b2",
-    "#59a14f",
-    "#edc948",
-    "#b07aa1",
-    "#ff9da7",
-    "#9c755f",
-    "#bab0ac"
-  ];
-  var folderColor = assignColors(folders, palette);
+  var folderColor = assignColors(folders, [...C.folderPalette]);
+  var allTags = [...new Set(data.nodes.flatMap((n) => n.tags || []))];
+  var tagColor = assignColors(allTags, [...C.tagPalette]);
+  var folderClusters = buildFolderClusters(
+    data.nodes,
+    graphConfig.dir,
+    folderColor
+  );
+  var tagClusters = buildTagClusters(
+    data.nodes,
+    graphConfig.tag,
+    tagColor
+  );
+  var allClusters = [...folderClusters, ...tagClusters];
+  var visibleKeys = initialVisibleKeys(
+    folderClusters,
+    tagClusters,
+    graphConfig.default_dir,
+    graphConfig.default_tag
+  );
+  function activeClusters2() {
+    return activeClusters(allClusters, visibleKeys);
+  }
   function seedNodePositions() {
     const seedRadius = Math.max(
-      config.seedRadiusBase,
-      folders.length * config.seedRadiusPerFolder
+      C.seedRadiusBase,
+      folders.length * C.seedRadiusPerFolder
     );
     const folderHome = /* @__PURE__ */ new Map();
     folders.forEach((f, i) => {
@@ -144,8 +248,8 @@
     });
     data.nodes.forEach((n) => {
       const [hx, hy] = folderHome.get(n.folder);
-      n.x = hx + (Math.random() - 0.5) * config.seedJitter;
-      n.y = hy + (Math.random() - 0.5) * config.seedJitter;
+      n.x = hx + (Math.random() - 0.5) * C.seedJitter;
+      n.y = hy + (Math.random() - 0.5) * C.seedJitter;
     });
   }
   seedNodePositions();
@@ -155,22 +259,20 @@
       n.vx = 0;
       n.vy = 0;
     });
-    simulation.alpha(0.5).restart();
+    simulation.alpha(C.alphaReset).restart();
   }
-  var svg = d3.select("#graph-view").append("svg").attr("width", width).attr("height", height);
-  svg.append("defs").append("marker").attr("id", "arrow").attr("viewBox", "0 -3 6 6").attr("refX", 12).attr("refY", 0).attr("markerWidth", 6).attr("markerHeight", 6).attr("orient", "auto").append("path").attr("d", "M0,-3L6,0L0,3").attr("fill", "#e0e0e0");
-  var root = svg.append("g").attr("class", "zoom-root");
-  var linkForce = d3.forceLink(data.edges).id((d) => d.id).distance(() => linkDistance);
-  var chargeForce = d3.forceManyBody().strength(() => chargeStrength);
-  var collisionForce = d3.forceCollide().radius(() => nodeRadius + collisionPadding);
+  var linkForce = d3.forceLink(data.edges).id((d) => d.id).distance(() => P.linkDistance.value);
+  var chargeForce = d3.forceManyBody().strength(() => P.chargeStrength.value);
+  var collisionForce = d3.forceCollide().radius(() => P.nodeRadius.value + P.collisionPadding.value);
   function containmentForce() {
     function force() {
-      if (containmentRadius <= 0 || containmentStrength <= 0) return;
+      const R = P.containmentRadius.value;
+      const k = P.containmentStrength.value;
+      if (R <= 0 || k <= 0) return;
       for (const n of data.nodes) {
         const r = Math.sqrt(n.x * n.x + n.y * n.y);
-        if (r > containmentRadius) {
-          const ratio = containmentRadius / r;
-          const k = containmentStrength;
+        if (r > R) {
+          const ratio = R / r;
           n.x += (n.x * ratio - n.x) * k;
           n.y += (n.y * ratio - n.y) * k;
           n.vx *= 1 - k;
@@ -182,10 +284,10 @@
     };
     return force;
   }
-  var simulation = d3.forceSimulation(data.nodes).force("link", linkForce).force("charge", chargeForce).force("center", d3.forceCenter(0, 0)).force("collision", collisionForce).force("cluster", clusterForce()).force("containment", containmentForce()).alpha(0.5);
   function clusterForce() {
     function force(alpha) {
-      if (clusterStrength === 0) return;
+      const base = P.clusterStrength.value;
+      if (base === 0) return;
       for (const c of activeClusters2()) {
         let cx = 0;
         let cy = 0;
@@ -195,7 +297,7 @@
         }
         cx /= c.nodes.length;
         cy /= c.nodes.length;
-        const k = clusterStrength * alpha;
+        const k = base * alpha;
         for (const n of c.nodes) {
           n.vx += (cx - n.x) * k;
           n.vy += (cy - n.y) * k;
@@ -206,43 +308,12 @@
     };
     return force;
   }
-  var tagPalette = [
-    "#8dd3c7",
-    "#ffffb3",
-    "#bebada",
-    "#fb8072",
-    "#80b1d3",
-    "#fdb462",
-    "#b3de69",
-    "#fccde5",
-    "#d9d9d9",
-    "#bc80bd"
-  ];
-  var allTags = [...new Set(data.nodes.flatMap((n) => n.tags || []))];
-  var tagColor = assignColors(allTags, tagPalette);
-  var folderClusters = buildFolderClusters(
-    data.nodes,
-    graphConfig.dir,
-    folderColor
-  );
-  var tagClusters = buildTagClusters(
-    data.nodes,
-    graphConfig.tag,
-    tagColor
-  );
-  var visibleKeys = initialVisibleKeys(
-    folderClusters,
-    tagClusters,
-    graphConfig.default_dir,
-    graphConfig.default_tag
-  );
+  var simulation = d3.forceSimulation(data.nodes).force("link", linkForce).force("charge", chargeForce).force("center", d3.forceCenter(0, 0)).force("collision", collisionForce).force("cluster", clusterForce()).force("containment", containmentForce()).alpha(C.alphaReset);
+  var svg = d3.select("#graph-view").append("svg").attr("width", width).attr("height", height);
+  svg.append("defs").append("marker").attr("id", "arrow").attr("viewBox", "0 -3 6 6").attr("refX", 12).attr("refY", 0).attr("markerWidth", 6).attr("markerHeight", 6).attr("orient", "auto").append("path").attr("d", "M0,-3L6,0L0,3").attr("fill", C.linkColorBase);
+  var root = svg.append("g").attr("class", "zoom-root");
   var hullLayer = root.insert("g", ":first-child").attr("class", "hulls");
-  var HULL_PAD = 24;
   var hullPath = d3.line().curve(d3.curveCatmullRomClosed.alpha(1));
-  var allClusters = [...folderClusters, ...tagClusters];
-  function activeClusters2() {
-    return activeClusters(allClusters, visibleKeys);
-  }
   function renderHulls() {
     const sel = hullLayer.selectAll("path").data(activeClusters2(), (c) => c.key);
     sel.exit().remove();
@@ -253,45 +324,56 @@
   function updateHullGeometry() {
     hullLayer.selectAll("path").attr("d", (c) => {
       const pts = c.nodes.flatMap((n) => [
-        [n.x + HULL_PAD, n.y],
-        [n.x - HULL_PAD, n.y],
-        [n.x, n.y + HULL_PAD],
-        [n.x, n.y - HULL_PAD]
+        [n.x + C.hullPad, n.y],
+        [n.x - C.hullPad, n.y],
+        [n.x, n.y + C.hullPad],
+        [n.x, n.y - C.hullPad]
       ]);
       const hull = d3.polygonHull(pts);
       return hull ? `${hullPath(hull)}Z` : null;
     });
   }
-  var link = root.append("g").attr("class", "links").attr("stroke", "#e0e0e0").attr("stroke-opacity", 0.8).selectAll("line").data(data.edges).join("line").attr("stroke-width", 1.5).attr("marker-end", "url(#arrow)");
-  var node = root.append("g").attr("class", "nodes").selectAll("circle").data(data.nodes).join("circle").attr("r", () => nodeRadius).attr("fill", (d) => folderColor.get(d.folder)).attr("stroke", "#fff").attr("stroke-width", 1.5).style("cursor", "pointer").call(drag(simulation));
-  var label = root.append("g").attr("class", "labels").selectAll("text").data(data.nodes).join("text").text((d) => d.title).attr("font-size", () => labelFontSize).attr("font-family", "sans-serif").attr("dx", () => nodeRadius + 4).attr("dy", 4);
+  function drag(sim) {
+    return d3.drag().on("start", (event, d) => {
+      if (!event.active) sim.alphaTarget(C.alphaDragTarget).restart();
+      d.fx = d.x;
+      d.fy = d.y;
+    }).on("drag", (event, d) => {
+      d.fx = event.x;
+      d.fy = event.y;
+    }).on("end", (event, d) => {
+      if (!event.active) sim.alphaTarget(0);
+      d.fx = null;
+      d.fy = null;
+    });
+  }
+  var link = root.append("g").attr("class", "links").attr("stroke", C.linkColorBase).attr("stroke-opacity", C.linkOpacityBase).selectAll("line").data(data.edges).join("line").attr("stroke-width", C.linkWidthBase).attr("marker-end", "url(#arrow)");
+  var node = root.append("g").attr("class", "nodes").selectAll("circle").data(data.nodes).join("circle").attr("r", () => P.nodeRadius.value).attr("fill", (d) => folderColor.get(d.folder)).attr("stroke", "#fff").attr("stroke-width", 1.5).style("cursor", "pointer").call(drag(simulation));
+  var label = root.append("g").attr("class", "labels").selectAll("text").data(data.nodes).join("text").text((d) => d.title).attr("font-size", () => P.labelFontSize.value).attr("font-family", "sans-serif").attr("dx", () => P.nodeRadius.value + 4).attr("dy", 4);
   node.on("mouseenter", (_event, d) => {
     const neighbors = adj.get(d.id);
-    node.attr(
-      "opacity",
-      (n) => n.id === d.id || neighbors.has(n.id) ? 1 : 0.15
+    const visible = (n) => n.id === d.id || neighbors.has(n.id) ? 1 : C.nodeDimOpacity;
+    const touchesD = (e) => {
+      const sid = typeof e.source === "string" ? e.source : e.source.id;
+      const tid = typeof e.target === "string" ? e.target : e.target.id;
+      return sid === d.id || tid === d.id;
+    };
+    node.attr("opacity", visible);
+    label.attr("opacity", visible);
+    link.attr(
+      "stroke",
+      (e) => touchesD(e) ? C.linkColorHover : C.linkColorBase
+    ).attr(
+      "stroke-opacity",
+      (e) => touchesD(e) ? 1 : C.linkOpacityDim
+    ).attr(
+      "stroke-width",
+      (e) => touchesD(e) ? C.linkWidthHover : C.linkWidthBase
     );
-    label.attr(
-      "opacity",
-      (n) => n.id === d.id || neighbors.has(n.id) ? 1 : 0.15
-    );
-    link.attr("stroke", (e) => {
-      const sid = typeof e.source === "string" ? e.source : e.source.id;
-      const tid = typeof e.target === "string" ? e.target : e.target.id;
-      return sid === d.id || tid === d.id ? "#ffcc00" : "#e0e0e0";
-    }).attr("stroke-opacity", (e) => {
-      const sid = typeof e.source === "string" ? e.source : e.source.id;
-      const tid = typeof e.target === "string" ? e.target : e.target.id;
-      return sid === d.id || tid === d.id ? 1 : 0.15;
-    }).attr("stroke-width", (e) => {
-      const sid = typeof e.source === "string" ? e.source : e.source.id;
-      const tid = typeof e.target === "string" ? e.target : e.target.id;
-      return sid === d.id || tid === d.id ? 2.5 : 1.5;
-    });
   }).on("mouseleave", () => {
     node.attr("opacity", 1);
     label.attr("opacity", 1);
-    link.attr("stroke", "#e0e0e0").attr("stroke-opacity", 0.8).attr("stroke-width", 1.5);
+    link.attr("stroke", C.linkColorBase).attr("stroke-opacity", C.linkOpacityBase).attr("stroke-width", C.linkWidthBase);
   });
   node.on("click", (_event, d) => {
     window.location.href = d.href;
@@ -314,46 +396,35 @@
     label.attr("x", (d) => d.x).attr("y", (d) => d.y);
     updateHullGeometry();
   });
-  var zoom = d3.zoom().scaleExtent([0.1, 8]).on("zoom", (event) => {
+  var zoom = d3.zoom().scaleExtent(C.zoomScaleExtent).on("zoom", (event) => {
     root.attr("transform", event.transform);
   });
   svg.call(zoom);
   function fitToScreen() {
-    for (let i = 0; i < 300; i++) simulation.tick();
-    simulation.alpha(0.1).restart();
+    for (let i = 0; i < C.fitSettleTicks; i++) simulation.tick();
+    simulation.alpha(C.alphaSlider).restart();
     const curW = container.clientWidth || width;
     const curH = container.clientHeight || height;
-    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
     data.nodes.forEach((n) => {
       if (n.x < minX) minX = n.x;
       if (n.y < minY) minY = n.y;
       if (n.x > maxX) maxX = n.x;
       if (n.y > maxY) maxY = n.y;
     });
-    const pad = 60;
-    const dx = maxX - minX + pad * 2;
-    const dy = maxY - minY + pad * 2;
+    const dx = maxX - minX + C.fitPad * 2;
+    const dy = maxY - minY + C.fitPad * 2;
     const cx = (minX + maxX) / 2;
     const cy = (minY + maxY) / 2;
-    const scale = Math.min(curW / dx, curH / dy, 2);
+    const scale = Math.min(curW / dx, curH / dy, C.fitMaxScale);
     const tx = curW / 2 - scale * cx;
     const ty = curH / 2 - scale * cy;
     svg.call(zoom.transform, d3.zoomIdentity.translate(tx, ty).scale(scale));
   }
   fitToScreen();
-  var controls = d3.select("#graph-view").append("div").attr("class", "zoom-controls");
-  controls.append("button").text("+").on("click", () => {
-    svg.transition().duration(200).call(zoom.scaleBy, 1.4);
-  });
-  controls.append("button").text("\u2212").on("click", () => {
-    svg.transition().duration(200).call(zoom.scaleBy, 1 / 1.4);
-  });
-  controls.append("button").text("\u2922").attr("title", "Fit").on("click", () => {
-    fitToScreen();
-  });
-  controls.append("button").text("\u21BB").attr("title", "Reset layout").on("click", () => {
-    resetLayout();
-  });
   var backdrop = d3.select("body").append("div").attr("id", "graph-view-backdrop").on("click", () => toggleMaximize());
   function toggleMaximize() {
     const isMax = container.classList.toggle("maximized");
@@ -364,6 +435,15 @@
     svg.attr("width", w).attr("height", h);
     fitToScreen();
   }
+  var controls = d3.select("#graph-view").append("div").attr("class", "zoom-controls");
+  controls.append("button").text("+").on("click", () => {
+    svg.transition().duration(C.zoomTransitionMs).call(zoom.scaleBy, C.zoomButtonFactor);
+  });
+  controls.append("button").text("\u2212").on("click", () => {
+    svg.transition().duration(C.zoomTransitionMs).call(zoom.scaleBy, 1 / C.zoomButtonFactor);
+  });
+  controls.append("button").text("\u2922").attr("title", "Fit").on("click", fitToScreen);
+  controls.append("button").text("\u21BB").attr("title", "Reset layout").on("click", resetLayout);
   controls.append("button").text("\u26F6").attr("title", "Expand").attr("class", "maximize-btn").on("click", toggleMaximize);
   d3.select("#graph-view").append("button").attr("class", "maximize-close").attr("title", "Close").text("\u2715").on("click", toggleMaximize);
   document.addEventListener("keydown", (e) => {
@@ -372,10 +452,10 @@
     }
   });
   var panel = d3.select("#graph-view").append("div").attr("class", "settings-panel collapsed");
-  var toggle = panel.append("div").attr("class", "panel-toggle");
-  toggle.append("span").attr("class", "panel-toggle-label").text("Settings");
-  toggle.append("span").attr("class", "panel-toggle-chevron").text("\u25B2");
-  toggle.on("click", () => {
+  var toggleBar = panel.append("div").attr("class", "panel-toggle");
+  toggleBar.append("span").attr("class", "panel-toggle-label").text("Settings");
+  toggleBar.append("span").attr("class", "panel-toggle-chevron").text("\u25B2");
+  toggleBar.on("click", () => {
     const collapsed = panel.classed("collapsed");
     panel.classed("collapsed", !collapsed);
     panel.select(".panel-toggle-chevron").text(collapsed ? "\u25BC" : "\u25B2");
@@ -383,77 +463,35 @@
     el.style.width = "";
     el.style.height = "";
   });
-  var radiusRow = panel.append("div").attr("class", "panel-row");
-  radiusRow.append("label").text("Node radius");
-  var radiusInput = radiusRow.append("input").attr("type", "range").attr("min", 5).attr("max", 25).attr("step", 1).attr("value", nodeRadius).on("input", function() {
-    nodeRadius = +this.value;
-    node.attr("r", () => nodeRadius);
-    label.attr("dx", () => nodeRadius + 4);
+  function makeSlider(p, onChange) {
+    const row = panel.append("div").attr("class", "panel-row");
+    row.append("label").text(p.label);
+    const input = row.append("input").attr("type", "range").attr("min", p.min).attr("max", p.max).attr("step", p.step).attr("value", p.value);
+    const valSpan = row.append("span").attr("class", "slider-val").text(p.value.toFixed(p.decimals));
+    input.on("input", function() {
+      p.value = +this.value;
+      valSpan.text(p.value.toFixed(p.decimals));
+      onChange?.(p.value);
+      simulation.alpha(C.alphaSlider).restart();
+    });
+  }
+  makeSlider(P.nodeRadius, (v) => {
+    node.attr("r", () => v);
+    label.attr("dx", () => v + 4);
     simulation.force(
       "collision",
-      d3.forceCollide().radius(() => nodeRadius + collisionPadding)
+      d3.forceCollide().radius(() => P.nodeRadius.value + P.collisionPadding.value)
     );
-    simulation.alpha(0.1).restart();
-    radiusRow.select(".slider-val").text(nodeRadius.toFixed(0));
   });
-  radiusRow.append("span").attr("class", "slider-val").text(nodeRadius.toFixed(0));
-  var labelRow = panel.append("div").attr("class", "panel-row");
-  labelRow.append("label").text("Label size");
-  var labelInput = labelRow.append("input").attr("type", "range").attr("min", 10).attr("max", 24).attr("step", 1).attr("value", labelFontSize).on("input", function() {
-    labelFontSize = +this.value;
-    label.attr("font-size", () => labelFontSize);
-    simulation.alpha(0.1).restart();
-    labelRow.select(".slider-val").text(labelFontSize.toFixed(0));
+  makeSlider(P.labelFontSize, (v) => {
+    label.attr("font-size", () => v);
   });
-  labelRow.append("span").attr("class", "slider-val").text(labelFontSize.toFixed(0));
-  var linkRow = panel.append("div").attr("class", "panel-row");
-  linkRow.append("label").text("Link distance");
-  var linkInput = linkRow.append("input").attr("type", "range").attr("min", 10).attr("max", 100).attr("step", 1).attr("value", linkDistance).on("input", function() {
-    linkDistance = +this.value;
-    simulation.alpha(0.1).restart();
-    linkRow.select(".slider-val").text(linkDistance.toFixed(0));
-  });
-  linkRow.append("span").attr("class", "slider-val").text(linkDistance.toFixed(0));
-  var chargeRow = panel.append("div").attr("class", "panel-row");
-  chargeRow.append("label").text("Charge strength");
-  var chargeInput = chargeRow.append("input").attr("type", "range").attr("min", -200).attr("max", -20).attr("step", 5).attr("value", chargeStrength).on("input", function() {
-    chargeStrength = +this.value;
-    simulation.alpha(0.1).restart();
-    chargeRow.select(".slider-val").text(chargeStrength.toFixed(0));
-  });
-  chargeRow.append("span").attr("class", "slider-val").text(chargeStrength.toFixed(0));
-  var collisionRow = panel.append("div").attr("class", "panel-row");
-  collisionRow.append("label").text("Collision padding");
-  var collisionInput = collisionRow.append("input").attr("type", "range").attr("min", 0).attr("max", 20).attr("step", 1).attr("value", collisionPadding).on("input", function() {
-    collisionPadding = +this.value;
-    simulation.alpha(0.1).restart();
-    collisionRow.select(".slider-val").text(collisionPadding.toFixed(0));
-  });
-  collisionRow.append("span").attr("class", "slider-val").text(collisionPadding.toFixed(0));
-  var pullRow = panel.append("div").attr("class", "panel-row");
-  pullRow.append("label").text("Cluster pull");
-  var pullInput = pullRow.append("input").attr("type", "range").attr("min", 0).attr("max", 0.2).attr("step", 5e-3).attr("value", clusterStrength).on("input", function() {
-    clusterStrength = +this.value;
-    simulation.alpha(0.1).restart();
-    pullRow.select(".slider-val").text((+this.value).toFixed(2));
-  });
-  pullRow.append("span").attr("class", "slider-val").text(clusterStrength.toFixed(2));
-  var containRow = panel.append("div").attr("class", "panel-row");
-  containRow.append("label").text("Containment");
-  var containInput = containRow.append("input").attr("type", "range").attr("min", 0).attr("max", 1200).attr("step", 50).attr("value", containmentRadius).on("input", function() {
-    containmentRadius = +this.value;
-    simulation.alpha(0.1).restart();
-    containRow.select(".slider-val").text(containmentRadius.toFixed(0));
-  });
-  containRow.append("span").attr("class", "slider-val").text(containmentRadius.toFixed(0));
-  var strengthRow = panel.append("div").attr("class", "panel-row");
-  strengthRow.append("label").text("Contain strength");
-  var strengthInput = strengthRow.append("input").attr("type", "range").attr("min", 0).attr("max", 0.5).attr("step", 25e-4).attr("value", containmentStrength).on("input", function() {
-    containmentStrength = +this.value;
-    simulation.alpha(0.1).restart();
-    strengthRow.select(".slider-val").text(containmentStrength.toFixed(2));
-  });
-  strengthRow.append("span").attr("class", "slider-val").text(containmentStrength.toFixed(2));
+  makeSlider(P.linkDistance);
+  makeSlider(P.chargeStrength);
+  makeSlider(P.collisionPadding);
+  makeSlider(P.clusterStrength);
+  makeSlider(P.containmentRadius);
+  makeSlider(P.containmentStrength);
   function setVisible(keys, on) {
     for (const k of keys) {
       if (on) visibleKeys.add(k);
@@ -463,7 +501,7 @@
       return visibleKeys.has(this.dataset.key);
     });
     renderHulls();
-    simulation.alpha(0.5).restart();
+    simulation.alpha(C.alphaReset).restart();
   }
   function buildSection(title, clusters) {
     const section = panel.append("div").attr("class", "panel-section");
@@ -492,7 +530,7 @@
       if (this.checked) visibleKeys.add(c.key);
       else visibleKeys.delete(c.key);
       renderHulls();
-      simulation.alpha(0.1).restart();
+      simulation.alpha(C.alphaSlider).restart();
     });
     items.append("span").attr("class", "swatch").style("background", (c) => c.color);
     items.append("span").attr("class", "cluster-label").text((c) => `${c.label} (${c.nodes.length})`);
@@ -500,18 +538,4 @@
   buildSection("Folders", folderClusters);
   buildSection("Tags", tagClusters);
   renderHulls();
-  function drag(simulation2) {
-    return d3.drag().on("start", (event, d) => {
-      if (!event.active) simulation2.alphaTarget(0.3).restart();
-      d.fx = d.x;
-      d.fy = d.y;
-    }).on("drag", (event, d) => {
-      d.fx = event.x;
-      d.fy = event.y;
-    }).on("end", (event, d) => {
-      if (!event.active) simulation2.alphaTarget(0);
-      d.fx = null;
-      d.fy = null;
-    });
-  }
 })();
