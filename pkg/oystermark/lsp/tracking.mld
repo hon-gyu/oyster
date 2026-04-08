@@ -9,13 +9,13 @@ Subsections are encouraged if needed.
 
 {1 diagnostics}
 - Spec: {!page-"feature-diagnostics"}
-- Implementation: TODO
-- Test: TODO
+- Implementation: {!module-Lsp_lib.Diagnostics.implementation}
+- Test: {!module-Lsp_lib.Diagnostics.test}
 
 {1 hover}
 - Spec: {!page-"feature-hover"}
-- Implementation: TODO
-- Test: TODO
+- Implementation: {!module-Lsp_lib.Hover.implementation}
+- Test: {!module-Lsp_lib.Hover.test}
 
 {1 completion}
 - Spec: {!page-"feature-completion"}
@@ -24,8 +24,8 @@ Subsections are encouraged if needed.
 
 {1 find-references}
 - Spec: {!page-"feature-find-references"}
-- Implementation: TODO
-- Test: TODO
+- Implementation: {!module-Lsp_lib.Find_references.implementation}
+- Test: {!module-Lsp_lib.Find_references.test}
 
 {1 utf16-positions}
 - Spec: {!page-"feature-utf16-positions"}
@@ -34,8 +34,8 @@ Subsections are encouraged if needed.
 
 {1 inlay-hints}
 - Spec: {!page-"feature-inlay-hints"}
-- Implementation: TODO
-- Test: TODO
+- Implementation: {!module-Lsp_lib.Inlay_hints.implementation}
+- Test: {!module-Lsp_lib.Inlay_hints.test}
 
 {1 index}
 - Spec: {!page-"feature-index"}
