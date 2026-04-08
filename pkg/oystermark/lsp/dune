@@ -8,7 +8,9 @@
   link_collect
   go_to_definition
   diagnostics
-  hover)
+  hover
+  find_references
+  inlay_hints)
  (libraries oystermark core trace.core)
  (inline_tests)
  (preprocess

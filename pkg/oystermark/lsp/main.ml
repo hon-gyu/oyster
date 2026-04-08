@@ -38,6 +38,10 @@ class oystermark_server =
     method spawn_query_handler f = Linol_eio.spawn f
     method! config_definition = Some (`Bool true)
     method! config_hover = Some (`Bool true)
+    method! config_inlay_hints = Some (`Bool true)
+
+    method! config_modify_capabilities (c : ServerCapabilities.t) =
+      { c with referencesProvider = Some (`Bool true) }
 
     method! config_sync_opts =
       TextDocumentSyncOptions.create
@@ -64,20 +68,31 @@ class oystermark_server =
       | None -> ()
       | Some root -> index <- build_vault_index root
 
+    method private rel_path_of_uri (uri : DocumentUri.t) : string =
+      let file_path = DocumentUri.to_path uri in
+      match vault_root with
+      | None -> file_path
+      | Some root ->
+        let prefix = root ^ "/" in
+        let plen = String.length prefix in
+        if String.length file_path >= plen
+           && String.equal (String.sub file_path ~pos:0 ~len:plen) prefix
+        then String.sub file_path ~pos:plen ~len:(String.length file_path - plen)
+        else file_path
+
+    method private read_file (rp : string) : string option =
+      match vault_root with
+      | None -> None
+      | Some root ->
+        let fp = Filename.concat root rp in
+        (try Some (In_channel.read_all fp) with
+         | _ -> None)
+
     method private publish_diagnostics ~notify_back ~uri ~content =
       match vault_root with
       | None -> ()
-      | Some root ->
-        let file_path = DocumentUri.to_path uri in
-        let rel_path =
-          let prefix = root ^ "/" in
-          let plen = String.length prefix in
-          if
-            String.length file_path >= plen
-            && String.equal (String.sub file_path ~pos:0 ~len:plen) prefix
-          then String.sub file_path ~pos:plen ~len:(String.length file_path - plen)
-          else file_path
-        in
+      | Some _ ->
+        let rel_path = self#rel_path_of_uri uri in
         let diags = Lsp_lib.Diagnostics.compute ~index ~rel_path ~content () in
         let lsp_diags =
           List.map diags ~f:(fun (d : Lsp_lib.Diagnostics.diagnostic) ->
@@ -121,22 +136,9 @@ class oystermark_server =
       (doc_st : doc_state) =
       match vault_root with
       | None -> None
-      | Some root ->
-        let file_path = DocumentUri.to_path uri in
-        let rel_path =
-          let prefix = root ^ "/" in
-          let plen = String.length prefix in
-          if
-            String.length file_path >= plen
-            && String.equal (String.sub file_path ~pos:0 ~len:plen) prefix
-          then String.sub file_path ~pos:plen ~len:(String.length file_path - plen)
-          else file_path
-        in
-        let read_file rp =
-          let fp = Filename.concat root rp in
-          try Some (In_channel.read_all fp) with
-          | _ -> None
-        in
+      | Some _ ->
+        let rel_path = self#rel_path_of_uri uri in
+        let read_file = self#read_file in
         (match
            Lsp_lib.Hover.hover
              ~index
@@ -175,16 +177,7 @@ class oystermark_server =
       match vault_root with
       | None -> None
       | Some root ->
-        let file_path = DocumentUri.to_path uri in
-        let rel_path =
-          let prefix = root ^ "/" in
-          let plen = String.length prefix in
-          if
-            String.length file_path >= plen
-            && String.equal (String.sub file_path ~pos:0 ~len:plen) prefix
-          then String.sub file_path ~pos:plen ~len:(String.length file_path - plen)
-          else file_path
-        in
+        let rel_path = self#rel_path_of_uri uri in
         (match
            Lsp_lib.Go_to_definition.go_to_definition
              ~index
@@ -201,6 +194,100 @@ class oystermark_server =
            let pos = Position.create ~line ~character:0 in
            let range = Range.create ~start:pos ~end_:pos in
            Some (`Location [ Location.create ~uri ~range ]))
+
+    method! on_request_unhandled
+      : type r.
+        notify_back:_ -> id:_ -> r Linol.Lsp.Client_request.t -> r =
+      fun ~notify_back:_ ~id:_ (req : r Linol.Lsp.Client_request.t) ->
+        match req with
+        | Linol.Lsp.Client_request.TextDocumentReferences params ->
+          (match vault_root with
+           | None -> None
+           | Some root ->
+             let uri = params.textDocument.uri in
+             let pos = params.position in
+             let rel_path = self#rel_path_of_uri uri in
+             let read_file = self#read_file in
+             let content =
+               let fp = Filename.concat root rel_path in
+               try In_channel.read_all fp with
+               | _ -> ""
+             in
+             let refs =
+               Lsp_lib.Find_references.find_references
+                 ~index
+                 ~rel_path
+                 ~content
+                 ~line:pos.line
+                 ~character:pos.character
+                 ~read_file
+                 ()
+             in
+             let locations =
+               List.map refs ~f:(fun (r : Lsp_lib.Find_references.reference) ->
+                 let full = Filename.concat root r.rel_path in
+                 let ref_uri = DocumentUri.of_path full in
+                 let ref_content =
+                   match read_file r.rel_path with
+                   | Some c -> c
+                   | None -> ""
+                 in
+                 let start_pos =
+                   Lsp_lib.Util.position_of_byte_offset ref_content r.first_byte
+                 in
+                 let end_pos =
+                   Lsp_lib.Util.position_of_byte_offset ref_content r.last_byte
+                 in
+                 let to_lsp_pos (line, character) =
+                   Position.create ~line ~character
+                 in
+                 let range =
+                   Range.create
+                     ~start:(to_lsp_pos start_pos)
+                     ~end_:(to_lsp_pos end_pos)
+                 in
+                 Location.create ~uri:ref_uri ~range)
+             in
+             Some locations)
+        | _ -> failwith "unhandled request"
+
+    method! on_req_inlay_hint ~notify_back:_ ~id:_ ~uri ~range () =
+      match vault_root with
+      | None -> None
+      | Some root ->
+        let rel_path = self#rel_path_of_uri uri in
+        let read_file = self#read_file in
+        let content =
+          let fp = Filename.concat root rel_path in
+          try In_channel.read_all fp with
+          | _ -> ""
+        in
+        let range_start_line = range.Range.start.line in
+        let range_end_line = range.end_.line + 1 in
+        let hints =
+          Lsp_lib.Inlay_hints.inlay_hints
+            ~index
+            ~rel_path
+            ~content
+            ~range_start_line
+            ~range_end_line
+            ~read_file
+            ()
+        in
+        (match hints with
+         | [] -> Some []
+         | _ ->
+           let lsp_hints =
+             List.map hints ~f:(fun (h : Lsp_lib.Inlay_hints.hint) ->
+               let position = Position.create ~line:h.line ~character:h.character in
+               InlayHint.create
+                 ~position
+                 ~label:(`String h.label)
+                 ~kind:InlayHintKind.Parameter
+                 ~paddingLeft:true
+                 ())
+           in
+           Some lsp_hints)
   end
 
 let () =

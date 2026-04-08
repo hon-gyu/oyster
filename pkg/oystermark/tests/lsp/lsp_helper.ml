@@ -200,6 +200,52 @@ let hover (s : session) ~(rel_path : string) ~(line : int) ~(character : int)
   Yojson.Safe.Util.member "result" resp
 ;;
 
+(** Send a textDocument/references request and return just the result. *)
+let references (s : session) ~(rel_path : string) ~(line : int) ~(character : int)
+  : Yojson.Safe.t
+  =
+  let id = fresh_id s in
+  let full_path = Filename.concat s.vault_root rel_path in
+  let uri = sprintf "file://%s" full_path in
+  let params =
+    `Assoc
+      [ "textDocument", `Assoc [ "uri", `String uri ]
+      ; "position", `Assoc [ "line", `Int line; "character", `Int character ]
+      ; "context", `Assoc [ "includeDeclaration", `Bool true ]
+      ]
+  in
+  send_message s.oc (make_request ~id ~method_:"textDocument/references" params);
+  let resp = read_response s.ic ~id in
+  Yojson.Safe.Util.member "result" resp
+;;
+
+(** Send a textDocument/inlayHint request and return just the result. *)
+let inlay_hint
+      (s : session)
+      ~(rel_path : string)
+      ~(start_line : int)
+      ~(end_line : int)
+  : Yojson.Safe.t
+  =
+  let id = fresh_id s in
+  let full_path = Filename.concat s.vault_root rel_path in
+  let uri = sprintf "file://%s" full_path in
+  let params =
+    `Assoc
+      [ "textDocument", `Assoc [ "uri", `String uri ]
+      ; ( "range"
+        , `Assoc
+            [ ( "start"
+              , `Assoc [ "line", `Int start_line; "character", `Int 0 ] )
+            ; "end", `Assoc [ "line", `Int end_line; "character", `Int 0 ]
+            ] )
+      ]
+  in
+  send_message s.oc (make_request ~id ~method_:"textDocument/inlayHint" params);
+  let resp = read_response s.ic ~id in
+  Yojson.Safe.Util.member "result" resp
+;;
+
 (* Result parsers
    ================ *)
 
@@ -232,6 +278,59 @@ let parse_hover_result (result : Yojson.Safe.t) : string option =
   | json ->
     let contents = Yojson.Safe.Util.member "contents" json in
     Some Yojson.Safe.Util.(member "value" contents |> to_string)
+;;
+
+(** Parse a JSON-RPC references result into a list of [(rel_path, start_line, start_char)] triples,
+    sorted by path then position. *)
+let parse_references_result (vault_root : string) (result : Yojson.Safe.t)
+  : (string * int * int) list
+  =
+  match result with
+  | `Null -> []
+  | `List locs ->
+    let parsed =
+      List.map locs ~f:(fun loc ->
+        let uri = Yojson.Safe.Util.(member "uri" loc |> to_string) in
+        let range = Yojson.Safe.Util.member "range" loc in
+        let start = Yojson.Safe.Util.member "start" range in
+        let line = Yojson.Safe.Util.(member "line" start |> to_int) in
+        let character = Yojson.Safe.Util.(member "character" start |> to_int) in
+        let path =
+          let raw = String.chop_prefix_exn uri ~prefix:"file://" in
+          match String.chop_prefix raw ~prefix:(vault_root ^ "/") with
+          | Some rel -> rel
+          | None -> raw
+        in
+        path, line, character)
+    in
+    List.sort parsed ~compare:(fun (p1, l1, c1) (p2, l2, c2) ->
+      let c = String.compare p1 p2 in
+      if c <> 0
+      then c
+      else (
+        let c = Int.compare l1 l2 in
+        if c <> 0 then c else Int.compare c1 c2))
+  | other -> failwithf "unexpected references result: %s" (Yojson.Safe.to_string other) ()
+;;
+
+(** Parse a JSON-RPC inlayHint result into a list of [(line, character, label)] triples,
+    sorted by line then character. *)
+let parse_inlay_hint_result (result : Yojson.Safe.t) : (int * int * string) list =
+  match result with
+  | `Null -> []
+  | `List hints ->
+    let parsed =
+      List.map hints ~f:(fun hint ->
+        let pos = Yojson.Safe.Util.member "position" hint in
+        let line = Yojson.Safe.Util.(member "line" pos |> to_int) in
+        let character = Yojson.Safe.Util.(member "character" pos |> to_int) in
+        let label = Yojson.Safe.Util.(member "label" hint |> to_string) in
+        line, character, label)
+    in
+    List.sort parsed ~compare:(fun (l1, c1, _) (l2, c2, _) ->
+      let c = Int.compare l1 l2 in
+      if c <> 0 then c else Int.compare c1 c2)
+  | other -> failwithf "unexpected inlay hint result: %s" (Yojson.Safe.to_string other) ()
 ;;
 
 (** Parse a publishDiagnostics notification into a list of [(message, line, character)] triples,
