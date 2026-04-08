@@ -1,0 +1,3 @@
+# Gamma
+
+See [[empty]].

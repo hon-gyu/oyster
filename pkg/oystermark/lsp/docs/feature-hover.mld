@@ -28,14 +28,22 @@ If the cursor falls on a recognized link, return a
 
 The hover content is a Markdown string with [MarkupKind.Markdown].
 
+Every hover result begins with a {b path header} of the form
+[*Path*:<relative-path>]. For self-referencing fragments the current
+file's path is used.
+
+When the target file is empty, the hover shows the path header followed
+by [*(empty)*].
+
 {ul
-  {- {b Resolved note / file link} ([[[note]]]): the raw markdown
-     content of the target file.}
-  {- {b Resolved heading fragment} ([[[note#Heading]]]): the markdown
-     content of the section starting at the matched heading, up to (but
-     not including) the next heading of equal or higher level.}
-  {- {b Resolved block-ID fragment} ([[[note#^blockid]]]): the
-     paragraph that carries the block ID.}
+  {- {b Resolved note / file link} ([[[note]]]): path header, then the
+     raw markdown content of the target file.}
+  {- {b Resolved heading fragment} ([[[note#Heading]]]): path header,
+     then the markdown content of the section starting at the matched
+     heading, up to (but not including) the next heading of equal or
+     higher level.}
+  {- {b Resolved block-ID fragment} ([[[note#^blockid]]]): path header,
+     then the paragraph that carries the block ID.}
   {- {b Self-referencing fragments} ([[[#Heading]]], [[[#^blockid]]]):
      same as above but sourced from the current file.}
   {- {b Unresolved link}: no hover result (return [None]).}

@@ -61,6 +61,44 @@ let read_notification (ic : In_channel.t) ~(method_ : string) : Yojson.Safe.t =
   loop ()
 ;;
 
+(** Like {!read_notification}, but gives up after [timeout_ms] and returns
+    [None].  Useful for asserting the {i absence} of a notification: if the
+    server is supposed to emit one but doesn't, the test can fail with a
+    clear message instead of hanging the runner.
+
+    Uses [Core_unix.select] on the underlying fd to peek for pending data
+    before committing to a blocking read.  Not precise — once a message
+    header is visible, the full body read is blocking — but good enough
+    for a single-server, single-client test. *)
+let try_read_notification (ic : In_channel.t) ~(method_ : string) ~(timeout_ms : int)
+  : Yojson.Safe.t option
+  =
+  let fd = Core_unix.descr_of_in_channel ic in
+  let deadline = Time_ns.add (Time_ns.now ()) (Time_ns.Span.of_int_ms timeout_ms) in
+  let rec loop () =
+    let remaining = Time_ns.diff deadline (Time_ns.now ()) |> Time_ns.Span.to_sec in
+    if Float.(remaining <= 0.0)
+    then None
+    else (
+      let { Core_unix.Select_fds.read; _ } =
+        Core_unix.select
+          ~read:[ fd ]
+          ~write:[]
+          ~except:[]
+          ~timeout:(`After (Time_ns.Span.of_sec remaining))
+          ()
+      in
+      match read with
+      | [] -> None
+      | _ ->
+        let msg = read_message ic in
+        (match Yojson.Safe.Util.member "method" msg with
+         | `String m when String.equal m method_ -> Some msg
+         | _ -> loop ()))
+  in
+  loop ()
+;;
+
 (* Message constructors
    ===================== *)
 
@@ -140,6 +178,26 @@ let did_open (s : session) ~(rel_path : string) : unit =
   send_message s.oc (make_notification ~method_:"textDocument/didOpen" params)
 ;;
 
+let did_save (s : session) ~(rel_path : string) : unit =
+  let full_path = Filename.concat s.vault_root rel_path in
+  let uri = sprintf "file://%s" full_path in
+  let params = `Assoc [ "textDocument", `Assoc [ "uri", `String uri ] ] in
+  send_message s.oc (make_notification ~method_:"textDocument/didSave" params)
+;;
+
+let did_change (s : session) ~(rel_path : string) ~(version : int) ~(text : string) : unit
+  =
+  let full_path = Filename.concat s.vault_root rel_path in
+  let uri = sprintf "file://%s" full_path in
+  let params =
+    `Assoc
+      [ "textDocument", `Assoc [ "uri", `String uri; "version", `Int version ]
+      ; "contentChanges", `List [ `Assoc [ "text", `String text ] ]
+      ]
+  in
+  send_message s.oc (make_notification ~method_:"textDocument/didChange" params)
+;;
+
 let shutdown (s : session) : unit =
   let id = fresh_id s in
   send_message s.oc (make_request ~id ~method_:"shutdown" `Null);
@@ -187,6 +245,47 @@ let hover (s : session) ~(rel_path : string) ~(line : int) ~(character : int)
   Yojson.Safe.Util.member "result" resp
 ;;
 
+(** Send a textDocument/references request and return just the result. *)
+let references (s : session) ~(rel_path : string) ~(line : int) ~(character : int)
+  : Yojson.Safe.t
+  =
+  let id = fresh_id s in
+  let full_path = Filename.concat s.vault_root rel_path in
+  let uri = sprintf "file://%s" full_path in
+  let params =
+    `Assoc
+      [ "textDocument", `Assoc [ "uri", `String uri ]
+      ; "position", `Assoc [ "line", `Int line; "character", `Int character ]
+      ; "context", `Assoc [ "includeDeclaration", `Bool true ]
+      ]
+  in
+  send_message s.oc (make_request ~id ~method_:"textDocument/references" params);
+  let resp = read_response s.ic ~id in
+  Yojson.Safe.Util.member "result" resp
+;;
+
+(** Send a textDocument/inlayHint request and return just the result. *)
+let inlay_hint (s : session) ~(rel_path : string) ~(start_line : int) ~(end_line : int)
+  : Yojson.Safe.t
+  =
+  let id = fresh_id s in
+  let full_path = Filename.concat s.vault_root rel_path in
+  let uri = sprintf "file://%s" full_path in
+  let params =
+    `Assoc
+      [ "textDocument", `Assoc [ "uri", `String uri ]
+      ; ( "range"
+        , `Assoc
+            [ "start", `Assoc [ "line", `Int start_line; "character", `Int 0 ]
+            ; "end", `Assoc [ "line", `Int end_line; "character", `Int 0 ]
+            ] )
+      ]
+  in
+  send_message s.oc (make_request ~id ~method_:"textDocument/inlayHint" params);
+  let resp = read_response s.ic ~id in
+  Yojson.Safe.Util.member "result" resp
+;;
+
 (* Result parsers
    ================ *)
 
@@ -219,6 +318,59 @@ let parse_hover_result (result : Yojson.Safe.t) : string option =
   | json ->
     let contents = Yojson.Safe.Util.member "contents" json in
     Some Yojson.Safe.Util.(member "value" contents |> to_string)
+;;
+
+(** Parse a JSON-RPC references result into a list of [(rel_path, start_line, start_char)] triples,
+    sorted by path then position. *)
+let parse_references_result (vault_root : string) (result : Yojson.Safe.t)
+  : (string * int * int) list
+  =
+  match result with
+  | `Null -> []
+  | `List locs ->
+    let parsed =
+      List.map locs ~f:(fun loc ->
+        let uri = Yojson.Safe.Util.(member "uri" loc |> to_string) in
+        let range = Yojson.Safe.Util.member "range" loc in
+        let start = Yojson.Safe.Util.member "start" range in
+        let line = Yojson.Safe.Util.(member "line" start |> to_int) in
+        let character = Yojson.Safe.Util.(member "character" start |> to_int) in
+        let path =
+          let raw = String.chop_prefix_exn uri ~prefix:"file://" in
+          match String.chop_prefix raw ~prefix:(vault_root ^ "/") with
+          | Some rel -> rel
+          | None -> raw
+        in
+        path, line, character)
+    in
+    List.sort parsed ~compare:(fun (p1, l1, c1) (p2, l2, c2) ->
+      let c = String.compare p1 p2 in
+      if c <> 0
+      then c
+      else (
+        let c = Int.compare l1 l2 in
+        if c <> 0 then c else Int.compare c1 c2))
+  | other -> failwithf "unexpected references result: %s" (Yojson.Safe.to_string other) ()
+;;
+
+(** Parse a JSON-RPC inlayHint result into a list of [(line, character, label)] triples,
+    sorted by line then character. *)
+let parse_inlay_hint_result (result : Yojson.Safe.t) : (int * int * string) list =
+  match result with
+  | `Null -> []
+  | `List hints ->
+    let parsed =
+      List.map hints ~f:(fun hint ->
+        let pos = Yojson.Safe.Util.member "position" hint in
+        let line = Yojson.Safe.Util.(member "line" pos |> to_int) in
+        let character = Yojson.Safe.Util.(member "character" pos |> to_int) in
+        let label = Yojson.Safe.Util.(member "label" hint |> to_string) in
+        line, character, label)
+    in
+    List.sort parsed ~compare:(fun (l1, c1, _) (l2, c2, _) ->
+      let c = Int.compare l1 l2 in
+      if c <> 0 then c else Int.compare c1 c2)
+  | other -> failwithf "unexpected inlay hint result: %s" (Yojson.Safe.to_string other) ()
 ;;
 
 (** Parse a publishDiagnostics notification into a list of [(message, line, character)] triples,

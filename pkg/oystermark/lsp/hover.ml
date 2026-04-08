@@ -137,6 +137,17 @@ let find_heading_in_content ~(slug : string) (content : string) : (int * int) op
     i, level)
 ;;
 
+(** {2 Formatting} *)
+
+(** Build the hover string: path header, separator, then body.
+    If [body] is empty, shows [*(empty)*] instead. *)
+let format_hover ~(path : string) (body : string) : string =
+  let header = "*Path*:" ^ path in
+  if String.is_empty (String.strip body)
+  then header ^ "\n\n*(empty)*"
+  else header ^ "\n\n" ^ body
+;;
+
 (** {2 Main computation} *)
 
 (** Compute hover content for the link at the given position.
@@ -179,86 +190,82 @@ let hover
         (match read_file path with
          | None -> None
          | Some file_content ->
-           (match link_ref.fragment with
-            | Some (Oystermark.Vault.Link_ref.Heading hs) ->
-              (* Fragment present but resolve fell back — try to find section. *)
-              let slug =
-                String.concat
-                  ~sep:"-"
-                  (List.map hs ~f:Oystermark.Parse.Heading_slug.slugify)
-              in
-              let section =
-                match find_heading_in_content ~slug file_content with
+           let body =
+             match link_ref.fragment with
+             | Some (Oystermark.Vault.Link_ref.Heading hs) ->
+               (* Fragment present but resolve fell back — try to find section. *)
+               let slug =
+                 String.concat
+                   ~sep:"-"
+                   (List.map hs ~f:Oystermark.Parse.Heading_slug.slugify)
+               in
+               (match find_heading_in_content ~slug file_content with
                 | Some (hline, hlevel) ->
                   extract_section ~heading_line:hline ~heading_level:hlevel file_content
-                | None -> file_content
-              in
-              Some section
-            | Some (Block_ref bid) ->
-              let section =
-                match extract_block ~block_id:bid file_content with
+                | None -> file_content)
+             | Some (Block_ref bid) ->
+               (match extract_block ~block_id:bid file_content with
                 | Some p -> p
-                | None -> file_content
-              in
-              Some section
-            | None -> Some file_content))
+                | None -> file_content)
+             | None -> file_content
+           in
+           Some (format_hover ~path body))
       | Heading { path; slug; _ } ->
         (match read_file path with
          | None -> None
          | Some file_content ->
-           let section =
+           let body =
              match find_heading_in_content ~slug file_content with
              | Some (hline, hlevel) ->
                extract_section ~heading_line:hline ~heading_level:hlevel file_content
              | None -> file_content
            in
-           Some section)
+           Some (format_hover ~path body))
       | Block { path; block_id } ->
         (match read_file path with
          | None -> None
          | Some file_content ->
-           let section =
+           let body =
              match extract_block ~block_id file_content with
              | Some p -> p
              | None -> file_content
            in
-           Some section)
+           Some (format_hover ~path body))
       | Curr_file ->
-        (match link_ref.fragment with
-         | Some (Oystermark.Vault.Link_ref.Heading hs) ->
-           let slug =
-             String.concat ~sep:"-" (List.map hs ~f:Oystermark.Parse.Heading_slug.slugify)
-           in
-           let section =
-             match find_heading_in_content ~slug content with
+        let body =
+          match link_ref.fragment with
+          | Some (Oystermark.Vault.Link_ref.Heading hs) ->
+            let slug =
+              String.concat
+                ~sep:"-"
+                (List.map hs ~f:Oystermark.Parse.Heading_slug.slugify)
+            in
+            (match find_heading_in_content ~slug content with
              | Some (hline, hlevel) ->
                extract_section ~heading_line:hline ~heading_level:hlevel content
-             | None -> content
-           in
-           Some section
-         | Some (Block_ref bid) ->
-           let section =
-             match extract_block ~block_id:bid content with
+             | None -> content)
+          | Some (Block_ref bid) ->
+            (match extract_block ~block_id:bid content with
              | Some p -> p
-             | None -> content
-           in
-           Some section
-         | None -> Some content)
+             | None -> content)
+          | None -> content
+        in
+        Some (format_hover ~path:rel_path body)
       | Curr_heading { slug; _ } ->
-        let section =
+        let body =
           match find_heading_in_content ~slug content with
           | Some (hline, hlevel) ->
             extract_section ~heading_line:hline ~heading_level:hlevel content
           | None -> content
         in
-        Some section
+        Some (format_hover ~path:rel_path body)
       | Curr_block { block_id } ->
-        let section =
+        let body =
           match extract_block ~block_id content with
           | Some p -> p
           | None -> content
         in
-        Some section
+        Some (format_hover ~path:rel_path body)
     in
     Option.map result_opt ~f:(fun raw ->
       let text = truncate ~max_chars:config.hover_max_chars raw in
@@ -343,6 +350,42 @@ let%test_module "extract_block" =
   end)
 ;;
 
+let%test_module "format_hover" =
+  (module struct
+    let%expect_test "with content" =
+      print_string (format_hover ~path:"dir/note.md" "# Hello\n\nWorld.\n");
+      [%expect
+        {|
+        *Path*:dir/note.md
+
+        # Hello
+
+        World.
+        |}]
+    ;;
+
+    let%expect_test "empty content" =
+      print_string (format_hover ~path:"dir/empty.md" "");
+      [%expect
+        {|
+        *Path*:dir/empty.md
+
+        *(empty)*
+        |}]
+    ;;
+
+    let%expect_test "whitespace-only content" =
+      print_string (format_hover ~path:"dir/blank.md" "  \n\n  ");
+      [%expect
+        {|
+        *Path*:dir/blank.md
+
+        *(empty)*
+        |}]
+    ;;
+  end)
+;;
+
 let%test_module "hover" =
   (module struct
     let files =
@@ -352,6 +395,8 @@ let%test_module "hover" =
       ; "note-c.md", "# Gamma\n\nSee [[note-a#Section One]].\n"
       ; "note-d.md", "# Delta\n\nSee [[note-a#^block1]].\n"
       ; "note-e.md", "# Epsilon\n\nSelf [[#Epsilon]].\n"
+      ; "empty.md", ""
+      ; "note-f.md", "# Zeta\n\nSee [[empty]].\n"
       ]
     ;;
 
@@ -380,6 +425,8 @@ let%test_module "hover" =
       [%expect
         {|
         [12-21]
+        *Path*:note-a.md
+
         # Alpha
 
         ## Section One
@@ -398,6 +445,8 @@ let%test_module "hover" =
       [%expect
         {|
         [13-34]
+        *Path*:note-a.md
+
         ## Section One
 
         Body text. ^block1
@@ -410,6 +459,8 @@ let%test_module "hover" =
       [%expect
         {|
         [13-30]
+        *Path*:note-a.md
+
         Body text. ^block1
         |}]
     ;;
@@ -420,9 +471,23 @@ let%test_module "hover" =
       [%expect
         {|
         [16-27]
+        *Path*:note-e.md
+
         # Epsilon
 
         Self [[#Epsilon]].
+        |}]
+    ;;
+
+    let%expect_test "empty target note" =
+      let content = List.Assoc.find_exn files ~equal:String.equal "note-f.md" in
+      show ~rel_path:"note-f.md" ~content ~line:2 ~character:8;
+      [%expect
+        {|
+        [12-20]
+        *Path*:empty.md
+
+        *(empty)*
         |}]
     ;;
 
@@ -439,7 +504,7 @@ let%test_module "hover" =
     ;;
 
     let%expect_test "truncation" =
-      let config = { Lsp_config.default with hover_max_chars = 20 } in
+      let config = { Lsp_config.default with hover_max_chars = 30 } in
       let content = List.Assoc.find_exn files ~equal:String.equal "note-b.md" in
       (match
          hover
@@ -456,6 +521,8 @@ let%test_module "hover" =
        | Some (text, _, _) -> print_string text);
       [%expect
         {|
+        *Path*:note-a.md
+
         # Alpha
 
 

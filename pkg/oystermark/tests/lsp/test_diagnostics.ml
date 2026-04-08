@@ -118,6 +118,32 @@ let%expect_test "e2e: unresolved link produces diagnostic on didOpen" =
   [%expect {| 10:11 unresolved link: missing-note |}]
 ;;
 
+let%expect_test "e2e: didChange republishes diagnostics" =
+  let s = start_server ~vault_root in
+  initialize s;
+  did_open s ~rel_path:"subdir/nested.md";
+  (* didOpen: no unresolved links *)
+  let notif = read_notification s.ic ~method_:"textDocument/publishDiagnostics" in
+  let diags = parse_diagnostics_notification notif in
+  printf "after open: %d diagnostics\n" (List.length diags);
+  (* didChange: add an unresolved link *)
+  did_change
+    s
+    ~rel_path:"subdir/nested.md"
+    ~version:2
+    ~text:"# Nested\n\nLink to [[non-exist]] now.\n";
+  let notif = read_notification s.ic ~method_:"textDocument/publishDiagnostics" in
+  let diags = parse_diagnostics_notification notif in
+  List.iter diags ~f:(fun (msg, line, char) ->
+    printf "after change: %d:%d %s\n" line char msg);
+  shutdown s;
+  [%expect
+    {|
+    after open: 0 diagnostics
+    after change: 2:8 unresolved link: non-exist
+    |}]
+;;
+
 let%expect_test "e2e: resolved links produce no diagnostics" =
   let s = start_server ~vault_root in
   initialize s;

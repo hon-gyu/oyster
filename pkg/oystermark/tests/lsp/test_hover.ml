@@ -24,6 +24,8 @@ let files =
        Markdown [link](note-a).\n\n\
        Unresolved [[missing-note]].\n" )
   ; "subdir/nested.md", "# Nested\n\nLink to [[note-a]] from subdirectory.\n"
+  ; "empty.md", ""
+  ; "note-c.md", "# Gamma\n\nSee [[empty]].\n"
   ]
 ;;
 
@@ -41,7 +43,9 @@ let%expect_test "e2e: hover on wikilink to note" =
   shutdown s;
   [%expect
     {|
-    ( "# Alpha\
+    ( "*Path*:note-a.md\
+     \n\
+     \n# Alpha\
      \n\
      \n## Section One\
      \n\
@@ -65,7 +69,9 @@ let%expect_test "e2e: hover on heading fragment" =
   shutdown s;
   [%expect
     {|
-    ( "## Section One\
+    ( "*Path*:note-a.md\
+     \n\
+     \n## Section One\
      \n\
      \nBody text ^block1\
      \n")
@@ -81,7 +87,29 @@ let%expect_test "e2e: hover on block fragment" =
   let result = parse_hover_result response in
   print_s [%sexp (result : string option)];
   shutdown s;
-  [%expect {| ("Body text ^block1") |}]
+  [%expect
+    {|
+    ( "*Path*:note-a.md\
+     \n\
+     \nBody text ^block1")
+    |}]
+;;
+
+let%expect_test "e2e: hover on empty note" =
+  let s = start_server ~vault_root in
+  initialize s;
+  did_open s ~rel_path:"note-c.md";
+  (* Line 2: "See [[empty]]." *)
+  let response = hover s ~rel_path:"note-c.md" ~line:2 ~character:8 in
+  let result = parse_hover_result response in
+  print_s [%sexp (result : string option)];
+  shutdown s;
+  [%expect
+    {|
+    ( "*Path*:empty.md\
+     \n\
+     \n*(empty)*")
+    |}]
 ;;
 
 let%expect_test "e2e: hover on unresolved link" =
@@ -134,7 +162,7 @@ let%expect_test "trace: hover spans for heading fragment" =
   print_endline (Trace_collect.format spans);
   [%expect
     {|
-    hover 5us content_bytes=34 rel_path=note-b.md line=- character=-
+    hover 5us content_bytes=52 rel_path=note-b.md line=- character=-
     ├── byte_offset_of_position 1us line=- character=- offset=42
     ├── parse_doc 2us content_len=144
     ├── collect_links 3us num_links=5
