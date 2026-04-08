@@ -1,19 +1,18 @@
 (** Struct: colon-keyed tree restructuring.
 
-    A keyed node is a list item or paragraph whose text content ends with
-    [:] (unescaped).  The following contiguous content is reparented as its
-    children, producing a new tree with {!Ext_keyed_block} and
-    {!Ext_keyed_list_item} nodes.
+    See [struct.mli] for the rule specification.  Rules below are
+    numbered per [specification/oyster/struct.md].
 
     {1 Parsing}
 
     Parsing is a single-pass rewrite on the already-parsed Cmarkit AST:
     {ol
     {- Walk sibling block lists left-to-right.}
-    {- When a keyed paragraph is found, collect contiguous following blocks
-       and wrap as {!Ext_keyed_block}.}
-    {- When a list's last item is keyed and followed by contiguous blocks,
-       reparent those blocks under the item as {!Ext_keyed_list_item}.}
+    {- When a keyed paragraph is found, collect contiguous following
+       blocks and wrap as {!Ext_keyed_block}.}
+    {- When a list's last item is keyed and followed by contiguous
+       blocks, reparent those blocks under the item as
+       {!Ext_keyed_list_item}.}
     {- Recurse into container blocks.}}
 *)
 
@@ -26,16 +25,18 @@ type Cmarkit.Block.t +=
   | Ext_keyed_block of t * Cmarkit.Block.t
 
 (* Colon detection
-   ================
+   =============== *)
 
-   Walk the inline tree to find the rightmost [Text] node and check whether
-   it ends with an unescaped [:].  Escaped-colon detection uses source byte
-   positions when [~source] is provided. *)
+module Colon : sig
+  val strip_trailing_colon
+    :  source:string option
+    -> Cmarkit.Inline.t
+    -> Cmarkit.Inline.t option
 
-include (
-struct
-  (** Flatten an inline tree to plain text.  Simplified version that skips
-      wikilinks (returns [""] for unknown extensions). *)
+  val labels_of_inline : Cmarkit.Inline.t -> string list
+end = struct
+  (** Flatten an inline tree to plain text.  Returns [""] for unknown
+      extensions (e.g. wikilinks). *)
   let rec inline_to_text (inline : Cmarkit.Inline.t) : string =
     match inline with
     | Cmarkit.Inline.Text (s, _) -> s
@@ -46,8 +47,9 @@ struct
     | _ -> ""
   ;;
 
-  (** [true] when the byte at [colon_byte] in [source] is preceded by ['\\'].
-      Returns [false] when [source] is [None] or the position is out of range. *)
+  (** [true] when the byte at [colon_byte] in [source] is preceded by
+      ['\\'].  Returns [false] when [source] is [None] or the position
+      is out of range. *)
   let is_escaped_in_source ~(source : string option) (colon_byte : int) : bool =
     match source with
     | None -> false
@@ -57,8 +59,8 @@ struct
       && Char.equal src.[colon_byte - 1] '\\'
   ;;
 
-  (** Strip a trailing [:] from a raw text string, consulting [source] byte
-      positions for escape detection.  Returns [Some stripped] or [None]. *)
+  (** Strip a trailing [:] from a raw text string, consulting [source]
+      byte positions for escape detection. *)
   let strip_colon_from_text ~(source : string option) (s : string) (meta : Cmarkit.Meta.t)
     : string option
     =
@@ -79,8 +81,8 @@ struct
       else Some (String.rstrip (String.chop_suffix_exn s' ~suffix:":")))
   ;;
 
-  (** Walk the inline tree rightward; if the rightmost [Text] leaf ends with
-      an unescaped [:], return the tree with that colon removed. *)
+  (** Walk the inline tree rightward; if the rightmost [Text] leaf ends
+      with an unescaped [:], return the tree with that colon removed. *)
   let rec strip_trailing_colon ~(source : string option) (inline : Cmarkit.Inline.t)
     : Cmarkit.Inline.t option
     =
@@ -104,10 +106,10 @@ struct
   ;;
 
   (* Colon chains
-     -------------
+     ------------
 
      Split [: ] (colon-space) boundaries into label segments.
-     ["foo: bar"] → [["foo"; "bar"]]. *)
+     ["foo: bar"] -> [["foo"; "bar"]]. *)
 
   (** Split at [: ] (colon followed by space) boundaries.  Colons not
       followed by a space are kept literal (e.g. URLs). *)
@@ -123,20 +125,11 @@ struct
           then merge (String.strip current :: acc) (String.lstrip next) rest
           else merge acc (current ^ ":" ^ next) rest
       in
-      let labels = merge [] first rest in
-      List.filter labels ~f:(fun s -> not (String.is_empty s))
+      merge [] first rest |> List.filter ~f:(fun s -> not (String.is_empty s))
   ;;
 
-  (** Extract label strings from a colon-stripped inline.  Returns a
-      singleton for simple labels, or multiple segments for colon chains. *)
   let labels_of_inline (inline : Cmarkit.Inline.t) : string list =
-    let text = inline_to_text inline in
-    let labels = split_colon_chain text in
-    if List.is_empty labels
-    then (
-      let t = String.strip text in
-      if String.is_empty t then [] else [ t ])
-    else labels
+    split_colon_chain (inline_to_text inline)
   ;;
 
   let%test_module "split_colon_chain" =
@@ -194,18 +187,39 @@ struct
       ;;
     end)
   ;;
-end :
-sig
-  val strip_trailing_colon
-    :  source:string option
-    -> Cmarkit.Inline.t
-    -> Cmarkit.Inline.t option
+end
 
-  val labels_of_inline : Cmarkit.Inline.t -> string list
-end)
+(* Shared helpers
+   ============== *)
+
+let is_blank_line : Cmarkit.Block.t -> bool = function
+  | Cmarkit.Block.Blank_line _ -> true
+  | _ -> false
+;;
+
+(** Split [bs] at the first blank line.  Returns [(prefix, rest)] where
+    [prefix] is the maximal contiguous non-blank head and [rest] is
+    everything from the first blank line onward (or [[]] if none). *)
+let span_non_blank (bs : Cmarkit.Block.t list)
+  : Cmarkit.Block.t list * Cmarkit.Block.t list
+  =
+  let rec go acc = function
+    | [] -> List.rev acc, []
+    | b :: _ as rest when is_blank_line b -> List.rev acc, rest
+    | b :: rest -> go (b :: acc) rest
+  in
+  go [] bs
+;;
+
+(** Wrap a list of blocks into a single block. *)
+let wrap_blocks : Cmarkit.Block.t list -> Cmarkit.Block.t = function
+  | [] -> Cmarkit.Block.Blocks ([], Cmarkit.Meta.none)
+  | [ single ] -> single
+  | multiple -> Cmarkit.Block.Blocks (multiple, Cmarkit.Meta.none)
+;;
 
 (** Build nested keyed nodes from a list of labels (outermost-first) and
-    a body block. *)
+    a body block.  Returns [body] unchanged when [labels] is empty. *)
 let build_nested_keyed
       ~(make_node : t -> Cmarkit.Block.t -> Cmarkit.Block.t)
       (labels : string list)
@@ -222,54 +236,26 @@ let build_nested_keyed
     List.fold outers ~init:(mk innermost body) ~f:(fun acc s -> mk s acc)
 ;;
 
+let mk_keyed_block t b = Ext_keyed_block (t, b)
+let mk_keyed_item t b = Ext_keyed_list_item (t, b)
+
 (* Tree rewrite
-   =============
+   ============
 
    Single-pass left-to-right traversal of sibling block lists. *)
 
-let is_blank_line : Cmarkit.Block.t -> bool = function
-  | Cmarkit.Block.Blank_line _ -> true
-  | _ -> false
-;;
-
-let collect_contiguous (arr : Cmarkit.Block.t array) (start : int) (len : int)
-  : Cmarkit.Block.t list * int
-  =
-  let collected = ref [] in
-  let i = ref start in
-  while !i < len && not (is_blank_line arr.(!i)) do
-    collected := arr.(!i) :: !collected;
-    incr i
-  done;
-  List.rev !collected, !i
-;;
-
-let wrap_blocks : Cmarkit.Block.t list -> Cmarkit.Block.t = function
-  | [] -> Cmarkit.Block.Blocks ([], Cmarkit.Meta.none)
-  | [ single ] -> single
-  | multiple -> Cmarkit.Block.Blocks (multiple, Cmarkit.Meta.none)
-;;
-
-(** Split a non-empty list into [(all_but_last, last)].
-    Single-pass, O(n). *)
-let split_last (l : 'a list) : ('a list * 'a) option =
-  match List.rev l with
-  | [] -> None
-  | last :: rev_prefix -> Some (List.rev rev_prefix, last)
-;;
-
-include (
-struct
+module Rewrite : sig
+  val rewrite_within_block : source:string option -> Cmarkit.Block.t -> Cmarkit.Block.t
+end = struct
   (** Decompose a list item into its leading paragraph and any indented
       sub-blocks.  Returns [None] for items without a leading paragraph
       (e.g. a bare code block inside a list item). *)
   let list_item_paragraph (item : Cmarkit.Block.List_item.t)
-    : (Cmarkit.Block.Paragraph.t * Cmarkit.Meta.t * Cmarkit.Block.t list) option
+    : (Cmarkit.Block.Paragraph.t * Cmarkit.Block.t list) option
     =
     match Cmarkit.Block.List_item.block item with
-    | Cmarkit.Block.Paragraph (p, meta) -> Some (p, meta, [])
-    | Cmarkit.Block.Blocks (Cmarkit.Block.Paragraph (p, meta) :: rest, _) ->
-      Some (p, meta, rest)
+    | Cmarkit.Block.Paragraph (p, _) -> Some (p, [])
+    | Cmarkit.Block.Blocks (Cmarkit.Block.Paragraph (p, _) :: rest, _) -> Some (p, rest)
     | _ -> None
   ;;
 
@@ -283,47 +269,6 @@ struct
       ~marker:(Cmarkit.Block.List_item.marker item)
       ~after_marker:(Cmarkit.Block.List_item.after_marker item)
       block
-  ;;
-
-  (** Walk list items and tag keyed ones (Rule 1).  Returns rebuilt items
-      and, if the last item is keyed with no sub-blocks, its label info
-      for Rule 3 handling by the caller. *)
-  let process_list_items
-        ~(source : string option)
-        (items : Cmarkit.Block.List_item.t Cmarkit.node list)
-    : Cmarkit.Block.List_item.t Cmarkit.node list
-      * (Cmarkit.Inline.t * string list) option
-    =
-    let len = List.length items in
-    let rebuilt_items = ref [] in
-    let last_keyed = ref None in
-    List.iteri items ~f:(fun i (item, item_meta) ->
-      let is_last = i = len - 1 in
-      match list_item_paragraph item with
-      | Some (p, _para_meta, sub_blocks) ->
-        let inline = Cmarkit.Block.Paragraph.inline p in
-        (match strip_trailing_colon ~source inline with
-         | None -> rebuilt_items := (item, item_meta) :: !rebuilt_items
-         | Some label_inline ->
-           let labels = labels_of_inline label_inline in
-           if not (List.is_empty sub_blocks)
-           then (
-             (* Rule 1: already has indented children *)
-             let body = wrap_blocks sub_blocks in
-             let keyed =
-               build_nested_keyed
-                 ~make_node:(fun t b -> Ext_keyed_list_item (t, b))
-                 labels
-                 body
-             in
-             rebuilt_items := (rebuild_item item keyed, item_meta) :: !rebuilt_items)
-           else if is_last
-           then (
-             last_keyed := Some (label_inline, labels);
-             rebuilt_items := (item, item_meta) :: !rebuilt_items)
-           else rebuilt_items := (item, item_meta) :: !rebuilt_items)
-      | None -> rebuilt_items := (item, item_meta) :: !rebuilt_items);
-    List.rev !rebuilt_items, !last_keyed
   ;;
 
   (** Rebuild a [List] block preserving tightness and list type. *)
@@ -341,8 +286,129 @@ struct
       , list_meta )
   ;;
 
-  (** Recursively rewrite the block content of each list item. *)
-  let rec recurse_items ~source items =
+  (** Replace the last element of a non-empty list. *)
+  let replace_last items new_last =
+    match List.rev items with
+    | [] -> assert false
+    | _ :: rev_prefix -> List.rev_append rev_prefix [ new_last ]
+  ;;
+
+  (* List-item tagging (Rule 1)
+     --------------------------
+
+     [tag_keyed_items] walks list items, applying Rule 1 (keyed item
+     with indented children) to every item.  For the {b last} item,
+     if it is a bare-keyed paragraph (trailing colon, no sub-blocks),
+     the label segments are returned so that the caller can decide
+     whether Rule 3 applies. *)
+
+  let tag_middle_item ~source item =
+    match list_item_paragraph item with
+    | Some (p, (_ :: _ as sub_blocks)) ->
+      (match Colon.strip_trailing_colon ~source (Cmarkit.Block.Paragraph.inline p) with
+       | None -> item
+       | Some label_inline ->
+         let labels = Colon.labels_of_inline label_inline in
+         let body = wrap_blocks sub_blocks in
+         let keyed = build_nested_keyed ~make_node:mk_keyed_item labels body in
+         rebuild_item item keyed)
+    | _ -> item
+  ;;
+
+  let tag_last_item ~source item : Cmarkit.Block.List_item.t * string list option =
+    match list_item_paragraph item with
+    | None -> item, None
+    | Some (p, sub_blocks) ->
+      (match Colon.strip_trailing_colon ~source (Cmarkit.Block.Paragraph.inline p) with
+       | None -> item, None
+       | Some label_inline ->
+         let labels = Colon.labels_of_inline label_inline in
+         if not (List.is_empty sub_blocks)
+         then (
+           (* Rule 1 *)
+           let body = wrap_blocks sub_blocks in
+           let keyed = build_nested_keyed ~make_node:mk_keyed_item labels body in
+           rebuild_item item keyed, None)
+         else (* Defer to caller: Rule 2 or Rule 3 *)
+           item, Some labels)
+  ;;
+
+  let rec tag_keyed_items
+            ~(source : string option)
+            (items : Cmarkit.Block.List_item.t Cmarkit.node list)
+    : Cmarkit.Block.List_item.t Cmarkit.node list * string list option
+    =
+    match items with
+    | [] -> [], None
+    | [ (item, meta) ] ->
+      let item', bare = tag_last_item ~source item in
+      [ item', meta ], bare
+    | (item, meta) :: rest ->
+      let item' = tag_middle_item ~source item in
+      let rest', bare = tag_keyed_items ~source rest in
+      (item', meta) :: rest', bare
+  ;;
+
+  (* Sibling-block rewrite
+     ---------------------
+
+     Recursive descent on a flat list of sibling blocks.  When a keyed
+     paragraph or keyed-last-item list is encountered, contiguous
+     non-blank followers are consumed and reparented. *)
+
+  let rec rewrite_block_list ~(source : string option) (blocks : Cmarkit.Block.t list)
+    : Cmarkit.Block.t list
+    =
+    match blocks with
+    | [] -> []
+    | (Cmarkit.Block.Paragraph (p, _) as block) :: rest ->
+      (match Colon.strip_trailing_colon ~source (Cmarkit.Block.Paragraph.inline p) with
+       | None -> rewrite_within_block ~source block :: rewrite_block_list ~source rest
+       | Some label_inline -> absorb_paragraph ~source ~original:block ~label_inline rest)
+    | Cmarkit.Block.List (l, list_meta) :: rest -> handle_list ~source l list_meta rest
+    | block :: rest ->
+      rewrite_within_block ~source block :: rewrite_block_list ~source rest
+
+  (** Rule 4/5: a keyed paragraph absorbs contiguous following blocks. *)
+  and absorb_paragraph ~source ~original ~label_inline rest =
+    let children, after = span_non_blank rest in
+    if List.is_empty children
+    then original :: rewrite_block_list ~source rest
+    else (
+      let children = rewrite_block_list ~source children in
+      let body = wrap_blocks children in
+      let labels = Colon.labels_of_inline label_inline in
+      let keyed = build_nested_keyed ~make_node:mk_keyed_block labels body in
+      keyed :: rewrite_block_list ~source after)
+
+  (** Rules 1/2/3 in one place: tag items for Rule 1, then decide Rule 3
+      absorption from the sibling context. *)
+  and handle_list ~source l list_meta rest =
+    let tagged, bare_last = tag_keyed_items ~source (Cmarkit.Block.List'.items l) in
+    let items, rest =
+      match bare_last, rest with
+      | Some labels, (next :: _ as rest) when not (is_blank_line next) ->
+        (* Rule 3: reparent contiguous following blocks under the last
+           item.  [span_non_blank] is guaranteed non-empty here since
+           [next] is non-blank. *)
+        let following, after = span_non_blank rest in
+        let body = wrap_blocks (rewrite_block_list ~source following) in
+        let keyed = build_nested_keyed ~make_node:mk_keyed_item labels body in
+        let last_item, last_meta =
+          match List.last tagged with
+          | Some x -> x
+          | None -> assert false
+        in
+        let new_last = rebuild_item last_item keyed, last_meta in
+        replace_last tagged new_last, after
+      | _ ->
+        (* Rule 2 (blank/end follows) or no bare-keyed last item. *)
+        tagged, rest
+    in
+    let items = recurse_items ~source items in
+    make_list l list_meta items :: rewrite_block_list ~source rest
+
+  and recurse_items ~source items =
     List.map items ~f:(fun (item, item_meta) ->
       let block = Cmarkit.Block.List_item.block item in
       let block' = rewrite_within_block ~source block in
@@ -350,91 +416,9 @@ struct
       then item, item_meta
       else rebuild_item item block', item_meta)
 
-  (** Rewrite a flat list of sibling blocks left-to-right, consuming
-      contiguous followers when a keyed paragraph or list is found. *)
-  and rewrite_block_list ~(source : string option) (blocks : Cmarkit.Block.t list)
-    : Cmarkit.Block.t list
-    =
-    let arr = Array.of_list blocks in
-    let len = Array.length arr in
-    let result = ref [] in
-    let i = ref 0 in
-    while !i < len do
-      let block = arr.(!i) in
-      match block with
-      (* Keyed paragraph (Rule 4/5) *)
-      | Cmarkit.Block.Paragraph (p, _meta) ->
-        let inline = Cmarkit.Block.Paragraph.inline p in
-        (match strip_trailing_colon ~source inline with
-         | None ->
-           result := rewrite_within_block ~source block :: !result;
-           incr i
-         | Some label_inline ->
-           incr i;
-           let children, new_i = collect_contiguous arr !i len in
-           i := new_i;
-           if List.is_empty children
-           then result := block :: !result
-           else (
-             let children = rewrite_block_list ~source children in
-             let body = wrap_blocks children in
-             let labels = labels_of_inline label_inline in
-             let keyed =
-               build_nested_keyed
-                 ~make_node:(fun t b -> Ext_keyed_block (t, b))
-                 labels
-                 body
-             in
-             result := keyed :: !result))
-      (* List — process items, handle Rule 2/3 for last item *)
-      | Cmarkit.Block.List (l, list_meta) ->
-        let rebuilt_items, last_keyed =
-          process_list_items ~source (Cmarkit.Block.List'.items l)
-        in
-        (match last_keyed with
-         | Some (_label_inline, labels) ->
-           incr i;
-           if !i >= len || is_blank_line arr.(!i)
-           then
-             (* Rule 2: blank or end follows — no reparenting *)
-             result
-             := make_list l list_meta (recurse_items ~source rebuilt_items) :: !result
-           else (
-             (* Rule 3: contiguous blocks follow — reparent under last item *)
-             let following, new_i = collect_contiguous arr !i len in
-             i := new_i;
-             let following = rewrite_block_list ~source following in
-             let body = wrap_blocks following in
-             let keyed =
-               build_nested_keyed
-                 ~make_node:(fun t b -> Ext_keyed_list_item (t, b))
-                 labels
-                 body
-             in
-             match split_last rebuilt_items with
-             | Some (prev_items, (last_item, last_item_meta)) ->
-               let new_items =
-                 prev_items @ [ rebuild_item last_item keyed, last_item_meta ]
-               in
-               result
-               := make_list l list_meta (recurse_items ~source new_items) :: !result
-             | None ->
-               (* Should not happen: last_keyed implies non-empty list *)
-               result
-               := make_list l list_meta (recurse_items ~source rebuilt_items) :: !result)
-         | None ->
-           result
-           := make_list l list_meta (recurse_items ~source rebuilt_items) :: !result;
-           incr i)
-      | _ ->
-        result := rewrite_within_block ~source block :: !result;
-        incr i
-    done;
-    List.rev !result
-
   (** Recurse into container blocks ([Blocks], [Block_quote], [List],
-      [Ext_div], and our own keyed nodes).  Lists are delegated to
-      {!rewrite_block_list} so that [process_list_items] runs first. *)
+      [Ext_div], and keyed nodes).  Lists are delegated to
+      {!handle_list} so that {!tag_keyed_items} runs first. *)
   and rewrite_within_block ~(source : string option) (block : Cmarkit.Block.t)
     : Cmarkit.Block.t
     =
@@ -445,41 +429,30 @@ struct
       let inner = Cmarkit.Block.Block_quote.block bq in
       let inner' = rewrite_within_block ~source inner in
       Cmarkit.Block.Block_quote (Cmarkit.Block.Block_quote.make inner', meta)
-    | Cmarkit.Block.List _ ->
-      (* Delegate to rewrite_block_list so that process_list_items handles
-         keyed list items (Rule 1) before we recurse into item blocks. *)
-      (match rewrite_block_list ~source [ block ] with
+    | Cmarkit.Block.List (l, list_meta) ->
+      (* With no siblings to absorb, [handle_list] returns a single
+         block; take it unwrapped. *)
+      (match handle_list ~source l list_meta [] with
        | [ single ] -> single
        | multiple -> Cmarkit.Block.Blocks (multiple, Cmarkit.Meta.none))
     | Div.Ext_div (div, body) ->
       let body' = rewrite_within_block ~source body in
       Div.Ext_div (div, body')
     | Ext_keyed_list_item (t, body) ->
-      let body' = rewrite_within_block ~source body in
-      Ext_keyed_list_item (t, body')
-    | Ext_keyed_block (t, body) ->
-      let body' = rewrite_within_block ~source body in
-      Ext_keyed_block (t, body')
+      Ext_keyed_list_item (t, rewrite_within_block ~source body)
+    | Ext_keyed_block (t, body) -> Ext_keyed_block (t, rewrite_within_block ~source body)
     | _ -> block
   ;;
-end :
-sig
-  val rewrite_block_list
-    :  source:string option
-    -> Cmarkit.Block.t list
-    -> Cmarkit.Block.t list
-
-  val rewrite_within_block : source:string option -> Cmarkit.Block.t -> Cmarkit.Block.t
-end)
+end
 
 let rewrite_doc ~(source : string option) (doc : Cmarkit.Doc.t) : Cmarkit.Doc.t =
   let block = Cmarkit.Doc.block doc in
-  let block' = rewrite_within_block ~source block in
+  let block' = Rewrite.rewrite_within_block ~source block in
   if phys_equal block block' then doc else Cmarkit.Doc.make block'
 ;;
 
 (* Specification
-   ==============
+   =============
 
    [Spec] codifies the struct rules as:
    {ul
@@ -496,6 +469,9 @@ let rewrite_doc ~(source : string option) (doc : Cmarkit.Doc.t) : Cmarkit.Doc.t 
    [parse.ml] via [pp_doc], so we don't encode expected output twice. *)
 
 module Spec = struct
+  (* Traversal helpers
+     ----------------- *)
+
   (** Visit every block reachable through container blocks, including
       keyed nodes and [Div.Ext_div]. *)
   let rec iter_blocks (b : Cmarkit.Block.t) ~(f : Cmarkit.Block.t -> unit) : unit =
@@ -514,12 +490,33 @@ module Spec = struct
 
   let iter_doc (d : Cmarkit.Doc.t) ~f = iter_blocks (Cmarkit.Doc.block d) ~f
 
+  (** Visit every sibling-block list reachable through container blocks.
+      Used by {!keying_is_maximal} to inspect neighbouring blocks, which
+      {!iter_blocks} flattens away. *)
+  let rec iter_sibling_lists (b : Cmarkit.Block.t) ~(f : Cmarkit.Block.t list -> unit)
+    : unit
+    =
+    match b with
+    | Cmarkit.Block.Blocks (bs, _) ->
+      f bs;
+      List.iter bs ~f:(iter_sibling_lists ~f)
+    | Cmarkit.Block.List (l, _) ->
+      List.iter (Cmarkit.Block.List'.items l) ~f:(fun (item, _) ->
+        iter_sibling_lists (Cmarkit.Block.List_item.block item) ~f)
+    | Cmarkit.Block.Block_quote (bq, _) ->
+      iter_sibling_lists (Cmarkit.Block.Block_quote.block bq) ~f
+    | Ext_keyed_block (_, body) | Ext_keyed_list_item (_, body) ->
+      iter_sibling_lists body ~f
+    | Div.Ext_div (_, body) -> iter_sibling_lists body ~f
+    | _ -> ()
+  ;;
+
   (* Universal predicates
      -------------------- *)
 
-  (** Every keyed node's body is non-empty.  Rule 2: if the next
-      element is blank, no keying happens — so an empty body would
-      indicate a bug. *)
+  (** Every keyed node's body is non-empty.  Rule 2: if the next element
+      is blank, no keying happens — so an empty body would indicate a
+      bug. *)
   let keyed_bodies_non_empty (doc : Cmarkit.Doc.t) : bool =
     let ok = ref true in
     iter_doc doc ~f:(fun b ->
@@ -556,19 +553,13 @@ module Spec = struct
     match List.last (Cmarkit.Block.List'.items l) with
     | None -> false
     | Some (item, _) ->
-      let block = Cmarkit.Block.List_item.block item in
-      let leading_para =
-        match block with
-        | Cmarkit.Block.Paragraph (p, _) -> Some p
-        | _ -> None
-        (* With sub-blocks the item would be [Blocks (Paragraph :: rest)];
-           that path is Rule 1 and would have become [Ext_keyed_list_item]. *)
-      in
-      (match leading_para with
-       | None -> false
-       | Some p ->
-         let inline = Cmarkit.Block.Paragraph.inline p in
-         Option.is_some (strip_trailing_colon ~source inline))
+      (* With sub-blocks the item would be [Blocks (Paragraph :: rest)];
+         that path is Rule 1 and would have become [Ext_keyed_list_item]. *)
+      (match Cmarkit.Block.List_item.block item with
+       | Cmarkit.Block.Paragraph (p, _) ->
+         Option.is_some
+           (Colon.strip_trailing_colon ~source (Cmarkit.Block.Paragraph.inline p))
+       | _ -> false)
   ;;
 
   (** The rewriter's maximality guarantee: no sibling-level keyed
@@ -578,7 +569,7 @@ module Spec = struct
       detection. *)
   let keying_is_maximal ~(source : string option) (doc : Cmarkit.Doc.t) : bool =
     let ok = ref true in
-    let check_siblings (bs : Cmarkit.Block.t list) =
+    iter_sibling_lists (Cmarkit.Doc.block doc) ~f:(fun bs ->
       let arr = Array.of_list bs in
       let len = Array.length arr in
       for i = 0 to len - 1 do
@@ -586,28 +577,12 @@ module Spec = struct
           match arr.(i) with
           | Cmarkit.Block.Paragraph (p, _) ->
             Option.is_some
-              (strip_trailing_colon ~source (Cmarkit.Block.Paragraph.inline p))
+              (Colon.strip_trailing_colon ~source (Cmarkit.Block.Paragraph.inline p))
           | Cmarkit.Block.List (l, _) -> list_last_item_is_bare_keyed ~source l
           | _ -> false
         in
-        if absorbable && i + 1 < len && not (is_blank_line arr.(i + 1))
-        then ok := false
-      done
-    in
-    let rec walk (b : Cmarkit.Block.t) =
-      match b with
-      | Cmarkit.Block.Blocks (bs, _) ->
-        check_siblings bs;
-        List.iter bs ~f:walk
-      | Cmarkit.Block.List (l, _) ->
-        List.iter (Cmarkit.Block.List'.items l) ~f:(fun (item, _) ->
-          walk (Cmarkit.Block.List_item.block item))
-      | Cmarkit.Block.Block_quote (bq, _) -> walk (Cmarkit.Block.Block_quote.block bq)
-      | Ext_keyed_block (_, body) | Ext_keyed_list_item (_, body) -> walk body
-      | Div.Ext_div (_, body) -> walk body
-      | _ -> ()
-    in
-    walk (Cmarkit.Doc.block doc);
+        if absorbable && i + 1 < len && not (is_blank_line arr.(i + 1)) then ok := false
+      done);
     !ok
   ;;
 
@@ -674,9 +649,8 @@ some text|}
 following paragraph|}
   ;;
 
-  (** All examples, used as [~examples:] seed for
-      [Core.Quickcheck.test] and for commonmark-roundtrip checking in
-      [parse.ml]. *)
+  (** All examples, used as [~examples:] seed for [Core.Quickcheck.test]
+      and for commonmark-roundtrip checking in [parse.ml]. *)
   let all_examples =
     [ rule1_keyed_list_item_with_indented_content
     ; rule2_keyed_list_item_followed_by_blank_line
