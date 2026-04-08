@@ -24,20 +24,23 @@ class oystermark_server =
     method! config_hover = Some (`Bool true)
     method! config_inlay_hints = Some (`Bool true)
 
-    method! config_modify_capabilities (c : ServerCapabilities.t) =
+    method! config_modify_capabilities (c : ServerCapabilities.t) : ServerCapabilities.t =
       { c with referencesProvider = Some (`Bool true) }
 
-    method! config_sync_opts =
+    method! config_sync_opts : TextDocumentSyncOptions.t =
       TextDocumentSyncOptions.create
         ~change:TextDocumentSyncKind.Full
         ~openClose:true
         ~save:(`SaveOptions (SaveOptions.create ~includeText:false ()))
         ()
 
-    method! filter_text_document uri =
+    method! filter_text_document (uri : DocumentUri.t) : bool =
       Filename.check_suffix (DocumentUri.to_path uri) ".md"
 
-    method! on_req_initialize ~notify_back (params : InitializeParams.t) =
+    method! on_req_initialize
+      ~notify_back
+      (params : InitializeParams.t)
+      : InitializeResult.t =
       let root =
         match params.rootUri with
         | Some uri -> Some (DocumentUri.to_path uri)
@@ -46,7 +49,7 @@ class oystermark_server =
       Option.iter root ~f:(fun r -> vault <- Some (build_vault r));
       super#on_req_initialize ~notify_back params
 
-    method private rebuild_vault =
+    method private rebuild_vault : unit =
       match vault with
       | None -> ()
       | Some v -> vault <- Some (build_vault v.vault_root)
@@ -72,7 +75,12 @@ class oystermark_server =
         (try Some (In_channel.read_all fp) with
          | _ -> None)
 
-    method private publish_diagnostics ~notify_back ~uri ~content =
+    method
+      private publish_diagnostics
+      ~notify_back
+      ~(uri : DocumentUri.t)
+      ~(content : string)
+      : unit =
       match vault with
       | None -> ()
       | Some v ->
@@ -95,14 +103,14 @@ class oystermark_server =
         in
         notify_back#send_diagnostic lsp_diags
 
-    method on_notif_doc_did_open ~notify_back doc ~content =
+    method on_notif_doc_did_open ~notify_back doc ~(content : string) : unit =
       let uri = doc.TextDocumentItem.uri in
       let rel_path = self#rel_path_of_uri uri in
       Hash_set.add open_docs rel_path;
       self#rebuild_vault;
       self#publish_diagnostics ~notify_back ~uri ~content
 
-    method on_notif_doc_did_close ~notify_back:_ doc =
+    method on_notif_doc_did_close ~notify_back:_ doc : unit =
       let rel_path = self#rel_path_of_uri doc.TextDocumentIdentifier.uri in
       Hash_set.remove open_docs rel_path
 
@@ -111,7 +119,13 @@ class oystermark_server =
         ([find_references], [inlay_hints], etc.) still answer against
         disk — they will only reflect the edit after a save.  See
         {!page-"feature-document-sync"}. *)
-    method on_notif_doc_did_change ~notify_back doc _changes ~old_content:_ ~new_content =
+    method on_notif_doc_did_change
+      ~notify_back
+      doc
+      _changes
+      ~old_content:_
+      ~(new_content : string)
+      : unit =
       let uri = doc.VersionedTextDocumentIdentifier.uri in
       self#publish_diagnostics ~notify_back ~uri ~content:new_content
 
@@ -120,7 +134,10 @@ class oystermark_server =
         sibling buffer (e.g. an [[[b]]] link that was just resolved by
         creating [b.md]) gets cleared.  See
         {!page-"feature-document-sync"}. *)
-    method! on_notif_doc_did_save ~notify_back _params =
+    method! on_notif_doc_did_save
+      ~notify_back
+      (_params : DidSaveTextDocumentParams.t)
+      : unit =
       self#rebuild_vault;
       match vault with
       | None -> ()
@@ -136,10 +153,11 @@ class oystermark_server =
     method! on_req_hover
       ~notify_back:_
       ~id:_
-      ~uri
-      ~pos
+      ~(uri : DocumentUri.t)
+      ~(pos : Position.t)
       ~workDoneToken:_
-      (doc_st : doc_state) =
+      (doc_st : doc_state)
+      : Hover.t option =
       match vault with
       | None -> None
       | Some v ->
@@ -175,11 +193,12 @@ class oystermark_server =
     method! on_req_definition
       ~notify_back:_
       ~id:_
-      ~uri
-      ~pos
+      ~(uri : DocumentUri.t)
+      ~(pos : Position.t)
       ~workDoneToken:_
       ~partialResultToken:_
-      (doc_st : doc_state) =
+      (doc_st : doc_state)
+      : [ `Location of Location.t list | `LocationLink of LocationLink.t list ] option =
       match vault with
       | None -> None
       | Some v ->
@@ -251,7 +270,13 @@ class oystermark_server =
              Some locations)
         | _ -> failwith "unhandled request"
 
-    method! on_req_inlay_hint ~notify_back:_ ~id:_ ~uri ~range () =
+    method! on_req_inlay_hint
+      ~notify_back:_
+      ~id:_
+      ~(uri : DocumentUri.t)
+      ~(range : Range.t)
+      ()
+      : InlayHint.t list option =
       match vault with
       | None -> None
       | Some v ->
