@@ -54,19 +54,10 @@ let file_cmd : Command.t =
        else print_string (Html.of_doc ~backend_blocks:true ~safe:false doc))
 ;;
 
-let theme_of_string (s : string) : Theme.t = Theme.of_name (Config.theme_of_string s)
-
-let pipeline_of_profile ~(cache : Cache.cache) (p : Config.pipeline_profile) : Pipeline.t =
-  match p with
-  | Default -> Pipeline.default ~cache ()
-  | Basic -> Pipeline.basic
-  | None_profile -> Pipeline.id
-;;
-
 (** Render vault and write output files + copy assets. Returns unit. *)
-let do_render ~verbose ~pipeline ~theme ~vault_root ~output_dir =
+let do_render ~verbose ~config ~theme ~vault_root ~output_dir =
   let cache = Cache.load_cache ~dir:output_dir in
-  let pipeline : Pipeline.t = pipeline_of_profile ~cache pipeline in
+  let pipeline : Pipeline.t = Pipeline.of_config ~cache ~config () in
   let results =
     render_vault ~pipeline ~theme ~backend_blocks:true ~safe:false vault_root
   in
@@ -115,9 +106,7 @@ let vault_cmd : Command.t =
      and (css_snippets : string list) =
        flag "--css-snippet" (listed string) ~doc:"PATH CSS snippet file to include"
      and (config_file : string option) =
-       flag "--config" (optional string) ~doc:"PATH Path to a YAML config file"
-     and (config_yaml : string option) =
-       flag "--config-yaml" (optional string) ~doc:"YAML Inline YAML config string"
+       flag "--config" (optional string) ~doc:"PATH Path to a JSON config file"
      and (pipeline_profile : string option) =
        flag
          "--pipeline"
@@ -136,16 +125,15 @@ let vault_cmd : Command.t =
      fun () ->
        (* ::: config-resolving *)
        let config : Config.t =
-         match config_file, config_yaml with
-         | Some _, Some _ -> failwith "Cannot provide both --config and --config-yaml"
-         | Some path, None -> Config.of_file path
-         | None, Some yaml -> Config.of_yaml_string yaml
-         | None, None ->
-           { theme =
+         match config_file with
+         | Some path -> Config.of_file path
+         | None ->
+           { Config.default with
+             theme =
                Option.value_map
                  theme
                  ~default:Config.default.theme
-                 ~f:Config.theme_of_string
+                 ~f:Config.Theme.of_string
            ; css_snippets =
                (match css_snippets with
                 | [] -> Config.default.css_snippets
@@ -154,7 +142,7 @@ let vault_cmd : Command.t =
                Option.value_map
                  pipeline_profile
                  ~default:Config.default.pipeline_profile
-                 ~f:Config.pipeline_profile_of_string
+                 ~f:Config.Pipeline_profile.of_string
            }
        in
        let css_snippet_contents : string list =
@@ -171,14 +159,7 @@ let vault_cmd : Command.t =
            let curr_dir = Sys_unix.getcwd () in
            curr_dir ^ "/_site"
        in
-       let render () =
-         do_render
-           ~verbose
-           ~pipeline:config.pipeline_profile
-           ~theme
-           ~vault_root
-           ~output_dir
-       in
+       let render () = do_render ~verbose ~config ~theme ~vault_root ~output_dir in
        (* Initial render *)
        render ();
        (* Serve and/or watch *)
@@ -197,7 +178,25 @@ let vault_cmd : Command.t =
            (fun () -> Dev_server.watch ~env ~watch_dir:vault_root ~on_change:render))
 ;;
 
+let graph_cmd : Command.t =
+  Command.basic
+    ~summary:"Output an interactive graph view of a vault as HTML"
+    (let%map_open.Command (vault_root : string) = anon ("vault-root" %: string)
+     and (output : string option) =
+       flag "--output" (optional string) ~doc:"PATH Write HTML to file instead of stdout"
+     in
+     fun () ->
+       let vault = Vault.of_root_path vault_root in
+       let vg = Vault_graph.of_vault vault in
+       let html = Graph_view.to_html vg in
+       match output with
+       | Some path -> Out_channel.write_all path ~data:html
+       | None -> print_string html)
+;;
+
 let () =
-  Command.group ~summary:"Oystermark renderer" [ "file", file_cmd; "vault", vault_cmd ]
+  Command.group
+    ~summary:"Oystermark renderer"
+    [ "file", file_cmd; "vault", vault_cmd; "graph", graph_cmd ]
   |> Command_unix.run ~version:"0.1.0"
 ;;

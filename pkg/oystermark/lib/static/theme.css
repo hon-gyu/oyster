@@ -108,7 +108,11 @@ footer {
     width: 8px;
 }
 
-/* Main content — centered in viewport, but never overlaps sidebar */
+/* Main content
+   =============
+   - Centered in viewport, but never overlaps sidebar.
+   - When sidebar is collapsed, content must re-center in the full
+     viewport width, not shift right. */
 main {
     max-width: 48rem;
     padding: 2rem 1.5rem;
@@ -117,6 +121,7 @@ main {
 }
 .sidebar-collapsed main {
     margin-left: auto;
+    margin-right: auto;
 }
 
 /* Headings */

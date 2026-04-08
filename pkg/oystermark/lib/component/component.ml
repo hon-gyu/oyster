@@ -6,6 +6,7 @@
 *)
 
 open Core
+module Html = Html
 
 type html = string
 type doc_component = string * Cmarkit.Doc.t -> html

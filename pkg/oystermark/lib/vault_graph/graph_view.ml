@@ -1,0 +1,151 @@
+(** Graph view: visual rendering (d3.js) of a {!Common.t}. *)
+
+(* TODO: refactor graph_view
+  graph_view/
+    `- widget.js
+    `- style.css
+    `- test/
+       `- data.json
+  use blob for style css
+*)
+
+open Core
+open Common
+module J = Yojson.Basic
+
+module String_pair = struct
+  module T = struct
+    type t = string * string [@@deriving sexp, compare]
+  end
+
+  include T
+  include Comparator.Make (T)
+end
+
+(* JSON output
+   ==================== *)
+
+(** Collapse the graph to note-level: one node per path, deduplicated edges. *)
+let to_json (t : t) : string =
+  (* Collect note-level nodes *)
+  let nodes : J.t list =
+    G.fold_vertex
+      (fun (v : vertex) acc ->
+         match v.kind with
+         | Note ->
+           let meta = Map.find_exn t.meta v.path in
+           `Assoc
+             [ "id", `String v.path
+             ; "title", `String meta.title
+             ; "tags", `List (List.map meta.tags ~f:(fun t -> `String t))
+             ; "folder", `String meta.folder
+             ; "href", `String meta.href
+             ]
+           :: acc
+         | _ -> acc)
+      t.graph
+      []
+  in
+  (* Collect note-level edges (deduplicated) *)
+  let edge_set =
+    G.fold_edges_e
+      (fun (src, _kind, tgt) acc ->
+         if String.equal src.path tgt.path then acc else Set.add acc (src.path, tgt.path))
+      t.graph
+      (Set.empty (module String_pair))
+  in
+  let edges : J.t list =
+    Set.to_list edge_set
+    |> List.map ~f:(fun (src, tgt) ->
+      `Assoc [ "source", `String src; "target", `String tgt ])
+  in
+  J.pretty_to_string (`Assoc [ "nodes", `List nodes; "edges", `List edges ])
+;;
+
+(* HTML output
+   ==================== *)
+
+let widget_js : string = [%blob "../vault_graph/static/widget.js"]
+let widget_css : string = [%blob "../vault_graph/static/widget.css"]
+let standalone_css : string = [%blob "../vault_graph/static/page.css"]
+
+let%expect_test "to_json with cross-note links" =
+  let vault =
+    Vault.of_inmem_files
+      ~vault_root:"/tmp_vault"
+      [ "a.md", "link to [[b]]"; "b.md", "link to [[a]]" ]
+  in
+  let g = of_vault vault in
+  print_endline (to_json g);
+  [%expect
+    {|
+    {
+      "nodes": [
+        { "id": "b.md", "title": "b", "tags": [], "folder": ".", "href": "/b/" },
+        { "id": "a.md", "title": "a", "tags": [], "folder": ".", "href": "/a/" }
+      ],
+      "edges": [
+        { "source": "a.md", "target": "b.md" },
+        { "source": "b.md", "target": "a.md" }
+      ]
+    }
+    |}]
+;;
+
+(** Embeddable widget HTML fragment (style + container + scripts).
+    Suitable for inlining into an existing page via an [=html] code block. *)
+let to_widget_html
+      ?(config : Config.Home_graph_view.t = Config.Home_graph_view.default)
+      (t : t)
+  : string
+  =
+  let json = to_json t in
+  let config_json = Yojson.Safe.to_string (Config.Home_graph_view.yojson_of_t config) in
+  Printf.sprintf
+    {|<style>
+%s
+</style>
+<div id="graph-view"></div>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<script>
+window.__graphData = %s;
+window.__graphConfig = %s;
+</script>
+<script>
+%s
+</script>|}
+    widget_css
+    json
+    config_json
+    widget_js
+;;
+
+let to_html (t : t) : string =
+  let json = to_json t in
+  Printf.sprintf
+    {|<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Graph View</title>
+<style>
+%s
+%s
+</style>
+</head>
+<body>
+<div id="graph-view"></div>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<script>
+window.__graphData = %s;
+</script>
+<script>
+%s
+</script>
+</body>
+</html>|}
+    standalone_css
+    widget_css
+    json
+    widget_js
+;;

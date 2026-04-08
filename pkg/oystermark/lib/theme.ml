@@ -233,15 +233,15 @@ let bluloco_light_colors : colors =
 
 let default : t = of_colors bluloco_dark_colors
 
-let of_name ?(css_snippets : string list = []) (theme : Config.theme) =
+let of_name ?(css_snippets : string list = []) (theme : Config.Theme.t) =
   let extra_css = String.concat css_snippets in
   let of_colors' = of_colors ~extra_css in
   match theme with
-  | Config.Tokyonight -> of_colors' tokyonight_colors
-  | Config.Gruvbox -> of_colors' gruvbox_colors
-  | Config.Atom_one_light -> of_colors' atom_one_light_colors
-  | Config.Atom_one_dark -> of_colors' atom_one_dark_colors
-  | Config.Bluloco_light -> of_colors' bluloco_light_colors
-  | Config.Bluloco_dark -> of_colors' bluloco_dark_colors
-  | Config.No_theme -> none
+  | Config.Theme_def.Tokyonight -> of_colors' tokyonight_colors
+  | Gruvbox -> of_colors' gruvbox_colors
+  | Atom_one_light -> of_colors' atom_one_light_colors
+  | Atom_one_dark -> of_colors' atom_one_dark_colors
+  | Bluloco_light -> of_colors' bluloco_light_colors
+  | Bluloco_dark -> of_colors' bluloco_dark_colors
+  | No_theme -> none
 ;;

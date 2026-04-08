@@ -1,0 +1,18 @@
+/* Standalone page styles — only for to_html (full-page graph).
+   Global resets that must not be used when embedding the widget.
+   ==================== */
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+body {
+    background: #1a1a2e;
+    overflow: hidden;
+    font-family: sans-serif;
+}
+#graph-view {
+    width: 100vw;
+    height: 100vh;
+}

@@ -8,12 +8,18 @@ type heading_entry =
   ; level : int
   ; slug : string
     (** GitHub-style anchor: lowercase, punctuation stripped, deduped with [-1], [-2], etc. *)
+  ; loc : Cmarkit.Textloc.t option
+  }
+
+type block_entry =
+  { id : string
+  ; loc : Cmarkit.Textloc.t option
   }
 
 type file_entry =
   { rel_path : string
   ; headings : heading_entry list
-  ; block_ids : string list
+  ; blocks : block_entry list
   }
 
 type t =
@@ -37,7 +43,11 @@ let extract_headings (doc : Cmarkit.Doc.t) : heading_entry list =
                  ~message:
                    "heading missing slug meta — doc must be parsed via Parse.of_string"
           in
-          Cmarkit.Folder.ret (acc @ [ { text; level; slug } ])
+          let loc =
+            let tl = Cmarkit.Meta.textloc meta in
+            if Cmarkit.Textloc.is_none tl then None else Some tl
+          in
+          Cmarkit.Folder.ret (acc @ [ { text; level; slug; loc } ])
         | _ -> Cmarkit.Folder.default)
       ~inline_ext_default:(fun _f acc _i -> acc)
       ~block_ext_default:(fun _f acc _b -> acc)
@@ -47,7 +57,7 @@ let extract_headings (doc : Cmarkit.Doc.t) : heading_entry list =
 ;;
 
 (* Use Cmarkit.Folder to extract block IDs from a document. *)
-let extract_block_ids (doc : Cmarkit.Doc.t) : string list =
+let extract_block_ids (doc : Cmarkit.Doc.t) : block_entry list =
   let folder =
     Cmarkit.Folder.make
       ~block:(fun _f acc block ->
@@ -58,7 +68,12 @@ let extract_block_ids (doc : Cmarkit.Doc.t) : string list =
              We should get it.
              *)
           (match Cmarkit.Meta.find Block_id.meta_key meta with
-           | Some (bid : Block_id.t) -> Cmarkit.Folder.ret (acc @ [ bid.id ])
+           | Some (bid : Block_id.t) ->
+             let loc =
+               let tl = Cmarkit.Meta.textloc meta in
+               if Cmarkit.Textloc.is_none tl then None else Some tl
+             in
+             Cmarkit.Folder.ret (acc @ [ { id = bid.id; loc } ])
            | None -> Cmarkit.Folder.default)
         | _ -> Cmarkit.Folder.default)
       ~inline_ext_default:(fun _f acc _i -> acc)
@@ -138,7 +153,7 @@ Third paragraph ^block-2
   in
   let doc = Cmarkit.Mapper.map_doc mapper doc in
   let block_ids = extract_block_ids doc in
-  List.iter block_ids ~f:(fun id -> Printf.printf "%s\n" id);
+  List.iter block_ids ~f:(fun (b : block_entry) -> Printf.printf "%s\n" b.id);
   [%expect
     {|
     para1

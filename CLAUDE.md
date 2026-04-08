@@ -1,7 +1,6 @@
-# Rules
-- When working in a dir that contains its own `CLAUDE.md`, read it first. They are important context that is specific to that dir.
-- All `CLAUDE.md` are considered source of truth and they are living documents. So if anything inside it is inconsistent or outdated, discuss with the user.
-
+# General
+- We consider specification a part of the program.
+  - odoc is used to tie spec <- implementation <- test
 
 # Tips
 

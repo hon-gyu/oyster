@@ -1,0 +1,38 @@
+; Bundle widget.ts -> widget.js via esbuild.
+;
+; The generated widget.js is checked into the source tree (promote mode).
+; The rule is gated on npx being available on PATH, so:
+;
+;   - Contributors with node: `dune build` regenerates widget.js
+;                              from widget.ts via the local esbuild
+;                              devDependency and promotes it back
+;                              to the source tree.
+;   - Contributors without node: the rule is disabled; the checked-in
+;                                widget.js is consumed as-is by
+;                                [%blob] in vault_graph/graph_view.ml.
+;
+; First-time setup if you intend to edit widget.ts:
+;   (cd pkg/oystermark/lib/vault_graph/static && npm install)
+;
+; If the wire format between OCaml and the widget changes, the
+; `Home_graph_view wire format` expect-test in the config library will
+; fail — update both the OCaml side and config.d.ts in the same commit.
+
+(rule
+ (enabled_if
+  (<> %{bin-available:npx} false))
+ (mode
+  (promote
+   (until-clean)
+   (only widget.js)))
+ (targets widget.js)
+ (deps widget.ts graph_model.ts selector.ts config.d.ts tsconfig.json)
+ (action
+  (run
+   npx
+   esbuild
+   widget.ts
+   --bundle
+   --format=iife
+   --outfile=widget.js
+   --log-level=warning)))

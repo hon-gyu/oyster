@@ -5,15 +5,12 @@
   parse
   vault
   code_executor
+  pipeline
+  vault_graph
+  component
   cmarkit
   core
-  core_unix
-  core_unix.filename_unix
-  core_unix.sys_unix
-  trace_collect
-  tyxml
-  yaml
-  yojson)
+  trace_collect)
  (inline_tests)
  (preprocessor_deps
   (file static/theme.css))

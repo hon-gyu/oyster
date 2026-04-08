@@ -1,3 +1,5 @@
+open Core
+
 type target =
   | Note of { path : string }
   | File of { path : string }
@@ -6,20 +8,28 @@ type target =
       ; heading : string
       ; level : int
       ; slug : string
+      ; loc : Cmarkit.Textloc.t option
       }
   | Block of
       { path : string
       ; block_id : string
+      ; loc : Cmarkit.Textloc.t option
       }
   | Curr_file
   | Curr_heading of
       { heading : string
       ; level : int
       ; slug : string
+      ; loc : Cmarkit.Textloc.t option
       }
-  | Curr_block of { block_id : string }
+  | Curr_block of
+      { block_id : string
+      ; loc : Cmarkit.Textloc.t option
+      }
   | Unresolved
-[@@deriving sexp]
+
+val sexp_of_target : target -> Sexp.t
+val target_of_sexp : Sexp.t -> target
 
 (** Meta key for storing resolved targets in the target *)
 val resolved_key : target Cmarkit.Meta.key

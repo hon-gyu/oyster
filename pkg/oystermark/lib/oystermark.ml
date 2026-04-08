@@ -9,11 +9,13 @@
 open Core
 module Parse = Parse
 module Vault = Vault
-module Html = Html
+module Html = Component.Html
 module Pipeline = Pipeline
 module Theme = Theme
 module Config = Config
 module Code_executor = Code_executor
+module Vault_graph = Vault_graph
+module Graph_view = Vault_graph.Graph_view
 
 (** Build and render a vault through the pipeline.
 

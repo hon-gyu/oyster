@@ -5,21 +5,25 @@ let test_index : Vault.Index.t =
   { files =
       [ { rel_path = "Note 1.md"
         ; headings =
-            [ { text = "Level 3 title"; level = 3; slug = "level-3-title" }
-            ; { text = "L2"; level = 2; slug = "l2" }
-            ; { text = "L3"; level = 3; slug = "l3" }
+            [ { text = "Level 3 title"; level = 3; slug = "level-3-title"; loc = None }
+            ; { text = "L2"; level = 2; slug = "l2"; loc = None }
+            ; { text = "L3"; level = 3; slug = "l3"; loc = None }
             ]
-        ; block_ids = [ "para1"; "block-2" ]
+        ; blocks = [ { id = "para1"; loc = None }; { id = "block-2"; loc = None } ]
         }
       ; { rel_path = "Note 2.md"
-        ; headings = [ { text = "Some heading"; level = 2; slug = "some-heading" } ]
-        ; block_ids = []
+        ; headings =
+            [ { text = "Some heading"; level = 2; slug = "some-heading"; loc = None } ]
+        ; blocks = []
         }
-      ; { rel_path = "image.png"; headings = []; block_ids = [] }
-      ; { rel_path = "video.mp4"; headings = []; block_ids = [] }
-      ; { rel_path = "audio.mp3"; headings = []; block_ids = [] }
-      ; { rel_path = "doc.pdf"; headings = []; block_ids = [] }
-      ; { rel_path = "dir/deep.md"; headings = []; block_ids = [ "d1" ] }
+      ; { rel_path = "image.png"; headings = []; blocks = [] }
+      ; { rel_path = "video.mp4"; headings = []; blocks = [] }
+      ; { rel_path = "audio.mp3"; headings = []; blocks = [] }
+      ; { rel_path = "doc.pdf"; headings = []; blocks = [] }
+      ; { rel_path = "dir/deep.md"
+        ; headings = []
+        ; blocks = [ { id = "d1"; loc = None } ]
+        }
       ]
   ; dirs = []
   }

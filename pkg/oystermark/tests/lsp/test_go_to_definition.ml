@@ -30,7 +30,6 @@ let files =
 ;;
 
 let index = Vault_helper.make_index files
-let read_file rel_path = List.Assoc.find files ~equal:String.equal rel_path
 
 let%expect_test "e2e: wikilink to note" =
   let s = start_server ~vault_root in
@@ -123,7 +122,6 @@ let%expect_test "trace: heading resolution spans" =
         ~content
         ~line:4
         ~character:8
-        ~read_file
         ()
     in
     ());
@@ -136,12 +134,10 @@ let%expect_test "trace: heading resolution spans" =
   print_endline (Trace_collect.format spans);
   [%expect
     {|
-        go_to_definition 7us resolution=heading rel_path=note-b.md line=- character=-
-        ├── byte_offset_of_position 1us line=- character=- offset=42
-        ├── parse_doc 2us content_len=144
-        ├── collect_links 3us num_links=5
-        ├── find_link_ref_at_offset 4us offset=42 found=true
-        ├── parse_doc 5us content_len=74
-        └── find_heading_line_in_doc 6us result_line=2 slug=section-one
-        |}]
+    go_to_definition 5us resolution=heading rel_path=note-b.md line=- character=-
+    ├── byte_offset_of_position 1us line=- character=- offset=42
+    ├── parse_doc 2us content_len=144
+    ├── collect_links 3us num_links=5
+    └── find_link_ref_at_offset 4us offset=42 found=true
+    |}]
 ;;

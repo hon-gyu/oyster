@@ -1,0 +1,11 @@
+(library
+ (name vault_graph)
+ (public_name oystermark.vault_graph)
+ (libraries parse vault component cmarkit core ocamlgraph config yojson)
+ (inline_tests)
+ (preprocessor_deps
+  (file static/widget.js)
+  (file static/page.css)
+  (file static/widget.css))
+ (preprocess
+  (pps ppx_jane ppx_string ppx_blob ppx_quick_test)))

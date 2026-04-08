@@ -33,12 +33,12 @@ let build_index
   let md_entries =
     List.map md_docs ~f:(fun (rel_path, doc) ->
       let headings = Index.extract_headings doc in
-      let block_ids = Index.extract_block_ids doc in
-      ({ rel_path; headings; block_ids } : Index.file_entry))
+      let blocks = Index.extract_block_ids doc in
+      ({ rel_path; headings; blocks } : Index.file_entry))
   in
   let non_md =
     List.map other_files ~f:(fun rel_path ->
-      ({ rel_path; headings = []; block_ids = [] } : Index.file_entry))
+      ({ rel_path; headings = []; blocks = [] } : Index.file_entry))
   in
   { files = md_entries @ non_md; dirs }
 ;;
@@ -57,7 +57,7 @@ let of_root_path (vault_root : string) : t =
       then (
         let full_path = Filename.concat vault_root rel_path in
         let content = In_channel.read_all full_path in
-        let parsed = Parse.of_string content in
+        let parsed = Parse.of_string ~locs:true content in
         Some (rel_path, parsed))
       else None)
   in
@@ -71,4 +71,16 @@ let of_root_path (vault_root : string) : t =
   (* Expand note embeds *)
   let expanded_docs : (string * Cmarkit.Doc.t) list = Embed.expand_docs resolved_docs in
   { vault_root; index; docs = expanded_docs; vault_meta = Cmarkit.Meta.none }
+;;
+
+(** [of_inmem_files] creates a vault from a list of in-memory files.
+  @param files A list of (path, content) pairs representing the files to include in the vault.
+*)
+let of_inmem_files ?(vault_root = "/tmp_vault") (files : (string * string) list) : t =
+  let docs =
+    List.map files ~f:(fun (path, content) -> path, Parse.of_string ~locs:true content)
+  in
+  let index = build_index ~md_docs:docs ~other_files:[] ~dirs:[] in
+  let resolved_docs = Resolve.resolve_docs docs index in
+  { vault_root; index; docs = resolved_docs; vault_meta = Cmarkit.Meta.none }
 ;;

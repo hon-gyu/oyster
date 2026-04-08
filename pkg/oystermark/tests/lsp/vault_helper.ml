@@ -7,7 +7,7 @@ let make_index (files : (string * string) list) : Oystermark.Vault.Index.t =
     List.filter_map files ~f:(fun (rel_path, content) ->
       if String.is_suffix rel_path ~suffix:".md"
       then (
-        let doc = Oystermark.Parse.of_string content in
+        let doc = Oystermark.Parse.of_string ~locs:true content in
         Some (rel_path, doc))
       else None)
   in

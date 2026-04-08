@@ -9,68 +9,12 @@ open Core
 
     See {!page-"feature-go-to-definition".resolution}. *)
 
-(** Find the 0-based line number of a heading with the given [slug] in [doc].
-    Returns 0 if not found or if text locations are unavailable.
-
-    Requires the document to have been parsed with [~locs:true]. *)
-let find_heading_line_in_doc (doc : Cmarkit.Doc.t) (slug : string) : int =
-  Trace_core.with_span ~__FILE__ ~__LINE__ "find_heading_line_in_doc"
-  @@ fun _sp ->
-  Trace_core.add_data_to_span _sp [ "slug", `String slug ];
-  let folder =
-    Cmarkit.Folder.make
-      ~block:(fun _f acc block ->
-        match block with
-        | Cmarkit.Block.Heading (_h, meta) ->
-          (match Cmarkit.Meta.find Oystermark.Parse.Heading_slug.meta_key meta with
-           | Some s when String.equal s slug ->
-             let loc = Cmarkit.Meta.textloc meta in
-             if Cmarkit.Textloc.is_none loc
-             then Cmarkit.Folder.default
-             else (
-               let line_num, _byte_pos = Cmarkit.Textloc.first_line loc in
-               Cmarkit.Folder.ret (Some (line_num - 1)))
-           | _ -> Cmarkit.Folder.default)
-        | _ -> Cmarkit.Folder.default)
-      ~inline_ext_default:(fun _f acc _i -> acc)
-      ~block_ext_default:(fun _f acc _b -> acc)
-      ()
-  in
-  let result = Cmarkit.Folder.fold_doc folder None doc |> Option.value ~default:0 in
-  Trace_core.add_data_to_span _sp [ "result_line", `Int result ];
-  result
-;;
-
-(** Find the 0-based line number of a block ID ([^id]) in [doc].
-    Returns 0 if not found or if text locations are unavailable.
-
-    Requires the document to have been parsed with [~locs:true]. *)
-let find_block_id_line_in_doc (doc : Cmarkit.Doc.t) (block_id : string) : int =
-  Trace_core.with_span ~__FILE__ ~__LINE__ "find_block_id_line_in_doc"
-  @@ fun _sp ->
-  Trace_core.add_data_to_span _sp [ "block_id", `String block_id ];
-  let folder =
-    Cmarkit.Folder.make
-      ~block:(fun _f acc block ->
-        match block with
-        | Cmarkit.Block.Paragraph (_p, meta) ->
-          (match Cmarkit.Meta.find Oystermark.Parse.Block_id.meta_key meta with
-           | Some (bid : Oystermark.Parse.Block_id.t) when String.equal bid.id block_id ->
-             let loc = Cmarkit.Meta.textloc meta in
-             if Cmarkit.Textloc.is_none loc
-             then Cmarkit.Folder.default
-             else (
-               let line_num, _byte_pos = Cmarkit.Textloc.first_line loc in
-               Cmarkit.Folder.ret (Some (line_num - 1)))
-           | _ -> Cmarkit.Folder.default)
-        | _ -> Cmarkit.Folder.default)
-      ~inline_ext_default:(fun _f acc _i -> acc)
-      ~block_ext_default:(fun _f acc _b -> acc)
-      ()
-  in
-  let result = Cmarkit.Folder.fold_doc folder None doc |> Option.value ~default:0 in
-  Trace_core.add_data_to_span _sp [ "result_line", `Int result ];
-  result
+(** Extract a 0-based line number from an optional [Cmarkit.Textloc.t].
+    Returns 0 if [None]. *)
+let line_of_textloc (tl : Cmarkit.Textloc.t option) : int =
+  match tl with
+  | Some tl -> fst (Cmarkit.Textloc.first_line tl) - 1
+  | None -> 0
 ;;
 
 (** {2 End-to-end}
@@ -97,7 +41,6 @@ let go_to_definition
       ~(content : string)
       ~(line : int)
       ~(character : int)
-      ~(read_file : string -> string option)
       ()
   : definition_result option
   =
@@ -127,73 +70,25 @@ let go_to_definition
       | Unresolved -> "unresolved"
     in
     Trace_core.add_data_to_span _sp [ "resolution", `String resolution_tag ];
-    let parse_target c = Lsp_util.parse_doc c in
     (match target with
      | Oystermark.Vault.Resolve.Note { path } | File { path } ->
        (* File found but fragment (if any) wasn't resolved — resolve fell back to the note. *)
        (match config.gtd_unresolved_fragment, link_ref.fragment with
         | Strict, Some _ -> None
         | _ -> Some { path; line = 0 })
-     | Heading { path; slug; _ } ->
-       let line =
-         match read_file path with
-         | Some c -> find_heading_line_in_doc (parse_target c) slug
-         | None -> 0
-       in
-       Some { path; line }
-     | Block { path; block_id } ->
-       let line =
-         match read_file path with
-         | Some c -> find_block_id_line_in_doc (parse_target c) block_id
-         | None -> 0
-       in
-       Some { path; line }
+     | Heading { path; loc; _ } -> Some { path; line = line_of_textloc loc }
+     | Block { path; loc; _ } -> Some { path; line = line_of_textloc loc }
      | Curr_file ->
        (* Self-reference but fragment (if any) wasn't resolved. *)
        (match config.gtd_unresolved_fragment, link_ref.fragment with
         | Strict, Some _ -> None
         | _ -> Some { path = rel_path; line = 0 })
-     | Curr_heading { slug; _ } ->
-       Some { path = rel_path; line = find_heading_line_in_doc doc slug }
-     | Curr_block { block_id } ->
-       Some { path = rel_path; line = find_block_id_line_in_doc doc block_id }
+     | Curr_heading { loc; _ } -> Some { path = rel_path; line = line_of_textloc loc }
+     | Curr_block { loc; _ } -> Some { path = rel_path; line = line_of_textloc loc }
      | Unresolved -> None)
 ;;
 
 (** {1:test Test} *)
-
-let%test_module "find_heading_line_in_doc" =
-  (module struct
-    let find content slug =
-      let doc = Lsp_util.parse_doc content in
-      find_heading_line_in_doc doc slug
-    ;;
-
-    let%test "finds heading" =
-      let content = "# Title\n\nSome text\n\n## Chapter 1\n\nBody" in
-      find content "chapter-1" = 4
-    ;;
-
-    let%test "returns 0 if not found" = find "# Title\n\nBody" "missing" = 0
-    let%test "first heading" = find "# Title\nBody" "title" = 0
-  end)
-;;
-
-let%test_module "find_block_id_line_in_doc" =
-  (module struct
-    let find content block_id =
-      let doc = Lsp_util.parse_doc content in
-      find_block_id_line_in_doc doc block_id
-    ;;
-
-    let%test "finds block id" =
-      let content = "First para\n\nSecond para ^abc123\n\nThird" in
-      find content "abc123" = 2
-    ;;
-
-    let%test "returns 0 if not found" = find "no ids here" "missing" = 0
-  end)
-;;
 
 let%test_module "go_to_definition" =
   (module struct
@@ -203,7 +98,7 @@ let%test_module "go_to_definition" =
         List.filter_map files ~f:(fun (rel_path, content) ->
           if String.is_suffix rel_path ~suffix:".md"
           then (
-            let doc = Oystermark.Parse.of_string content in
+            let doc = Oystermark.Parse.of_string ~locs:true content in
             Some (rel_path, doc))
           else None)
       in
@@ -225,12 +120,9 @@ let%test_module "go_to_definition" =
     ;;
 
     let index = make_index files
-    let read_file rel_path = List.Assoc.find files ~equal:String.equal rel_path
 
     let show ~rel_path ~content ~line ~character =
-      let def_res_opt =
-        go_to_definition ~index ~rel_path ~content ~line ~character ~read_file ()
-      in
+      let def_res_opt = go_to_definition ~index ~rel_path ~content ~line ~character () in
       print_s [%sexp (def_res_opt : definition_result option)]
     ;;
 

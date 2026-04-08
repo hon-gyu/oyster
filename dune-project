@@ -27,6 +27,7 @@
   core
   core_unix
   tyxml
+  ocamlgraph
   yaml
   yojson
   ppx_jane
