@@ -231,7 +231,8 @@ let%expect_test "Home_graph_view wire format" =
 
 let%expect_test "Config default" =
   default |> yojson_of_t |> J.pretty_to_string |> print_endline;
-  [%expect {|
+  [%expect
+    {|
     {
       "theme": "bluloco_dark",
       "css_snippets": [],
@@ -243,4 +244,5 @@ let%expect_test "Config default" =
         "default_tag": "none"
       }
     }
-    |}];
+    |}]
+;;

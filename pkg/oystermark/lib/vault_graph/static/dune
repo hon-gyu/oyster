@@ -28,4 +28,11 @@
  (targets widget.js)
  (deps widget.ts graph_model.ts selector.ts config.d.ts tsconfig.json)
  (action
-  (run npx esbuild widget.ts --bundle --format=iife --outfile=widget.js --log-level=warning)))
+  (run
+   npx
+   esbuild
+   widget.ts
+   --bundle
+   --format=iife
+   --outfile=widget.js
+   --log-level=warning)))
