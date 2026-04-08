@@ -102,15 +102,16 @@ let of_string ?(strict = false) ?(layout = false) ?(locs = true) (s : string)
 
 let commonmark_of_doc (doc : Cmarkit.Doc.t) : string =
   let custom =
-    let inline (c : Cmarkit_renderer.context) = function
+    let open Cmarkit_renderer in
+    let inline (c : context) = function
       | Wikilink.Ext_wikilink (wl, _) ->
-        Cmarkit_renderer.Context.string c (Wikilink.to_commonmark wl);
+        Context.string c (Wikilink.to_commonmark wl);
         true
       | _ -> false
     in
-    let block (c : Cmarkit_renderer.context) = function
+    let block (c : context) = function
       | Frontmatter.Frontmatter y ->
-        Cmarkit_renderer.Context.string c (Frontmatter.to_commonmark y);
+        Context.string c (Frontmatter.to_commonmark y);
         true
       | Div.Ext_div (div, body) ->
         let fence = String.make div.colons ':' in
@@ -119,24 +120,24 @@ let commonmark_of_doc (doc : Cmarkit.Doc.t) : string =
           | Some cls -> " " ^ cls
           | None -> ""
         in
-        let buf = Cmarkit_renderer.Context.buffer c in
+        let buf = Context.buffer c in
         let len = Buffer.length buf in
         let needs_nl = len > 0 && not (Char.equal (Buffer.nth buf (len - 1)) '\n') in
-        if needs_nl then Cmarkit_renderer.Context.byte c '\n';
-        Cmarkit_renderer.Context.string c (fence ^ class_suffix ^ "\n\n");
-        Cmarkit_renderer.Context.block c body;
-        Cmarkit_renderer.Context.string c ("\n" ^ fence ^ "\n");
+        if needs_nl then Context.byte c '\n';
+        Context.string c (fence ^ class_suffix ^ "\n\n");
+        Context.block c body;
+        Context.string c ("\n" ^ fence ^ "\n");
         true
       | Struct.Ext_keyed_block ({ label }, body) ->
-        Cmarkit_renderer.Context.inline c label;
-        Cmarkit_renderer.Context.string c ":\n";
-        Cmarkit_renderer.Context.block c body;
+        Context.inline c label;
+        Context.string c ":\n";
+        Context.block c body;
         true
       | Struct.Ext_keyed_list_item ({ label }, body) ->
-        Cmarkit_renderer.Context.string c "- ";
-        Cmarkit_renderer.Context.inline c label;
-        Cmarkit_renderer.Context.string c ":\n";
-        Cmarkit_renderer.Context.block c body;
+        Context.string c "- ";
+        Context.inline c label;
+        Context.string c ":\n";
+        Context.block c body;
         true
       | _ -> false
     in
@@ -146,6 +147,8 @@ let commonmark_of_doc (doc : Cmarkit.Doc.t) : string =
   let r = Cmarkit_renderer.compose default custom in
   Cmarkit_renderer.doc_to_string r doc
 ;;
+
+(* {1 sexp of Cmarkit.{Meta.t, Block.t, Inline.t} }*)
 
 let sexp_of_meta (meta : Cmarkit.Meta.t) : Sexp.t list =
   let open Cmarkit.Meta in
@@ -315,18 +318,6 @@ module For_test = struct
     in
     Cmarkit.Folder.fold_doc folder 0 doc
   ;;
-
-  let pp_section (blocks : Cmarkit.Block.t list) : unit =
-    print_endline
-      (commonmark_of_doc
-         (Cmarkit.Doc.make (Cmarkit.Block.Blocks (blocks, Cmarkit.Meta.none))))
-  ;;
-
-  let pp_block_opt (block : Cmarkit.Block.t option) : unit =
-    match block with
-    | None -> print_endline "<none>"
-    | Some b -> print_endline (commonmark_of_doc (Cmarkit.Doc.make b))
-  ;;
 end
 
 (** {2 Attribute}
@@ -406,6 +397,18 @@ let%test_module "Extract" =
   (module struct
     open For_test
     open Extract.For_test
+
+    let pp_section (blocks : Cmarkit.Block.t list) : unit =
+      print_endline
+        (commonmark_of_doc
+           (Cmarkit.Doc.make (Cmarkit.Block.Blocks (blocks, Cmarkit.Meta.none))))
+    ;;
+
+    let pp_block_opt (block : Cmarkit.Block.t option) : unit =
+      match block with
+      | None -> print_endline "<none>"
+      | Some b -> print_endline (commonmark_of_doc (Cmarkit.Doc.make b))
+    ;;
 
     let%expect_test "get_heading_section: heading-1" =
       let block = make_block example_headings in
