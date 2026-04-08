@@ -33,18 +33,27 @@ module Colon : sig
     -> Cmarkit.Inline.t
     -> Cmarkit.Inline.t option
 
-  val labels_of_inline : Cmarkit.Inline.t -> string list
+  val labels_of_inline : Cmarkit.Inline.t -> Cmarkit.Inline.t list
 end = struct
-  (** Flatten an inline tree to plain text.  Returns [""] for unknown
-      extensions (e.g. wikilinks). *)
-  let rec inline_to_text (inline : Cmarkit.Inline.t) : string =
+  (** Try to flatten an inline tree to a plain string.  Returns [None]
+      if the tree contains {e anything} other than [Text] / [Inlines] —
+      code spans, emphasis, links, images, raw HTML, breaks, or unknown
+      extensions all cause a [None].  This is the sole criterion for
+      whether a label is eligible for chain splitting (see
+      {!labels_of_inline}). *)
+  let rec try_flatten_text (inline : Cmarkit.Inline.t) : string option =
     match inline with
-    | Cmarkit.Inline.Text (s, _) -> s
-    | Cmarkit.Inline.Inlines (is, _) -> String.concat (List.map is ~f:inline_to_text)
-    | Cmarkit.Inline.Emphasis (e, _) | Cmarkit.Inline.Strong_emphasis (e, _) ->
-      inline_to_text (Cmarkit.Inline.Emphasis.inline e)
-    | Cmarkit.Inline.Break (_, _) -> " "
-    | _ -> ""
+    | Cmarkit.Inline.Text (s, _) -> Some s
+    | Cmarkit.Inline.Inlines (is, _) ->
+      let rec go acc = function
+        | [] -> Some (String.concat (List.rev acc))
+        | x :: xs ->
+          (match try_flatten_text x with
+           | None -> None
+           | Some s -> go (s :: acc) xs)
+      in
+      go [] is
+    | _ -> None
   ;;
 
   (** [true] when the byte at [colon_byte] in [source] is preceded by
@@ -128,8 +137,28 @@ end = struct
       merge [] first rest |> List.filter ~f:(fun s -> not (String.is_empty s))
   ;;
 
-  let labels_of_inline (inline : Cmarkit.Inline.t) : string list =
-    split_colon_chain (inline_to_text inline)
+  (** Turn a colon-stripped label inline into a list of label inlines,
+      one per nesting level.
+
+      {ul
+      {- If [inline] is pure text ({!try_flatten_text} returns [Some]),
+         the flattened string is split on [: ] boundaries and each
+         segment becomes a fresh [Inline.Text].}
+      {- Otherwise — the label contains a code span, emphasis, link,
+         image, break, or extension — the entire inline is returned
+         {e unchanged} as a single label.  Chain splitting is not
+         attempted, because [: ] inside e.g. a code span is literal
+         punctuation, not a chain delimiter.}}
+
+      An empty result signals "no meaningful label"; callers should
+      leave the original block in place. *)
+  let labels_of_inline (inline : Cmarkit.Inline.t) : Cmarkit.Inline.t list =
+    match try_flatten_text inline with
+    | None -> [ inline ]
+    | Some s ->
+      split_colon_chain s
+      |> List.filter ~f:(fun seg -> not (String.is_empty seg))
+      |> List.map ~f:(fun seg -> Cmarkit.Inline.Text (seg, Cmarkit.Meta.none))
   ;;
 
   let%test_module "split_colon_chain" =
@@ -218,22 +247,21 @@ let wrap_blocks : Cmarkit.Block.t list -> Cmarkit.Block.t = function
   | multiple -> Cmarkit.Block.Blocks (multiple, Cmarkit.Meta.none)
 ;;
 
-(** Build nested keyed nodes from a list of labels (outermost-first) and
-    a body block.  Returns [body] unchanged when [labels] is empty. *)
+(** Build nested keyed nodes from a list of label inlines (outermost
+    first) and a body block.  Precondition: [labels] is non-empty —
+    callers check [Colon.labels_of_inline] and skip keying when it
+    returns [[]]. *)
 let build_nested_keyed
       ~(make_node : t -> Cmarkit.Block.t -> Cmarkit.Block.t)
-      (labels : string list)
+      (labels : Cmarkit.Inline.t list)
       (body : Cmarkit.Block.t)
   : Cmarkit.Block.t
   =
-  let mk s b =
-    let label = Cmarkit.Inline.Text (s, Cmarkit.Meta.none) in
-    make_node { label } b
-  in
+  let mk label b = make_node { label } b in
   match List.rev labels with
-  | [] -> body
+  | [] -> failwith "build_nested_keyed: empty labels"
   | innermost :: outers ->
-    List.fold outers ~init:(mk innermost body) ~f:(fun acc s -> mk s acc)
+    List.fold outers ~init:(mk innermost body) ~f:(fun acc lbl -> mk lbl acc)
 ;;
 
 let mk_keyed_block t b = Ext_keyed_block (t, b)
@@ -308,35 +336,41 @@ end = struct
       (match Colon.strip_trailing_colon ~source (Cmarkit.Block.Paragraph.inline p) with
        | None -> item
        | Some label_inline ->
-         let labels = Colon.labels_of_inline label_inline in
-         let body = wrap_blocks sub_blocks in
-         let keyed = build_nested_keyed ~make_node:mk_keyed_item labels body in
-         rebuild_item item keyed)
+         (match Colon.labels_of_inline label_inline with
+          | [] -> item
+          | labels ->
+            let body = wrap_blocks sub_blocks in
+            let keyed = build_nested_keyed ~make_node:mk_keyed_item labels body in
+            rebuild_item item keyed))
     | _ -> item
   ;;
 
-  let tag_last_item ~source item : Cmarkit.Block.List_item.t * string list option =
+  let tag_last_item ~source item
+    : Cmarkit.Block.List_item.t * Cmarkit.Inline.t list option
+    =
     match list_item_paragraph item with
     | None -> item, None
     | Some (p, sub_blocks) ->
       (match Colon.strip_trailing_colon ~source (Cmarkit.Block.Paragraph.inline p) with
        | None -> item, None
        | Some label_inline ->
-         let labels = Colon.labels_of_inline label_inline in
-         if not (List.is_empty sub_blocks)
-         then (
-           (* Rule 1 *)
-           let body = wrap_blocks sub_blocks in
-           let keyed = build_nested_keyed ~make_node:mk_keyed_item labels body in
-           rebuild_item item keyed, None)
-         else (* Defer to caller: Rule 2 or Rule 3 *)
-           item, Some labels)
+         (match Colon.labels_of_inline label_inline with
+          | [] -> item, None
+          | labels ->
+            if not (List.is_empty sub_blocks)
+            then (
+              (* Rule 1 *)
+              let body = wrap_blocks sub_blocks in
+              let keyed = build_nested_keyed ~make_node:mk_keyed_item labels body in
+              rebuild_item item keyed, None)
+            else (* Defer to caller: Rule 2 or Rule 3 *)
+              item, Some labels))
   ;;
 
   let rec tag_keyed_items
             ~(source : string option)
             (items : Cmarkit.Block.List_item.t Cmarkit.node list)
-    : Cmarkit.Block.List_item.t Cmarkit.node list * string list option
+    : Cmarkit.Block.List_item.t Cmarkit.node list * Cmarkit.Inline.t list option
     =
     match items with
     | [] -> [], None
@@ -372,14 +406,15 @@ end = struct
   (** Rule 4/5: a keyed paragraph absorbs contiguous following blocks. *)
   and absorb_paragraph ~source ~original ~label_inline rest =
     let children, after = span_non_blank rest in
-    if List.is_empty children
-    then original :: rewrite_block_list ~source rest
-    else (
+    match children, Colon.labels_of_inline label_inline with
+    | [], _ | _, [] ->
+      (* No children, or no meaningful labels — leave the paragraph as-is. *)
+      original :: rewrite_block_list ~source rest
+    | _ :: _, (_ :: _ as labels) ->
       let children = rewrite_block_list ~source children in
       let body = wrap_blocks children in
-      let labels = Colon.labels_of_inline label_inline in
       let keyed = build_nested_keyed ~make_node:mk_keyed_block labels body in
-      keyed :: rewrite_block_list ~source after)
+      keyed :: rewrite_block_list ~source after
 
   (** Rules 1/2/3 in one place: tag items for Rule 1, then decide Rule 3
       absorption from the sibling context. *)
@@ -527,22 +562,15 @@ module Spec = struct
     !ok
   ;;
 
-  (** Every keyed label is a plain [Inline.Text].  The rewriter
-      reconstructs labels via {!build_nested_keyed} as [Text], and the
-      spec forbids hard breaks in labels. *)
-  let labels_are_plain_text (doc : Cmarkit.Doc.t) : bool =
-    let ok = ref true in
-    iter_doc doc ~f:(fun b ->
-      let check (label : Cmarkit.Inline.t) =
-        match label with
-        | Cmarkit.Inline.Text _ -> ()
-        | _ -> ok := false
-      in
-      match b with
-      | Ext_keyed_block ({ label }, _) | Ext_keyed_list_item ({ label }, _) -> check label
-      | _ -> ());
-    !ok
-  ;;
+  (** {b Chain-splitting discipline.}  A label that was split off a
+      [: ] chain is always an [Inline.Text] (constructed fresh by
+      {!Colon.labels_of_inline}).  A label that survived as a single
+      unsplit inline may be anything — [Code_span], [Emphasis], [Link],
+      [Image], extension, etc. — preserved verbatim.  In particular,
+      if the label contains any non-text inline, chain splitting is
+      {e not} attempted: [: ] inside a code span is literal
+      punctuation, not a chain delimiter, and splitting on it would
+      silently corrupt the label. *)
 
   (** Does a list item's leading paragraph end with an unescaped
       trailing colon, with no indented sub-blocks?  Such an item could

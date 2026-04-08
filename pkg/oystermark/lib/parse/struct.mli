@@ -24,9 +24,18 @@
 
     {2 Colon chains}
 
-    When the label text contains interior [: ] (colon-space) boundaries,
-    e.g. [foo: bar:], each segment produces a nesting level:
+    When the label is pure text and contains interior [: ]
+    (colon-space) boundaries, e.g. [foo: bar:], each segment produces
+    a nesting level:
     [Ext_keyed_list_item("foo", Ext_keyed_list_item("bar", body))].
+
+    {b Chain splitting only applies to pure-text labels.}  If the label
+    contains any non-text inline — code span, emphasis, link, image,
+    raw HTML, hard/soft break, or extension (e.g. wikilink) — the whole
+    inline becomes a single label, preserved verbatim.  Rationale: a
+    [: ] inside a code span is literal punctuation, not a chain
+    delimiter, and splitting across inline boundaries would silently
+    corrupt the label.
 
     {2 Escaped colons}
 
@@ -70,9 +79,6 @@ module Spec : sig
 
   (** No keyed node has an empty body. *)
   val keyed_bodies_non_empty : Cmarkit.Doc.t -> bool
-
-  (** Every keyed label is a plain [Inline.Text]. *)
-  val labels_are_plain_text : Cmarkit.Doc.t -> bool
 
   (** No sibling-level keyed paragraph or keyed-last-item list is
       immediately followed by a non-blank block — the rewriter has

@@ -704,7 +704,6 @@ let%test_module "Struct" =
           [%message "universal predicate failed" (name : string) (input : string)]
       in
       if not (keyed_bodies_non_empty doc) then fail "keyed_bodies_non_empty";
-      if not (labels_are_plain_text doc) then fail "labels_are_plain_text";
       if not (keying_is_maximal ~source doc) then fail "keying_is_maximal"
     ;;
 
