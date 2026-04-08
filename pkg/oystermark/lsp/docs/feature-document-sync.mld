@@ -1,0 +1,95 @@
+{0 Document synchronization}
+
+How the server keeps its in-memory view of the vault consistent with
+disk as the user opens, edits, saves, and closes files.
+
+{1 State}
+
+{ul
+  {- [vault]: a {!Oystermark.Vault.t} holding the index, pre-resolved
+     docs, and vault root.  Built from disk; rebuilt on didOpen and
+     didSave.}
+  {- [open_docs]: a set of vault-relative paths for documents the
+     editor currently has open.  Used only to know {i which} files
+     need diagnostic refresh after a save — {b it does not track
+     buffer contents}.}
+}
+
+{1 Current behavior}
+
+{b This section describes what the server does today.  The
+buffer-vs-disk story is not yet settled — see
+{{!section-"open-questions"}Open questions} below.}
+
+Feature handlers (find references, inlay hints, go-to-definition,
+hover) read document content from disk via [read_file].  If the user
+has unsaved edits, those features may return stale results until the
+next save.
+
+Diagnostics are computed against the live buffer content passed in
+notification payloads, so squigglies update as the user types.
+
+{1 Notification handling}
+
+{2 [textDocument/didOpen]}
+
+{ol
+  {- Add the document's rel_path to [open_docs].}
+  {- Rebuild the vault from disk.  This catches files that were added
+     out-of-band since the last rebuild.}
+  {- Publish diagnostics for the opened document, computed against
+     [content] from the notification.}
+}
+
+{2 [textDocument/didChange]}
+
+Recompute and publish diagnostics for the changed document against
+[new_content].  Nothing else happens — [vault] is {i not} rebuilt
+and feature handlers continue to see the pre-edit disk state.
+
+{2 [textDocument/didSave]}
+
+{ol
+  {- Rebuild the vault from disk.  The saved file's new content is
+     now part of the vault, along with any other files that changed
+     on disk as a side-effect of the save.}
+  {- For every entry in [open_docs], read its current disk content
+     and republish diagnostics.  This is what clears stale warnings
+     in sibling buffers when the save caused them to become
+     resolvable.}
+}
+
+{2 [textDocument/didClose]}
+
+Remove the entry from [open_docs].  No rebuild.
+
+{1 Observable consequences}
+
+{ul
+  {- Unsaved edits don't affect features other than diagnostics.
+     Adding a new [[[note-x]]] link to an unsaved buffer and
+     immediately running find-references on [note-x] will not show
+     the new link.}
+  {- Diagnostics for the active buffer are live — the squiggly under
+     an unresolved link appears and disappears as the user types.}
+  {- Diagnostics for sibling buffers refresh only on save.  If [a.md]
+     is open with an unresolved [[[b]]] link, creating [b.md] in
+     another tab only clears [a.md]'s warning once a save fires.}
+  {- Out-of-band file changes (e.g. [git checkout]) are only picked
+     up on the next didOpen or didSave.}
+}
+
+{1:open-questions Open questions}
+
+{ul
+  {- {b Should feature handlers honor unsaved buffer content?}  Doing
+     so means holding a server-side copy of every open buffer and
+     incrementally re-resolving links on didChange.  The current
+     behavior is simpler but can surprise users who expect
+     find-references to reflect what they see on screen.  Not yet
+     decided.}
+  {- {b Should diagnostics recompute on didChange at all?}  Keeping
+     them live is ergonomic but inconsistent with the rest of the
+     feature set answering from disk.  The alternative is to refresh
+     everything only on save.}
+}

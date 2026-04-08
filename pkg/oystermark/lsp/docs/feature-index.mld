@@ -16,4 +16,5 @@
   {- {!page-"feature-inlay-hints"}}
   {- {!page-"feature-completion"}}
   {- {!page-"feature-utf16-positions"}}
+  {- {!page-"feature-document-sync"}}
 }

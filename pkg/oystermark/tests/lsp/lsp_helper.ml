@@ -61,6 +61,51 @@ let read_notification (ic : In_channel.t) ~(method_ : string) : Yojson.Safe.t =
   loop ()
 ;;
 
+(** Like {!read_notification}, but gives up after [timeout_ms] and returns
+    [None].  Useful for asserting the {i absence} of a notification: if the
+    server is supposed to emit one but doesn't, the test can fail with a
+    clear message instead of hanging the runner.
+
+    Uses [Core_unix.select] on the underlying fd to peek for pending data
+    before committing to a blocking read.  Not precise — once a message
+    header is visible, the full body read is blocking — but good enough
+    for a single-server, single-client test. *)
+let try_read_notification
+      (ic : In_channel.t)
+      ~(method_ : string)
+      ~(timeout_ms : int)
+  : Yojson.Safe.t option
+  =
+  let fd = Core_unix.descr_of_in_channel ic in
+  let deadline =
+    Time_ns.add (Time_ns.now ()) (Time_ns.Span.of_int_ms timeout_ms)
+  in
+  let rec loop () =
+    let remaining =
+      Time_ns.diff deadline (Time_ns.now ()) |> Time_ns.Span.to_sec
+    in
+    if Float.(remaining <= 0.0)
+    then None
+    else (
+      let { Core_unix.Select_fds.read; _ } =
+        Core_unix.select
+          ~read:[ fd ]
+          ~write:[]
+          ~except:[]
+          ~timeout:(`After (Time_ns.Span.of_sec remaining))
+          ()
+      in
+      match read with
+      | [] -> None
+      | _ ->
+        let msg = read_message ic in
+        (match Yojson.Safe.Util.member "method" msg with
+         | `String m when String.equal m method_ -> Some msg
+         | _ -> loop ()))
+  in
+  loop ()
+;;
+
 (* Message constructors
    ===================== *)
 
@@ -138,6 +183,15 @@ let did_open (s : session) ~(rel_path : string) : unit =
       ]
   in
   send_message s.oc (make_notification ~method_:"textDocument/didOpen" params)
+;;
+
+let did_save (s : session) ~(rel_path : string) : unit =
+  let full_path = Filename.concat s.vault_root rel_path in
+  let uri = sprintf "file://%s" full_path in
+  let params =
+    `Assoc [ "textDocument", `Assoc [ "uri", `String uri ] ]
+  in
+  send_message s.oc (make_notification ~method_:"textDocument/didSave" params)
 ;;
 
 let did_change (s : session) ~(rel_path : string) ~(version : int) ~(text : string) : unit =

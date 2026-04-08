@@ -3,49 +3,21 @@
 open Core
 open Linol_eio
 
-(** Build a vault index and pre-resolved docs by scanning the vault root.
-    Parses with [~locs:true] for byte ranges, builds the index, then
-    resolves links (attaching {!Oystermark.Vault.Resolve.resolved_key}
-    metadata to every link node).  Skips embed expansion since the LSP
-    doesn't render. *)
-let build_vault (vault_root : string)
-  : Oystermark.Vault.Index.t * (string * Cmarkit.Doc.t) list
-  =
-  let all_entries = Oystermark.Vault.list_entries vault_root in
-  let is_dir p = String.length p > 0 && Char.equal p.[String.length p - 1] '/' in
-  let dirs = List.filter all_entries ~f:is_dir in
-  let files = List.filter ~f:(fun p -> not (is_dir p)) all_entries in
-  let is_md p = Filename.check_suffix p ".md" in
-  let md_files = List.filter ~f:is_md files in
-  let other_files = List.filter ~f:(fun p -> not (is_md p)) files in
-  let md_docs =
-    List.filter_map
-      ~f:(fun rel_path ->
-        let full_path = Filename.concat vault_root rel_path in
-        try
-          let content = In_channel.read_all full_path in
-          let doc = Oystermark.Parse.of_string ~locs:true content in
-          Some (rel_path, doc)
-        with
-        | _ -> None)
-      md_files
-  in
-  let index = Oystermark.Vault.build_index ~md_docs ~other_files ~dirs in
-  let resolved_docs = Oystermark.Vault.Resolve.resolve_docs md_docs index in
-  index, resolved_docs
-;;
+let build_vault = Oystermark.Vault.of_root_path ~skip_expand:true
 
 class oystermark_server =
   object (self)
     inherit Linol_eio.Jsonrpc2.server as super
-    val mutable vault_root : string option = None
 
-    val mutable index : Oystermark.Vault.Index.t =
-      { Oystermark.Vault.Index.files = []; dirs = [] }
+    (** Current vault state.  [None] before [initialize]. *)
+    val mutable vault : Oystermark.Vault.t option = None
 
-    (** Pre-resolved vault docs with {!Oystermark.Vault.Resolve.resolved_key}
-        metadata on every link node.  Built alongside the index. *)
-    val mutable resolved_docs : (string * Cmarkit.Doc.t) list = []
+    (** Vault-relative paths of every document the editor currently has
+        open.  Used by [on_notif_doc_did_save] to refresh diagnostics
+        across open docs after a save.  Does {i not} track buffer content
+        — feature handlers read from disk.  See
+        {!page-"feature-document-sync"}. *)
+    val open_docs : String.Hash_set.t = String.Hash_set.create ()
 
     method spawn_query_handler f = Linol_eio.spawn f
     method! config_definition = Some (`Bool true)
@@ -71,44 +43,41 @@ class oystermark_server =
         | Some uri -> Some (DocumentUri.to_path uri)
         | None -> Option.join params.rootPath
       in
-      vault_root <- root;
-      self#rebuild_index;
+      Option.iter root ~f:(fun r -> vault <- Some (build_vault r));
       super#on_req_initialize ~notify_back params
 
-    method private rebuild_index =
-      match vault_root with
+    method private rebuild_vault =
+      match vault with
       | None -> ()
-      | Some root ->
-        let idx, docs = build_vault root in
-        index <- idx;
-        resolved_docs <- docs
+      | Some v -> vault <- Some (build_vault v.vault_root)
 
     method private rel_path_of_uri (uri : DocumentUri.t) : string =
       let file_path = DocumentUri.to_path uri in
-      match vault_root with
+      match vault with
       | None -> file_path
-      | Some root ->
-        let prefix = root ^ "/" in
+      | Some v ->
+        let prefix = v.vault_root ^ "/" in
         let plen = String.length prefix in
-        if String.length file_path >= plen
-           && String.equal (String.sub file_path ~pos:0 ~len:plen) prefix
+        if
+          String.length file_path >= plen
+          && String.equal (String.sub file_path ~pos:0 ~len:plen) prefix
         then String.sub file_path ~pos:plen ~len:(String.length file_path - plen)
         else file_path
 
     method private read_file (rp : string) : string option =
-      match vault_root with
+      match vault with
       | None -> None
-      | Some root ->
-        let fp = Filename.concat root rp in
+      | Some v ->
+        let fp = Filename.concat v.vault_root rp in
         (try Some (In_channel.read_all fp) with
          | _ -> None)
 
     method private publish_diagnostics ~notify_back ~uri ~content =
-      match vault_root with
+      match vault with
       | None -> ()
-      | Some _ ->
+      | Some v ->
         let rel_path = self#rel_path_of_uri uri in
-        let diags = Lsp_lib.Diagnostics.compute ~index ~rel_path ~content () in
+        let diags = Lsp_lib.Diagnostics.compute ~index:v.index ~rel_path ~content () in
         let lsp_diags =
           List.map diags ~f:(fun (d : Lsp_lib.Diagnostics.diagnostic) ->
             let start_pos = Lsp_lib.Util.position_of_byte_offset content d.first_byte in
@@ -127,20 +96,42 @@ class oystermark_server =
         notify_back#send_diagnostic lsp_diags
 
     method on_notif_doc_did_open ~notify_back doc ~content =
-      self#rebuild_index;
       let uri = doc.TextDocumentItem.uri in
+      let rel_path = self#rel_path_of_uri uri in
+      Hash_set.add open_docs rel_path;
+      self#rebuild_vault;
       self#publish_diagnostics ~notify_back ~uri ~content
 
-    method on_notif_doc_did_close ~notify_back:_ _doc = ()
+    method on_notif_doc_did_close ~notify_back:_ doc =
+      let rel_path = self#rel_path_of_uri doc.TextDocumentIdentifier.uri in
+      Hash_set.remove open_docs rel_path
 
+    (** Recompute diagnostics live against the in-flight buffer so the
+        user sees squigglies update as they type.  Feature handlers
+        ([find_references], [inlay_hints], etc.) still answer against
+        disk — they will only reflect the edit after a save.  See
+        {!page-"feature-document-sync"}. *)
     method on_notif_doc_did_change ~notify_back doc _changes ~old_content:_ ~new_content =
       let uri = doc.VersionedTextDocumentIdentifier.uri in
       self#publish_diagnostics ~notify_back ~uri ~content:new_content
 
-    method! on_notif_doc_did_save ~notify_back _params = self#rebuild_index
-    (* Re-publish diagnostics for all open documents would be ideal,
-         but linol doesn't expose the open doc set easily.  For now,
-         diagnostics refresh on didOpen. *)
+    (** Rebuild the vault, then republish diagnostics for every open
+        document — this is the one moment where a stale warning in a
+        sibling buffer (e.g. an [[[b]]] link that was just resolved by
+        creating [b.md]) gets cleared.  See
+        {!page-"feature-document-sync"}. *)
+    method! on_notif_doc_did_save ~notify_back _params =
+      self#rebuild_vault;
+      match vault with
+      | None -> ()
+      | Some v ->
+        Hash_set.iter open_docs ~f:(fun rel_path ->
+          let full = Filename.concat v.vault_root rel_path in
+          match self#read_file rel_path with
+          | None -> ()
+          | Some content ->
+            let uri = DocumentUri.of_path full in
+            self#publish_diagnostics ~notify_back ~uri ~content)
 
     method! on_req_hover
       ~notify_back:_
@@ -149,14 +140,14 @@ class oystermark_server =
       ~pos
       ~workDoneToken:_
       (doc_st : doc_state) =
-      match vault_root with
+      match vault with
       | None -> None
-      | Some _ ->
+      | Some v ->
         let rel_path = self#rel_path_of_uri uri in
         let read_file = self#read_file in
         (match
            Lsp_lib.Hover.hover
-             ~index
+             ~index:v.index
              ~rel_path
              ~content:doc_st.content
              ~line:pos.line
@@ -189,13 +180,13 @@ class oystermark_server =
       ~workDoneToken:_
       ~partialResultToken:_
       (doc_st : doc_state) =
-      match vault_root with
+      match vault with
       | None -> None
-      | Some root ->
+      | Some v ->
         let rel_path = self#rel_path_of_uri uri in
         (match
            Lsp_lib.Go_to_definition.go_to_definition
-             ~index
+             ~index:v.index
              ~rel_path
              ~content:doc_st.content
              ~line:pos.line
@@ -204,33 +195,32 @@ class oystermark_server =
          with
          | None -> None
          | Some { path; line } ->
-           let full = Filename.concat root path in
+           let full = Filename.concat v.vault_root path in
            let uri = DocumentUri.of_path full in
            let pos = Position.create ~line ~character:0 in
            let range = Range.create ~start:pos ~end_:pos in
            Some (`Location [ Location.create ~uri ~range ]))
 
     method! on_request_unhandled
-      : type r.
-        notify_back:_ -> id:_ -> r Linol.Lsp.Client_request.t -> r =
+      : type r. notify_back:_ -> id:_ -> r Linol.Lsp.Client_request.t -> r =
       fun ~notify_back:_ ~id:_ (req : r Linol.Lsp.Client_request.t) ->
         match req with
         | Linol.Lsp.Client_request.TextDocumentReferences params ->
-          (match vault_root with
+          (match vault with
            | None -> None
-           | Some root ->
+           | Some v ->
              let uri = params.textDocument.uri in
              let pos = params.position in
              let rel_path = self#rel_path_of_uri uri in
              let content =
-               let fp = Filename.concat root rel_path in
-               try In_channel.read_all fp with
-               | _ -> ""
+               match self#read_file rel_path with
+               | Some c -> c
+               | None -> ""
              in
              let refs =
                Lsp_lib.Find_references.find_references
-                 ~index
-                 ~docs:resolved_docs
+                 ~index:v.index
+                 ~docs:v.docs
                  ~rel_path
                  ~content
                  ~line:pos.line
@@ -239,7 +229,7 @@ class oystermark_server =
              in
              let locations =
                List.map refs ~f:(fun (r : Lsp_lib.Find_references.reference) ->
-                 let full = Filename.concat root r.rel_path in
+                 let full = Filename.concat v.vault_root r.rel_path in
                  let ref_uri = DocumentUri.of_path full in
                  let ref_content =
                    match self#read_file r.rel_path with
@@ -252,13 +242,9 @@ class oystermark_server =
                  let end_pos =
                    Lsp_lib.Util.position_of_byte_offset ref_content r.last_byte
                  in
-                 let to_lsp_pos (line, character) =
-                   Position.create ~line ~character
-                 in
+                 let to_lsp_pos (line, character) = Position.create ~line ~character in
                  let range =
-                   Range.create
-                     ~start:(to_lsp_pos start_pos)
-                     ~end_:(to_lsp_pos end_pos)
+                   Range.create ~start:(to_lsp_pos start_pos) ~end_:(to_lsp_pos end_pos)
                  in
                  Location.create ~uri:ref_uri ~range)
              in
@@ -266,20 +252,20 @@ class oystermark_server =
         | _ -> failwith "unhandled request"
 
     method! on_req_inlay_hint ~notify_back:_ ~id:_ ~uri ~range () =
-      match vault_root with
+      match vault with
       | None -> None
-      | Some root ->
+      | Some v ->
         let rel_path = self#rel_path_of_uri uri in
         let content =
-          let fp = Filename.concat root rel_path in
-          try In_channel.read_all fp with
-          | _ -> ""
+          match self#read_file rel_path with
+          | Some c -> c
+          | None -> ""
         in
         let range_start_line = range.Range.start.line in
         let range_end_line = range.end_.line + 1 in
         let hints =
           Lsp_lib.Inlay_hints.inlay_hints
-            ~docs:resolved_docs
+            ~docs:v.docs
             ~rel_path
             ~content
             ~range_start_line

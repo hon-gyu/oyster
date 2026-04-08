@@ -45,7 +45,7 @@ let build_index
 
 (** Simple build: read all .md files, optionally filter, build index.
     For pipeline-aware builds, use the lower-level functions directly. *)
-let of_root_path (vault_root : string) : t =
+let of_root_path ?(skip_expand : bool = false) ?(locs : bool = true) (vault_root : string) : t =
   (* Scan files *)
   let all_files =
     List.filter (list_entries vault_root) ~f:(fun p ->
@@ -57,7 +57,7 @@ let of_root_path (vault_root : string) : t =
       then (
         let full_path = Filename.concat vault_root rel_path in
         let content = In_channel.read_all full_path in
-        let parsed = Parse.of_string ~locs:true content in
+        let parsed = Parse.of_string ~locs content in
         Some (rel_path, parsed))
       else None)
   in
@@ -68,9 +68,11 @@ let of_root_path (vault_root : string) : t =
   let index = build_index ~md_docs:docs ~other_files ~dirs:[] in
   (* Resolve *)
   let resolved_docs : (string * Cmarkit.Doc.t) list = Resolve.resolve_docs docs index in
-  (* Expand note embeds *)
-  let expanded_docs : (string * Cmarkit.Doc.t) list = Embed.expand_docs resolved_docs in
-  { vault_root; index; docs = expanded_docs; vault_meta = Cmarkit.Meta.none }
+  if skip_expand
+  then { vault_root; index; docs = resolved_docs; vault_meta = Cmarkit.Meta.none }
+  else (
+    let expanded_docs : (string * Cmarkit.Doc.t) list = Embed.expand_docs resolved_docs in
+    { vault_root; index; docs = expanded_docs; vault_meta = Cmarkit.Meta.none })
 ;;
 
 (** [of_inmem_files] creates a vault from a list of in-memory files.
