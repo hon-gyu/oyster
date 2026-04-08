@@ -3,8 +3,14 @@
 open Core
 open Linol_eio
 
-(** Build a vault index by scanning the vault root directory. *)
-let build_vault_index (vault_root : string) : Oystermark.Vault.Index.t =
+(** Build a vault index and pre-resolved docs by scanning the vault root.
+    Parses with [~locs:true] for byte ranges, builds the index, then
+    resolves links (attaching {!Oystermark.Vault.Resolve.resolved_key}
+    metadata to every link node).  Skips embed expansion since the LSP
+    doesn't render. *)
+let build_vault (vault_root : string)
+  : Oystermark.Vault.Index.t * (string * Cmarkit.Doc.t) list
+  =
   let all_entries = Oystermark.Vault.list_entries vault_root in
   let is_dir p = String.length p > 0 && Char.equal p.[String.length p - 1] '/' in
   let dirs = List.filter all_entries ~f:is_dir in
@@ -24,7 +30,9 @@ let build_vault_index (vault_root : string) : Oystermark.Vault.Index.t =
         | _ -> None)
       md_files
   in
-  Oystermark.Vault.build_index ~md_docs ~other_files ~dirs
+  let index = Oystermark.Vault.build_index ~md_docs ~other_files ~dirs in
+  let resolved_docs = Oystermark.Vault.Resolve.resolve_docs md_docs index in
+  index, resolved_docs
 ;;
 
 class oystermark_server =
@@ -34,6 +42,10 @@ class oystermark_server =
 
     val mutable index : Oystermark.Vault.Index.t =
       { Oystermark.Vault.Index.files = []; dirs = [] }
+
+    (** Pre-resolved vault docs with {!Oystermark.Vault.Resolve.resolved_key}
+        metadata on every link node.  Built alongside the index. *)
+    val mutable resolved_docs : (string * Cmarkit.Doc.t) list = []
 
     method spawn_query_handler f = Linol_eio.spawn f
     method! config_definition = Some (`Bool true)
@@ -66,7 +78,10 @@ class oystermark_server =
     method private rebuild_index =
       match vault_root with
       | None -> ()
-      | Some root -> index <- build_vault_index root
+      | Some root ->
+        let idx, docs = build_vault root in
+        index <- idx;
+        resolved_docs <- docs
 
     method private rel_path_of_uri (uri : DocumentUri.t) : string =
       let file_path = DocumentUri.to_path uri in
@@ -207,7 +222,6 @@ class oystermark_server =
              let uri = params.textDocument.uri in
              let pos = params.position in
              let rel_path = self#rel_path_of_uri uri in
-             let read_file = self#read_file in
              let content =
                let fp = Filename.concat root rel_path in
                try In_channel.read_all fp with
@@ -216,11 +230,11 @@ class oystermark_server =
              let refs =
                Lsp_lib.Find_references.find_references
                  ~index
+                 ~docs:resolved_docs
                  ~rel_path
                  ~content
                  ~line:pos.line
                  ~character:pos.character
-                 ~read_file
                  ()
              in
              let locations =
@@ -228,7 +242,7 @@ class oystermark_server =
                  let full = Filename.concat root r.rel_path in
                  let ref_uri = DocumentUri.of_path full in
                  let ref_content =
-                   match read_file r.rel_path with
+                   match self#read_file r.rel_path with
                    | Some c -> c
                    | None -> ""
                  in
@@ -256,7 +270,6 @@ class oystermark_server =
       | None -> None
       | Some root ->
         let rel_path = self#rel_path_of_uri uri in
-        let read_file = self#read_file in
         let content =
           let fp = Filename.concat root rel_path in
           try In_channel.read_all fp with
@@ -266,12 +279,11 @@ class oystermark_server =
         let range_end_line = range.end_.line + 1 in
         let hints =
           Lsp_lib.Inlay_hints.inlay_hints
-            ~index
+            ~docs:resolved_docs
             ~rel_path
             ~content
             ~range_start_line
             ~range_end_line
-            ~read_file
             ()
         in
         (match hints with

@@ -2,8 +2,10 @@
     given file, heading, or block.
 
     Spec: {!page-"feature-find-references"}.
-    Reuses {!Link_collect} for link extraction and
-    {!Oystermark.Vault.Resolve} for resolution. *)
+    Walks pre-resolved vault docs and reads {!Oystermark.Vault.Resolve.resolved_key}
+    metadata attached during vault building, avoiding re-parsing and re-resolving.
+    Uses {!Link_collect} for link extraction at the cursor position and
+    {!Oystermark.Vault.Resolve} for single-file resolution during target detection. *)
 
 open Core
 
@@ -31,13 +33,13 @@ type target =
 (** Check whether [line_str] ends with a block ID marker [ ^id].
     Returns [Some id] if so. *)
 let block_id_of_line (line_str : string) : string option =
-  (* Pattern: " ^<id>" at end of line, where id is alphanumeric *)
   match String.lsplit2 line_str ~on:'^' with
   | Some (prefix, id) ->
     let prefix = String.rstrip prefix in
     if String.length prefix > 0
        && not (String.is_empty id)
-       && String.for_all id ~f:(fun c -> Char.is_alphanum c || Char.equal c '-' || Char.equal c '_')
+       && String.for_all id ~f:(fun c ->
+            Char.is_alphanum c || Char.equal c '-' || Char.equal c '_')
     then Some id
     else None
   | None -> None
@@ -109,97 +111,118 @@ let detect_target
 
 (** {2 Vault scanning}
 
-    Scan all vault documents for links matching the target.
+    Scan pre-resolved vault documents for links matching the target.
+    Reads {!Oystermark.Vault.Resolve.resolved_key} from AST node metadata
+    instead of re-resolving each link.
     See {!page-"feature-find-references".collection}. *)
 
-(** Check whether a resolved target matches our reference target. *)
-let target_matches
+(** Extract the path from a resolved target, substituting [source_rel_path]
+    for targets that refer to the current file. *)
+let path_of_resolved ~(source_rel_path : string) (t : Oystermark.Vault.Resolve.target)
+  : string option
+  =
+  match t with
+  | Oystermark.Vault.Resolve.Note { path }
+  | File { path }
+  | Heading { path; _ }
+  | Block { path; _ } -> Some path
+  | Curr_file | Curr_heading _ | Curr_block _ -> Some source_rel_path
+  | Unresolved -> None
+;;
+
+(** Extract the heading slug from a resolved target, if any. *)
+let slug_of_resolved (t : Oystermark.Vault.Resolve.target) : string option =
+  match t with
+  | Oystermark.Vault.Resolve.Heading { slug; _ } | Curr_heading { slug; _ } -> Some slug
+  | _ -> None
+;;
+
+(** Extract the block id from a resolved target, if any. *)
+let block_id_of_resolved (t : Oystermark.Vault.Resolve.target) : string option =
+  match t with
+  | Oystermark.Vault.Resolve.Block { block_id; _ } | Curr_block { block_id } ->
+    Some block_id
+  | _ -> None
+;;
+
+(** Check whether a pre-resolved target matches our reference target. *)
+let resolved_matches
       (ref_target : target)
       (resolved : Oystermark.Vault.Resolve.target)
-      (link_ref : Oystermark.Vault.Link_ref.t)
       ~(source_rel_path : string)
   : bool
   =
-  let resolved_path =
-    match resolved with
-    | Oystermark.Vault.Resolve.Note { path } | File { path } -> Some path
-    | Heading { path; _ } -> Some path
-    | Block { path; _ } -> Some path
-    | Curr_file -> Some source_rel_path
-    | Curr_heading _ -> Some source_rel_path
-    | Curr_block _ -> Some source_rel_path
-    | Unresolved -> None
-  in
-  let resolved_slug =
-    match resolved with
-    | Oystermark.Vault.Resolve.Heading { slug; _ } -> Some slug
-    | Curr_heading { slug; _ } -> Some slug
-    | Note _ | File _ | Curr_file ->
-      (* Resolve fell back — check the link_ref fragment directly. *)
-      (match link_ref.fragment with
-       | Some (Oystermark.Vault.Link_ref.Heading hs) ->
-         Some
-           (String.concat ~sep:"-" (List.map hs ~f:Oystermark.Parse.Heading_slug.slugify))
-       | _ -> None)
-    | _ -> None
-  in
-  let resolved_block_id =
-    match resolved with
-    | Oystermark.Vault.Resolve.Block { block_id; _ } -> Some block_id
-    | Curr_block { block_id } -> Some block_id
-    | Note _ | File _ | Curr_file ->
-      (match link_ref.fragment with
-       | Some (Block_ref bid) -> Some bid
-       | _ -> None)
-    | _ -> None
-  in
-  match ref_target, resolved_path with
+  match ref_target, path_of_resolved ~source_rel_path resolved with
   | _, None -> false
   | Path_only { path }, Some rp -> String.equal path rp
   | Path_heading { path; slug }, Some rp ->
     String.equal path rp
-    && (match resolved_slug with
+    && (match slug_of_resolved resolved with
         | Some s -> String.equal s slug
         | None -> false)
   | Path_block { path; block_id }, Some rp ->
     String.equal path rp
-    && (match resolved_block_id with
+    && (match block_id_of_resolved resolved with
         | Some bid -> String.equal bid block_id
         | None -> false)
 ;;
 
-(** Scan all documents in the index for references matching [ref_target].
+(** Collect references from a single pre-resolved document by folding over
+    its AST and reading {!Oystermark.Vault.Resolve.resolved_key} metadata. *)
+let collect_from_doc
+      ~(source_rel_path : string)
+      (ref_target : target)
+      (doc : Cmarkit.Doc.t)
+  : reference list
+  =
+  let check_meta acc (meta : Cmarkit.Meta.t) =
+    match Cmarkit.Meta.find Oystermark.Vault.Resolve.resolved_key meta with
+    | None -> acc
+    | Some resolved ->
+      if resolved_matches ref_target resolved ~source_rel_path
+      then (
+        let loc = Cmarkit.Meta.textloc meta in
+        if Cmarkit.Textloc.is_none loc
+        then acc
+        else
+          { rel_path = source_rel_path
+          ; first_byte = Cmarkit.Textloc.first_byte loc
+          ; last_byte = Cmarkit.Textloc.last_byte loc
+          }
+          :: acc)
+      else acc
+  in
+  let folder =
+    Cmarkit.Folder.make
+      ~inline:(fun _f acc i ->
+        match i with
+        | Cmarkit.Inline.Link (_, meta) | Cmarkit.Inline.Image (_, meta) ->
+          Cmarkit.Folder.ret (check_meta acc meta)
+        | _ -> Cmarkit.Folder.default)
+      ~inline_ext_default:(fun _f acc i ->
+        match i with
+        | Oystermark.Parse.Wikilink.Ext_wikilink (_, meta) -> check_meta acc meta
+        | _ -> acc)
+      ~block_ext_default:(fun _f acc _b -> acc)
+      ()
+  in
+  List.rev (Cmarkit.Folder.fold_doc folder [] doc)
+;;
 
-    Each document is parsed to extract links, which are then resolved against
-    the index. Links whose resolution matches [ref_target] are collected. *)
+(** Scan all pre-resolved vault documents for references matching [ref_target].
+
+    Each document's AST already has {!Oystermark.Vault.Resolve.resolved_key}
+    metadata on every link node, so no re-parsing or re-resolving is needed. *)
 let scan_vault
-      ~(index : Oystermark.Vault.Index.t)
-      ~(read_file : string -> string option)
+      ~(docs : (string * Cmarkit.Doc.t) list)
       (ref_target : target)
   : reference list
   =
   Trace_core.with_span ~__FILE__ ~__LINE__ "find_references.scan_vault"
   @@ fun _sp ->
   let refs =
-    List.concat_map index.files ~f:(fun (entry : Oystermark.Vault.Index.file_entry) ->
-      let source_rel_path = entry.rel_path in
-      match read_file source_rel_path with
-      | None -> []
-      | Some content ->
-        let doc = Lsp_util.parse_doc content in
-        let links = Link_collect.collect_links doc in
-        List.filter_map links ~f:(fun (ll : Link_collect.located_link) ->
-          let resolved =
-            Oystermark.Vault.Resolve.resolve ll.link_ref source_rel_path index
-          in
-          if target_matches ref_target resolved ll.link_ref ~source_rel_path
-          then
-            Some
-              { rel_path = source_rel_path
-              ; first_byte = ll.first_byte
-              ; last_byte = ll.last_byte
-              }
-          else None))
+    List.concat_map docs ~f:(fun (source_rel_path, doc) ->
+      collect_from_doc ~source_rel_path ref_target doc)
   in
   let sorted =
     List.sort refs ~compare:(fun a b ->
@@ -217,15 +240,18 @@ let scan_vault
 (** Find all references to the target at cursor position [(line, character)]
     in file [rel_path] with [content].
 
+    [docs] is the list of pre-resolved vault documents (with
+    {!Oystermark.Vault.Resolve.resolved_key} metadata attached).
+
     Returns a sorted list of {!reference} values, or an empty list if the
     cursor is not on a link, heading, or block ID. *)
 let find_references
       ~(index : Oystermark.Vault.Index.t)
+      ~(docs : (string * Cmarkit.Doc.t) list)
       ~(rel_path : string)
       ~(content : string)
       ~(line : int)
       ~(character : int)
-      ~(read_file : string -> string option)
       ()
   : reference list
   =
@@ -238,7 +264,7 @@ let find_references
   | None ->
     Trace_core.add_data_to_span _sp [ "result", `String "no_target" ];
     []
-  | Some ref_target -> scan_vault ~index ~read_file ref_target
+  | Some ref_target -> scan_vault ~docs ref_target
 ;;
 
 (** {2 Counting}
@@ -247,23 +273,21 @@ let find_references
 
 (** Count how many links across the vault resolve to [path] (any fragment). *)
 let count_file_refs
-      ~(index : Oystermark.Vault.Index.t)
-      ~(read_file : string -> string option)
+      ~(docs : (string * Cmarkit.Doc.t) list)
       ~(path : string)
   : int
   =
-  List.length (scan_vault ~index ~read_file (Path_only { path }))
+  List.length (scan_vault ~docs (Path_only { path }))
 ;;
 
 (** Count how many links across the vault resolve to [path] with heading [slug]. *)
 let count_heading_refs
-      ~(index : Oystermark.Vault.Index.t)
-      ~(read_file : string -> string option)
+      ~(docs : (string * Cmarkit.Doc.t) list)
       ~(path : string)
       ~(slug : string)
   : int
   =
-  List.length (scan_vault ~index ~read_file (Path_heading { path; slug }))
+  List.length (scan_vault ~docs (Path_heading { path; slug }))
 ;;
 
 (** {1:test Test} *)
@@ -287,6 +311,27 @@ let%test_module "block_id_of_line" =
   end)
 ;;
 
+(** Helper: build an index and pre-resolved docs for testing. *)
+module For_test = struct
+  let make_vault (files : (string * string) list)
+    : Oystermark.Vault.Index.t * (string * Cmarkit.Doc.t) list
+    =
+    let md_docs =
+      List.filter_map files ~f:(fun (rel_path, content) ->
+        if String.is_suffix rel_path ~suffix:".md"
+        then Some (rel_path, Oystermark.Parse.of_string ~locs:true content)
+        else None)
+    in
+    let other_files =
+      List.filter_map files ~f:(fun (p, _) ->
+        if not (String.is_suffix p ~suffix:".md") then Some p else None)
+    in
+    let index = Oystermark.Vault.build_index ~md_docs ~other_files ~dirs:[] in
+    let resolved_docs = Oystermark.Vault.Resolve.resolve_docs md_docs index in
+    index, resolved_docs
+  ;;
+end
+
 let%test_module "detect_target" =
   (module struct
     let files =
@@ -295,17 +340,7 @@ let%test_module "detect_target" =
       ]
     ;;
 
-    let make_index files =
-      let md_docs =
-        List.filter_map files ~f:(fun (rel_path, content) ->
-          if String.is_suffix rel_path ~suffix:".md"
-          then Some (rel_path, Oystermark.Parse.of_string content)
-          else None)
-      in
-      Oystermark.Vault.build_index ~md_docs ~other_files:[] ~dirs:[]
-    ;;
-
-    let index = make_index files
+    let index, _docs = For_test.make_vault files
 
     let show ~rel_path ~content ~line ~character =
       match detect_target ~index ~rel_path ~content ~line ~character with
@@ -351,21 +386,10 @@ let%test_module "find_references" =
       ]
     ;;
 
-    let make_index files =
-      let md_docs =
-        List.filter_map files ~f:(fun (rel_path, content) ->
-          if String.is_suffix rel_path ~suffix:".md"
-          then Some (rel_path, Oystermark.Parse.of_string content)
-          else None)
-      in
-      Oystermark.Vault.build_index ~md_docs ~other_files:[] ~dirs:[]
-    ;;
-
-    let index = make_index files
-    let read_file rp = List.Assoc.find files ~equal:String.equal rp
+    let index, docs = For_test.make_vault files
 
     let show ~rel_path ~content ~line ~character =
-      let refs = find_references ~index ~rel_path ~content ~line ~character ~read_file () in
+      let refs = find_references ~index ~docs ~rel_path ~content ~line ~character () in
       List.iter refs ~f:(fun r ->
         printf "%s [%d-%d]\n" r.rel_path r.first_byte r.last_byte)
     ;;

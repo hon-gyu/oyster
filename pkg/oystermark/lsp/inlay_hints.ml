@@ -1,7 +1,7 @@
 (** Inlay hints: show reference counts next to headings and at top of file.
 
     Spec: {!page-"feature-inlay-hints"}.
-    Uses {!Find_references} for counting. *)
+    Uses {!Find_references} for counting over pre-resolved vault docs. *)
 
 open Core
 
@@ -52,14 +52,16 @@ let headings_in_range
 
 (** Compute inlay hints for [rel_path] within the given line range.
 
+    [docs] is the list of pre-resolved vault documents (with
+    {!Oystermark.Vault.Resolve.resolved_key} metadata attached).
+
     See {!page-"feature-inlay-hints"}. *)
 let inlay_hints
-      ~(index : Oystermark.Vault.Index.t)
+      ~(docs : (string * Cmarkit.Doc.t) list)
       ~(rel_path : string)
       ~(content : string)
       ~(range_start_line : int)
       ~(range_end_line : int)
-      ~(read_file : string -> string option)
       ()
   : hint list
   =
@@ -75,9 +77,7 @@ let inlay_hints
   (* File-level hint at (0, 0) if range includes line 0. *)
   if range_start_line <= 0 && range_end_line > 0
   then (
-    let count =
-      Find_references.count_file_refs ~index ~read_file ~path:rel_path
-    in
+    let count = Find_references.count_file_refs ~docs ~path:rel_path in
     match format_count count with
     | None -> ()
     | Some label -> hints := { line = 0; character = 0; label } :: !hints);
@@ -85,7 +85,7 @@ let inlay_hints
   let headings = headings_in_range ~content ~range_start_line ~range_end_line in
   List.iter headings ~f:(fun (line, end_char, slug) ->
     let count =
-      Find_references.count_heading_refs ~index ~read_file ~path:rel_path ~slug
+      Find_references.count_heading_refs ~docs ~path:rel_path ~slug
     in
     match format_count count with
     | None -> ()
@@ -126,29 +126,11 @@ let%test_module "inlay_hints" =
       ]
     ;;
 
-    let make_index files =
-      let md_docs =
-        List.filter_map files ~f:(fun (rel_path, content) ->
-          if String.is_suffix rel_path ~suffix:".md"
-          then Some (rel_path, Oystermark.Parse.of_string content)
-          else None)
-      in
-      Oystermark.Vault.build_index ~md_docs ~other_files:[] ~dirs:[]
-    ;;
-
-    let index = make_index files
-    let read_file rp = List.Assoc.find files ~equal:String.equal rp
+    let _index, docs = Find_references.For_test.make_vault files
 
     let show ~rel_path ~content ~range_start_line ~range_end_line =
       let hints =
-        inlay_hints
-          ~index
-          ~rel_path
-          ~content
-          ~range_start_line
-          ~range_end_line
-          ~read_file
-          ()
+        inlay_hints ~docs ~rel_path ~content ~range_start_line ~range_end_line ()
       in
       List.iter hints ~f:(fun h ->
         printf "(%d,%d) %s\n" h.line h.character h.label)

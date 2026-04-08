@@ -29,8 +29,7 @@ let files =
   ]
 ;;
 
-let index = Vault_helper.make_index files
-let read_file rel_path = List.Assoc.find files ~equal:String.equal rel_path
+let index, docs = Lsp_lib.Find_references.For_test.make_vault files
 
 (* Unit tests
    ========== *)
@@ -40,11 +39,11 @@ let%expect_test "unit: references to note-a from wikilink in note-b" =
   let refs =
     Lsp_lib.Find_references.find_references
       ~index
+      ~docs
       ~rel_path:"note-b.md"
       ~content
       ~line:2
       ~character:13
-      ~read_file
       ()
   in
   List.iter refs ~f:(fun r ->
@@ -64,11 +63,11 @@ let%expect_test "unit: references to heading" =
   let refs =
     Lsp_lib.Find_references.find_references
       ~index
+      ~docs
       ~rel_path:"note-a.md"
       ~content
       ~line:2
       ~character:3
-      ~read_file
       ()
   in
   List.iter refs ~f:(fun r ->
@@ -81,11 +80,11 @@ let%expect_test "unit: references to block id" =
   let refs =
     Lsp_lib.Find_references.find_references
       ~index
+      ~docs
       ~rel_path:"note-a.md"
       ~content
       ~line:4
       ~character:5
-      ~read_file
       ()
   in
   List.iter refs ~f:(fun r ->
@@ -97,11 +96,11 @@ let%expect_test "unit: cursor not on link, heading or block" =
   let refs =
     Lsp_lib.Find_references.find_references
       ~index
+      ~docs
       ~rel_path:"note-a.md"
       ~content:"plain text"
       ~line:0
       ~character:3
-      ~read_file
       ()
   in
   printf "%d refs\n" (List.length refs);
@@ -113,11 +112,11 @@ let%expect_test "unit: unresolved link returns empty" =
   let refs =
     Lsp_lib.Find_references.find_references
       ~index
+      ~docs
       ~rel_path:"note-b.md"
       ~content
       ~line:10
       ~character:15
-      ~read_file
       ()
   in
   printf "%d refs\n" (List.length refs);

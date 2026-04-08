@@ -29,8 +29,7 @@ let files =
   ]
 ;;
 
-let index = Vault_helper.make_index files
-let read_file rel_path = List.Assoc.find files ~equal:String.equal rel_path
+let _index, docs = Lsp_lib.Find_references.For_test.make_vault files
 
 (* Unit tests
    ========== *)
@@ -39,12 +38,11 @@ let%expect_test "unit: hints for note-a (has incoming refs)" =
   let content = List.Assoc.find_exn files ~equal:String.equal "note-a.md" in
   let hints =
     Lsp_lib.Inlay_hints.inlay_hints
-      ~index
+      ~docs
       ~rel_path:"note-a.md"
       ~content
       ~range_start_line:0
       ~range_end_line:20
-      ~read_file
       ()
   in
   List.iter hints ~f:(fun h ->
@@ -60,12 +58,11 @@ let%expect_test "unit: hints for note-b (no incoming refs)" =
   let content = List.Assoc.find_exn files ~equal:String.equal "note-b.md" in
   let hints =
     Lsp_lib.Inlay_hints.inlay_hints
-      ~index
+      ~docs
       ~rel_path:"note-b.md"
       ~content
       ~range_start_line:0
       ~range_end_line:20
-      ~read_file
       ()
   in
   printf "%d hints\n" (List.length hints);
@@ -76,12 +73,11 @@ let%expect_test "unit: partial range" =
   let content = List.Assoc.find_exn files ~equal:String.equal "note-a.md" in
   let hints =
     Lsp_lib.Inlay_hints.inlay_hints
-      ~index
+      ~docs
       ~rel_path:"note-a.md"
       ~content
       ~range_start_line:2
       ~range_end_line:5
-      ~read_file
       ()
   in
   List.iter hints ~f:(fun h ->
