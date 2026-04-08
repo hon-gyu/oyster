@@ -236,7 +236,9 @@ let hover
           match link_ref.fragment with
           | Some (Oystermark.Vault.Link_ref.Heading hs) ->
             let slug =
-              String.concat ~sep:"-" (List.map hs ~f:Oystermark.Parse.Heading_slug.slugify)
+              String.concat
+                ~sep:"-"
+                (List.map hs ~f:Oystermark.Parse.Heading_slug.slugify)
             in
             (match find_heading_in_content ~slug content with
              | Some (hline, hlevel) ->
@@ -364,7 +366,8 @@ let%test_module "format_hover" =
 
     let%expect_test "empty content" =
       print_string (format_hover ~path:"dir/empty.md" "");
-      [%expect {|
+      [%expect
+        {|
         *Path*:dir/empty.md
 
         *(empty)*
@@ -373,7 +376,8 @@ let%test_module "format_hover" =
 
     let%expect_test "whitespace-only content" =
       print_string (format_hover ~path:"dir/blank.md" "  \n\n  ");
-      [%expect {|
+      [%expect
+        {|
         *Path*:dir/blank.md
 
         *(empty)*

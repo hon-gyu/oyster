@@ -46,8 +46,7 @@ let%expect_test "unit: references to note-a from wikilink in note-b" =
       ~character:13
       ()
   in
-  List.iter refs ~f:(fun r ->
-    printf "%s [%d-%d]\n" r.rel_path r.first_byte r.last_byte);
+  List.iter refs ~f:(fun r -> printf "%s [%d-%d]\n" r.rel_path r.first_byte r.last_byte);
   [%expect
     {|
     note-b.md [16-25]
@@ -70,8 +69,7 @@ let%expect_test "unit: references to heading" =
       ~character:3
       ()
   in
-  List.iter refs ~f:(fun r ->
-    printf "%s [%d-%d]\n" r.rel_path r.first_byte r.last_byte);
+  List.iter refs ~f:(fun r -> printf "%s [%d-%d]\n" r.rel_path r.first_byte r.last_byte);
   [%expect {| note-b.md [38-59] |}]
 ;;
 
@@ -87,8 +85,7 @@ let%expect_test "unit: references to block id" =
       ~character:5
       ()
   in
-  List.iter refs ~f:(fun r ->
-    printf "%s [%d-%d]\n" r.rel_path r.first_byte r.last_byte);
+  List.iter refs ~f:(fun r -> printf "%s [%d-%d]\n" r.rel_path r.first_byte r.last_byte);
   [%expect {| note-b.md [68-85] |}]
 ;;
 

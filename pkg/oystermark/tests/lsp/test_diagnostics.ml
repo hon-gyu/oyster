@@ -134,7 +134,8 @@ let%expect_test "e2e: didChange republishes diagnostics" =
     ~text:"# Nested\n\nLink to [[non-exist]] now.\n";
   let notif = read_notification s.ic ~method_:"textDocument/publishDiagnostics" in
   let diags = parse_diagnostics_notification notif in
-  List.iter diags ~f:(fun (msg, line, char) -> printf "after change: %d:%d %s\n" line char msg);
+  List.iter diags ~f:(fun (msg, line, char) ->
+    printf "after change: %d:%d %s\n" line char msg);
   shutdown s;
   [%expect
     {|

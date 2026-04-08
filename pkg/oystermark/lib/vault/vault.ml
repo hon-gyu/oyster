@@ -45,7 +45,9 @@ let build_index
 
 (** Simple build: read all .md files, optionally filter, build index.
     For pipeline-aware builds, use the lower-level functions directly. *)
-let of_root_path ?(skip_expand : bool = false) ?(locs : bool = true) (vault_root : string) : t =
+let of_root_path ?(skip_expand : bool = false) ?(locs : bool = true) (vault_root : string)
+  : t
+  =
   (* Scan files *)
   let all_files =
     List.filter (list_entries vault_root) ~f:(fun p ->

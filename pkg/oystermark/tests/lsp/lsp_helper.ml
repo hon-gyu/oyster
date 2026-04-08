@@ -70,20 +70,13 @@ let read_notification (ic : In_channel.t) ~(method_ : string) : Yojson.Safe.t =
     before committing to a blocking read.  Not precise — once a message
     header is visible, the full body read is blocking — but good enough
     for a single-server, single-client test. *)
-let try_read_notification
-      (ic : In_channel.t)
-      ~(method_ : string)
-      ~(timeout_ms : int)
+let try_read_notification (ic : In_channel.t) ~(method_ : string) ~(timeout_ms : int)
   : Yojson.Safe.t option
   =
   let fd = Core_unix.descr_of_in_channel ic in
-  let deadline =
-    Time_ns.add (Time_ns.now ()) (Time_ns.Span.of_int_ms timeout_ms)
-  in
+  let deadline = Time_ns.add (Time_ns.now ()) (Time_ns.Span.of_int_ms timeout_ms) in
   let rec loop () =
-    let remaining =
-      Time_ns.diff deadline (Time_ns.now ()) |> Time_ns.Span.to_sec
-    in
+    let remaining = Time_ns.diff deadline (Time_ns.now ()) |> Time_ns.Span.to_sec in
     if Float.(remaining <= 0.0)
     then None
     else (
@@ -188,19 +181,17 @@ let did_open (s : session) ~(rel_path : string) : unit =
 let did_save (s : session) ~(rel_path : string) : unit =
   let full_path = Filename.concat s.vault_root rel_path in
   let uri = sprintf "file://%s" full_path in
-  let params =
-    `Assoc [ "textDocument", `Assoc [ "uri", `String uri ] ]
-  in
+  let params = `Assoc [ "textDocument", `Assoc [ "uri", `String uri ] ] in
   send_message s.oc (make_notification ~method_:"textDocument/didSave" params)
 ;;
 
-let did_change (s : session) ~(rel_path : string) ~(version : int) ~(text : string) : unit =
+let did_change (s : session) ~(rel_path : string) ~(version : int) ~(text : string) : unit
+  =
   let full_path = Filename.concat s.vault_root rel_path in
   let uri = sprintf "file://%s" full_path in
   let params =
     `Assoc
-      [ ( "textDocument"
-        , `Assoc [ "uri", `String uri; "version", `Int version ] )
+      [ "textDocument", `Assoc [ "uri", `String uri; "version", `Int version ]
       ; "contentChanges", `List [ `Assoc [ "text", `String text ] ]
       ]
   in
@@ -274,11 +265,7 @@ let references (s : session) ~(rel_path : string) ~(line : int) ~(character : in
 ;;
 
 (** Send a textDocument/inlayHint request and return just the result. *)
-let inlay_hint
-      (s : session)
-      ~(rel_path : string)
-      ~(start_line : int)
-      ~(end_line : int)
+let inlay_hint (s : session) ~(rel_path : string) ~(start_line : int) ~(end_line : int)
   : Yojson.Safe.t
   =
   let id = fresh_id s in
@@ -289,8 +276,7 @@ let inlay_hint
       [ "textDocument", `Assoc [ "uri", `String uri ]
       ; ( "range"
         , `Assoc
-            [ ( "start"
-              , `Assoc [ "line", `Int start_line; "character", `Int 0 ] )
+            [ "start", `Assoc [ "line", `Int start_line; "character", `Int 0 ]
             ; "end", `Assoc [ "line", `Int end_line; "character", `Int 0 ]
             ] )
       ]

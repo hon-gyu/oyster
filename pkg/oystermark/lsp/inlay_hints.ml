@@ -18,11 +18,7 @@ type hint =
 (** Format a reference count as a label string.
     Returns [None] for count 0 (no hint emitted). *)
 let format_count (n : int) : string option =
-  if n = 0
-  then None
-  else if n = 1
-  then Some "1 ref"
-  else Some (sprintf "%d refs" n)
+  if n = 0 then None else if n = 1 then Some "1 ref" else Some (sprintf "%d refs" n)
 ;;
 
 (** Find all headings in [content] within the line range [\[range_start_line,
@@ -84,9 +80,7 @@ let inlay_hints
   (* Per-heading hints. *)
   let headings = headings_in_range ~content ~range_start_line ~range_end_line in
   List.iter headings ~f:(fun (line, end_char, slug) ->
-    let count =
-      Find_references.count_heading_refs ~docs ~path:rel_path ~slug
-    in
+    let count = Find_references.count_heading_refs ~docs ~path:rel_path ~slug in
     match format_count count with
     | None -> ()
     | Some label -> hints := { line; character = end_char; label } :: !hints);
@@ -132,8 +126,7 @@ let%test_module "inlay_hints" =
       let hints =
         inlay_hints ~docs ~rel_path ~content ~range_start_line ~range_end_line ()
       in
-      List.iter hints ~f:(fun h ->
-        printf "(%d,%d) %s\n" h.line h.character h.label)
+      List.iter hints ~f:(fun h -> printf "(%d,%d) %s\n" h.line h.character h.label)
     ;;
 
     let%expect_test "file with incoming refs" =

@@ -22,8 +22,14 @@ type reference =
 (** The kind of target we are looking for references to. *)
 type target =
   | Path_only of { path : string }
-  | Path_heading of { path : string; slug : string }
-  | Path_block of { path : string; block_id : string }
+  | Path_heading of
+      { path : string
+      ; slug : string
+      }
+  | Path_block of
+      { path : string
+      ; block_id : string
+      }
 
 (** {2 Target detection}
 
@@ -36,10 +42,11 @@ let block_id_of_line (line_str : string) : string option =
   match String.lsplit2 line_str ~on:'^' with
   | Some (prefix, id) ->
     let prefix = String.rstrip prefix in
-    if String.length prefix > 0
-       && not (String.is_empty id)
-       && String.for_all id ~f:(fun c ->
-            Char.is_alphanum c || Char.equal c '-' || Char.equal c '_')
+    if
+      String.length prefix > 0
+      && (not (String.is_empty id))
+      && String.for_all id ~f:(fun c ->
+        Char.is_alphanum c || Char.equal c '-' || Char.equal c '_')
     then Some id
     else None
   | None -> None
@@ -157,14 +164,16 @@ let resolved_matches
   | Path_only { path }, Some rp -> String.equal path rp
   | Path_heading { path; slug }, Some rp ->
     String.equal path rp
-    && (match slug_of_resolved resolved with
-        | Some s -> String.equal s slug
-        | None -> false)
+    &&
+      (match slug_of_resolved resolved with
+      | Some s -> String.equal s slug
+      | None -> false)
   | Path_block { path; block_id }, Some rp ->
     String.equal path rp
-    && (match block_id_of_resolved resolved with
-        | Some bid -> String.equal bid block_id
-        | None -> false)
+    &&
+      (match block_id_of_resolved resolved with
+      | Some bid -> String.equal bid block_id
+      | None -> false)
 ;;
 
 (** Collect references from a single pre-resolved document by folding over
@@ -213,9 +222,7 @@ let collect_from_doc
 
     Each document's AST already has {!Oystermark.Vault.Resolve.resolved_key}
     metadata on every link node, so no re-parsing or re-resolving is needed. *)
-let scan_vault
-      ~(docs : (string * Cmarkit.Doc.t) list)
-      (ref_target : target)
+let scan_vault ~(docs : (string * Cmarkit.Doc.t) list) (ref_target : target)
   : reference list
   =
   Trace_core.with_span ~__FILE__ ~__LINE__ "find_references.scan_vault"
@@ -272,11 +279,7 @@ let find_references
     Used by {!Inlay_hints} for reference count computation. *)
 
 (** Count how many links across the vault resolve to [path] (any fragment). *)
-let count_file_refs
-      ~(docs : (string * Cmarkit.Doc.t) list)
-      ~(path : string)
-  : int
-  =
+let count_file_refs ~(docs : (string * Cmarkit.Doc.t) list) ~(path : string) : int =
   List.length (scan_vault ~docs (Path_only { path }))
 ;;
 

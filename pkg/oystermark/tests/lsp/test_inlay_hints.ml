@@ -45,8 +45,7 @@ let%expect_test "unit: hints for note-a (has incoming refs)" =
       ~range_end_line:20
       ()
   in
-  List.iter hints ~f:(fun h ->
-    printf "(%d,%d) %s\n" h.line h.character h.label);
+  List.iter hints ~f:(fun h -> printf "(%d,%d) %s\n" h.line h.character h.label);
   [%expect
     {|
     (0,0) 5 refs
@@ -80,8 +79,7 @@ let%expect_test "unit: partial range" =
       ~range_end_line:5
       ()
   in
-  List.iter hints ~f:(fun h ->
-    printf "(%d,%d) %s\n" h.line h.character h.label);
+  List.iter hints ~f:(fun h -> printf "(%d,%d) %s\n" h.line h.character h.label);
   [%expect {| (2,14) 1 ref |}]
 ;;
 
