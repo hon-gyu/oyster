@@ -135,7 +135,7 @@ let home_graph ?(config : Config.Home_graph_view.t = Config.Home_graph_view.defa
         if not (String.equal path "home.md")
         then path, doc
         else (
-          let block_mapper = add_html_code_block `Prepend html in
+          let block_mapper = add_html_code_block `Append html in
           let mapper =
             Cmarkit.Mapper.make
               ~inline_ext_default:(fun _m i -> Some i)
@@ -161,8 +161,8 @@ let default ?(cache : Cache.cache option) ?(config : Config.t = Config.default) 
   >> py_executor ?cache ()
   >> dot_render ()
   >> backlinks
-  >> home_toc ~dir_link:true ()
   >> home_graph ~config:config.home_graph_view ()
+  >> home_toc ~dir_link:true ()
   >> dir_index ()
 ;;
 
