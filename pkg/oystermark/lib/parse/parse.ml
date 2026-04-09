@@ -92,19 +92,15 @@ let commonmark_of_doc (doc : Cmarkit.Doc.t) : string =
 
 let sexp_of_ =
   Common.make_sexp_of
-    ~inlines:[ Wikilink.sexp_of_inline; Common.sexp_of_inline_core ]
-    ~blocks:
-      [ Frontmatter.sexp_of_block
-      ; Div.sexp_of_block
-      ; Struct.sexp_of_block
-      ; Common.sexp_of_block_core
-      ]
+    ~inlines:[ Wikilink.sexp_of_inline ]
+    ~blocks:[ Frontmatter.sexp_of_block; Div.sexp_of_block; Struct.sexp_of_block ]
     ~metas:
       [ Heading_slug.sexp_of_meta
       ; Block_id.sexp_of_meta
       ; Callout.sexp_of_meta
       ; Attribute.sexp_of_meta
       ]
+    ()
 ;;
 
 let sexp_of_inline = sexp_of_.inline

@@ -155,16 +155,19 @@ let sexp_of_block_core : block_sexp =
   Some s
 ;;
 
-(** Compose a list of converters (extensions followed by core) into a
-    mutually-recursive triple. Converters are tried in list order; the
-    first to return [Some] wins. The caller is responsible for placing
-    [sexp_of_inline_core] / [sexp_of_block_core] last. *)
+(** Compose a list of extension converters with the built-in core
+    converters into a mutually-recursive triple. Extensions are tried
+    in list order; the first to return [Some] wins. The core converters
+    are always appended last — callers pass extensions only. *)
 let make_sexp_of
-      ~(inlines : inline_sexp list)
-      ~(blocks : block_sexp list)
-      ~(metas : meta_sexp list)
+      ?(inlines : inline_sexp list = [])
+      ?(blocks : block_sexp list = [])
+      ?(metas : meta_sexp list = [])
+      ()
   : sexp_of
   =
+  let inlines = inlines @ [ sexp_of_inline_core ] in
+  let blocks = blocks @ [ sexp_of_block_core ] in
   let rec sexp_of_inline (i : Inline.t) : Sexp.t =
     let rec try_ = function
       | [] -> Sexp.Atom "<unknown-inline>"
@@ -194,3 +197,20 @@ let make_sexp_of
   in
   { inline = sexp_of_inline; block = sexp_of_block; meta = sexp_of_meta }
 ;;
+
+module For_test = struct
+  (** Assert that the commonmark roundtrip of a doc is idempotent under normalization.
+    @return ()
+    @raise Failure if the roundtrip is not idempotent.
+  *)
+  let commonmark_of_doc_idempotent
+        (doc_of_string : string -> Doc.t)
+        (commonmark_of_doc : Doc.t -> string)
+        s
+    =
+    let normalize s = String.rstrip s in
+    let cm1 = commonmark_of_doc (doc_of_string s) in
+    let cm2 = commonmark_of_doc (doc_of_string cm1) in
+    [%test_eq: string] (normalize cm1) (normalize cm2)
+  ;;
+end
