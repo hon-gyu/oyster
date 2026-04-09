@@ -52,6 +52,8 @@ type Cmarkit.Block.t += Ext_keyed_list_item of t * Cmarkit.Block.t
 (** A paragraph whose trailing-colon label has been detected. *)
 type Cmarkit.Block.t += Ext_keyed_block of t * Cmarkit.Block.t
 
+val block_commonmark_renderer : Cmarkit_renderer.block
+
 (** Sexp converter for keyed blocks; composes into {!Common.make_sexp_of}. *)
 val sexp_of_block : Common.block_sexp
 

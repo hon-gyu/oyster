@@ -70,50 +70,16 @@ let of_string ?(strict = false) ?(layout = false) ?(locs = true) (s : string)
 ;;
 
 let commonmark_of_doc (doc : Cmarkit.Doc.t) : string =
-  let custom =
-    let open Cmarkit_renderer in
-    let inline (c : context) = function
-      | Wikilink.Ext_wikilink (wl, _) ->
-        Context.string c (Wikilink.to_commonmark wl);
-        true
-      | _ -> false
-    in
-    let block (c : context) = function
-      | Frontmatter.Frontmatter y ->
-        Context.string c (Frontmatter.to_commonmark y);
-        true
-      | Div.Ext_div (div, body) ->
-        let fence = String.make div.colons ':' in
-        let class_suffix =
-          match div.class_name with
-          | Some cls -> " " ^ cls
-          | None -> ""
-        in
-        let buf = Context.buffer c in
-        let len = Buffer.length buf in
-        let needs_nl = len > 0 && not (Char.equal (Buffer.nth buf (len - 1)) '\n') in
-        if needs_nl then Context.byte c '\n';
-        Context.string c (fence ^ class_suffix ^ "\n\n");
-        Context.block c body;
-        Context.string c ("\n" ^ fence ^ "\n");
-        true
-      | Struct.Ext_keyed_block ({ label }, body) ->
-        Context.inline c label;
-        Context.string c ":\n";
-        Context.block c body;
-        true
-      | Struct.Ext_keyed_list_item ({ label }, body) ->
-        Context.string c "- ";
-        Context.inline c label;
-        Context.string c ":\n";
-        Context.block c body;
-        true
-      | _ -> false
-    in
-    Cmarkit_renderer.make ~inline ~block ()
+  let r =
+    List.fold
+      ~f:Cmarkit_renderer.compose
+      ~init:(Cmarkit_commonmark.renderer ())
+      [ Cmarkit_renderer.make ~inline:Wikilink.inline_commonmark_renderer ()
+      ; Cmarkit_renderer.make ~block:Frontmatter.block_commonmark_renderer ()
+      ; Cmarkit_renderer.make ~block:Div.block_commonmark_renderer ()
+      ; Cmarkit_renderer.make ~block:Struct.block_commonmark_renderer ()
+      ]
   in
-  let default = Cmarkit_commonmark.renderer () in
-  let r = Cmarkit_renderer.compose default custom in
   Cmarkit_renderer.doc_to_string r doc
 ;;
 
