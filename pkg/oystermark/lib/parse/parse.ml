@@ -117,124 +117,33 @@ let commonmark_of_doc (doc : Cmarkit.Doc.t) : string =
   Cmarkit_renderer.doc_to_string r doc
 ;;
 
-(* {1 sexp of Cmarkit.{Meta.t, Block.t, Inline.t} }*)
+(* {1 sexp of Cmarkit.{Meta.t, Block.t, Inline.t} }
 
-let sexp_of_meta (meta : Cmarkit.Meta.t) : Sexp.t list =
-  let open Cmarkit.Meta in
-  let items = ref [] in
-  (match find Heading_slug.meta_key meta with
-   | Some slug -> items := Sexp.List [ Atom "heading-slug"; Atom slug ] :: !items
-   | None -> ());
-  (match find Block_id.meta_key meta with
-   | Some bid -> items := Sexp.List [ Atom "block-id"; Block_id.sexp_of_t bid ] :: !items
-   | None -> ());
-  (match find Callout.meta_key meta with
-   | Some c -> items := Sexp.List [ Atom "callout"; Callout.sexp_of_t c ] :: !items
-   | None -> ());
-  (match find Attribute.meta_key meta with
-   | Some a ->
-     items
-     := Sexp.List [ Atom "attribute"; Attribute.sexp_of_code_block_info a ] :: !items
-   | None -> ());
-  List.rev !items
+   Each submodule that introduces an extension constructor or a meta key
+   provides a converter of type {!Common.inline_sexp} / {!Common.block_sexp}
+   / {!Common.meta_sexp}. Here we compose them, placing the core converters
+   last so extensions win on their constructors. *)
+
+let sexp_of_ =
+  Common.make_sexp_of
+    ~inlines:[ Wikilink.sexp_of_inline; Common.sexp_of_inline_core ]
+    ~blocks:
+      [ Frontmatter.sexp_of_block
+      ; Div.sexp_of_block
+      ; Struct.sexp_of_block
+      ; Common.sexp_of_block_core
+      ]
+    ~metas:
+      [ Heading_slug.sexp_of_meta
+      ; Block_id.sexp_of_meta
+      ; Callout.sexp_of_meta
+      ; Attribute.sexp_of_meta
+      ]
 ;;
 
-let rec sexp_of_inline (i : Cmarkit.Inline.t) : Sexp.t =
-  let open Cmarkit in
-  match i with
-  | Inline.Text (s, _) -> Sexp.List [ Atom "Text"; Atom s ]
-  | Inline.Autolink (a, _) ->
-    let link = fst (Inline.Autolink.link a) in
-    Sexp.List [ Atom "Autolink"; Atom link ]
-  | Inline.Break (b, _) ->
-    let type_s =
-      match Inline.Break.type' b with
-      | `Hard -> "hard"
-      | `Soft -> "soft"
-    in
-    Sexp.List [ Atom "Break"; Atom type_s ]
-  | Inline.Code_span (cs, _) ->
-    Sexp.List [ Atom "Code_span"; Atom (Inline.Code_span.code cs) ]
-  | Inline.Emphasis (e, _) ->
-    Sexp.List [ Atom "Emphasis"; sexp_of_inline (Inline.Emphasis.inline e) ]
-  | Inline.Strong_emphasis (e, _) ->
-    Sexp.List [ Atom "Strong_emphasis"; sexp_of_inline (Inline.Emphasis.inline e) ]
-  | Inline.Link (l, _) -> Sexp.List [ Atom "Link"; sexp_of_inline (Inline.Link.text l) ]
-  | Inline.Image (l, _) -> Sexp.List [ Atom "Image"; sexp_of_inline (Inline.Link.text l) ]
-  | Inline.Raw_html (html, _) ->
-    let s =
-      List.map html ~f:(fun bl -> Cmarkit.Block_line.tight_to_string bl)
-      |> String.concat ~sep:""
-    in
-    Sexp.List [ Atom "Raw_html"; Atom s ]
-  | Inline.Inlines (is, _) -> Sexp.List (Atom "Inlines" :: List.map is ~f:sexp_of_inline)
-  | Inline.Ext_strikethrough (s, _) ->
-    Sexp.List [ Atom "Strikethrough"; sexp_of_inline (Inline.Strikethrough.inline s) ]
-  | Inline.Ext_math_span (m, _) ->
-    Sexp.List [ Atom "Math_span"; Atom (Inline.Math_span.tex m) ]
-  | Wikilink.Ext_wikilink (wl, _) -> Sexp.List [ Atom "Wikilink"; Wikilink.sexp_of_t wl ]
-  | _ -> Sexp.Atom "<unknown-inline>"
-
-and sexp_of_block (b : Cmarkit.Block.t) : Sexp.t =
-  let open Cmarkit in
-  let with_meta meta sexp =
-    match sexp_of_meta meta with
-    | [] -> sexp
-    | metas -> Sexp.List [ sexp; Sexp.List (Atom "meta" :: metas) ]
-  in
-  match b with
-  | Block.Blank_line (_, meta) -> with_meta meta (Sexp.Atom "Blank_line")
-  | Block.Paragraph (p, meta) ->
-    with_meta
-      meta
-      (Sexp.List [ Atom "Paragraph"; sexp_of_inline (Block.Paragraph.inline p) ])
-  | Block.Heading (h, meta) ->
-    with_meta
-      meta
-      (Sexp.List
-         [ Atom "Heading"
-         ; Atom (Int.to_string (Block.Heading.level h))
-         ; sexp_of_inline (Block.Heading.inline h)
-         ])
-  | Block.Code_block (cb, meta) ->
-    let info =
-      match Block.Code_block.info_string cb with
-      | None -> Sexp.Atom "no-info"
-      | Some (s, _) -> Sexp.Atom s
-    in
-    let code =
-      List.map (Block.Code_block.code cb) ~f:(fun bl ->
-        Sexp.Atom (Block_line.to_string bl))
-    in
-    with_meta meta (Sexp.List (Atom "Code_block" :: info :: code))
-  | Block.Html_block (lines, meta) ->
-    let s =
-      List.map lines ~f:(fun bl -> Block_line.to_string bl) |> String.concat ~sep:"\n"
-    in
-    with_meta meta (Sexp.List [ Atom "Html_block"; Atom s ])
-  | Block.Block_quote (bq, meta) ->
-    with_meta
-      meta
-      (Sexp.List [ Atom "Block_quote"; sexp_of_block (Block.Block_quote.block bq) ])
-  | Block.List (l, meta) ->
-    let items =
-      List.map (Block.List'.items l) ~f:(fun (item, _item_meta) ->
-        sexp_of_block (Block.List_item.block item))
-    in
-    with_meta meta (Sexp.List (Atom "List" :: items))
-  | Block.Blocks (bs, meta) ->
-    with_meta meta (Sexp.List (Atom "Blocks" :: List.map bs ~f:sexp_of_block))
-  | Block.Link_reference_definition _ -> Sexp.Atom "Link_reference_definition"
-  | Block.Thematic_break (_, meta) -> with_meta meta (Sexp.Atom "Thematic_break")
-  | Frontmatter.Frontmatter _ -> Sexp.Atom "Frontmatter"
-  | Div.Ext_div (div, body) ->
-    Sexp.List [ Atom "Div"; Div.sexp_of_t div; sexp_of_block body ]
-  | Struct.Ext_keyed_list_item ({ label }, body) ->
-    Sexp.List [ Atom "Keyed_list_item"; sexp_of_inline label; sexp_of_block body ]
-  | Struct.Ext_keyed_block ({ label }, body) ->
-    Sexp.List [ Atom "Keyed_block"; sexp_of_inline label; sexp_of_block body ]
-  | _ -> Sexp.Atom "<unknown-block>"
-;;
+let sexp_of_inline = sexp_of_.inline
+let sexp_of_block = sexp_of_.block
+let sexp_of_meta = sexp_of_.meta
 
 (** {1:test Test} *)
 

@@ -9,6 +9,12 @@ open Core
 
 let meta_key : string Cmarkit.Meta.key = Cmarkit.Meta.key ()
 
+let sexp_of_meta : Common.meta_sexp =
+  fun meta ->
+  Cmarkit.Meta.find meta_key meta
+  |> Option.map ~f:(fun slug -> Sexp.List [ Atom "heading-slug"; Atom slug ])
+;;
+
 (** GitHub-style slug: lowercase, non-alphanum to [-], collapse runs, strip edges. *)
 let slugify (s : string) : string =
   s

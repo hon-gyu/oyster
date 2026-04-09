@@ -25,6 +25,16 @@ type Cmarkit.Block.t +=
   | Ext_keyed_list_item of t * Cmarkit.Block.t
   | Ext_keyed_block of t * Cmarkit.Block.t
 
+let sexp_of_block : Common.block_sexp =
+  fun ~recurse_inline ~recurse_block ~with_meta:_ b ->
+  match b with
+  | Ext_keyed_list_item ({ label }, body) ->
+    Some (Sexp.List [ Atom "Keyed_list_item"; recurse_inline label; recurse_block body ])
+  | Ext_keyed_block ({ label }, body) ->
+    Some (Sexp.List [ Atom "Keyed_block"; recurse_inline label; recurse_block body ])
+  | _ -> None
+;;
+
 (* Colon detection
    =============== *)
 

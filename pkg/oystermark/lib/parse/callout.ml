@@ -119,6 +119,12 @@ type t =
 
 let meta_key : t Cmarkit.Meta.key = Cmarkit.Meta.key ()
 
+let sexp_of_meta : Common.meta_sexp =
+  fun meta ->
+  Cmarkit.Meta.find meta_key meta
+  |> Option.map ~f:(fun c -> Sexp.List [ Atom "callout"; sexp_of_t c ])
+;;
+
 (** Parse the callout header from the first text node of the first paragraph
     inside a blockquote.  Expected format: [\[!type\](+|-)? optional title]. *)
 let parse_header (s : string) : (t * int) option =

@@ -71,6 +71,13 @@ type Inline.t += Ext_wikilink of t node
 (** Meta key to tag wikilink nodes. *)
 let meta_key : unit Meta.key = Meta.key ()
 
+let sexp_of_inline : Common.inline_sexp =
+  fun _recurse i ->
+  match i with
+  | Ext_wikilink (wl, _) -> Some (Sexp.List [ Atom "Wikilink"; sexp_of_t wl ])
+  | _ -> None
+;;
+
 (** Parse a fragment string (the part after '#') into a fragment value. *)
 let parse_fragment (frag_str : string) : fragment option =
   if String.is_empty frag_str

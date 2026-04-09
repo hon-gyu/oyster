@@ -15,6 +15,13 @@ let to_commonmark (fm : Yaml.value) : string = "---\n" ^ Yaml.to_string_exn fm ^
 
 type Cmarkit.Block.t += Frontmatter of Yaml.value
 
+let sexp_of_block : Common.block_sexp =
+  fun ~recurse_inline:_ ~recurse_block:_ ~with_meta:_ b ->
+  match b with
+  | Frontmatter _ -> Some (Sexp.Atom "Frontmatter")
+  | _ -> None
+;;
+
 let make_block_mapper (f : Yaml.value -> Yaml.value option)
   : Cmarkit.Block.t Cmarkit.Mapper.mapper
   =

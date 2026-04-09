@@ -27,6 +27,12 @@ type code_block_info =
 let empty = { id = None; classes = []; kvs = [] }
 let meta_key : code_block_info Cmarkit.Meta.key = Cmarkit.Meta.key ()
 
+let sexp_of_meta : Common.meta_sexp =
+  fun meta ->
+  Cmarkit.Meta.find meta_key meta
+  |> Option.map ~f:(fun a -> Sexp.List [ Atom "attribute"; sexp_of_code_block_info a ])
+;;
+
 let strip_paired_double_quotes (s : string) : string =
   if
     String.length s >= 2

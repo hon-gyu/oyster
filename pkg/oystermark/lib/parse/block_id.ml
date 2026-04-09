@@ -37,6 +37,12 @@ type t =
 
 let meta_key : t Cmarkit.Meta.key = Cmarkit.Meta.key ()
 
+let sexp_of_meta : Common.meta_sexp =
+  fun meta ->
+  Cmarkit.Meta.find meta_key meta
+  |> Option.map ~f:(fun bid -> Sexp.List [ Atom "block-id"; sexp_of_t bid ])
+;;
+
 let is_valid_block_id (s : string) : bool =
   String.length s > 0
   && String.for_all s ~f:(fun c -> Char.is_alphanum c || Char.equal c '-')

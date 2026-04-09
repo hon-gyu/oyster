@@ -42,6 +42,14 @@ type t =
 
 type Cmarkit.Block.t += Ext_div of t * Cmarkit.Block.t
 
+let sexp_of_block : Common.block_sexp =
+  fun ~recurse_inline:_ ~recurse_block ~with_meta:_ b ->
+  match b with
+  | Ext_div (div, body) ->
+    Some (Sexp.List [ Atom "Div"; sexp_of_t div; recurse_block body ])
+  | _ -> None
+;;
+
 (** Parse a div fence line.  Returns [(colons, class_name option)] or [None].
     A valid fence is 3+ consecutive colons, optionally followed by whitespace
     and a single non-whitespace token (the class name). *)
