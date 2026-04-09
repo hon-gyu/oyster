@@ -4,6 +4,13 @@ Each module provides a single-pass mapper that might
 - introduce new inline or block extensions
 - rewrite Cmarkit.Doc AST
 - add metadata to AST nodes
+- {!Frontmatter} operates on the raw file content before Cmarkit.Doc parsing.
+  Every other mapper operates on the Cmarkit.Doc AST.
+- Some mappers operate on node of Cmarkit AST, i.e. [Block.t] or [Inline.t]. Their
+  provided mapper follows the signature of [Cmarkit.Inline.t Cmarkit.Mapper.mapper]
+  or [Cmarkit.Block.t Cmarkit.Mapper.mapper]
+- `-> other mappers rely on multiple nodes as input, thus operates on the whole
+  [Cmarkit.Doc.t]. E.g., {!Div} and {!Struct}
 
 *)
 
@@ -14,10 +21,11 @@ module Div = Div
 module Frontmatter = Frontmatter
 module Heading_slug = Heading_slug
 module Wikilink = Wikilink
-module Extract = Extract
 module Attribute = Attribute
 module Textloc_conv = Textloc_conv
 module Struct = Struct
+(** Does not provide a mapper  *)
+module Extract = Extract
 
 
 (* TODO: mapper should be provided directly by each sub-module so that
