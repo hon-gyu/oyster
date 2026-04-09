@@ -36,7 +36,7 @@ let extract_headings (doc : Cmarkit.Doc.t) : heading_entry list =
         match block with
         | Cmarkit.Block.Heading (h, meta) ->
           let level = Cmarkit.Block.Heading.level h in
-          let text = inline_to_plain_text (Cmarkit.Block.Heading.inline h) in
+          let text = Heading_slug.inline_to_plain_text (Cmarkit.Block.Heading.inline h) in
           let slug =
             Cmarkit.Meta.find Heading_slug.meta_key meta
             |> Option.value_exn

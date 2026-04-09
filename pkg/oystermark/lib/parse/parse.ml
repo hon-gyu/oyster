@@ -15,6 +15,7 @@ Each module provides a single-pass mapper that might
 *)
 
 open Core
+open Common
 module Block_id = Block_id
 module Callout = Callout
 module Div = Div
@@ -24,77 +25,25 @@ module Wikilink = Wikilink
 module Attribute = Attribute
 module Textloc_conv = Textloc_conv
 module Struct = Struct
+
 (** Does not provide a mapper  *)
 module Extract = Extract
-
-
-(* TODO: mapper should be provided directly by each sub-module so that
-  test can be put inside corresponding sub-module.
-*)
 
 type block_id =
   | Caret of Block_id.t
   | Heading of string
 
-(** Render inlines to plain text, losing their markdown syntax. Used in rendering
-    heading to plain text. *)
-let inline_to_plain_text (inline : Cmarkit.Inline.t) : string =
-  let lines =
-    Cmarkit.Inline.to_plain_text
-      ~ext:(fun ~break_on_soft inline ->
-        match inline with
-        | Wikilink.Ext_wikilink (wl, _meta) ->
-          let text = Wikilink.to_plain_text wl in
-          Cmarkit.Inline.Text (text, Cmarkit.Meta.none)
-        | other -> other)
-      ~break_on_soft:false
-      inline
-  in
-  String.concat ~sep:"\n" (List.map lines ~f:(String.concat ~sep:""))
-;;
-
-(** Create the single-pass mapper that:
-    - parses wikilinks in inline text nodes ({!module:Wikilink})
-    - tags block identifiers at paragraph ends ({!module:Block_id})
-    - tags callout metadata on block quotes ({!module:Callout})
-    - tags code block attributes onto code blocks ({!module:Attribute})
-    - tags deduplicated heading slugs onto heading block meta ({!module:Heading_slug})
-
-    Returns a fresh mapper each time (heading slug dedup requires per-document state). *)
-let make_mapper () : Cmarkit.Mapper.t =
-  let slug_seen = Hashtbl.create (module String) in
-  let map_block (mapper : Cmarkit.Mapper.t) (block : Cmarkit.Block.t)
-    : Cmarkit.Block.t Cmarkit.Mapper.result
-    =
-    match block with
-    | Cmarkit.Block.Heading (h, meta) ->
-      let orig_inline = Cmarkit.Block.Heading.inline h in
-      let mapped_inline =
-        Cmarkit.Mapper.map_inline mapper orig_inline |> Option.value ~default:orig_inline
-      in
-      let text = inline_to_plain_text mapped_inline in
-      let slug = Heading_slug.dedup_slug slug_seen text in
-      let meta' = Cmarkit.Meta.add Heading_slug.meta_key slug meta in
-      let h' =
-        Cmarkit.Block.Heading.make
-          ?id:(Cmarkit.Block.Heading.id h)
-          ~layout:(Cmarkit.Block.Heading.layout h)
-          ~level:(Cmarkit.Block.Heading.level h)
-          mapped_inline
-      in
-      Cmarkit.Mapper.ret (Cmarkit.Block.Heading (h', meta'))
-    | _ ->
-      (match Callout.block_map mapper block with
-       | `Map _ as result -> result
-       | `Default ->
-         (match Attribute.block_map mapper block with
-          | `Map _ as result -> result
-          | `Default -> Block_id.block_map mapper block))
-  in
+let mk_mapper () : Cmarkit.Mapper.t =
   Cmarkit.Mapper.make
     ~inline_ext_default:(fun _m i -> Some i)
-    ~inline:Wikilink.inline_map
-    ~block:map_block
+    ~inline:(compose_all_inline_maps [ Wikilink.inline_map ])
+    ~block:
+      (compose_all_block_maps
+         [ Heading_slug.mk_block_map ()
+         ; Callout.block_map
+         ; Attribute.block_map
+         ; Block_id.block_map
+         ])
     ()
 ;;
 
@@ -108,7 +57,7 @@ let of_string ?(strict = false) ?(layout = false) ?(locs = true) (s : string)
   let open Cmarkit in
   let yaml_opt, body = Frontmatter.of_string s in
   let cmarkit_doc = Doc.of_string ~strict ~layout ~locs:true body in
-  let body_doc = Mapper.map_doc (make_mapper ()) cmarkit_doc in
+  let body_doc = Mapper.map_doc (mk_mapper ()) cmarkit_doc in
   let body_doc = Div.rewrite_doc body_doc in
   let body_doc = Struct.rewrite_doc ~source:(Some body) body_doc in
   match yaml_opt, Doc.block body_doc with
