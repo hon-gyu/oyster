@@ -79,7 +79,7 @@ let make_mapper () : Cmarkit.Mapper.t =
       (match Callout.callout_block_map mapper block with
        | `Map _ as result -> result
        | `Default ->
-         (match Attribute.tag_cb_attr_meta mapper block with
+         (match Attribute.cb_attr_block_map mapper block with
           | `Map _ as result -> result
           | `Default -> Block_id.tag_block_id_meta mapper block))
   in

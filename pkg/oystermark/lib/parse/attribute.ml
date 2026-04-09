@@ -1,9 +1,10 @@
-(** Pandoc code block attribute parsing.
-    Implements {!page-"pandoc-attribute"}
+(** {0 Pandoc code block attribute parsing}
 
-    Attribute will be attached to the code block if it can be parsed out.
+    - Implements {!page-"pandoc-attribute"}
+    - Attribute will be attached to the metadata code block if it can be parsed out.
+    - Only codeblock's metadata will be changed.
 
-    Note: we didn't really consider the number of spaces between cmark info string and attribute.
+    Note: we didn't really consider the number of spaces between cmark info string (lang) and attribute.
 *)
 open Core
 
@@ -90,7 +91,8 @@ let of_string_exn (s : string) : t =
     Invariant: whenever a [code_block_info] is attached, [lang] is a non-empty string.
     Callers can therefore match on [Meta.find meta_key meta] and rely on [lang] always
     being meaningful — there is no need for [lang : string option]. *)
-let tag_cb_attr_meta (mapper : Mapper.t) (b : Block.t) : Block.t Mapper.result =
+let cb_attr_block_map : Block.t Mapper.mapper =
+  fun (mapper : Mapper.t) (b : Block.t) : Block.t Mapper.result ->
   match b with
   | Cmarkit.Block.Code_block (cb, cb_meta) ->
     (match Block.Code_block.info_string cb with
