@@ -76,7 +76,7 @@ let make_mapper () : Cmarkit.Mapper.t =
       in
       Cmarkit.Mapper.ret (Cmarkit.Block.Heading (h', meta'))
     | _ ->
-      (match Callout.map_callout mapper block with
+      (match Callout.callout_block_map mapper block with
        | `Map _ as result -> result
        | `Default ->
          (match Attribute.tag_cb_attr_meta mapper block with

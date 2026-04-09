@@ -1,9 +1,14 @@
-(** Obsidian callout extension.
+(** {0 Obsidian callout extension.}
 
     Transforms blockquotes whose first line matches [\[!type\]] into callout
     metadata attached to the block_quote's [Cmarkit.Meta.t].
 
-    {1 Syntax}
+    - Adds metadata
+    - Transforms blockquote block
+
+    {1:spec Specification}
+
+    {2 Syntax}
 
 {v
 > [!type] Optional title
@@ -23,7 +28,7 @@ v}
     {- Nested callouts: a callout body may contain another blockquote that is
        itself a callout.}}
 
-    {1 Parsing}
+    {2 Parsing}
 
     First line regex: [\[!([a-zA-Z_-]+)\]([+-])?\s*(.*\)]
 
@@ -37,7 +42,7 @@ v}
     [Cmarkit.Block.Block_quote] nodes and attaches {!t} to the
     blockquote's [Cmarkit.Meta.t] via {!meta_key}.
 
-    {1 Data types}
+    {2 Data types}
 
     A callout's foldability is represented by {!type-fold}:
 
@@ -52,7 +57,7 @@ v}
     {- [fold] — [None] means not foldable, [Some _] selects the initial state}
     {- [title] — explicit title text, or the kind in title case}}
 
-    {1 HTML output}
+    {2 HTML output}
 
     Non-foldable callouts render as:
 
@@ -78,7 +83,7 @@ v}
     {- [open] attribute present when fold = {!Foldable_open}}
     {- [open] attribute absent when fold = {!Foldable_closed}}}
 
-    {1 Supported types}
+    {2 Supported types}
 
     The following type identifiers are styled. Aliases share the same style.
     Any unsupported type defaults to the [note] style.
@@ -235,9 +240,10 @@ let recompose_block
 (** Block mapper: detects callout syntax in blockquotes and attaches
     {!t} to the blockquote's metadata. Strips the header from the first
     paragraph's inline text. *)
-let map_callout (_mapper : Cmarkit.Mapper.t) (block : Cmarkit.Block.t)
-  : Cmarkit.Block.t Cmarkit.Mapper.result
-  =
+let callout_block_map : Cmarkit.Block.t Cmarkit.Mapper.mapper =
+  fun (_mapper : Cmarkit.Mapper.t)
+    (block : Cmarkit.Block.t)
+    : Cmarkit.Block.t Cmarkit.Mapper.result ->
   match block with
   | Cmarkit.Block.Block_quote (bq, bq_meta) ->
     let inner = Cmarkit.Block.Block_quote.block bq in
