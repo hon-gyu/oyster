@@ -18,6 +18,7 @@
 
 open Core
 
+(* TODO: should only be pure text or emphasis?  *)
 type t = { label : Cmarkit.Inline.t }
 
 type Cmarkit.Block.t +=

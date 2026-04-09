@@ -1,4 +1,11 @@
-(** Pre-resolution file-level parsing  *)
+(** {0 Pre-resolution file-level parsing}
+
+Each module provides a single-pass mapper that might
+- introduce new inline or block extensions
+- rewrite Cmarkit.Doc AST
+- add metadata to AST nodes
+
+*)
 
 open Core
 module Block_id = Block_id
@@ -11,6 +18,11 @@ module Extract = Extract
 module Attribute = Attribute
 module Textloc_conv = Textloc_conv
 module Struct = Struct
+
+
+(* TODO: mapper should be provided directly by each sub-module so that
+  test can be put inside corresponding sub-module.
+*)
 
 type block_id =
   | Caret of Block_id.t
