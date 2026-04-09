@@ -1,4 +1,8 @@
-(** Obsidian caret block identifier
+(** {0 Obsidian caret block identifier}
+
+  - Adds metadata only
+
+  {1 Syntax}
 
   ```markdown
   (* Inline at end of paragraph *)
@@ -69,7 +73,7 @@ let extract_block_id_from_inline (inline : Cmarkit.Inline.t) : t option =
 ;;
 
 (** Block mapper that attaches block IDs to paragraphs' metadata if they have one. *)
-let tag_block_id_meta (mapper : Mapper.t) (block : Block.t) : Block.t Mapper.result =
+let block_map : Block.t Mapper.mapper = fun (mapper : Mapper.t) (block : Block.t) : Block.t Mapper.result ->
   match block with
   | Block.Paragraph (p, meta) ->
     let inline = Block.Paragraph.inline p in
