@@ -17,6 +17,7 @@
 *)
 
 open Core
+open Cmarkit
 
 (* TODO: should only be pure text or emphasis?  *)
 type t = { label : Cmarkit.Inline.t }
@@ -24,6 +25,24 @@ type t = { label : Cmarkit.Inline.t }
 type Cmarkit.Block.t +=
   | Ext_keyed_list_item of t * Cmarkit.Block.t
   | Ext_keyed_block of t * Cmarkit.Block.t
+
+let block_commonmark_renderer : Cmarkit_renderer.block =
+  let open Cmarkit_renderer in
+  fun (c : context) (b : Block.t) ->
+    match b with
+    | Ext_keyed_block ({ label }, body) ->
+      Context.inline c label;
+      Context.string c ":\n";
+      Context.block c body;
+      true
+    | Ext_keyed_list_item ({ label }, body) ->
+      Context.string c "- ";
+      Context.inline c label;
+      Context.string c ":\n";
+      Context.block c body;
+      true
+    | _ -> false
+;;
 
 let sexp_of_block : Common.block_sexp =
   fun ~recurse_inline ~recurse_block ~with_meta:_ b ->

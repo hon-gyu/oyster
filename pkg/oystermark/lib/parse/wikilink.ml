@@ -68,6 +68,16 @@ let%expect_test "to_commonmark" =
 (** Inline extension constructor for wikilinks. *)
 type Inline.t += Ext_wikilink of t node
 
+let inline_commonmark_renderer : Cmarkit_renderer.inline =
+  let open Cmarkit_renderer in
+  fun (c : context) (i : Inline.t) ->
+    match i with
+    | Ext_wikilink (wl, _) ->
+      Context.string c (to_commonmark wl);
+      true
+    | _ -> false
+;;
+
 (** Meta key to tag wikilink nodes. *)
 let meta_key : unit Meta.key = Meta.key ()
 

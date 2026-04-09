@@ -33,6 +33,7 @@ v}
 *)
 
 open Core
+open Cmarkit
 
 type t =
   { class_name : string option (** Optional class from the opening fence. *)
@@ -41,6 +42,28 @@ type t =
 [@@deriving sexp]
 
 type Cmarkit.Block.t += Ext_div of t * Cmarkit.Block.t
+
+let block_commonmark_renderer : Cmarkit_renderer.block =
+  let open Cmarkit_renderer in
+  fun (c : context) (b : Block.t) ->
+    match b with
+    | Ext_div (div, body) ->
+      let fence = String.make div.colons ':' in
+      let class_suffix =
+        match div.class_name with
+        | Some cls -> " " ^ cls
+        | None -> ""
+      in
+      let buf = Context.buffer c in
+      let len = Buffer.length buf in
+      let needs_nl = len > 0 && not (Char.equal (Buffer.nth buf (len - 1)) '\n') in
+      if needs_nl then Context.byte c '\n';
+      Context.string c (fence ^ class_suffix ^ "\n\n");
+      Context.block c body;
+      Context.string c ("\n" ^ fence ^ "\n");
+      true
+    | _ -> false
+;;
 
 let sexp_of_block : Common.block_sexp =
   fun ~recurse_inline:_ ~recurse_block ~with_meta:_ b ->

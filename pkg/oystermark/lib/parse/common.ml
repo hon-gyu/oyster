@@ -31,9 +31,7 @@ let compose_all_inline_maps (ms : Inline.t Mapper.mapper list) =
   List.fold_right ms ~init:(fun m i -> Mapper.default) ~f:compose_inline_map
 ;;
 
-(* ==========================================================
-   Sexp conversion scaffolding
-   ========================================================== *)
+(* {1 Sexp conversion scaffolding} *)
 
 (** A sexp-converter for inlines. Returns [None] to fall through to the
     next converter in the composed chain. [recurse] is the fully-composed

@@ -8,12 +8,23 @@
     *)
 
 open Core
+open Cmarkit
 
 type t = Yaml.value
 
 let to_commonmark (fm : Yaml.value) : string = "---\n" ^ Yaml.to_string_exn fm ^ "---\n"
 
 type Cmarkit.Block.t += Frontmatter of Yaml.value
+
+let block_commonmark_renderer : Cmarkit_renderer.block =
+  let open Cmarkit_renderer in
+  fun (c : context) (b : Block.t) ->
+    match b with
+    | Frontmatter y ->
+      Context.string c (to_commonmark y);
+      true
+    | _ -> false
+;;
 
 let sexp_of_block : Common.block_sexp =
   fun ~recurse_inline:_ ~recurse_block:_ ~with_meta:_ b ->
