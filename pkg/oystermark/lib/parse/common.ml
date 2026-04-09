@@ -6,7 +6,10 @@ let compose_block_map (m1 : Block.t Mapper.mapper) (m2 : Block.t Mapper.mapper) 
   match m1 m b with
   | `Default -> m2 m b
   | `Map None -> `Map None
-  | `Map (Some b') -> m2 m b'
+  | `Map (Some b') ->
+    (match m2 m b' with
+     | `Default -> `Map (Some b')
+     | other -> other)
 ;;
 
 let compose_inline_map (m1 : Inline.t Mapper.mapper) (m2 : Inline.t Mapper.mapper) =
@@ -14,7 +17,10 @@ let compose_inline_map (m1 : Inline.t Mapper.mapper) (m2 : Inline.t Mapper.mappe
   match m1 m i with
   | `Default -> m2 m i
   | `Map None -> `Map None
-  | `Map (Some i') -> m2 m i'
+  | `Map (Some i') ->
+    (match m2 m i' with
+     | `Default -> `Map (Some i')
+     | other -> other)
 ;;
 
 let compose_all_block_maps (ms : Block.t Mapper.mapper list) =
