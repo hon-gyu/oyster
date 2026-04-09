@@ -141,7 +141,7 @@ let is_escaped s pos = pos > 0 && Char.equal (String.get s (pos - 1)) '\\'
     list of plain [Text] and [Ext_wikilink] nodes spliced via [Inlines].
     Returns [Mapper.default] for non-[Text] nodes or when no \[\[…\]\] is present,
     so the mapper falls through to its default behaviour. *)
-let parse (_mapper : Mapper.t) (i : Inline.t) : Inline.t Mapper.result =
+let inline_map : Inline.t Mapper.mapper = fun (_mapper : Mapper.t) (i : Inline.t) : Inline.t Mapper.result ->
   match i with
   | Inline.Text (text, meta) ->
     let len = String.length text in

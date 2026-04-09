@@ -148,7 +148,7 @@ Third paragraph ^block-2
   let mapper =
     Cmarkit.Mapper.make
       ~inline_ext_default:(fun _m i -> Some i)
-      ~block:Block_id.tag_block_id_meta
+      ~block:Block_id.block_map
       ()
   in
   let doc = Cmarkit.Mapper.map_doc mapper doc in

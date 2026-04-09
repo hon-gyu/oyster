@@ -93,7 +93,7 @@ let make_mapper () : Cmarkit.Mapper.t =
   in
   Cmarkit.Mapper.make
     ~inline_ext_default:(fun _m i -> Some i)
-    ~inline:Wikilink.parse
+    ~inline:Wikilink.inline_map
     ~block:map_block
     ()
 ;;
