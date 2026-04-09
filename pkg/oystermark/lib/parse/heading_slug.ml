@@ -66,5 +66,5 @@ let mk_block_map () : Cmarkit.Block.t Cmarkit.Mapper.mapper =
           mapped_inline
       in
       ret (Cmarkit.Block.Heading (h', meta'))
-    | _ -> ret b
+    | _ -> Cmarkit.Mapper.default
 ;;
