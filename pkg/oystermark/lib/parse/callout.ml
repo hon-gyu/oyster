@@ -240,7 +240,7 @@ let recompose_block
 (** Block mapper: detects callout syntax in blockquotes and attaches
     {!t} to the blockquote's metadata. Strips the header from the first
     paragraph's inline text. *)
-let callout_block_map : Cmarkit.Block.t Cmarkit.Mapper.mapper =
+let block_map : Cmarkit.Block.t Cmarkit.Mapper.mapper =
   fun (_mapper : Cmarkit.Mapper.t)
     (block : Cmarkit.Block.t)
     : Cmarkit.Block.t Cmarkit.Mapper.result ->

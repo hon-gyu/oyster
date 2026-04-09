@@ -91,7 +91,7 @@ let of_string_exn (s : string) : t =
     Invariant: whenever a [code_block_info] is attached, [lang] is a non-empty string.
     Callers can therefore match on [Meta.find meta_key meta] and rely on [lang] always
     being meaningful — there is no need for [lang : string option]. *)
-let cb_attr_block_map : Block.t Mapper.mapper =
+let block_map : Block.t Mapper.mapper =
   fun (mapper : Mapper.t) (b : Block.t) : Block.t Mapper.result ->
   match b with
   | Cmarkit.Block.Code_block (cb, cb_meta) ->

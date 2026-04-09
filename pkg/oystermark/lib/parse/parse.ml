@@ -84,12 +84,12 @@ let make_mapper () : Cmarkit.Mapper.t =
       in
       Cmarkit.Mapper.ret (Cmarkit.Block.Heading (h', meta'))
     | _ ->
-      (match Callout.callout_block_map mapper block with
+      (match Callout.block_map mapper block with
        | `Map _ as result -> result
        | `Default ->
-         (match Attribute.cb_attr_block_map mapper block with
+         (match Attribute.block_map mapper block with
           | `Map _ as result -> result
-          | `Default -> Block_id.tag_block_id_meta mapper block))
+          | `Default -> Block_id.block_map mapper block))
   in
   Cmarkit.Mapper.make
     ~inline_ext_default:(fun _m i -> Some i)
