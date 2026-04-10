@@ -15,25 +15,24 @@
     Only [Text] and [Inlines] nodes are traversed.  Emphasis, code
     spans, links, images, raw HTML, breaks, and extension inlines are
     {b opaque} — a colon inside them does not make the node keyed.
-    However, they {e can} appear earlier in the label; only the final
-    position matters.
 
-    Examples (the Cmarkit AST for each markdown source is shown):
+    After the trailing colon is stripped, the resulting inline is
+    decomposed into label segments (see {b Colon chains} below).
+    Each segment must be a {b single inline unit}: pure text,
+    emphasis, strong emphasis, or code span.  Mixed content — e.g.
+    emphasis followed by text in the same segment — is rejected, and
+    the node is not keyed.
 
     {ul
-    {- [foo bar:] → [Text "foo bar:"] → keyed, label ["foo bar"]}
-    {- [*foo* bar:] → [Inlines (Emphasis "foo") (Text " bar:")] →
-       keyed, label [*foo* bar].  The emphasis is part of the label
-       but the colon is detected in the trailing [Text] leaf.}
-    {- [*foo:*] → [Emphasis (Text "foo:")] → {b not keyed}.
-       Emphasis is opaque; the colon inside it is not examined.}
-    {- [*foo:* bar:] → [Inlines (Emphasis "foo:") (Text " bar:")] →
-       keyed, label [*foo:* bar].  The colon inside emphasis is
-       ignored; the one in the trailing [Text] is detected.}
-    {- [`code:`] → [Code_span "code:"] → {b not keyed}.
-       Code spans are opaque.}
-    {- [foo `http://x` bar:] → keyed.  The code span is interior;
-       the trailing [Text " bar:"] is what matters.}}
+    {- [foo bar:] → keyed, label [Text "foo bar"].}
+    {- [*foo*:] → keyed, label [Emphasis "foo"].
+       The colon follows the emphasis in a trailing [Text ":"] node.}
+    {- [**foo**:] → keyed, label [Strong_emphasis "foo"].}
+    {- [*foo* bar:] → {b not keyed}.  After stripping the colon the
+       segment is [Emphasis "foo"; Text " bar"] — mixed content.}
+    {- [*foo:*] → {b not keyed}.  Emphasis is opaque; the colon
+       inside is not examined.}
+    {- [`code:`] → {b not keyed}.  Code spans are opaque.}}
 
     {2 Escaped colons}
 
@@ -54,23 +53,24 @@
 
     {2 Colon chains}
 
-    When the label is {b pure text} (the inline tree contains only
-    [Text] and [Inlines] nodes — no emphasis, code spans, links, etc.)
-    and contains interior [: ] (colon followed by space) boundaries,
-    each segment produces a nesting level.
+    When the inline content (after trailing colon removal) contains
+    [: ] (colon followed by space) boundaries inside [Text] nodes,
+    it is split into segments.  Each segment must be a single inline
+    unit (see {b Label detection}).
 
     {ul
     {- [- foo: bar:] with body [baz] →
        [Keyed_list_item "foo" (Keyed_list_item "bar" (... baz ...))].
-       Two segments, two nesting levels.}
+       Two text segments, two nesting levels.}
     {- [- a: b: c:] with body [x] →
-       [Keyed_list_item "a" (Keyed_list_item "b" (Keyed_list_item "c" (... x ...)))].}
+       three nesting levels.}
+    {- [- *foo*: bar:] with body [baz] →
+       [Keyed_list_item (Emphasis "foo") (Keyed_list_item "bar" (...))].
+       Chain splitting works across inline types.}
     {- [- http://example.com:] → single label ["http://example.com"].
-       The [:] after [http] has no trailing space, so no split occurs.}
-    {- [- *foo*: bar:] → single label [*foo*: bar] (the full inline).
-       Chain splitting is {b not attempted} because the label contains
-       emphasis — it is not pure text.  This prevents [: ] inside
-       non-text inlines from being misinterpreted as chain delimiters.}}
+       The [:] after [http] has no trailing space, so no split.}
+    {- [- *foo* bar:] → {b not keyed}.  The single segment contains
+       emphasis + text — mixed content is rejected.}}
 
     {2 Tree restructuring rules}
 
@@ -147,23 +147,6 @@ module Colon : sig
   val strip_trailing_colon : Inline.t -> Inline.t option
   val labels_of_inline : Inline.t -> Inline.t list
 end = struct
-  (** Try to flatten an inline tree to a plain string.  Returns [None]
-      if the tree contains anything other than [Text] / [Inlines]. *)
-  let rec try_flatten_text (inline : Inline.t) : string option =
-    match inline with
-    | Inline.Text (s, _) -> Some s
-    | Inline.Inlines (is, _) ->
-      let rec go acc = function
-        | [] -> Some (String.concat (List.rev acc))
-        | x :: xs ->
-          (match try_flatten_text x with
-           | None -> None
-           | Some s -> go (s :: acc) xs)
-      in
-      go [] is
-    | _ -> None
-  ;;
-
   (** Count consecutive backslashes immediately before position [pos]
       in [s]. *)
   let count_preceding_backslashes (s : string) (pos : int) : int =
@@ -210,60 +193,82 @@ end = struct
   (* Colon chains
      ------------ *)
 
-  (** Split at [: ] (colon followed by space) boundaries.  Colons not
-      followed by a space are kept literal (e.g. URLs). *)
-  let split_colon_chain (s : string) : string list =
-    let parts = String.split_on_chars s ~on:[ ':' ] in
-    match parts with
-    | [] | [ _ ] -> [ String.strip s ]
-    | first :: rest ->
-      let rec merge acc current = function
-        | [] -> List.rev (String.strip current :: acc)
-        | next :: rest ->
-          if String.is_prefix next ~prefix:" "
-          then merge (String.strip current :: acc) (String.lstrip next) rest
-          else merge acc (current ^ ":" ^ next) rest
-      in
-      merge [] first rest |> List.filter ~f:(fun s -> not (String.is_empty s))
+  (** Unwrap [Inlines] to a flat child list; other nodes become a
+      singleton. *)
+  let unwrap_inline (inline : Inline.t) : Inline.t list =
+    match inline with
+    | Inline.Inlines (is, _) -> is
+    | other -> [ other ]
   ;;
 
-  (** Turn a colon-stripped label inline into a list of label inlines,
-      one per nesting level.
+  (** A segment is a valid label if it consists of a single simple
+      inline unit after filtering empty text nodes. *)
+  let as_simple_label (segment : Inline.t list) : Inline.t option =
+    let segment =
+      List.filter segment ~f:(fun i ->
+        match i with
+        | Inline.Text (s, _) -> not (String.is_empty (String.strip s))
+        | _ -> true)
+    in
+    match segment with
+    | [] -> None
+    | [ (Inline.Text (s, meta)) ] -> Some (Inline.Text (String.strip s, meta))
+    | [ (Inline.Emphasis _ as e) ] -> Some e
+    | [ (Inline.Strong_emphasis _ as e) ] -> Some e
+    | [ (Inline.Code_span _ as e) ] -> Some e
+    | _ -> None
+  ;;
 
-      If [inline] is pure text, the flattened string is split on [: ]
-      boundaries and each segment becomes a fresh [Inline.Text].
-      Otherwise, the entire inline is returned as a single label. *)
+  (** Split a flat list of inlines into segments at [: ] (colon-space)
+      boundaries found inside [Text] nodes.  Non-text inlines are never
+      split. *)
+  let split_at_colon_space (children : Inline.t list) : Inline.t list list =
+    (* [current_rev]: inlines accumulated for the segment being built (reversed).
+       [segments_rev]: completed segments (reversed). *)
+    let flush current_rev segments_rev =
+      List.rev current_rev :: segments_rev
+    in
+    let rec go current_rev segments_rev = function
+      | [] -> List.rev (flush current_rev segments_rev)
+      | Inline.Text (s, meta) :: rest ->
+        split_text current_rev segments_rev s meta rest
+      | other :: rest -> go (other :: current_rev) segments_rev rest
+    and split_text current_rev segments_rev s meta rest =
+      match String.substr_index s ~pattern:": " with
+      | None -> go (Inline.Text (s, meta) :: current_rev) segments_rev rest
+      | Some i ->
+        let before = String.prefix s i in
+        let after = String.lstrip (String.drop_prefix s (i + 1)) in
+        let current_rev =
+          if String.is_empty (String.strip before)
+          then current_rev
+          else Inline.Text (String.rstrip before, meta) :: current_rev
+        in
+        let segments_rev = flush current_rev segments_rev in
+        if String.is_empty (String.strip after)
+        then go [] segments_rev rest
+        else split_text [] segments_rev after meta rest
+    in
+    go [] [] children
+  ;;
+
+  (** Decompose a colon-stripped inline into label segments.
+
+      Each label must be a single inline unit: [Text], [Emphasis],
+      [Strong_emphasis], or [Code_span].  Mixed content (e.g.
+      emphasis followed by text in the same segment) is rejected.
+
+      Chain splitting at [: ] boundaries works across inline types:
+      [*foo*: bar] becomes two labels, [Emphasis "foo"] and
+      [Text "bar"].
+
+      Returns [[]] when the inline cannot be decomposed into valid
+      labels (mixed content, empty result, etc.). *)
   let labels_of_inline (inline : Inline.t) : Inline.t list =
-    match try_flatten_text inline with
-    | None -> [ inline ]
-    | Some s ->
-      split_colon_chain s
-      |> List.filter ~f:(fun seg -> not (String.is_empty seg))
-      |> List.map ~f:(fun seg -> Inline.Text (seg, Meta.none))
-  ;;
-
-  let%test_module "split_colon_chain" =
-    (module struct
-      let%test_unit _ = [%test_eq: string list] (split_colon_chain "foo") [ "foo" ]
-
-      let%test_unit _ =
-        [%test_eq: string list] (split_colon_chain "foo: bar") [ "foo"; "bar" ]
-      ;;
-
-      let%test_unit _ =
-        [%test_eq: string list] (split_colon_chain "a: b: c") [ "a"; "b"; "c" ]
-      ;;
-
-      let%test_unit "no split without space" =
-        [%test_eq: string list] (split_colon_chain "foo:bar") [ "foo:bar" ]
-      ;;
-
-      let%test_unit "url-like" =
-        [%test_eq: string list] (split_colon_chain "http://x.com") [ "http://x.com" ]
-      ;;
-
-      let%test_unit _ = [%test_eq: string list] (split_colon_chain "") [ "" ]
-    end)
+    let children = unwrap_inline inline in
+    let segments = split_at_colon_space children in
+    let labels = List.filter_map segments ~f:as_simple_label in
+    if List.length labels = List.length segments then labels else []
   ;;
 
   let%test_module "strip_trailing_colon" =
@@ -307,10 +312,7 @@ end = struct
       ;;
 
       let%test "emphasis is opaque" =
-        let em =
-          Inline.Emphasis
-            (Inline.Emphasis.make (text "foo:"), Meta.none)
-        in
+        let em = Inline.Emphasis (Inline.Emphasis.make (text "foo:"), Meta.none) in
         Option.is_none (strip_trailing_colon em)
       ;;
 
@@ -323,6 +325,72 @@ end = struct
             , Meta.none)
         in
         Option.is_some (strip_trailing_colon inline)
+      ;;
+    end)
+  ;;
+
+  let%test_module "labels_of_inline" =
+    (module struct
+      let text s = Inline.Text (s, Meta.none)
+      let emph s = Inline.Emphasis (Inline.Emphasis.make (text s), Meta.none)
+      let strong s = Inline.Strong_emphasis (Inline.Emphasis.make (text s), Meta.none)
+
+      let label_count inline =
+        List.length (labels_of_inline inline)
+      ;;
+
+      (* Simple labels *)
+      let%test_unit "pure text" =
+        [%test_eq: int] (label_count (text "foo")) 1
+      ;;
+
+      let%test_unit "single emphasis" =
+        let inline = Inline.Inlines ([ emph "foo"; text "" ], Meta.none) in
+        [%test_eq: int] (label_count inline) 1
+      ;;
+
+      let%test_unit "single strong emphasis" =
+        let inline = Inline.Inlines ([ strong "foo"; text "" ], Meta.none) in
+        [%test_eq: int] (label_count inline) 1
+      ;;
+
+      (* Mixed content rejected *)
+      let%test_unit "emphasis + text is mixed" =
+        let inline = Inline.Inlines ([ emph "foo"; text " bar" ], Meta.none) in
+        [%test_eq: int] (label_count inline) 0
+      ;;
+
+      (* Chain splitting *)
+      let%test_unit "pure text chain" =
+        [%test_eq: int] (label_count (text "foo: bar")) 2
+      ;;
+
+      let%test_unit "three-way text chain" =
+        [%test_eq: int] (label_count (text "a: b: c")) 3
+      ;;
+
+      let%test_unit "emphasis chain" =
+        let inline = Inline.Inlines ([ emph "foo"; text ": bar" ], Meta.none) in
+        [%test_eq: int] (label_count inline) 2
+      ;;
+
+      let%test_unit "text then emphasis chain" =
+        let inline = Inline.Inlines ([ text "foo: "; emph "bar"; text "" ], Meta.none) in
+        [%test_eq: int] (label_count inline) 2
+      ;;
+
+      (* No split without space *)
+      let%test_unit "url-like" =
+        [%test_eq: int] (label_count (text "http://x.com")) 1
+      ;;
+
+      let%test_unit "colon without space" =
+        [%test_eq: int] (label_count (text "foo:bar")) 1
+      ;;
+
+      (* Empty / bare *)
+      let%test_unit "empty text" =
+        [%test_eq: int] (label_count (text "")) 0
       ;;
     end)
   ;;
@@ -558,20 +626,28 @@ module For_test = struct
     Folder.fold_doc folder true doc
   ;;
 
-  (** Does the last item of a list have a bare trailing colon? *)
+  (** Would [strip_trailing_colon] + [labels_of_inline] produce valid
+      labels for this inline? *)
+  let has_valid_labels (inline : Inline.t) : bool =
+    match Colon.strip_trailing_colon inline with
+    | None -> false
+    | Some label_inline -> not (List.is_empty (Colon.labels_of_inline label_inline))
+  ;;
+
+  (** Does the last item of a list have a bare trailing colon with
+      valid labels? *)
   let list_last_item_is_bare_keyed (l : Block.List'.t) : bool =
     match List.last (Block.List'.items l) with
     | None -> false
     | Some (item, _) ->
       (match Block.List_item.block item with
-       | Block.Paragraph (p, _) ->
-         Option.is_some (Colon.strip_trailing_colon (Block.Paragraph.inline p))
+       | Block.Paragraph (p, _) -> has_valid_labels (Block.Paragraph.inline p)
        | _ -> false)
   ;;
 
-  (** No keyed paragraph or keyed-last-item list is immediately followed
-      by a non-blank block.  Violation means the rewriter missed an
-      absorption. *)
+  (** No keyable paragraph or keyable-last-item list is immediately
+      followed by a non-blank block.  Violation means the rewriter
+      missed an absorption. *)
   let keying_is_maximal (doc : Doc.t) : bool =
     let ok = ref true in
     let check_siblings bs =
@@ -580,8 +656,7 @@ module For_test = struct
       for i = 0 to len - 1 do
         let absorbable =
           match arr.(i) with
-          | Block.Paragraph (p, _) ->
-            Option.is_some (Colon.strip_trailing_colon (Block.Paragraph.inline p))
+          | Block.Paragraph (p, _) -> has_valid_labels (Block.Paragraph.inline p)
           | Block.List (l, _) -> list_last_item_is_bare_keyed l
           | _ -> false
         in
@@ -651,6 +726,17 @@ some text|}
   - baz|}
   ;;
 
+  let emphasis_keyed_item =
+    {|- *foo*:
+  - bar
+  - baz|}
+  ;;
+
+  let emphasis_chain =
+    {|- *foo*: bar:
+  - baz|}
+  ;;
+
   let non_example_no_colon =
     {|- foo
 - bar|}
@@ -661,12 +747,17 @@ some text|}
 following paragraph|}
   ;;
 
+  let non_example_mixed_inline =
+    {|*foo* bar:
+following|}
+  ;;
+
   let escaped_colon =
     {|- foo\\:
 - bar|}
   ;;
 
-  let all_examples =
+  let examples =
     [ rule1_keyed_list_item_with_indented_content
     ; rule2_keyed_list_item_followed_by_blank_line
     ; rule3_keyed_list_item_with_contiguous_blocks
@@ -674,8 +765,11 @@ following paragraph|}
     ; rule5_keyed_paragraph_multiple_children
     ; rule6_nesting
     ; colon_chain_inline_keying
+    ; emphasis_keyed_item
+    ; emphasis_chain
     ; non_example_no_colon
     ; non_example_colon_in_code_span
+    ; non_example_mixed_inline
     ; escaped_colon
     ]
   ;;

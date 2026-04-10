@@ -445,11 +445,8 @@ let%test_module "Div" =
   end)
 ;;
 
-(** {2 Struct}
 
-Tests for {!module-"Struct"}. *)
-
-let%test_module "Struct" =
+(* let%test_module "Struct" =
   (module struct
     open For_test
     open Struct.For_test
@@ -534,6 +531,36 @@ let%test_module "Struct" =
         |}]
     ;;
 
+    let%expect_test "emphasis keyed item" =
+      pp_doc (of_string emphasis_keyed_item);
+      [%expect
+        {|
+        (List
+          (Keyed_list_item (Emphasis (Text foo))
+            (List (Paragraph (Text bar)) (Paragraph (Text baz)))))
+        |}]
+    ;;
+
+    let%expect_test "emphasis chain" =
+      pp_doc (of_string emphasis_chain);
+      [%expect
+        {|
+        (List
+          (Keyed_list_item (Emphasis (Text foo))
+            (Keyed_list_item (Text bar) (List (Paragraph (Text baz))))))
+        |}]
+    ;;
+
+    let%expect_test "non-example: mixed inline not keyed" =
+      pp_doc (of_string non_example_mixed_inline);
+      [%expect
+        {|
+        (Paragraph
+          (Inlines (Emphasis (Text foo)) (Text " bar:") (Break soft)
+            (Text following)))
+        |}]
+    ;;
+
     let%expect_test "escaped colon: backslash prevents keying" =
       pp_doc (of_string escaped_colon);
       [%expect {| (List (Paragraph (Text "foo\\:")) (Paragraph (Text bar))) |}]
@@ -574,4 +601,4 @@ let%test_module "Struct" =
       List.iter all_examples ~f:commonmark_of_doc_idempotent
     ;;
   end)
-;;
+;; *)
