@@ -14,9 +14,26 @@
 
     Only [Text] and [Inlines] nodes are traversed.  Emphasis, code
     spans, links, images, raw HTML, breaks, and extension inlines are
-    opaque — a colon inside them does not make the node keyed.
-    However, they {e can} appear before the trailing colon in the
-    label (e.g. [*foo* bar:] is keyed with label [*foo* bar]).
+    {b opaque} — a colon inside them does not make the node keyed.
+    However, they {e can} appear earlier in the label; only the final
+    position matters.
+
+    Examples (the Cmarkit AST for each markdown source is shown):
+
+    {ul
+    {- [foo bar:] → [Text "foo bar:"] → keyed, label ["foo bar"]}
+    {- [*foo* bar:] → [Inlines (Emphasis "foo") (Text " bar:")] →
+       keyed, label [*foo* bar].  The emphasis is part of the label
+       but the colon is detected in the trailing [Text] leaf.}
+    {- [*foo:*] → [Emphasis (Text "foo:")] → {b not keyed}.
+       Emphasis is opaque; the colon inside it is not examined.}
+    {- [*foo:* bar:] → [Inlines (Emphasis "foo:") (Text " bar:")] →
+       keyed, label [*foo:* bar].  The colon inside emphasis is
+       ignored; the one in the trailing [Text] is detected.}
+    {- [`code:`] → [Code_span "code:"] → {b not keyed}.
+       Code spans are opaque.}
+    {- [foo `http://x` bar:] → keyed.  The code span is interior;
+       the trailing [Text " bar:"] is what matters.}}
 
     {2 Escaped colons}
 
@@ -37,15 +54,23 @@
 
     {2 Colon chains}
 
-    When the label is pure text and contains interior [: ]
-    (colon-space) boundaries, e.g. [foo: bar:], each segment produces
-    a nesting level:
-    [Ext_keyed_list_item("foo", Ext_keyed_list_item("bar", body))].
+    When the label is {b pure text} (the inline tree contains only
+    [Text] and [Inlines] nodes — no emphasis, code spans, links, etc.)
+    and contains interior [: ] (colon followed by space) boundaries,
+    each segment produces a nesting level.
 
-    {b Chain splitting only applies to pure-text labels.}  If the label
-    contains any non-text inline — code span, emphasis, link, image,
-    raw HTML, hard/soft break, or extension — the whole inline becomes
-    a single label, preserved verbatim.
+    {ul
+    {- [- foo: bar:] with body [baz] →
+       [Keyed_list_item "foo" (Keyed_list_item "bar" (... baz ...))].
+       Two segments, two nesting levels.}
+    {- [- a: b: c:] with body [x] →
+       [Keyed_list_item "a" (Keyed_list_item "b" (Keyed_list_item "c" (... x ...)))].}
+    {- [- http://example.com:] → single label ["http://example.com"].
+       The [:] after [http] has no trailing space, so no split occurs.}
+    {- [- *foo*: bar:] → single label [*foo*: bar] (the full inline).
+       Chain splitting is {b not attempted} because the label contains
+       emphasis — it is not pure text.  This prevents [: ] inside
+       non-text inlines from being misinterpreted as chain delimiters.}}
 
     {2 Tree restructuring rules}
 
