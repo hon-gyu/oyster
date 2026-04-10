@@ -107,10 +107,7 @@ open Core
 open Cmarkit
 
 type t = { label : Inline.t }
-
-type Block.t +=
-  | Ext_keyed_list_item of t * Block.t
-  | Ext_keyed_block of t * Block.t
+type Block.t += Ext_keyed_list_item of t * Block.t | Ext_keyed_block of t * Block.t
 
 let block_commonmark_renderer : Cmarkit_renderer.block =
   let open Cmarkit_renderer in
@@ -150,9 +147,7 @@ end = struct
   (** Count consecutive backslashes immediately before position [pos]
       in [s]. *)
   let count_preceding_backslashes (s : string) (pos : int) : int =
-    let rec go i n =
-      if i >= 0 && Char.equal s.[i] '\\' then go (i - 1) (n + 1) else n
-    in
+    let rec go i n = if i >= 0 && Char.equal s.[i] '\\' then go (i - 1) (n + 1) else n in
     go (pos - 1) 0
   ;;
 
@@ -212,7 +207,7 @@ end = struct
     in
     match segment with
     | [] -> None
-    | [ (Inline.Text (s, meta)) ] -> Some (Inline.Text (String.strip s, meta))
+    | [ Inline.Text (s, meta) ] -> Some (Inline.Text (String.strip s, meta))
     | [ (Inline.Emphasis _ as e) ] -> Some e
     | [ (Inline.Strong_emphasis _ as e) ] -> Some e
     | [ (Inline.Code_span _ as e) ] -> Some e
@@ -225,13 +220,10 @@ end = struct
   let split_at_colon_space (children : Inline.t list) : Inline.t list list =
     (* [current_rev]: inlines accumulated for the segment being built (reversed).
        [segments_rev]: completed segments (reversed). *)
-    let flush current_rev segments_rev =
-      List.rev current_rev :: segments_rev
-    in
+    let flush current_rev segments_rev = List.rev current_rev :: segments_rev in
     let rec go current_rev segments_rev = function
       | [] -> List.rev (flush current_rev segments_rev)
-      | Inline.Text (s, meta) :: rest ->
-        split_text current_rev segments_rev s meta rest
+      | Inline.Text (s, meta) :: rest -> split_text current_rev segments_rev s meta rest
       | other :: rest -> go (other :: current_rev) segments_rev rest
     and split_text current_rev segments_rev s meta rest =
       match String.substr_index s ~pattern:": " with
@@ -285,7 +277,11 @@ end = struct
 
       let%test_unit "basic" = [%test_eq: string option] (check "foo:") (Some "foo")
       let%test_unit "no colon" = [%test_eq: string option] (check "foo") None
-      let%test_unit "trailing space" = [%test_eq: string option] (check "foo: ") (Some "foo")
+
+      let%test_unit "trailing space" =
+        [%test_eq: string option] (check "foo: ") (Some "foo")
+      ;;
+
       let%test_unit "bare colon" = [%test_eq: string option] (check ":") (Some "")
       let%test_unit "empty" = [%test_eq: string option] (check "") None
 
@@ -319,10 +315,10 @@ end = struct
       let%test "emphasis before trailing colon" =
         let inline =
           Inline.Inlines
-            ([ Inline.Emphasis (Inline.Emphasis.make (text "foo"), Meta.none)
-             ; text " bar:"
-             ]
-            , Meta.none)
+            ( [ Inline.Emphasis (Inline.Emphasis.make (text "foo"), Meta.none)
+              ; text " bar:"
+              ]
+            , Meta.none )
         in
         Option.is_some (strip_trailing_colon inline)
       ;;
@@ -334,15 +330,10 @@ end = struct
       let text s = Inline.Text (s, Meta.none)
       let emph s = Inline.Emphasis (Inline.Emphasis.make (text s), Meta.none)
       let strong s = Inline.Strong_emphasis (Inline.Emphasis.make (text s), Meta.none)
-
-      let label_count inline =
-        List.length (labels_of_inline inline)
-      ;;
+      let label_count inline = List.length (labels_of_inline inline)
 
       (* Simple labels *)
-      let%test_unit "pure text" =
-        [%test_eq: int] (label_count (text "foo")) 1
-      ;;
+      let%test_unit "pure text" = [%test_eq: int] (label_count (text "foo")) 1
 
       let%test_unit "single emphasis" =
         let inline = Inline.Inlines ([ emph "foo"; text "" ], Meta.none) in
@@ -361,9 +352,7 @@ end = struct
       ;;
 
       (* Chain splitting *)
-      let%test_unit "pure text chain" =
-        [%test_eq: int] (label_count (text "foo: bar")) 2
-      ;;
+      let%test_unit "pure text chain" = [%test_eq: int] (label_count (text "foo: bar")) 2
 
       let%test_unit "three-way text chain" =
         [%test_eq: int] (label_count (text "a: b: c")) 3
@@ -380,18 +369,14 @@ end = struct
       ;;
 
       (* No split without space *)
-      let%test_unit "url-like" =
-        [%test_eq: int] (label_count (text "http://x.com")) 1
-      ;;
+      let%test_unit "url-like" = [%test_eq: int] (label_count (text "http://x.com")) 1
 
       let%test_unit "colon without space" =
         [%test_eq: int] (label_count (text "foo:bar")) 1
       ;;
 
       (* Empty / bare *)
-      let%test_unit "empty text" =
-        [%test_eq: int] (label_count (text "")) 0
-      ;;
+      let%test_unit "empty text" = [%test_eq: int] (label_count (text "")) 0
     end)
   ;;
 end
@@ -461,11 +446,15 @@ end = struct
       block
   ;;
 
-  let make_list (l : Block.List'.t) (list_meta : Meta.t) (items : Block.List_item.t node list)
+  let make_list
+        (l : Block.List'.t)
+        (list_meta : Meta.t)
+        (items : Block.List_item.t node list)
     : Block.t
     =
     Block.List
-      (Block.List'.make ~tight:(Block.List'.tight l) (Block.List'.type' l) items, list_meta)
+      ( Block.List'.make ~tight:(Block.List'.tight l) (Block.List'.type' l) items
+      , list_meta )
   ;;
 
   let replace_last items new_last =
@@ -504,8 +493,8 @@ end = struct
             if not (List.is_empty sub_blocks)
             then (
               let body = wrap_blocks sub_blocks in
-              rebuild_item item (build_nested_keyed ~make_node:mk_keyed_item labels body),
-              None)
+              ( rebuild_item item (build_nested_keyed ~make_node:mk_keyed_item labels body)
+              , None ))
             else item, Some labels))
   ;;
 
@@ -569,13 +558,13 @@ end = struct
     List.map items ~f:(fun (item, item_meta) ->
       let block = Block.List_item.block item in
       let block' = rewrite_within_block block in
-      if phys_equal block block' then item, item_meta
+      if phys_equal block block'
+      then item, item_meta
       else rebuild_item item block', item_meta)
 
   and rewrite_within_block (block : Block.t) : Block.t =
     match block with
-    | Block.Blocks (blocks, meta) ->
-      Block.Blocks (rewrite_block_list blocks, meta)
+    | Block.Blocks (blocks, meta) -> Block.Blocks (rewrite_block_list blocks, meta)
     | Block.Block_quote (bq, meta) ->
       let inner = Block.Block_quote.block bq in
       Block.Block_quote (Block.Block_quote.make (rewrite_within_block inner), meta)
@@ -584,8 +573,7 @@ end = struct
        | [ single ] -> single
        | multiple -> Block.Blocks (multiple, Meta.none))
     | Div.Ext_div (div, body) -> Div.Ext_div (div, rewrite_within_block body)
-    | Ext_keyed_list_item (t, body) ->
-      Ext_keyed_list_item (t, rewrite_within_block body)
+    | Ext_keyed_list_item (t, body) -> Ext_keyed_list_item (t, rewrite_within_block body)
     | Ext_keyed_block (t, body) -> Ext_keyed_block (t, rewrite_within_block body)
     | _ -> block
   ;;
@@ -599,17 +587,24 @@ let rewrite_doc (doc : Doc.t) : Doc.t =
 
 (** {1 For test} *)
 module For_test = struct
-  (* Predicates
-     ========== *)
+  open Common.For_test
+
+  let doc_of_string s =
+    let doc = Doc.of_string s in
+    rewrite_doc doc
+  ;;
+
+  let pp_doc doc = mk_pp_doc ~blocks:[ sexp_of_block ] () doc
 
   let block_ext_fold : (Block.t, 'a) Folder.fold =
     fun f acc b ->
     match b with
     | Ext_keyed_block (_, body) | Ext_keyed_list_item (_, body) ->
       Folder.fold_block f acc body
-    | Div.Ext_div (_, body) -> Folder.fold_block f acc body
     | _ -> acc
   ;;
+
+  (** {2 Predicates} *)
 
   (** Every keyed node's body is non-empty. *)
   let keyed_bodies_non_empty (doc : Doc.t) : bool =
@@ -660,8 +655,7 @@ module For_test = struct
           | Block.List (l, _) -> list_last_item_is_bare_keyed l
           | _ -> false
         in
-        if absorbable && i + 1 < len && not (is_blank_line arr.(i + 1))
-        then ok := false
+        if absorbable && i + 1 < len && not (is_blank_line arr.(i + 1)) then ok := false
       done
     in
     let folder =
@@ -680,26 +674,20 @@ module For_test = struct
 
   (** {2 Examples} *)
 
-  let rule1_keyed_list_item_with_indented_content =
+  let keyed_list_item_with_indented_content =
     {|- foo:
   - bar
   - baz|}
   ;;
 
-  let rule2_keyed_list_item_followed_by_blank_line =
-    {|- foo:
-
-bar|}
-  ;;
-
-  let rule3_keyed_list_item_with_contiguous_blocks =
+  let keyed_list_item_with_contiguous_blocks =
     {|- foo:
 ```
 bar
 ```|}
   ;;
 
-  let rule4_keyed_paragraph =
+  let keyed_paragraph =
     {|foo:
 - bar
 - baz
@@ -707,14 +695,14 @@ bar
 bee|}
   ;;
 
-  let rule5_keyed_paragraph_multiple_children =
+  let keyed_paragraph_multiple_children =
     {|foo:
 - bar
 - baz
 some text|}
   ;;
 
-  let rule6_nesting =
+  let nesting =
     {|foo:
 - bar:
   - baz
@@ -737,6 +725,11 @@ some text|}
   - baz|}
   ;;
 
+  let escaped_colon =
+    {|- foo\\:
+- bar|}
+  ;;
+
   let non_example_no_colon =
     {|- foo
 - bar|}
@@ -752,18 +745,19 @@ following paragraph|}
 following|}
   ;;
 
-  let escaped_colon =
-    {|- foo\\:
-- bar|}
+  let non_example_blank_line =
+    {|- foo:
+
+bar|}
   ;;
 
   let examples =
-    [ rule1_keyed_list_item_with_indented_content
-    ; rule2_keyed_list_item_followed_by_blank_line
-    ; rule3_keyed_list_item_with_contiguous_blocks
-    ; rule4_keyed_paragraph
-    ; rule5_keyed_paragraph_multiple_children
-    ; rule6_nesting
+    [ keyed_list_item_with_indented_content
+    ; non_example_blank_line
+    ; keyed_list_item_with_contiguous_blocks
+    ; keyed_paragraph
+    ; keyed_paragraph_multiple_children
+    ; nesting
     ; colon_chain_inline_keying
     ; emphasis_keyed_item
     ; emphasis_chain
@@ -802,3 +796,119 @@ following|}
     String.concat ~sep:"\n" lines
   ;;
 end
+
+let%test_module "Struct" =
+  (module struct
+    open For_test
+
+    let%expect_test _ =
+      keyed_list_item_with_indented_content |> doc_of_string |> pp_doc;
+      [%expect
+        {|
+        (List
+          (Keyed_list_item (Text foo)
+            (List (Paragraph (Text bar)) (Paragraph (Text baz)))))
+        |}]
+    ;;
+
+    let%expect_test _ =
+      keyed_list_item_with_contiguous_blocks |> doc_of_string |> pp_doc;
+      [%expect
+        {| (Blocks (List (Keyed_list_item (Text foo) (Code_block no-info bar)))) |}]
+    ;;
+
+    let%expect_test _ =
+      keyed_paragraph |> doc_of_string |> pp_doc;
+      [%expect
+        {|
+        (Blocks
+          (Keyed_block (Text foo)
+            (List (Paragraph (Text bar)) (Paragraph (Text baz))))
+          Blank_line (Paragraph (Text bee)))
+        |}]
+    ;;
+
+    let%expect_test _ =
+      keyed_paragraph_multiple_children |> doc_of_string |> pp_doc;
+      [%expect
+        {|
+        (Blocks
+          (Keyed_block (Text foo)
+            (List (Paragraph (Text bar))
+              (Paragraph (Inlines (Text baz) (Break soft) (Text "some text"))))))
+        |}]
+    ;;
+
+    let%expect_test _ =
+      nesting |> doc_of_string |> pp_doc;
+      [%expect
+        {|
+        (Blocks
+          (Keyed_block (Text foo)
+            (List (Keyed_list_item (Text bar) (List (Paragraph (Text baz))))
+              (Paragraph (Text qux)))))
+        |}]
+    ;;
+
+    let%expect_test _ =
+      colon_chain_inline_keying |> doc_of_string |> pp_doc;
+      [%expect
+        {|
+        (List
+          (Keyed_list_item (Text foo)
+            (Keyed_list_item (Text bar) (List (Paragraph (Text baz))))))
+        |}]
+    ;;
+
+    let%expect_test _ =
+      emphasis_keyed_item |> doc_of_string |> pp_doc;
+      [%expect
+        {|
+        (List
+          (Keyed_list_item (Emphasis (Text foo))
+            (List (Paragraph (Text bar)) (Paragraph (Text baz)))))
+        |}]
+    ;;
+
+    let%expect_test _ =
+      emphasis_chain |> doc_of_string |> pp_doc;
+      [%expect
+        {|
+        (List
+          (Keyed_list_item (Emphasis (Text foo))
+            (Keyed_list_item (Text bar) (List (Paragraph (Text baz))))))
+        |}]
+    ;;
+
+    let%expect_test _ =
+      non_example_no_colon |> doc_of_string |> pp_doc;
+      [%expect {| (List (Paragraph (Text foo)) (Paragraph (Text bar))) |}]
+    ;;
+
+    let%expect_test _ =
+      non_example_colon_in_code_span |> doc_of_string |> pp_doc;
+      [%expect
+        {|
+        (Paragraph
+          (Inlines (Text "text with ") (Code_span code:) (Break soft)
+            (Text "following paragraph")))
+        |}]
+    ;;
+
+    let%expect_test _ =
+      non_example_mixed_inline |> doc_of_string |> pp_doc;
+      [%expect
+        {|
+        (Paragraph
+          (Inlines (Emphasis (Text foo)) (Text " bar:") (Break soft)
+            (Text following)))
+        |}]
+    ;;
+
+    let%expect_test _ =
+      non_example_blank_line |> doc_of_string |> pp_doc;
+      [%expect
+        {| (Blocks (List (Paragraph (Text foo:))) Blank_line (Paragraph (Text bar))) |}]
+    ;;
+  end)
+;;
