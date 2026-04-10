@@ -59,6 +59,7 @@ type sexp_of =
   { inline : Inline.t -> Sexp.t
   ; block : Block.t -> Sexp.t
   ; meta : Meta.t -> Sexp.t list
+  ; doc : Doc.t -> Sexp.t
   }
 
 (** Core inline converter. Always returns [Some] — unknown constructors
@@ -195,7 +196,12 @@ let make_sexp_of
     | [] -> sexp
     | items -> Sexp.List [ sexp; Sexp.List (Atom "meta" :: items) ]
   in
-  { inline = sexp_of_inline; block = sexp_of_block; meta = sexp_of_meta }
+  let sexp_of_doc (d : Doc.t) : Sexp.t = sexp_of_block (Doc.block d) in
+  { inline = sexp_of_inline
+  ; block = sexp_of_block
+  ; meta = sexp_of_meta
+  ; doc = sexp_of_doc
+  }
 ;;
 
 module For_test = struct
@@ -204,13 +210,32 @@ module For_test = struct
     @raise Failure if the roundtrip is not idempotent.
   *)
   let commonmark_of_doc_idempotent
-        (doc_of_string : string -> Doc.t)
-        (commonmark_of_doc : Doc.t -> string)
+        ~(doc_of_string : string -> Doc.t)
+        ~(commonmark_of_doc : Doc.t -> string)
         s
     =
     let normalize s = String.rstrip s in
     let cm1 = commonmark_of_doc (doc_of_string s) in
     let cm2 = commonmark_of_doc (doc_of_string cm1) in
     [%test_eq: string] (normalize cm1) (normalize cm2)
+  ;;
+
+  (* Helpers
+  ==================== *)
+
+  let mk_doc_of_string ?inline_ext_default ?block_ext_default ?inline ?block () s =
+    let doc = Doc.of_string s in
+    let doc' =
+      Mapper.map_doc
+        (Mapper.make ?inline_ext_default ?block_ext_default ?block ?inline ())
+        doc
+    in
+    doc'
+  ;;
+
+  let mk_pp_doc ?inlines ?blocks ?metas () doc =
+    (make_sexp_of ?inlines ?blocks ?metas ()).doc doc
+    |> Sexp.to_string_hum ~indent:2
+    |> print_endline
   ;;
 end

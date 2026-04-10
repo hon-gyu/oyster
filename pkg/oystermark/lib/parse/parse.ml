@@ -106,6 +106,7 @@ let sexp_of_ =
 let sexp_of_inline = sexp_of_.inline
 let sexp_of_block = sexp_of_.block
 let sexp_of_meta = sexp_of_.meta
+let sexp_of_doc = sexp_of_.doc
 
 (** {1:test Test} *)
 
