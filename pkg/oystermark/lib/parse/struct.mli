@@ -7,13 +7,8 @@ val sexp_of_block : Common.block_sexp
 val rewrite_doc : source:string option -> Cmarkit.Doc.t -> Cmarkit.Doc.t
 
 module For_test : sig
-  (** {2 Predicates} *)
-
   val keyed_bodies_non_empty : Cmarkit.Doc.t -> bool
   val keying_is_maximal : source:string option -> Cmarkit.Doc.t -> bool
-
-  (** {2 Examples} *)
-
   val rule1_keyed_list_item_with_indented_content : string
   val rule2_keyed_list_item_followed_by_blank_line : string
   val rule3_keyed_list_item_with_contiguous_blocks : string

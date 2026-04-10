@@ -567,6 +567,7 @@ let rewrite_doc ~(source : string option) (doc : Cmarkit.Doc.t) : Cmarkit.Doc.t 
   if phys_equal block block' then doc else Cmarkit.Doc.make block'
 ;;
 
+(** {1 For test}  *)
 module For_test = struct
   (* Traversal helpers
      ----------------- *)
@@ -610,7 +611,7 @@ module For_test = struct
     | _ -> ()
   ;;
 
-  (* Predicates *)
+  (* {2 Predicates} *)
 
   (** Every keyed node's body is non-empty.  Rule 2: if the next element
       is blank, no keying happens — so an empty body would indicate a
@@ -624,16 +625,6 @@ module For_test = struct
       | _ -> ());
     !ok
   ;;
-
-  (** {b Chain-splitting discipline.}  A label that was split off a
-      [: ] chain is always an [Inline.Text] (constructed fresh by
-      {!Colon.labels_of_inline}).  A label that survived as a single
-      unsplit inline may be anything — [Code_span], [Emphasis], [Link],
-      [Image], extension, etc. — preserved verbatim.  In particular,
-      if the label contains any non-text inline, chain splitting is
-      {e not} attempted: [: ] inside a code span is literal
-      punctuation, not a chain delimiter, and splitting on it would
-      silently corrupt the label. *)
 
   (** Does a list item's leading paragraph end with an unescaped
       trailing colon, with no indented sub-blocks?  Such an item could
@@ -677,8 +668,7 @@ module For_test = struct
     !ok
   ;;
 
-  (* Examples
-     --------
+  (** {2 Examples}
 
      One named string per example in [specification/oyster/struct.md].
      The variable name encodes the rule number and a short description;
@@ -754,15 +744,6 @@ following paragraph|}
     ; non_example_colon_in_code_span
     ]
   ;;
-
-  (* Generator for PBT
-     -----------------
-
-     A tiny line-based generator that samples from a vocabulary of
-     markdown lines likely to exercise keying, nesting, blank lines,
-     and escape handling.  The output is not always "valid" structurally
-     — that is the point: the rewriter must preserve invariants on
-     arbitrary inputs, not just well-formed ones. *)
 
   let line_vocabulary =
     [| "- foo:"
