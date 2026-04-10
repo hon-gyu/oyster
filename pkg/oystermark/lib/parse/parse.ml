@@ -59,7 +59,7 @@ let of_string ?(strict = false) ?(layout = false) ?(locs = true) (s : string)
   let cmarkit_doc = Doc.of_string ~strict ~layout ~locs:true body in
   let body_doc = Mapper.map_doc (mk_mapper ()) cmarkit_doc in
   let body_doc = Div.rewrite_doc body_doc in
-  let body_doc = Struct.rewrite_doc ~source:(Some body) body_doc in
+  let body_doc = Struct.rewrite_doc body_doc in
   match yaml_opt, Doc.block body_doc with
   | None, _ -> body_doc
   | Some yaml, Block.Blocks (blocks, meta) ->
@@ -534,18 +534,22 @@ let%test_module "Struct" =
         |}]
     ;;
 
+    let%expect_test "escaped colon: backslash prevents keying" =
+      pp_doc (of_string escaped_colon);
+      [%expect {| (List (Paragraph (Text "foo\\:")) (Paragraph (Text bar))) |}]
+    ;;
+
     (* Universal predicates: driven by both the named examples
        (regression) and a [Quickcheck] stream (property-based). *)
 
     let check_universal_predicates (input : string) : unit =
       let doc = of_string input in
-      let source = Some input in
       let fail name =
         Core.raise_s
           [%message "universal predicate failed" (name : string) (input : string)]
       in
       if not (keyed_bodies_non_empty doc) then fail "keyed_bodies_non_empty";
-      if not (keying_is_maximal ~source doc) then fail "keying_is_maximal"
+      if not (keying_is_maximal doc) then fail "keying_is_maximal"
     ;;
 
     let%test_unit "examples: universal predicates hold" =
