@@ -452,7 +452,7 @@ Tests for {!module-"Struct"}. *)
 let%test_module "Struct" =
   (module struct
     open For_test
-    open Struct.Spec
+    open Struct.For_test
 
     let%expect_test "rule 1: keyed list item with indented content" =
       pp_doc (of_string rule1_keyed_list_item_with_indented_content);

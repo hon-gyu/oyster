@@ -1,7 +1,49 @@
-(** Struct: colon-keyed tree restructuring.
+(** {0 Struct: colon-keyed tree restructuring}
 
-    See [struct.mli] for the rule specification.  Rules below are
-    numbered per [specification/oyster/struct.md].
+    {1 Specification}
+
+    A {b keyed node} is a list item or paragraph whose inline text ends with
+    an unescaped [:].  The struct rewrite reparents contiguous following
+    content as children of the keyed node.
+
+    {2 Rules}
+
+    {ol
+    {- {b Keyed list item with indented content.}  The indented sub-blocks
+       are already children in the CommonMark AST; they become the body of
+       an {!Ext_keyed_list_item}.}
+    {- {b Keyed list item followed by a blank line.}  No transformation —
+       the trailing colon is treated as literal punctuation.}
+    {- {b Keyed list item followed by contiguous blocks.}  Unindented
+       blocks immediately after the list are reparented under the last
+       item as an {!Ext_keyed_list_item}.}
+    {- {b Keyed paragraph.}  A paragraph ending with [:] claims all
+       immediately following contiguous blocks (no blank-line separation)
+       as children, producing an {!Ext_keyed_block}.}
+    {- Same as rule 4 but with multiple child block types.}
+    {- {b Nesting.}  Keyed nodes nest: a keyed paragraph can contain a
+       list whose items are themselves keyed.}}
+
+    {2 Colon chains}
+
+    When the label is pure text and contains interior [: ]
+    (colon-space) boundaries, e.g. [foo: bar:], each segment produces
+    a nesting level:
+    [Ext_keyed_list_item("foo", Ext_keyed_list_item("bar", body))].
+
+    {b Chain splitting only applies to pure-text labels.}  If the label
+    contains any non-text inline — code span, emphasis, link, image,
+    raw HTML, hard/soft break, or extension (e.g. wikilink) — the whole
+    inline becomes a single label, preserved verbatim.  Rationale: a
+    [: ] inside a code span is literal punctuation, not a chain
+    delimiter, and splitting across inline boundaries would silently
+    corrupt the label.
+
+    {2 Escaped colons}
+
+    A backslash-escaped colon ([\:]) in the original source is {b not} a
+    key delimiter.  Detection requires [~source] to be passed to
+    {!rewrite_doc}.
 
     {1 Parsing}
 
@@ -24,7 +66,9 @@ type t = { label : Cmarkit.Inline.t }
 
 type Cmarkit.Block.t +=
   | Ext_keyed_list_item of t * Cmarkit.Block.t
+        (** A list item whose trailing-colon label has been detected. *)
   | Ext_keyed_block of t * Cmarkit.Block.t
+        (** A paragraph whose trailing-colon label has been detected. *)
 
 let block_commonmark_renderer : Cmarkit_renderer.block =
   let open Cmarkit_renderer in
@@ -44,6 +88,7 @@ let block_commonmark_renderer : Cmarkit_renderer.block =
     | _ -> false
 ;;
 
+(** Sexp converter for keyed blocks; composes into {!Common.make_sexp_of}. *)
 let sexp_of_block : Common.block_sexp =
   fun ~recurse_inline ~recurse_block ~with_meta:_ b ->
   match b with
@@ -510,30 +555,19 @@ end = struct
   ;;
 end
 
+(** Rewrite a document, converting keyed paragraphs and list items into
+    {!Ext_keyed_block} / {!Ext_keyed_list_item} nodes.
+
+    @param source  The original markdown source string (after frontmatter
+    extraction).  Used for escaped-colon detection via byte positions.
+    Pass [None] to skip escape checking. *)
 let rewrite_doc ~(source : string option) (doc : Cmarkit.Doc.t) : Cmarkit.Doc.t =
   let block = Cmarkit.Doc.block doc in
   let block' = Rewrite.rewrite_within_block ~source block in
   if phys_equal block block' then doc else Cmarkit.Doc.make block'
 ;;
 
-(* Specification
-   =============
-
-   [Spec] codifies the struct rules as:
-   {ul
-   {- boolean {e universal predicates} that hold for every [Cmarkit.Doc.t]
-      produced by {!rewrite_doc};}
-   {- named {e example} markdown strings, one per rule in
-      [specification/oyster/struct.md];}
-   {- a line-based [gen_markdown] generator for property-based testing.}}
-
-   The predicates are driven by two witness streams in [parse.ml]:
-   the named examples (hand-picked, act as regression tests) and
-   generator-driven strings via [Core.Quickcheck].  The expected
-   rewritten tree for each example is pinned in the expect-tests in
-   [parse.ml] via [pp_doc], so we don't encode expected output twice. *)
-
-module Spec = struct
+module For_test = struct
   (* Traversal helpers
      ----------------- *)
 
@@ -576,8 +610,7 @@ module Spec = struct
     | _ -> ()
   ;;
 
-  (* Universal predicates
-     -------------------- *)
+  (* Predicates *)
 
   (** Every keyed node's body is non-empty.  Rule 2: if the next element
       is blank, no keying happens — so an empty body would indicate a
@@ -746,6 +779,9 @@ following paragraph|}
     |]
   ;;
 
+  (** A small line-based generator that samples from a vocabulary of
+      lines likely to exercise keying, nesting, blank lines, and
+      escape handling. *)
   let gen_markdown : string Core.Quickcheck.Generator.t =
     let open Core.Quickcheck.Generator in
     let open Core.Quickcheck.Generator.Let_syntax in
