@@ -1,5 +1,7 @@
 # Struct Specification
 
+- date: April 8
+
 Struct is a syntax extension that restructures the document tree based on colon-suffixed labels. A colon at the end of a list item or paragraph declares that the following contiguous content is its children, causing the `Cmarkit.Doc` tree to be rewritten with new parent-child relationships.
 
 ## Syntax
