@@ -4,7 +4,7 @@ type Cmarkit.Block.t += Ext_keyed_block of t * Cmarkit.Block.t
 
 val block_commonmark_renderer : Cmarkit_renderer.block
 val sexp_of_block : Common.block_sexp
-val rewrite_doc : Cmarkit.Doc.t -> Cmarkit.Doc.t
+val rewrite_doc : ?paragraph_inline_value:bool -> Cmarkit.Doc.t -> Cmarkit.Doc.t
 
 module For_test : sig
   val examples : string list

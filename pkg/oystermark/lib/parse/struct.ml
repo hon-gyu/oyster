@@ -3,36 +3,59 @@
     {1 Specification}
 
     A {b keyed node} is a list item or paragraph whose inline content
-    ends with an unescaped [:].
+    carries a colon-delimited label / value relationship.  There are
+    two mutually exclusive forms:
+
+    {ul
+    {- {b Trailing-colon form.}  The inline ends with an unescaped
+       [:] (no space after).  The labels are all the segments
+       separated by [: ] (colon-space).  The body comes from the
+       node's sub-blocks, or — if there are none — from content that
+       is {e absorbed} from the surrounding context (see
+       {{!section:restructuring}Tree restructuring}).}
+    {- {b Inline-value form.}  The inline does {e not} end with a
+       colon, but contains at least one [: ] split.  The last
+       segment is the {b value} (unrestricted free-form inline); all
+       preceding segments are labels.  Unlike the trailing-colon
+       form, this node does {e not} absorb following content.}}
+
+    In both forms, each {b label} segment must be a single inline
+    unit: pure text, emphasis, strong emphasis, or code span.  Mixed
+    content — e.g. emphasis followed by text in the same segment —
+    disqualifies the entire decomposition.  The {b value} segment in
+    the inline-value form has no such restriction.
+
+    For cross-line absorption (trailing-colon form), there must be no
+    whitespace between the colon and the line break.  For inline
+    splits (both forms), there must be exactly [": "] — a colon
+    immediately followed by a space.  [- foo:bar] (no space) and
+    [- foo: ] (trailing space) are both non-keying.
 
     {2 Label detection}
 
     A trailing colon is detected by walking the inline tree rightward:
     follow the last child of each [Inlines] container until a [Text]
-    leaf is reached.  If that leaf's content (after stripping
-    whitespace) ends with [:], the node is keyed.
+    leaf is reached.  If that leaf's raw content ends with [:]
+    (no trailing whitespace), the node is keyed in trailing-colon
+    form.
 
     Only [Text] and [Inlines] nodes are traversed.  Emphasis, code
     spans, links, images, raw HTML, breaks, and extension inlines are
-    {b opaque} — a colon inside them does not make the node keyed.
-
-    After the trailing colon is stripped, the resulting inline is
-    decomposed into label segments (see {b Colon chains} below).
-    Each segment must be a {b single inline unit}: pure text,
-    emphasis, strong emphasis, or code span.  Mixed content — e.g.
-    emphasis followed by text in the same segment — is rejected, and
-    the node is not keyed.
+    {b opaque} — a colon inside them does not participate in
+    keying.
 
     {ul
-    {- [foo bar:] → keyed, label [Text "foo bar"].}
-    {- [*foo*:] → keyed, label [Emphasis "foo"].
-       The colon follows the emphasis in a trailing [Text ":"] node.}
-    {- [**foo**:] → keyed, label [Strong_emphasis "foo"].}
-    {- [*foo* bar:] → {b not keyed}.  After stripping the colon the
-       segment is [Emphasis "foo"; Text " bar"] — mixed content.}
-    {- [*foo:*] → {b not keyed}.  Emphasis is opaque; the colon
-       inside is not examined.}
-    {- [`code:`] → {b not keyed}.  Code spans are opaque.}}
+    {- [foo bar:] → trailing-colon, label [Text "foo bar"].}
+    {- [*foo*:] → trailing-colon, label [Emphasis "foo"].}
+    {- [**foo**:] → trailing-colon, label [Strong_emphasis "foo"].}
+    {- [*foo* bar:] → {b not keyed}.  Mixed content.}
+    {- [*foo:*] → {b not keyed}.  Emphasis is opaque.}
+    {- [`code:`] → {b not keyed}.  Code spans are opaque.}
+    {- [foo: bar] → inline-value, label [Text "foo"], value
+       [Text "bar"].}
+    {- [foo: `code: thing`] → inline-value, label [Text "foo"],
+       value [Code_span "code: thing"] (code spans inside values are
+       free-form).}}
 
     {2 Escaped colons}
 
@@ -42,9 +65,7 @@
     Because CommonMark already consumes one level of backslash
     escaping ([\\:] in source becomes [\:] in the AST), write [\\\\:]
     in source to get [\\:] in the AST — which struct treats as a
-    literal colon.  In practice, most renderers (including Cmarkit)
-    will display the remaining backslash, so this is a deliberate
-    opt-out that is visible in the output.
+    literal colon.
 
     More precisely, the number of consecutive backslashes immediately
     before the colon is counted.  An odd count means the colon is
@@ -53,55 +74,55 @@
 
     {2 Colon chains}
 
-    When the inline content (after trailing colon removal) contains
-    [: ] (colon followed by space) boundaries inside [Text] nodes,
-    it is split into segments.  Each segment must be a single inline
-    unit (see {b Label detection}).
+    Chains combine with both forms.  [a: b: c:] yields three labels
+    in trailing-colon form; [a: b: c] yields two labels and a
+    value [c] in inline-value form.
 
     {ul
     {- [- foo: bar:] with body [baz] →
-       [Keyed_list_item "foo" (Keyed_list_item "bar" (... baz ...))].
-       Two text segments, two nesting levels.}
-    {- [- a: b: c:] with body [x] →
-       three nesting levels.}
+       [Keyed_list_item "foo" (Keyed_list_item "bar" (... baz ...))].}
+    {- [- a: b: c] (no trailing colon, no sub-blocks) →
+       [Keyed_list_item "a" (Keyed_list_item "b" (Paragraph "c"))].}
     {- [- *foo*: bar:] with body [baz] →
-       [Keyed_list_item (Emphasis "foo") (Keyed_list_item "bar" (...))].
-       Chain splitting works across inline types.}
+       [Keyed_list_item (Emphasis "foo") (Keyed_list_item "bar" (...))].}
     {- [- http://example.com:] → single label ["http://example.com"].
-       The [:] after [http] has no trailing space, so no split.}
-    {- [- *foo* bar:] → {b not keyed}.  The single segment contains
-       emphasis + text — mixed content is rejected.}}
+       The [:] after [http] has no trailing space, so no split.}}
 
-    {2 Tree restructuring rules}
+    {2:restructuring Tree restructuring rules}
 
     {ol
-    {- {b Keyed list item with indented content.}  The indented sub-blocks
-       are already children in the CommonMark AST; they become the body of
-       an {!Ext_keyed_list_item}.}
-    {- {b Keyed list item followed by a blank line.}  No transformation —
-       the trailing colon is treated as literal punctuation.}
-    {- {b Keyed list item followed by contiguous blocks.}  Unindented
-       blocks immediately after the list are reparented under the last
-       item as an {!Ext_keyed_list_item}.}
-    {- {b Keyed paragraph.}  A paragraph ending with [:] claims all
-       immediately following contiguous blocks (no blank-line separation)
-       as children, producing an {!Ext_keyed_block}.}
-    {- Same as rule 4 but with multiple child block types.}
-    {- {b Nesting.}  Keyed nodes nest: a keyed paragraph can contain a
-       list whose items are themselves keyed.}}
+    {- {b Keyed list item with indented content.}  The indented
+       sub-blocks become the body of an {!Ext_keyed_list_item}.
+       Applies to both forms; in the inline-value form the value
+       paragraph is prepended to the body.}
+    {- {b Keyed list item followed by a blank line.}  No
+       transformation — the trailing colon is treated as literal
+       punctuation.}
+    {- {b Keyed list item followed by contiguous blocks.}  For
+       trailing-colon form only, unindented blocks immediately after
+       the list are reparented under the last item as an
+       {!Ext_keyed_list_item}.}
+    {- {b Middle-item absorption.}  A non-last list item whose
+       paragraph has a bare trailing colon (no inline value, no
+       sub-blocks) absorbs all remaining sibling items of the same
+       list as a nested list under its label.}
+    {- {b Keyed paragraph.}  In trailing-colon form, a paragraph
+       ending with [:] claims all immediately following contiguous
+       blocks (no blank-line separation) as children, producing an
+       {!Ext_keyed_block}.  In inline-value form, the paragraph is
+       rewritten to an {!Ext_keyed_block} whose body is the value
+       paragraph; no following content is absorbed.  The
+       inline-value rewrite on paragraphs is gated by the
+       [paragraph_inline_value] parameter of {!rewrite_doc}.}
+    {- {b Nesting.}  Keyed nodes nest: a keyed paragraph can contain
+       a list whose items are themselves keyed.}}
 
     {1 Parsing}
 
-    Parsing is a single-pass rewrite on the already-parsed Cmarkit AST:
-    {ol
-    {- Walk sibling block lists left-to-right.}
-    {- When a keyed paragraph is found, collect contiguous following
-       blocks and wrap as {!Ext_keyed_block}.}
-    {- When a list's last item is keyed and followed by contiguous
-       blocks, reparent those blocks under the item as
-       {!Ext_keyed_list_item}.}
-    {- Recurse into container blocks.}}
-*)
+    Parsing is a single-pass rewrite on the already-parsed Cmarkit
+    AST.  [decompose] classifies each candidate inline into one of
+    the two forms, and the sibling-block walker in [Rewrite] applies
+    the restructuring rules above. *)
 
 open Core
 open Cmarkit
@@ -141,8 +162,11 @@ let sexp_of_block : Common.block_sexp =
    =============== *)
 
 module Colon : sig
-  val strip_trailing_colon : Inline.t -> Inline.t option
-  val labels_of_inline : Inline.t -> Inline.t list
+  type decomposition =
+    | Chain_trailing_colon of Inline.t list
+    | Chain_with_value of Inline.t list * Inline.t
+
+  val decompose : Inline.t -> decomposition option
 end = struct
   (** Count consecutive backslashes immediately before position [pos]
       in [s]. *)
@@ -151,16 +175,18 @@ end = struct
     go (pos - 1) 0
   ;;
 
-  (** Strip a trailing [:] from a raw text string.  A colon preceded by
-      an odd number of backslashes is escaped and not stripped. *)
+  (** Strip a trailing [:] from a raw text string.  The original must
+      end with [:] directly — any trailing whitespace before the colon
+      means the colon was followed by a space, not by end-of-line,
+      and is not a structural trailing colon.  A colon preceded by an
+      odd number of backslashes is escaped. *)
   let strip_colon_from_text (s : string) : string option =
-    let s' = String.rstrip s in
-    let len = String.length s' in
-    if len = 0 || not (Char.equal s'.[len - 1] ':')
+    let len = String.length s in
+    if len = 0 || not (Char.equal s.[len - 1] ':')
     then None
-    else if count_preceding_backslashes s' (len - 1) mod 2 = 1
+    else if count_preceding_backslashes s (len - 1) mod 2 = 1
     then None
-    else Some (String.rstrip (String.chop_suffix_exn s' ~suffix:":"))
+    else Some (String.rstrip (String.chop_suffix_exn s ~suffix:":"))
   ;;
 
   (** Walk the inline tree rightward; if the rightmost [Text] leaf ends
@@ -244,23 +270,73 @@ end = struct
     go [] [] children
   ;;
 
-  (** Decompose a colon-stripped inline into label segments.
+  (** Reassemble a segment (inline list) into a single [Inline.t]. *)
+  let rebuild_value_inline (segment : Inline.t list) : Inline.t =
+    match segment with
+    | [] -> Inline.Text ("", Meta.none)
+    | [ single ] -> single
+    | multiple -> Inline.Inlines (multiple, Meta.none)
+  ;;
 
-      Each label must be a single inline unit: [Text], [Emphasis],
-      [Strong_emphasis], or [Code_span].  Mixed content (e.g.
-      emphasis followed by text in the same segment) is rejected.
+  (** A value segment is valid iff — after removing empty text nodes —
+      it is non-empty and does not begin with a soft/hard break.  A
+      leading break would indicate the value is on the next source
+      line; the colon must be followed by its value on the same line. *)
+  let is_valid_value_segment (segment : Inline.t list) : bool =
+    let stripped =
+      List.filter segment ~f:(fun i ->
+        match i with
+        | Inline.Text (s, _) -> not (String.is_empty (String.strip s))
+        | _ -> true)
+    in
+    match stripped with
+    | [] -> false
+    | Inline.Break _ :: _ -> false
+    | _ -> true
+  ;;
 
-      Chain splitting at [: ] boundaries works across inline types:
-      [*foo*: bar] becomes two labels, [Emphasis "foo"] and
-      [Text "bar"].
-
-      Returns [[]] when the inline cannot be decomposed into valid
-      labels (mixed content, empty result, etc.). *)
-  let labels_of_inline (inline : Inline.t) : Inline.t list =
-    let children = unwrap_inline inline in
-    let segments = split_at_colon_space children in
+  let validate_labels (segments : Inline.t list list) : Inline.t list option =
     let labels = List.filter_map segments ~f:as_simple_label in
-    if List.length labels = List.length segments then labels else []
+    if List.length labels = List.length segments && not (List.is_empty labels)
+    then Some labels
+    else None
+  ;;
+
+  type decomposition =
+    | Chain_trailing_colon of Inline.t list
+    | Chain_with_value of Inline.t list * Inline.t
+
+  (** Decompose an inline into a keying decomposition.
+
+      {ul
+      {- Trailing [:] (no space after) → all [: ]-separated segments
+         are chain labels; body must come from sub-blocks or absorbed
+         following content.}
+      {- No trailing [:] but at least one [: ] split → the last
+         segment is the inline value (unrestricted), preceding
+         segments are chain labels.  Each label must be a single
+         simple inline unit.}
+      {- Otherwise → no decomposition.}} *)
+  let decompose (inline : Inline.t) : decomposition option =
+    match strip_trailing_colon inline with
+    | Some stripped ->
+      let segments = split_at_colon_space (unwrap_inline stripped) in
+      Option.map (validate_labels segments) ~f:(fun labels ->
+        Chain_trailing_colon labels)
+    | None ->
+      let segments = split_at_colon_space (unwrap_inline inline) in
+      (match List.rev segments with
+       | [] | [ _ ] -> None
+       | value_seg :: rev_label_segs ->
+         let label_segs = List.rev rev_label_segs in
+         if not (is_valid_value_segment value_seg)
+         then None
+         else (
+           match validate_labels label_segs with
+           | None -> None
+           | Some labels ->
+             let value = rebuild_value_inline value_seg in
+             Some (Chain_with_value (labels, value))))
   ;;
 
   let%test_module "strip_trailing_colon" =
@@ -278,8 +354,8 @@ end = struct
       let%test_unit "basic" = [%test_eq: string option] (check "foo:") (Some "foo")
       let%test_unit "no colon" = [%test_eq: string option] (check "foo") None
 
-      let%test_unit "trailing space" =
-        [%test_eq: string option] (check "foo: ") (Some "foo")
+      let%test_unit "trailing space prevents stripping" =
+        [%test_eq: string option] (check "foo: ") None
       ;;
 
       let%test_unit "bare colon" = [%test_eq: string option] (check ":") (Some "")
@@ -325,60 +401,6 @@ end = struct
     end)
   ;;
 
-  let%test_module "labels_of_inline" =
-    (module struct
-      let text s = Inline.Text (s, Meta.none)
-      let emph s = Inline.Emphasis (Inline.Emphasis.make (text s), Meta.none)
-      let strong s = Inline.Strong_emphasis (Inline.Emphasis.make (text s), Meta.none)
-      let label_count inline = List.length (labels_of_inline inline)
-
-      (* Simple labels *)
-      let%test_unit "pure text" = [%test_eq: int] (label_count (text "foo")) 1
-
-      let%test_unit "single emphasis" =
-        let inline = Inline.Inlines ([ emph "foo"; text "" ], Meta.none) in
-        [%test_eq: int] (label_count inline) 1
-      ;;
-
-      let%test_unit "single strong emphasis" =
-        let inline = Inline.Inlines ([ strong "foo"; text "" ], Meta.none) in
-        [%test_eq: int] (label_count inline) 1
-      ;;
-
-      (* Mixed content rejected *)
-      let%test_unit "emphasis + text is mixed" =
-        let inline = Inline.Inlines ([ emph "foo"; text " bar" ], Meta.none) in
-        [%test_eq: int] (label_count inline) 0
-      ;;
-
-      (* Chain splitting *)
-      let%test_unit "pure text chain" = [%test_eq: int] (label_count (text "foo: bar")) 2
-
-      let%test_unit "three-way text chain" =
-        [%test_eq: int] (label_count (text "a: b: c")) 3
-      ;;
-
-      let%test_unit "emphasis chain" =
-        let inline = Inline.Inlines ([ emph "foo"; text ": bar" ], Meta.none) in
-        [%test_eq: int] (label_count inline) 2
-      ;;
-
-      let%test_unit "text then emphasis chain" =
-        let inline = Inline.Inlines ([ text "foo: "; emph "bar"; text "" ], Meta.none) in
-        [%test_eq: int] (label_count inline) 2
-      ;;
-
-      (* No split without space *)
-      let%test_unit "url-like" = [%test_eq: int] (label_count (text "http://x.com")) 1
-
-      let%test_unit "colon without space" =
-        [%test_eq: int] (label_count (text "foo:bar")) 1
-      ;;
-
-      (* Empty / bare *)
-      let%test_unit "empty text" = [%test_eq: int] (label_count (text "")) 0
-    end)
-  ;;
 end
 
 (* Shared helpers
@@ -423,6 +445,11 @@ let build_nested_keyed
 let mk_keyed_block t b = Ext_keyed_block (t, b)
 let mk_keyed_item t b = Ext_keyed_list_item (t, b)
 
+(** Mutable config.  Set by [rewrite_doc] before each run. *)
+module Config = struct
+  let paragraph_inline_value = ref true
+end
+
 (* Tree rewrite
    ============ *)
 
@@ -457,59 +484,8 @@ end = struct
       , list_meta )
   ;;
 
-  let replace_last items new_last =
-    match List.rev items with
-    | [] -> assert false
-    | _ :: rev_prefix -> List.rev_append rev_prefix [ new_last ]
-  ;;
-
-  (* List-item tagging (Rule 1)
-     -------------------------- *)
-
-  let tag_middle_item item =
-    match list_item_paragraph item with
-    | Some (p, (_ :: _ as sub_blocks)) ->
-      (match Colon.strip_trailing_colon (Block.Paragraph.inline p) with
-       | None -> item
-       | Some label_inline ->
-         (match Colon.labels_of_inline label_inline with
-          | [] -> item
-          | labels ->
-            let body = wrap_blocks sub_blocks in
-            rebuild_item item (build_nested_keyed ~make_node:mk_keyed_item labels body)))
-    | _ -> item
-  ;;
-
-  let tag_last_item item : Block.List_item.t * Inline.t list option =
-    match list_item_paragraph item with
-    | None -> item, None
-    | Some (p, sub_blocks) ->
-      (match Colon.strip_trailing_colon (Block.Paragraph.inline p) with
-       | None -> item, None
-       | Some label_inline ->
-         (match Colon.labels_of_inline label_inline with
-          | [] -> item, None
-          | labels ->
-            if not (List.is_empty sub_blocks)
-            then (
-              let body = wrap_blocks sub_blocks in
-              ( rebuild_item item (build_nested_keyed ~make_node:mk_keyed_item labels body)
-              , None ))
-            else item, Some labels))
-  ;;
-
-  let rec tag_keyed_items (items : Block.List_item.t node list)
-    : Block.List_item.t node list * Inline.t list option
-    =
-    match items with
-    | [] -> [], None
-    | [ (item, meta) ] ->
-      let item', bare = tag_last_item item in
-      [ item', meta ], bare
-    | (item, meta) :: rest ->
-      let item' = tag_middle_item item in
-      let rest', bare = tag_keyed_items rest in
-      (item', meta) :: rest', bare
+  let value_paragraph (value : Inline.t) : Block.t =
+    Block.Paragraph (Block.Paragraph.make value, Meta.none)
   ;;
 
   (* Sibling-block rewrite
@@ -519,48 +495,126 @@ end = struct
     match blocks with
     | [] -> []
     | (Block.Paragraph (p, _) as block) :: rest ->
-      (match Colon.strip_trailing_colon (Block.Paragraph.inline p) with
+      (match Colon.decompose (Block.Paragraph.inline p) with
        | None -> rewrite_within_block block :: rewrite_block_list rest
-       | Some label_inline -> absorb_paragraph ~original:block ~label_inline rest)
+       | Some (Colon.Chain_trailing_colon labels) ->
+         absorb_paragraph_trailing ~original:block ~labels rest
+       | Some (Colon.Chain_with_value (labels, value)) ->
+         if !Config.paragraph_inline_value
+         then (
+           let body = value_paragraph value in
+           let keyed = build_nested_keyed ~make_node:mk_keyed_block labels body in
+           keyed :: rewrite_block_list rest)
+         else rewrite_within_block block :: rewrite_block_list rest)
     | Block.List (l, list_meta) :: rest -> handle_list l list_meta rest
     | block :: rest -> rewrite_within_block block :: rewrite_block_list rest
 
-  and absorb_paragraph ~original ~label_inline rest =
+  and absorb_paragraph_trailing ~original ~labels rest =
     let children, after = span_non_blank rest in
-    match children, Colon.labels_of_inline label_inline with
-    | [], _ | _, [] -> original :: rewrite_block_list rest
-    | _ :: _, (_ :: _ as labels) ->
+    match children with
+    | [] -> original :: rewrite_block_list rest
+    | _ :: _ ->
       let children = rewrite_block_list children in
       let body = wrap_blocks children in
       let keyed = build_nested_keyed ~make_node:mk_keyed_block labels body in
       keyed :: rewrite_block_list after
 
   and handle_list l list_meta rest =
-    let tagged, bare_last = tag_keyed_items (Block.List'.items l) in
-    let items, rest =
-      match bare_last, rest with
-      | Some labels, (next :: _ as rest) when not (is_blank_line next) ->
-        let following, after = span_non_blank rest in
-        let body = wrap_blocks (rewrite_block_list following) in
-        let keyed = build_nested_keyed ~make_node:mk_keyed_item labels body in
-        let last_item, last_meta =
-          match List.last tagged with
-          | Some x -> x
-          | None -> assert false
-        in
-        replace_last tagged (rebuild_item last_item keyed, last_meta), after
-      | _ -> tagged, rest
-    in
-    let items = recurse_items items in
+    let items = Block.List'.items l in
+    let items, rest = rewrite_list_items l items rest in
     make_list l list_meta items :: rewrite_block_list rest
 
-  and recurse_items items =
-    List.map items ~f:(fun (item, item_meta) ->
+  and rewrite_list_items
+    (l : Block.List'.t)
+    (items : Block.List_item.t node list)
+    (following : Block.t list)
+    : Block.List_item.t node list * Block.t list
+    =
+    match items with
+    | [] -> [], following
+    | [ (item, meta) ] ->
+      let item', following = rewrite_last_item item following in
+      [ item', meta ], following
+    | (item, meta) :: rest_items ->
+      (match try_tag_non_last_item l item rest_items with
+       | `Absorbed_rest new_block ->
+         [ rebuild_item item new_block, meta ], following
+       | `Tagged new_block ->
+         let rest_items, following = rewrite_list_items l rest_items following in
+         (rebuild_item item new_block, meta) :: rest_items, following
+       | `Untouched ->
+         let block = Block.List_item.block item in
+         let block' = rewrite_within_block block in
+         let item =
+           if phys_equal block block' then item else rebuild_item item block'
+         in
+         let rest_items, following = rewrite_list_items l rest_items following in
+         (item, meta) :: rest_items, following)
+
+  and try_tag_non_last_item
+    (l : Block.List'.t)
+    (item : Block.List_item.t)
+    (rest_items : Block.List_item.t node list)
+    =
+    match list_item_paragraph item with
+    | None -> `Untouched
+    | Some (p, sub_blocks) ->
+      (match Colon.decompose (Block.Paragraph.inline p) with
+       | None -> `Untouched
+       | Some (Colon.Chain_with_value (labels, value)) ->
+         let sub_blocks = rewrite_block_list sub_blocks in
+         let body = wrap_blocks (value_paragraph value :: sub_blocks) in
+         `Tagged (build_nested_keyed ~make_node:mk_keyed_item labels body)
+       | Some (Colon.Chain_trailing_colon labels) ->
+         if not (List.is_empty sub_blocks)
+         then (
+           let sub_blocks = rewrite_block_list sub_blocks in
+           let body = wrap_blocks sub_blocks in
+           `Tagged (build_nested_keyed ~make_node:mk_keyed_item labels body))
+         else (
+           (* Bare trailing-colon middle item absorbs remaining siblings
+              as a nested list of the same type. *)
+           let absorbed_items, _ = rewrite_list_items l rest_items [] in
+           let nested_list = make_list l Meta.none absorbed_items in
+           `Absorbed_rest
+             (build_nested_keyed ~make_node:mk_keyed_item labels nested_list)))
+
+  and rewrite_last_item (item : Block.List_item.t) (following : Block.t list)
+    : Block.List_item.t * Block.t list
+    =
+    let recurse_item () =
       let block = Block.List_item.block item in
       let block' = rewrite_within_block block in
-      if phys_equal block block'
-      then item, item_meta
-      else rebuild_item item block', item_meta)
+      if phys_equal block block' then item else rebuild_item item block'
+    in
+    match list_item_paragraph item with
+    | None -> recurse_item (), following
+    | Some (p, sub_blocks) ->
+      (match Colon.decompose (Block.Paragraph.inline p) with
+       | None -> recurse_item (), following
+       | Some (Colon.Chain_with_value (labels, value)) ->
+         let sub_blocks = rewrite_block_list sub_blocks in
+         let body = wrap_blocks (value_paragraph value :: sub_blocks) in
+         let new_block = build_nested_keyed ~make_node:mk_keyed_item labels body in
+         rebuild_item item new_block, following
+       | Some (Colon.Chain_trailing_colon labels) ->
+         if not (List.is_empty sub_blocks)
+         then (
+           let sub_blocks = rewrite_block_list sub_blocks in
+           let body = wrap_blocks sub_blocks in
+           let new_block = build_nested_keyed ~make_node:mk_keyed_item labels body in
+           rebuild_item item new_block, following)
+         else (
+           let absorbed, remaining = span_non_blank following in
+           if List.is_empty absorbed
+           then item, following
+           else (
+             let absorbed = rewrite_block_list absorbed in
+             let body = wrap_blocks absorbed in
+             let new_block =
+               build_nested_keyed ~make_node:mk_keyed_item labels body
+             in
+             rebuild_item item new_block, remaining)))
 
   and rewrite_within_block (block : Block.t) : Block.t =
     match block with
@@ -579,7 +633,8 @@ end = struct
   ;;
 end
 
-let rewrite_doc (doc : Doc.t) : Doc.t =
+let rewrite_doc ?(paragraph_inline_value = true) (doc : Doc.t) : Doc.t =
+  Config.paragraph_inline_value := paragraph_inline_value;
   let block = Doc.block doc in
   let block' = Rewrite.rewrite_within_block block in
   if phys_equal block block' then doc else Doc.make block'
@@ -589,9 +644,9 @@ let rewrite_doc (doc : Doc.t) : Doc.t =
 module For_test = struct
   open Common.For_test
 
-  let doc_of_string s =
+  let doc_of_string ?paragraph_inline_value s =
     let doc = Doc.of_string s in
-    rewrite_doc doc
+    rewrite_doc ?paragraph_inline_value doc
   ;;
 
   let pp_doc doc = mk_pp_doc ~blocks:[ sexp_of_block ] () doc
@@ -621,12 +676,13 @@ module For_test = struct
     Folder.fold_doc folder true doc
   ;;
 
-  (** Would [strip_trailing_colon] + [labels_of_inline] produce valid
-      labels for this inline? *)
-  let has_valid_labels (inline : Inline.t) : bool =
-    match Colon.strip_trailing_colon inline with
-    | None -> false
-    | Some label_inline -> not (List.is_empty (Colon.labels_of_inline label_inline))
+  (** Does this inline have a trailing colon that would absorb
+      following content?  Inline-value decompositions don't trigger
+      absorption and return [false]. *)
+  let is_trailing_colon_absorbable (inline : Inline.t) : bool =
+    match Colon.decompose inline with
+    | Some (Colon.Chain_trailing_colon _) -> true
+    | _ -> false
   ;;
 
   (** Does the last item of a list have a bare trailing colon with
@@ -636,7 +692,8 @@ module For_test = struct
     | None -> false
     | Some (item, _) ->
       (match Block.List_item.block item with
-       | Block.Paragraph (p, _) -> has_valid_labels (Block.Paragraph.inline p)
+       | Block.Paragraph (p, _) ->
+         is_trailing_colon_absorbable (Block.Paragraph.inline p)
        | _ -> false)
   ;;
 
@@ -651,7 +708,8 @@ module For_test = struct
       for i = 0 to len - 1 do
         let absorbable =
           match arr.(i) with
-          | Block.Paragraph (p, _) -> has_valid_labels (Block.Paragraph.inline p)
+          | Block.Paragraph (p, _) ->
+            is_trailing_colon_absorbable (Block.Paragraph.inline p)
           | Block.List (l, _) -> list_last_item_is_bare_keyed l
           | _ -> false
         in
@@ -750,6 +808,8 @@ following|}
 
 bar|}
   ;;
+
+  (** {2 Generator} *)
 
   let examples =
     [ keyed_list_item_with_indented_content
@@ -909,6 +969,41 @@ let%test_module "Struct" =
       non_example_blank_line |> doc_of_string |> pp_doc;
       [%expect
         {| (Blocks (List (Paragraph (Text foo:))) Blank_line (Paragraph (Text bar))) |}]
+    ;;
+
+    let%expect_test _ =
+      (* Two levels: A is keyed around the list; each item is keyed
+         with an inline value. *)
+      let eg = {|A:
+- B: b
+- C: c|} in
+      eg |> doc_of_string |> pp_doc;
+      [%expect
+        {|
+        (Blocks
+          (Keyed_block (Text A)
+            (List (Keyed_list_item (Text B) (Paragraph (Text b)))
+              (Keyed_list_item (Text C) (Paragraph (Text c))))))
+        |}]
+    ;;
+
+    let%expect_test _ =
+      (* Four levels: A -> B -> b -> C.  The first item's trailing
+         colon ([b:]) makes [b] a label, and [b] absorbs the
+         following [C: c] sibling as its nested body. *)
+      let eg = {|A:
+- B: b:
+- C: c|} in
+      eg |> doc_of_string |> pp_doc;
+      [%expect
+        {|
+        (Blocks
+          (Keyed_block (Text A)
+            (List
+              (Keyed_list_item (Text B)
+                (Keyed_list_item (Text b)
+                  (List (Keyed_list_item (Text C) (Paragraph (Text c)))))))))
+        |}]
     ;;
   end)
 ;;
