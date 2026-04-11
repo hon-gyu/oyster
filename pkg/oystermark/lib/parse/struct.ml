@@ -321,8 +321,7 @@ end = struct
     match strip_trailing_colon inline with
     | Some stripped ->
       let segments = split_at_colon_space (unwrap_inline stripped) in
-      Option.map (validate_labels segments) ~f:(fun labels ->
-        Chain_trailing_colon labels)
+      Option.map (validate_labels segments) ~f:(fun labels -> Chain_trailing_colon labels)
     | None ->
       let segments = split_at_colon_space (unwrap_inline inline) in
       (match List.rev segments with
@@ -400,7 +399,6 @@ end = struct
       ;;
     end)
   ;;
-
 end
 
 (* Shared helpers
@@ -525,9 +523,9 @@ end = struct
     make_list l list_meta items :: rewrite_block_list rest
 
   and rewrite_list_items
-    (l : Block.List'.t)
-    (items : Block.List_item.t node list)
-    (following : Block.t list)
+        (l : Block.List'.t)
+        (items : Block.List_item.t node list)
+        (following : Block.t list)
     : Block.List_item.t node list * Block.t list
     =
     match items with
@@ -537,24 +535,21 @@ end = struct
       [ item', meta ], following
     | (item, meta) :: rest_items ->
       (match try_tag_non_last_item l item rest_items with
-       | `Absorbed_rest new_block ->
-         [ rebuild_item item new_block, meta ], following
+       | `Absorbed_rest new_block -> [ rebuild_item item new_block, meta ], following
        | `Tagged new_block ->
          let rest_items, following = rewrite_list_items l rest_items following in
          (rebuild_item item new_block, meta) :: rest_items, following
        | `Untouched ->
          let block = Block.List_item.block item in
          let block' = rewrite_within_block block in
-         let item =
-           if phys_equal block block' then item else rebuild_item item block'
-         in
+         let item = if phys_equal block block' then item else rebuild_item item block' in
          let rest_items, following = rewrite_list_items l rest_items following in
          (item, meta) :: rest_items, following)
 
   and try_tag_non_last_item
-    (l : Block.List'.t)
-    (item : Block.List_item.t)
-    (rest_items : Block.List_item.t node list)
+        (l : Block.List'.t)
+        (item : Block.List_item.t)
+        (rest_items : Block.List_item.t node list)
     =
     match list_item_paragraph item with
     | None -> `Untouched
@@ -576,8 +571,7 @@ end = struct
               as a nested list of the same type. *)
            let absorbed_items, _ = rewrite_list_items l rest_items [] in
            let nested_list = make_list l Meta.none absorbed_items in
-           `Absorbed_rest
-             (build_nested_keyed ~make_node:mk_keyed_item labels nested_list)))
+           `Absorbed_rest (build_nested_keyed ~make_node:mk_keyed_item labels nested_list)))
 
   and rewrite_last_item (item : Block.List_item.t) (following : Block.t list)
     : Block.List_item.t * Block.t list
@@ -611,9 +605,7 @@ end = struct
            else (
              let absorbed = rewrite_block_list absorbed in
              let body = wrap_blocks absorbed in
-             let new_block =
-               build_nested_keyed ~make_node:mk_keyed_item labels body
-             in
+             let new_block = build_nested_keyed ~make_node:mk_keyed_item labels body in
              rebuild_item item new_block, remaining)))
 
   and rewrite_within_block (block : Block.t) : Block.t =
@@ -692,8 +684,7 @@ module For_test = struct
     | None -> false
     | Some (item, _) ->
       (match Block.List_item.block item with
-       | Block.Paragraph (p, _) ->
-         is_trailing_colon_absorbable (Block.Paragraph.inline p)
+       | Block.Paragraph (p, _) -> is_trailing_colon_absorbable (Block.Paragraph.inline p)
        | _ -> false)
   ;;
 
@@ -974,9 +965,11 @@ let%test_module "Struct" =
     let%expect_test _ =
       (* Two levels: A is keyed around the list; each item is keyed
          with an inline value. *)
-      let eg = {|A:
+      let eg =
+        {|A:
 - B: b
-- C: c|} in
+- C: c|}
+      in
       eg |> doc_of_string |> pp_doc;
       [%expect
         {|
@@ -991,9 +984,11 @@ let%test_module "Struct" =
       (* Four levels: A -> B -> b -> C.  The first item's trailing
          colon ([b:]) makes [b] a label, and [b] absorbs the
          following [C: c] sibling as its nested body. *)
-      let eg = {|A:
+      let eg =
+        {|A:
 - B: b:
-- C: c|} in
+- C: c|}
+      in
       eg |> doc_of_string |> pp_doc;
       [%expect
         {|

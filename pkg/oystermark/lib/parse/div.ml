@@ -412,12 +412,12 @@ let%test_module "Div" =
     open Common.For_test
     open For_test
 
-    let doc_of_string  s =
+    let doc_of_string s =
       let doc = Doc.of_string s in
       rewrite_doc doc
     ;;
 
-    let pp_doc doc = mk_pp_doc ~blocks:[sexp_of_block] () doc
+    let pp_doc doc = mk_pp_doc ~blocks:[ sexp_of_block ] () doc
 
     let%expect_test _ =
       let doc = doc_of_string example_basic in
@@ -536,7 +536,9 @@ let%test_module "Div" =
       let commonmark_of_doc =
         Cmarkit_renderer.doc_to_string (Cmarkit_commonmark.renderer ())
       in
-      List.iter all_examples ~f:(commonmark_of_doc_idempotent ~doc_of_string ~commonmark_of_doc)
+      List.iter
+        all_examples
+        ~f:(commonmark_of_doc_idempotent ~doc_of_string ~commonmark_of_doc)
     ;;
   end)
 ;;

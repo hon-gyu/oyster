@@ -156,7 +156,6 @@ module For_test = struct
     let cm2 = commonmark_of_doc (of_string cm1) in
     [%test_eq: string] (normalize cm1) (normalize cm2)
   ;;
-
 end
 
 (** {2 Extract}
