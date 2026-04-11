@@ -722,22 +722,42 @@ module For_test = struct
   ;;
 
   (** {2 Examples} *)
+  type example =
+    { name : string
+    ; content : string
+    }
+
+  let mk_example name content : example = { name; content }
+
+  let expect_example ex : unit =
+    ex.name |> printf "- name: %s\n";
+    ex.content |> printf "- content: \n```md\n%s\n```\n";
+    print_endline "```sexp";
+    ex.content |> doc_of_string |> pp_doc;
+    print_endline "```"
+  ;;
 
   let keyed_list_item_with_indented_content =
-    {|- foo:
+    mk_example
+      "keyed_list_item_with_indented_content"
+      {|- foo:
   - bar
   - baz|}
   ;;
 
   let keyed_list_item_with_contiguous_blocks =
-    {|- foo:
+    mk_example
+      "keyed_list_item_with_contiguous_blocks"
+      {|- foo:
 ```
 bar
 ```|}
   ;;
 
   let keyed_paragraph =
-    {|foo:
+    mk_example
+      "keyed_paragraph"
+      {|foo:
 - bar
 - baz
 
@@ -745,57 +765,77 @@ bee|}
   ;;
 
   let keyed_paragraph_multiple_children =
-    {|foo:
+    mk_example
+      "keyed_paragraph_multiple_children"
+      {|foo:
 - bar
 - baz
 some text|}
   ;;
 
   let nesting =
-    {|foo:
+    mk_example
+      "nesting"
+      {|foo:
 - bar:
   - baz
 - qux|}
   ;;
 
   let colon_chain_inline_keying =
-    {|- foo: bar:
+    mk_example
+      "colon_chain_inline_keying"
+      {|- foo: bar:
   - baz|}
   ;;
 
   let emphasis_keyed_item =
-    {|- *foo*:
+    mk_example
+      "emphasis_keyed_item"
+      {|- *foo*:
   - bar
   - baz|}
   ;;
 
   let emphasis_chain =
-    {|- *foo*: bar:
+    mk_example
+      "emphasis_chain"
+      {|- *foo*: bar:
   - baz|}
   ;;
 
   let escaped_colon =
-    {|- foo\\:
+    mk_example
+      "escaped_colon"
+      {|- foo\\:
 - bar|}
   ;;
 
   let non_example_no_colon =
-    {|- foo
+    mk_example
+      "non_example_no_colon"
+      {|- foo
 - bar|}
   ;;
 
   let non_example_colon_in_code_span =
-    {|text with `code:`
+    mk_example
+      "non_example_colon_in_code_span"
+      {|text with `code:`
 following paragraph|}
   ;;
 
   let non_example_mixed_inline =
-    {|*foo* bar:
+    mk_example
+      "non_example_mixed_inline"
+      {|*foo* bar:
 following|}
   ;;
 
   let non_example_blank_line =
-    {|- foo:
+    mk_example
+      "non_example_blank_line"
+      {|- foo:
 
 bar|}
   ;;
@@ -853,113 +893,189 @@ let%test_module "Struct" =
     open For_test
 
     let%expect_test _ =
-      keyed_list_item_with_indented_content |> doc_of_string |> pp_doc;
+      examples
+      |> List.iteri ~f:(fun i ex ->
+        printf "Example %d\n" i;
+        expect_example ex;
+        print_endline "");
       [%expect
         {|
+        Example 0
+        - name: keyed_list_item_with_indented_content
+        - content:
+        ```md
+        - foo:
+          - bar
+          - baz
+        ```
+        ```sexp
         (List
           (Keyed_list_item (Text foo)
             (List (Paragraph (Text bar)) (Paragraph (Text baz)))))
-        |}]
-    ;;
+        ```
 
-    let%expect_test _ =
-      keyed_list_item_with_contiguous_blocks |> doc_of_string |> pp_doc;
-      [%expect
-        {| (Blocks (List (Keyed_list_item (Text foo) (Code_block no-info bar)))) |}]
-    ;;
+        Example 1
+        - name: non_example_blank_line
+        - content:
+        ```md
+        - foo:
 
-    let%expect_test _ =
-      keyed_paragraph |> doc_of_string |> pp_doc;
-      [%expect
-        {|
+        bar
+        ```
+        ```sexp
+        (Blocks (List (Paragraph (Text foo:))) Blank_line (Paragraph (Text bar)))
+        ```
+
+        Example 2
+        - name: keyed_list_item_with_contiguous_blocks
+        - content:
+        ```md
+        - foo:
+        ```
+        bar
+        ```
+        ```
+        ```sexp
+        (Blocks (List (Keyed_list_item (Text foo) (Code_block no-info bar))))
+        ```
+
+        Example 3
+        - name: keyed_paragraph
+        - content:
+        ```md
+        foo:
+        - bar
+        - baz
+
+        bee
+        ```
+        ```sexp
         (Blocks
           (Keyed_block (Text foo)
             (List (Paragraph (Text bar)) (Paragraph (Text baz))))
           Blank_line (Paragraph (Text bee)))
-        |}]
-    ;;
+        ```
 
-    let%expect_test _ =
-      keyed_paragraph_multiple_children |> doc_of_string |> pp_doc;
-      [%expect
-        {|
+        Example 4
+        - name: keyed_paragraph_multiple_children
+        - content:
+        ```md
+        foo:
+        - bar
+        - baz
+        some text
+        ```
+        ```sexp
         (Blocks
           (Keyed_block (Text foo)
             (List (Paragraph (Text bar))
               (Paragraph (Inlines (Text baz) (Break soft) (Text "some text"))))))
-        |}]
-    ;;
+        ```
 
-    let%expect_test _ =
-      nesting |> doc_of_string |> pp_doc;
-      [%expect
-        {|
+        Example 5
+        - name: nesting
+        - content:
+        ```md
+        foo:
+        - bar:
+          - baz
+        - qux
+        ```
+        ```sexp
         (Blocks
           (Keyed_block (Text foo)
             (List (Keyed_list_item (Text bar) (List (Paragraph (Text baz))))
               (Paragraph (Text qux)))))
-        |}]
-    ;;
+        ```
 
-    let%expect_test _ =
-      colon_chain_inline_keying |> doc_of_string |> pp_doc;
-      [%expect
-        {|
+        Example 6
+        - name: colon_chain_inline_keying
+        - content:
+        ```md
+        - foo: bar:
+          - baz
+        ```
+        ```sexp
         (List
           (Keyed_list_item (Text foo)
             (Keyed_list_item (Text bar) (List (Paragraph (Text baz))))))
-        |}]
-    ;;
+        ```
 
-    let%expect_test _ =
-      emphasis_keyed_item |> doc_of_string |> pp_doc;
-      [%expect
-        {|
+        Example 7
+        - name: emphasis_keyed_item
+        - content:
+        ```md
+        - *foo*:
+          - bar
+          - baz
+        ```
+        ```sexp
         (List
           (Keyed_list_item (Emphasis (Text foo))
             (List (Paragraph (Text bar)) (Paragraph (Text baz)))))
-        |}]
-    ;;
+        ```
 
-    let%expect_test _ =
-      emphasis_chain |> doc_of_string |> pp_doc;
-      [%expect
-        {|
+        Example 8
+        - name: emphasis_chain
+        - content:
+        ```md
+        - *foo*: bar:
+          - baz
+        ```
+        ```sexp
         (List
           (Keyed_list_item (Emphasis (Text foo))
             (Keyed_list_item (Text bar) (List (Paragraph (Text baz))))))
-        |}]
-    ;;
+        ```
 
-    let%expect_test _ =
-      non_example_no_colon |> doc_of_string |> pp_doc;
-      [%expect {| (List (Paragraph (Text foo)) (Paragraph (Text bar))) |}]
-    ;;
+        Example 9
+        - name: non_example_no_colon
+        - content:
+        ```md
+        - foo
+        - bar
+        ```
+        ```sexp
+        (List (Paragraph (Text foo)) (Paragraph (Text bar)))
+        ```
 
-    let%expect_test _ =
-      non_example_colon_in_code_span |> doc_of_string |> pp_doc;
-      [%expect
-        {|
+        Example 10
+        - name: non_example_colon_in_code_span
+        - content:
+        ```md
+        text with `code:`
+        following paragraph
+        ```
+        ```sexp
         (Paragraph
           (Inlines (Text "text with ") (Code_span code:) (Break soft)
             (Text "following paragraph")))
-        |}]
-    ;;
+        ```
 
-    let%expect_test _ =
-      non_example_mixed_inline |> doc_of_string |> pp_doc;
-      [%expect
-        {|
+        Example 11
+        - name: non_example_mixed_inline
+        - content:
+        ```md
+        *foo* bar:
+        following
+        ```
+        ```sexp
         (Paragraph
           (Inlines (Emphasis (Text foo)) (Text " bar:") (Break soft)
             (Text following)))
-        |}]
-    ;;
+        ```
 
-    let%expect_test _ =
-      non_example_blank_line |> doc_of_string |> pp_doc;
-      [%expect
-        {| (Blocks (List (Paragraph (Text foo:))) Blank_line (Paragraph (Text bar))) |}]
+        Example 12
+        - name: escaped_colon
+        - content:
+        ```md
+        - foo\\:
+        - bar
+        ```
+        ```sexp
+        (List (Paragraph (Text "foo\\:")) (Paragraph (Text bar)))
+        ```
+        |}]
     ;;
 
     let%expect_test _ =
