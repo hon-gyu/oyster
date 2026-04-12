@@ -5,6 +5,18 @@ open Cmarkit
 open Struct_common
 open Common.For_test
 
+let count_keyed (doc : Cmarkit.Doc.t) : int =
+  let folder =
+    Cmarkit.Folder.make
+      ~block:(fun f acc -> function
+         | Ext_keyed_block (label, b) | Ext_keyed_list_item (label, b) ->
+           Cmarkit.Folder.ret (1 + Cmarkit.Folder.fold_block f acc b)
+         | _ -> Cmarkit.Folder.default)
+      ()
+  in
+  Cmarkit.Folder.fold_doc folder 0 doc
+;;
+
 let doc_of_string ?paragraph_inline_value s =
   let doc = Doc.of_string s in
   rewrite_doc ?paragraph_inline_value doc
@@ -110,7 +122,7 @@ let mk_example name content : example = { name; content }
 let expect_example ?paragraph_inline_value s =
   s |> printf "```md {#original}\n%s\n```\n";
   print_endline "```debug-view";
-  s |> (doc_of_string ?paragraph_inline_value) |> pp_doc_debug;
+  s |> doc_of_string ?paragraph_inline_value |> pp_doc_debug;
   print_endline "```";
   print_endline "```sexp";
   s |> doc_of_string |> pp_doc_sexp;
@@ -340,6 +352,29 @@ bar
 ```|}
 ;;
 
+(* Empty label *)
+let empty_label_in_list_item =
+  mk_example
+    "empty_label_in_list_item"
+    {|- : a
+- B: b|}
+;;
+
+let empty_label_nested_under_paragraph_key =
+  mk_example
+    "empty_label_nested_under_paragraph_key"
+    {|A:
+- : a
+- B: b|}
+;;
+
+let empty_label_with_trailing_colon_and_body =
+  mk_example
+    "empty_label_with_trailing_colon_and_body"
+    {|- :
+  - nested|}
+;;
+
 (* Non-examples *)
 
 let non_example_no_colon =
@@ -388,7 +423,10 @@ let examples =
   ; non_example_blank_line
   ; last_item_absorbs_following_text
   ; last_item_absorbs_following_text_2
-  ; keyed_list_item_with_contiguous_blocks (* General non-examples *)
+  ; keyed_list_item_with_contiguous_blocks
+  ; empty_label_in_list_item
+  ; empty_label_nested_under_paragraph_key
+  ; empty_label_with_trailing_colon_and_body (* General non-examples *)
   ; non_example_no_colon
   ; non_example_colon_in_code_span
   ]
@@ -892,7 +930,53 @@ let%test_module _ =
         (Blocks (List (Keyed_list_item (Text foo) (Code_block no-info bar))))
         ```
 
-        Example 31: non_example_no_colon
+        Example 31: empty_label_in_list_item
+        ----------
+        ```md {#original}
+        - : a
+        - B: b
+        ```
+        ```debug-view
+        List[K(, a), K(B,
+        b)]
+        ```
+        ```sexp
+        (List (Keyed_list_item (Text "") (Paragraph (Text a)))
+          (Keyed_list_item (Text B) (Paragraph (Text b))))
+        ```
+
+        Example 32: empty_label_nested_under_paragraph_key
+        ----------
+        ```md {#original}
+        A:
+        - : a
+        - B: b
+        ```
+        ```debug-view
+        K(A, List[K(, a), K(B,
+        b)])
+        ```
+        ```sexp
+        (Blocks
+          (Keyed_block (Text A)
+            (List (Keyed_list_item (Text "") (Paragraph (Text a)))
+              (Keyed_list_item (Text B) (Paragraph (Text b))))))
+        ```
+
+        Example 33: empty_label_with_trailing_colon_and_body
+        ----------
+        ```md {#original}
+        - :
+          - nested
+        ```
+        ```debug-view
+        List[K(, List[nested])]
+        ```
+        ```sexp
+        (List (Keyed_list_item (Text "") (List (Paragraph (Text nested)))))
+        ```
+
+        Example 34: non_example_no_colon
         ----------
         ```md {#original}
         - foo
@@ -906,7 +990,7 @@ let%test_module _ =
         (List (Paragraph (Text foo)) (Paragraph (Text bar)))
         ```
 
-        Example 32: non_example_colon_in_code_span
+        Example 35: non_example_colon_in_code_span
         ----------
         ```md {#original}
         text with `code:`
@@ -931,7 +1015,8 @@ let%test_module "paragraph_inline_value" =
     let%expect_test "enabled (default)" =
       (* Standalone paragraph with inline value is keyed. *)
       {|foo: bar|} |> expect_example;
-      [%expect {|
+      [%expect
+        {|
         ```md {#original}
         foo: bar
         ```
@@ -954,7 +1039,8 @@ let%test_module "paragraph_inline_value" =
       (* When paragraph_inline_value is false, standalone paragraph
          is not keyed. *)
       {|foo: bar|} |> expect_example ~paragraph_inline_value:false;
-      [%expect {|
+      [%expect
+        {|
         ```md {#original}
         foo: bar
         ```
@@ -973,7 +1059,8 @@ let%test_module "paragraph_inline_value" =
       {|foo:
 - bar|}
       |> expect_example ~paragraph_inline_value:false;
-      [%expect {|
+      [%expect
+        {|
         ```md {#original}
         foo:
         - bar
@@ -983,74 +1070,6 @@ let%test_module "paragraph_inline_value" =
         ```
         ```sexp
         (Blocks (Keyed_block (Text foo) (List (Paragraph (Text bar)))))
-        ```
-        |}]
-    ;;
-  end)
-;;
-
-let%test_module "empty_label" =
-  (module struct
-    let%expect_test "empty label in list item" =
-      {|- : a
-- B: b|}
-      |> expect_example;
-      [%expect
-        {|
-        ```md {#original}
-        - : a
-        - B: b
-        ```
-        ```debug-view
-        List[K(, a), K(B,
-        b)]
-        ```
-        ```sexp
-        (List (Keyed_list_item (Text "") (Paragraph (Text a)))
-          (Keyed_list_item (Text B) (Paragraph (Text b))))
-        ```
-        |}]
-    ;;
-
-    let%expect_test "empty label nested under paragraph key" =
-      {|A:
-- : a
-- B: b|}
-      |> expect_example;
-      [%expect
-        {|
-        ```md {#original}
-        A:
-        - : a
-        - B: b
-        ```
-        ```debug-view
-        K(A, List[K(, a), K(B,
-        b)])
-        ```
-        ```sexp
-        (Blocks
-          (Keyed_block (Text A)
-            (List (Keyed_list_item (Text "") (Paragraph (Text a)))
-              (Keyed_list_item (Text B) (Paragraph (Text b))))))
-        ```
-        |}]
-    ;;
-
-    let%expect_test "empty label with trailing colon and body" =
-      {|- :
-  - nested|}
-      |> expect_example;
-      [%expect {|
-        ```md {#original}
-        - :
-          - nested
-        ```
-        ```debug-view
-        List[K(, List[nested])]
-        ```
-        ```sexp
-        (List (Keyed_list_item (Text "") (List (Paragraph (Text nested)))))
         ```
         |}]
     ;;
