@@ -37,7 +37,8 @@ Attention:
 let%expect_test _ =
   let doc = example |> doc_of_string in
   doc |> pp_doc_debug;
-  [%expect {|
+  [%expect
+    {|
     K(Architecture, List[K(,
     encoder–decoder. each half is a stack of six identical layers. self-attention and position-wise feed-forward replace recurrent and convolutional layers), K(encoder, List[K(self-attention,
     multi-head, every position attends to every other input position), K(feed-forward,
@@ -54,10 +55,10 @@ let%expect_test _ =
     run `h = 8` attention functions in parallel over learned linear projections of `Q`, `K`, `V`.,
     concatenate the heads and project.]), K(why multiple heads, List[
     each head can attend to a different representation subspace. a single softmax over averaged features cannot recover this.])])])
-    |}]
-;
+    |}];
   doc |> pp_doc_sexp;
-  [%expect {|
+  [%expect
+    {|
     (Blocks Blank_line
       (Keyed_block (Text Architecture)
         (List
@@ -126,7 +127,7 @@ let%expect_test _ =
                     (Text
                       "each head can attend to a different representation subspace. a single softmax over averaged features cannot recover this."))))))))
       Blank_line)
-    |}];
+    |}]
 ;;
 
 (* Graph pretty-printing
@@ -248,9 +249,7 @@ let rec render (v : visual) : string list =
   match v with
   | Txt s -> word_wrap max_text_w s
   | Arrow (label, value) ->
-    let prefix =
-      if String.is_empty label then "──> " else "──" ^ label ^ "──> "
-    in
+    let prefix = if String.is_empty label then "──> " else "──" ^ label ^ "──> " in
     let prefix_w = display_width prefix in
     if prefix_w + display_width value <= max_text_w
     then [ prefix ^ value ]
@@ -259,7 +258,11 @@ let rec render (v : visual) : string list =
       let value_lines = word_wrap (max_text_w - 4) value in
       head :: List.map value_lines ~f:(fun l -> "    " ^ l))
   | Box (title, children) ->
-    let has_box = List.exists children ~f:(function Box _ -> true | _ -> false) in
+    let has_box =
+      List.exists children ~f:(function
+        | Box _ -> true
+        | _ -> false)
+    in
     let child_lines =
       List.concat_mapi children ~f:(fun i c ->
         let lines = render c in
@@ -301,7 +304,8 @@ let pp_doc_graph (doc : Doc.t) : unit =
 let%expect_test "graph" =
   let doc = example |> doc_of_string in
   doc |> pp_doc_graph;
-  [%expect {|
+  [%expect
+    {|
     ╭─ Architecture ───────────────────────────────────────────────────╮
     │  ─>                                                              │
     │      encoder–decoder. each half is a stack of six                │
