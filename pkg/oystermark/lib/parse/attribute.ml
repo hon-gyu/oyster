@@ -1,4 +1,4 @@
-(** {0 Pandoc code block attribute parsing}
+(** {1 Pandoc code block attribute parsing}
 
     - Implements {!page-"pandoc-attribute"}
     - Attribute will be attached to the metadata code block if it can be parsed out.

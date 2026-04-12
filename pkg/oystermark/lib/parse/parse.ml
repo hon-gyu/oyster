@@ -1,4 +1,4 @@
-(** {0 Pre-resolution file-level parsing}
+(** {1 Pre-resolution file-level parsing}
 
 Each module provides a single-pass mapper that might
 - introduce new inline or block extensions

@@ -1,4 +1,4 @@
-(** {0 Struct.For_test} *)
+(** {1 Struct.For_test} *)
 
 open Core
 open Cmarkit

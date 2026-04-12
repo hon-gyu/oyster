@@ -1,4 +1,4 @@
-(** {0 Obsidian callout extension.}
+(** {1 Obsidian callout extension.}
 
     Transforms blockquotes whose first line matches [\[!type\]] into callout
     metadata attached to the block_quote's [Cmarkit.Meta.t].
@@ -38,7 +38,7 @@ v}
     {- Group 3: title text (optional, rest of line)}}
 
     Parsing is performed by {!parse_header}. The block mapper
-    {!map_callout} detects callout syntax in
+    {!block_map} detects callout syntax in
     [Cmarkit.Block.Block_quote] nodes and attaches {!t} to the
     blockquote's [Cmarkit.Meta.t] via {!meta_key}.
 

@@ -1,4 +1,4 @@
-(** {0 Obsidian caret block identifier}
+(** {1 Obsidian caret block identifier}
 
   - Adds metadata only
 
