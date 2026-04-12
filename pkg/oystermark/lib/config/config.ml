@@ -70,10 +70,9 @@ end
 (* {1 Sub-configs}  *)
 
 module Ext_struct = struct
-  type t = { enable : bool; } [@@deriving yojson] [@@yojson.allow_extra_fields]
+  type t = { enable : bool } [@@deriving yojson] [@@yojson.allow_extra_fields]
 
   let default = { enable = true }
-
   let t_of_yojson j = or_default ~default t_of_yojson j
 end
 

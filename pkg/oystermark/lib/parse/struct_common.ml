@@ -521,9 +521,10 @@ end = struct
       (match handle_list l list_meta [] with
        | [ single ] -> single
        | multiple -> Block.Blocks (multiple, Meta.none))
-    | (Block.Paragraph (p, _) as block) ->
+    | Block.Paragraph (p, _) as block ->
       (match Colon.decompose (Block.Paragraph.inline p) with
-       | Some (Colon.Chain_with_value (labels, value)) when !Config.paragraph_inline_value ->
+       | Some (Colon.Chain_with_value (labels, value)) when !Config.paragraph_inline_value
+         ->
          let body = value_paragraph value in
          build_nested_keyed ~make_node:mk_keyed_block labels body
        | _ -> block)

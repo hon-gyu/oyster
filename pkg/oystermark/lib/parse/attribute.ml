@@ -177,7 +177,7 @@ II
 ```|}
   ;;
 
-  let all_examples =
+  let examples =
     [ example_no_attribute
     ; example_with_attribute
     ; non_example_invalid_multiple_ids
@@ -282,7 +282,7 @@ let%test_module "Doc" =
         Cmarkit_renderer.doc_to_string (Cmarkit_commonmark.renderer ())
       in
       List.iter
-        all_examples
+        examples
         ~f:(commonmark_of_doc_idempotent ~doc_of_string ~commonmark_of_doc)
     ;;
   end)

@@ -273,93 +273,132 @@ let block_map : Cmarkit.Block.t Cmarkit.Mapper.mapper =
 ;;
 
 module For_test = struct
-  let examples =
-    [ "[!info] Here's a callout title"
-    ; "[!tip]"
-    ; "[!faq]- Are callouts foldable?"
-    ; "[!note]+ Expanded"
-    ; "[!WARNING] Watch out"
-    ; "not a callout"
-    ; "[!] empty kind"
+  let examples_header =
+    [ "> [!info] Here's a callout title"
+    ; "> [!tip]"
+    ; "> [!faq]- Are callouts foldable?"
+    ; "> [!note]+ Expanded"
+    ; "> [!WARNING] Watch out"
+    ; "> not a callout"
+    ; "> [!] empty kind"
+    ; "> [!tip]\n> Body content here"
     ]
   ;;
+
+  let examples_with_body = List.map examples_header ~f:(fun f -> f ^ "\n> body")
+  let examples = List.concat [ examples_header; examples_with_body ]
+  (* Add a body *)
 end
 
-let%expect_test "parse_header basic" =
-  let open For_test in
-  let test s =
-    print_endline "```md {#original}";
-    print_endline s;
-    print_endline "```";
-    print_endline "```sexp";
-    (match parse_header s with
-     | Some (c, pos) -> printf !"%{sexp: t} @ %d" c pos
-     | None -> print_string "None");
-    print_endline "\n```"
-  in
-  List.iter examples ~f:(fun src -> test src; print_endline "\n---\n";);
-  [%expect {|
-    ```md {#original}
-    [!info] Here's a callout title
-    ```
-    ```sexp
-    ((kind info) (fold ()) (title "Here's a callout title")) @ 30
-    ```
+let%test_module "Callout" =
+  (module struct
+    open Common.For_test
+    open For_test
 
-    ---
+    let doc_of_string s = mk_doc_of_string ~block:block_map () s
+    let pp_doc doc = mk_pp_doc ~metas:[ sexp_of_meta ] () doc
 
-    ```md {#original}
-    [!tip]
-    ```
-    ```sexp
-    ((kind tip) (fold ()) (title Tip)) @ 6
-    ```
+    let pp_src src =
+      print_endline "```md {#original}";
+      print_endline src;
+      print_endline "```"
+    ;;
 
-    ---
+    let test src =
+      pp_src src;
+      print_endline "```sexp";
+      pp_doc (doc_of_string src);
+      print_endline "```"
+    ;;
 
-    ```md {#original}
-    [!faq]- Are callouts foldable?
-    ```
-    ```sexp
-    ((kind faq) (fold (Foldable_closed)) (title "Are callouts foldable?")) @ 30
-    ```
+    let%expect_test _ =
+      List.iter examples_header ~f:(fun src ->
+        test src;
+        print_endline "\n---\n");
+      [%expect
+        {|
+        ```md {#original}
+        > [!info] Here's a callout title
+        ```
+        ```sexp
+        ((Block_quote (Blocks))
+          (meta (callout ((kind info) (fold ()) (title "Here's a callout title")))))
+        ```
 
-    ---
+        ---
 
-    ```md {#original}
-    [!note]+ Expanded
-    ```
-    ```sexp
-    ((kind note) (fold (Foldable_open)) (title Expanded)) @ 17
-    ```
+        ```md {#original}
+        > [!tip]
+        ```
+        ```sexp
+        ((Block_quote (Blocks)) (meta (callout ((kind tip) (fold ()) (title Tip)))))
+        ```
 
-    ---
+        ---
 
-    ```md {#original}
-    [!WARNING] Watch out
-    ```
-    ```sexp
-    ((kind warning) (fold ()) (title "Watch out")) @ 20
-    ```
+        ```md {#original}
+        > [!faq]- Are callouts foldable?
+        ```
+        ```sexp
+        ((Block_quote (Blocks))
+          (meta
+            (callout
+              ((kind faq) (fold (Foldable_closed)) (title "Are callouts foldable?")))))
+        ```
 
-    ---
+        ---
 
-    ```md {#original}
-    not a callout
-    ```
-    ```sexp
-    None
-    ```
+        ```md {#original}
+        > [!note]+ Expanded
+        ```
+        ```sexp
+        ((Block_quote (Blocks))
+          (meta (callout ((kind note) (fold (Foldable_open)) (title Expanded)))))
+        ```
 
-    ---
+        ---
 
-    ```md {#original}
-    [!] empty kind
-    ```
-    ```sexp
-    None
-    ```
+        ```md {#original}
+        > [!WARNING] Watch out
+        ```
+        ```sexp
+        ((Block_quote (Blocks))
+          (meta (callout ((kind warning) (fold ()) (title "Watch out")))))
+        ```
 
-    ---
-    |}]
+        ---
+
+        ```md {#original}
+        > not a callout
+        ```
+        ```sexp
+        (Block_quote (Paragraph (Text "not a callout")))
+        ```
+
+        ---
+
+        ```md {#original}
+        > [!] empty kind
+        ```
+        ```sexp
+        (Block_quote (Paragraph (Text "[!] empty kind")))
+        ```
+
+        ---
+
+        ```md {#original}
+        > [!tip]
+        > Body content here
+        ```
+        ```sexp
+        ((Block_quote (Paragraph (Text "Body content here")))
+          (meta (callout ((kind tip) (fold ()) (title Tip)))))
+        ```
+
+        ---
+        |}]
+    ;;
+
+    let%test_unit "dont' throw" = List.iter examples_with_body ~f:(fun src -> test src)
+  end)
 ;;
