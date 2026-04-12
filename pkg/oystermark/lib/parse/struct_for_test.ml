@@ -1,3 +1,5 @@
+(** {0 Struct.For_test} *)
+
 open Core
 open Cmarkit
 open Struct_common
@@ -27,7 +29,7 @@ let block_ext_fold : (Block.t, 'a) Folder.fold =
   | _ -> acc
 ;;
 
-(** {2 Predicates} *)
+(** {1 Predicates} *)
 
 (** Every keyed node's body is non-empty. *)
 let keyed_bodies_non_empty (doc : Doc.t) : bool =
@@ -97,7 +99,7 @@ let keying_is_maximal (doc : Doc.t) : bool =
   !ok
 ;;
 
-(** {2 Examples} *)
+(** {1 Examples} *)
 type example =
   { name : string
   ; content : string
@@ -398,25 +400,45 @@ let gen_markdown : string Core.Quickcheck.Generator.t =
   String.concat ~sep:"\n" lines
 ;;
 
-let%test_module "Struct" =
+let%test_module _ =
   (module struct
     let%expect_test _ =
       examples
       |> List.iteri ~f:(fun i ex ->
-        printf "Example %d\n" i;
+        print_endline {%string|Example %{i+1#Int}: %{ex.name}|};
         print_endline (String.make 10 '-');
-        expect_example ex;
+        ex.content |> printf "```md {#original}\n%s\n```\n";
+        print_endline "```debug-view";
+        ex.content |> doc_of_string |> pp_doc_debug;
+        print_endline "```";
+        print_endline "```sexp";
+        ex.content |> doc_of_string |> pp_doc_sexp;
+        print_endline "```";
         print_endline "");
       [%expect
         {|
-        Example 0
+        Example 1: inline_value_list_item
         ----------
-        - name: keyed_list_item_with_indented_content
-        - content:
-        ```md
+        ```md {#original}
+        - foo: bar
+        ```
+        ```debug-view
+        List[K(foo, bar)]
+        ```
+        ```sexp
+        (List (Keyed_list_item (Text foo) (Paragraph (Text bar))))
+        ```
+
+        Example 2: keyed_list_item_with_indented_content
+        ----------
+        ```md {#original}
         - foo:
           - bar
           - baz
+        ```
+        ```debug-view
+        List[K(foo, List[bar,
+        baz])]
         ```
         ```sexp
         (List
@@ -424,41 +446,102 @@ let%test_module "Struct" =
             (List (Paragraph (Text bar)) (Paragraph (Text baz)))))
         ```
 
-        Example 1
+        Example 3: no_body_no_following
         ----------
-        - name: non_example_blank_line
-        - content:
-        ```md
-        - foo:
-
-        bar
-        ```
-        ```sexp
-        (Blocks (List (Paragraph (Text foo:))) Blank_line (Paragraph (Text bar)))
-        ```
-
-        Example 2
-        ----------
-        - name: keyed_list_item_with_contiguous_blocks
-        - content:
-        ```md
+        ```md {#original}
         - foo:
         ```
-        bar
-        ```
+        ```debug-view
+        List[foo:]
         ```
         ```sexp
-        (Blocks (List (Keyed_list_item (Text foo) (Code_block no-info bar))))
+        (List (Paragraph (Text foo:)))
         ```
 
-        Example 3
+        Example 4: chain_with_value
         ----------
-        - name: keyed_paragraph
-        - content:
-        ```md
+        ```md {#original}
+        - a: b: c
+        ```
+        ```debug-view
+        List[K(a, K(b, c))]
+        ```
+        ```sexp
+        (List
+          (Keyed_list_item (Text a) (Keyed_list_item (Text b) (Paragraph (Text c)))))
+        ```
+
+        Example 5: colon_chain_inline_keying
+        ----------
+        ```md {#original}
+        - foo: bar:
+          - baz
+        ```
+        ```debug-view
+        List[K(foo, K(bar, List[baz]))]
+        ```
+        ```sexp
+        (List
+          (Keyed_list_item (Text foo)
+            (Keyed_list_item (Text bar) (List (Paragraph (Text baz))))))
+        ```
+
+        Example 6: three_label_chain
+        ----------
+        ```md {#original}
+        - a: b: c:
+          - baz
+        ```
+        ```debug-view
+        List[K(a, K(b, K(c, List[baz])))]
+        ```
+        ```sexp
+        (List
+          (Keyed_list_item (Text a)
+            (Keyed_list_item (Text b)
+              (Keyed_list_item (Text c) (List (Paragraph (Text baz)))))))
+        ```
+
+        Example 7: two_independent_siblings
+        ----------
+        ```md {#original}
+        - a: b: c
+        - x: y
+        ```
+        ```debug-view
+        List[K(a, K(b, c)), K(x,
+        y)]
+        ```
+        ```sexp
+        (List
+          (Keyed_list_item (Text a) (Keyed_list_item (Text b) (Paragraph (Text c))))
+          (Keyed_list_item (Text x) (Paragraph (Text y))))
+        ```
+
+        Example 8: paragraph_inline_value
+        ----------
+        ```md {#original}
+        foo: bar
+        ```
+        ```debug-view
+        foo: bar
+        ```
+        ```sexp
+        (Paragraph (Text "foo: bar"))
+        ```
+
+        Example 9: keyed_paragraph
+        ----------
+        ```md {#original}
         foo:
         - bar
         - baz
+
+        bee
+        ```
+        ```debug-view
+        K(foo, List[bar,
+        baz])
 
         bee
         ```
@@ -469,15 +552,18 @@ let%test_module "Struct" =
           Blank_line (Paragraph (Text bee)))
         ```
 
-        Example 4
+        Example 10: keyed_paragraph_multiple_children
         ----------
-        - name: keyed_paragraph_multiple_children
-        - content:
-        ```md
+        ```md {#original}
         foo:
         - bar
         - baz
         some text
+        ```
+        ```debug-view
+        K(foo, List[bar,
+        baz
+        some text])
         ```
         ```sexp
         (Blocks
@@ -486,15 +572,32 @@ let%test_module "Struct" =
               (Paragraph (Inlines (Text baz) (Break soft) (Text "some text"))))))
         ```
 
-        Example 5
+        Example 11: paragraph_chain
         ----------
-        - name: nesting
-        - content:
-        ```md
+        ```md {#original}
+        foo: bar:
+        - baz
+        ```
+        ```debug-view
+        K(foo, K(bar, List[baz]))
+        ```
+        ```sexp
+        (Blocks
+          (Keyed_block (Text foo)
+            (Keyed_block (Text bar) (List (Paragraph (Text baz))))))
+        ```
+
+        Example 12: nesting
+        ----------
+        ```md {#original}
         foo:
         - bar:
           - baz
         - qux
+        ```
+        ```debug-view
+        K(foo, List[K(bar, List[baz]),
+        qux])
         ```
         ```sexp
         (Blocks
@@ -503,28 +606,94 @@ let%test_module "Struct" =
               (Paragraph (Text qux)))))
         ```
 
-        Example 6
+        Example 13: mixed_inline_value
         ----------
-        - name: colon_chain_inline_keying
-        - content:
-        ```md
-        - foo: bar:
-          - baz
+        ```md {#original}
+        - foo: bar *baz* qux
+        ```
+        ```debug-view
+        List[K(foo, bar *baz* qux)]
         ```
         ```sexp
         (List
           (Keyed_list_item (Text foo)
-            (Keyed_list_item (Text bar) (List (Paragraph (Text baz))))))
+            (Paragraph (Inlines (Text "bar ") (Emphasis (Text baz)) (Text " qux")))))
         ```
 
-        Example 7
+        Example 14: code_span_in_value
         ----------
-        - name: emphasis_keyed_item
-        - content:
-        ```md
+        ```md {#original}
+        - foo: `code: thing`
+        ```
+        ```debug-view
+        List[K(foo, `code: thing`)]
+        ```
+        ```sexp
+        (List (Keyed_list_item (Text foo) (Paragraph (Code_span "code: thing"))))
+        ```
+
+        Example 15: non_example_trailing_space
+        ----------
+        ```md {#original}
+        - foo:
+        following
+        ```
+        ```debug-view
+        List[foo:
+        following]
+        ```
+        ```sexp
+        (List (Paragraph (Inlines (Text foo:) (Break soft) (Text following))))
+        ```
+
+        Example 16: non_example_no_space_after_colon
+        ----------
+        ```md {#original}
+        - foo:bar
+        ```
+        ```debug-view
+        List[foo:bar]
+        ```
+        ```sexp
+        (List (Paragraph (Text foo:bar)))
+        ```
+
+        Example 17: url_as_label
+        ----------
+        ```md {#original}
+        - http://x.com: click here
+        ```
+        ```debug-view
+        List[K(http://x.com, click here)]
+        ```
+        ```sexp
+        (List (Keyed_list_item (Text http://x.com) (Paragraph (Text "click here"))))
+        ```
+
+        Example 18: escaped_colon
+        ----------
+        ```md {#original}
+        - foo\\:
+        - bar
+        ```
+        ```debug-view
+        List[foo\\:,
+        bar]
+        ```
+        ```sexp
+        (List (Paragraph (Text "foo\\:")) (Paragraph (Text bar)))
+        ```
+
+        Example 19: emphasis_keyed_item
+        ----------
+        ```md {#original}
         - *foo*:
           - bar
           - baz
+        ```
+        ```debug-view
+        List[K(*foo*, List[bar,
+        baz])]
         ```
         ```sexp
         (List
@@ -532,13 +701,26 @@ let%test_module "Struct" =
             (List (Paragraph (Text bar)) (Paragraph (Text baz)))))
         ```
 
-        Example 8
+        Example 20: emphasis_inline_value
         ----------
-        - name: emphasis_chain
-        - content:
-        ```md
+        ```md {#original}
+        - *foo*: bar
+        ```
+        ```debug-view
+        List[K(*foo*, bar)]
+        ```
+        ```sexp
+        (List (Keyed_list_item (Emphasis (Text foo)) (Paragraph (Text bar))))
+        ```
+
+        Example 21: emphasis_chain
+        ----------
+        ```md {#original}
         - *foo*: bar:
           - baz
+        ```
+        ```debug-view
+        List[K(*foo*, K(bar, List[baz]))]
         ```
         ```sexp
         (List
@@ -546,37 +728,13 @@ let%test_module "Struct" =
             (Keyed_list_item (Text bar) (List (Paragraph (Text baz))))))
         ```
 
-        Example 9
+        Example 22: non_example_mixed_inline
         ----------
-        - name: non_example_no_colon
-        - content:
-        ```md
-        - foo
-        - bar
+        ```md {#original}
+        *foo* bar:
+        following
         ```
-        ```sexp
-        (List (Paragraph (Text foo)) (Paragraph (Text bar)))
-        ```
-
-        Example 10
-        ----------
-        - name: non_example_colon_in_code_span
-        - content:
-        ```md
-        text with `code:`
-        following paragraph
-        ```
-        ```sexp
-        (Paragraph
-          (Inlines (Text "text with ") (Code_span code:) (Break soft)
-            (Text "following paragraph")))
-        ```
-
-        Example 11
-        ----------
-        - name: non_example_mixed_inline
-        - content:
-        ```md
+        ```debug-view
         *foo* bar:
         following
         ```
@@ -586,16 +744,127 @@ let%test_module "Struct" =
             (Text following)))
         ```
 
-        Example 12
+        Example 23: non_example_mixed_inline_list_item
         ----------
-        - name: escaped_colon
-        - content:
-        ```md
-        - foo\\:
-        - bar
+        ```md {#original}
+        - *foo* x: bar
+        ```
+        ```debug-view
+        List[*foo* x: bar]
         ```
         ```sexp
-        (List (Paragraph (Text "foo\\:")) (Paragraph (Text bar)))
+        (List (Paragraph (Inlines (Emphasis (Text foo)) (Text " x: bar"))))
+        ```
+
+        Example 24: free_form_value
+        ----------
+        ```md {#original}
+        - foo: *bar* x
+        ```
+        ```debug-view
+        List[K(foo, *bar* x)]
+        ```
+        ```sexp
+        (List
+          (Keyed_list_item (Text foo)
+            (Paragraph (Inlines (Emphasis (Text bar)) (Text " x")))))
+        ```
+
+        Example 25: non_example_blank_line
+        ----------
+        ```md {#original}
+        - foo:
+
+        bar
+        ```
+        ```debug-view
+        List[foo:]
+
+        bar
+        ```
+        ```sexp
+        (Blocks (List (Paragraph (Text foo:))) Blank_line (Paragraph (Text bar)))
+        ```
+
+        Example 26: last_item_absorbs_following_text
+        ----------
+        ```md {#original}
+        - a
+        - b:
+        text
+        ```
+        ```debug-view
+        List[a,
+        b:
+        text]
+        ```
+        ```sexp
+        (List (Paragraph (Text a))
+          (Paragraph (Inlines (Text b:) (Break soft) (Text text))))
+        ```
+
+        Example 27: last_item_absorbs_following_text_2
+        ----------
+        ```md {#original}
+        - a: x
+        - b:
+        text
+        ```
+        ```debug-view
+        List[K(a, x),
+        b:
+        text]
+        ```
+        ```sexp
+        (List (Keyed_list_item (Text a) (Paragraph (Text x)))
+          (Paragraph (Inlines (Text b:) (Break soft) (Text text))))
+        ```
+
+        Example 28: keyed_list_item_with_contiguous_blocks
+        ----------
+        ```md {#original}
+        - foo:
+        ```
+        bar
+        ```
+        ```
+        ```debug-view
+        List[K(foo, ```
+        bar
+        ```)]
+        ```
+        ```sexp
+        (Blocks (List (Keyed_list_item (Text foo) (Code_block no-info bar))))
+        ```
+
+        Example 29: non_example_no_colon
+        ----------
+        ```md {#original}
+        - foo
+        - bar
+        ```
+        ```debug-view
+        List[foo,
+        bar]
+        ```
+        ```sexp
+        (List (Paragraph (Text foo)) (Paragraph (Text bar)))
+        ```
+
+        Example 30: non_example_colon_in_code_span
+        ----------
+        ```md {#original}
+        text with `code:`
+        following paragraph
+        ```
+        ```debug-view
+        text with `code:`
+        following paragraph
+        ```
+        ```sexp
+        (Paragraph
+          (Inlines (Text "text with ") (Code_span code:) (Break soft)
+            (Text "following paragraph")))
         ```
         |}]
     ;;
