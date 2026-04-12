@@ -400,7 +400,7 @@ let%test_module "Callout" =
     ;;
 
     let%test_unit "dont' throw" =
-      List.iter examples_with_body ~f:(fun src -> ignore (test src))
+      List.iter examples_with_body ~f:(fun src -> ignore (doc_of_string src))
     ;;
   end)
 ;;
