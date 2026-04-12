@@ -7,6 +7,8 @@ val sexp_of_block : Common.block_sexp
 val rewrite_doc : ?paragraph_inline_value:bool -> Cmarkit.Doc.t -> Cmarkit.Doc.t
 
 module For_test : sig
+  val count_keyed : Cmarkit.Doc.t -> int
+
   type example =
     { name : string
     ; content : string

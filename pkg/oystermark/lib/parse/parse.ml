@@ -116,45 +116,9 @@ module For_test = struct
     Cmarkit.Doc.block doc
   ;;
 
-  (** Recurse into Struct's extension block bodies.  Used by the
-      counting folders below so that content nested inside a struct
-      keyed block is still visited. *)
-  let struct_block_ext_default : (Cmarkit.Block.t, 'a) Cmarkit.Folder.fold =
-    fun f acc b ->
-    match b with
-    | Struct.Ext_keyed_block (_, body) | Struct.Ext_keyed_list_item (_, body) ->
-      Cmarkit.Folder.fold_block f acc body
-    | _ -> acc
-  ;;
-
-  (** Count the number of div blocks in a doc  *)
-  let count_div (doc : Cmarkit.Doc.t) : int =
-    let folder =
-      Cmarkit.Folder.make
-        ~block_ext_default:struct_block_ext_default
-        ~block:(fun f acc -> function
-           | Div.Ext_div (_div, body) ->
-             Cmarkit.Folder.ret (1 + Cmarkit.Folder.fold_block f acc body)
-           | _ -> Cmarkit.Folder.default)
-        ()
-    in
-    Cmarkit.Folder.fold_doc folder 0 doc
-  ;;
-
   let pp_doc (doc : Cmarkit.Doc.t) : unit =
     let block = Cmarkit.Doc.block doc in
     block |> sexp_of_block |> Sexp.to_string_hum ~indent:2 |> print_endline
-  ;;
-
-  (** Assert that the commonmark roundtrip of a doc is idempotent under normalization.
-    @return ()
-    @raise Failure if the roundtrip is not idempotent.
-  *)
-  let commonmark_of_doc_idempotent s =
-    let normalize s = String.rstrip s in
-    let cm1 = commonmark_of_doc (of_string s) in
-    let cm2 = commonmark_of_doc (of_string cm1) in
-    [%test_eq: string] (normalize cm1) (normalize cm2)
   ;;
 end
 
@@ -259,124 +223,235 @@ TODO: the test expection is wrong at the moment.
 
 let%test_module "Div and Struct" =
   (module struct
-    open For_test
+    open Common.For_test
     open Div.For_test
+    open For_test
+
+    let count_div (doc : Cmarkit.Doc.t) : int =
+      let folder =
+        Cmarkit.Folder.make
+          ~block:(fun f acc -> function
+             | Div.Ext_div (_div, block) ->
+               Cmarkit.Folder.ret (1 + Cmarkit.Folder.fold_block f acc block)
+             | Struct.Ext_keyed_block (_label, block)
+             | Struct.Ext_keyed_list_item (_label, block) ->
+               Cmarkit.Folder.ret (Cmarkit.Folder.fold_block f acc block)
+             | _ -> Cmarkit.Folder.default)
+          ()
+      in
+      Cmarkit.Folder.fold_doc folder 0 doc
+    ;;
+
+    let count_keyed (doc : Cmarkit.Doc.t) : int =
+      let folder =
+        Cmarkit.Folder.make
+          ~block:(fun f acc -> function
+             | Div.Ext_div (_div, block) ->
+               Cmarkit.Folder.ret (Cmarkit.Folder.fold_block f acc block)
+             | Struct.Ext_keyed_block (_label, block)
+             | Struct.Ext_keyed_list_item (_label, block) ->
+               Cmarkit.Folder.ret (1 + Cmarkit.Folder.fold_block f acc block)
+             | _ -> Cmarkit.Folder.default)
+          ()
+      in
+      Cmarkit.Folder.fold_doc folder 0 doc
+    ;;
+
+    let pp_src src =
+      print_endline "```md {#original}";
+      print_endline src;
+      print_endline "```"
+    ;;
+
+    let test ?(n_div : int = 0) ?(n_keyed : int = 0) src =
+      pp_src src;
+      let doc = of_string src in
+      print_endline "```sexp";
+      pp_doc doc;
+      print_endline "```";
+      [%test_result: int] (count_div doc) ~expect:n_div;
+      [%test_result: int] (count_keyed doc) ~expect:n_keyed
+    ;;
 
     let%expect_test _ =
-      let doc = of_string example_basic in
-      (* [%test_result: int] (count_div doc) ~expect:1; *)
-      pp_doc doc;
+      example_basic |> test ~n_div:1;
       [%expect
         {|
+        ```md {#original}
+        ::: warning
+        Here is a paragraph.
+
+        And here is another.
+        :::
+        ```
+        ```sexp
         (Blocks
           (Div ((class_name (warning)) (colons 3))
             (Blocks (Paragraph (Text "Here is a paragraph.")) Blank_line
               (Paragraph (Text "And here is another.")))))
+        ```
         |}]
     ;;
 
     let%expect_test _ =
-      let doc = of_string example_no_class in
-      (* [%test_result: int] (count_div doc) ~expect:1; *)
-      pp_doc doc;
+      example_no_class |> test ~n_div:1;
       [%expect
         {|
+        ```md {#original}
+        :::
+        content
+        :::
+
+        ```
+        ```sexp
         (Blocks (Div ((class_name ()) (colons 3)) (Paragraph (Text content)))
           Blank_line)
+        ```
         |}]
     ;;
 
     let%expect_test _ =
-      let doc = of_string example_nested_divs in
-      (* [%test_result: int] (count_div doc) ~expect:2; *)
-      pp_doc doc;
+      example_nested_divs |> test ~n_div:2;
       [%expect
         {|
+        ```md {#original}
+        :::: outer
+        ::: inner
+        content
+        :::
+        ::::
+
+        ```
+        ```sexp
         (Blocks
           (Div ((class_name (outer)) (colons 4))
             (Div ((class_name (inner)) (colons 3)) (Paragraph (Text content))))
           Blank_line)
+        ```
         |}]
     ;;
 
     let%expect_test _ =
-      let doc = of_string example_nested_divs_same_length in
-      (* [%test_result: int] (count_div doc) ~expect:2; *)
-      pp_doc doc;
+      example_nested_divs_same_length |> test ~n_div:2;
       [%expect
         {|
+        ```md {#original}
+        ::: warning
+        content
+        :::
+        :::
+        ```
+        ```sexp
         (Blocks (Div ((class_name (warning)) (colons 3)) (Paragraph (Text content)))
           (Div ((class_name ()) (colons 3)) (Blocks)))
+        ```
         |}]
     ;;
 
     let%expect_test _ =
-      let doc = of_string example_EOF_closes in
-      (* [%test_result: int] (count_div doc) ~expect:1; *)
-      pp_doc doc;
+      example_EOF_closes |> test ~n_div:1;
       [%expect
         {|
+        ```md {#original}
+        ::: warning
+        unclosed content
+        ```
+        ```sexp
         (Blocks
           (Div ((class_name (warning)) (colons 3))
             (Paragraph (Text "unclosed content"))))
+        ```
         |}]
     ;;
 
     let%expect_test _ =
-      let doc = of_string example_extra_closing_fence in
-      (* [%test_result: int] (count_div doc) ~expect:2; *)
-      pp_doc doc;
+      example_extra_closing_fence |> test ~n_div:2;
       [%expect
         {|
+        ```md {#original}
+        ::: warning
+        content
+        :::
+        :::
+        ```
+        ```sexp
         (Blocks (Div ((class_name (warning)) (colons 3)) (Paragraph (Text content)))
           (Div ((class_name ()) (colons 3)) (Blocks)))
+        ```
         |}]
     ;;
 
     let%expect_test _ =
-      let doc = of_string non_example_less_than_3_colons in
-      (* [%test_result: int] (count_div doc) ~expect:0; *)
-      pp_doc doc;
+      non_example_less_than_3_colons |> test ~n_div:0;
       [%expect
         {|
+        ```md {#original}
+        :: not-a-div
+        content
+        ::
+        ```
+        ```sexp
         (Paragraph
           (Inlines (Text ":: not-a-div") (Break soft) (Text content) (Break soft)
             (Text ::)))
+        ```
         |}]
     ;;
 
     let%expect_test _ =
-      let doc = of_string non_example_extra_words_after_class in
-      (* [%test_result: int] (count_div doc) ~expect:1; *)
-      pp_doc doc;
+      non_example_extra_words_after_class |> test ~n_div:1 ~n_keyed:1;
       [%expect
         {|
+        ```md {#original}
+        ::: warning extra
+        content
+        :::
+        ```
+        ```sexp
         (Blocks (Keyed_block (Text ::) (Paragraph (Text "warning extra")))
           (Paragraph (Text content)) (Div ((class_name ()) (colons 3)) (Blocks)))
+        ```
         |}]
     ;;
 
     let%expect_test _ =
-      let doc = of_string non_example_div_does_not_interfere_with_code_blocks in
-      (* [%test_result: int] (count_div doc) ~expect:0; *)
-      pp_doc doc;
-      [%expect {| (Code_block no-info "::: not-a-div") |}]
+      non_example_div_does_not_interfere_with_code_blocks |> test ~n_div:0;
+      [%expect
+        {|
+        ```md {#original}
+        ```
+        ::: not-a-div
+        ```
+        ```
+        ```sexp
+        (Code_block no-info "::: not-a-div")
+        ```
+        |}]
     ;;
 
     let%expect_test _ =
-      let doc = of_string example_closing_fence_must_be_at_least_as_long in
-      pp_doc doc;
+      example_closing_fence_must_be_at_least_as_long |> test ~n_div:2;
       [%expect
         {|
+        ```md {#original}
+        :::: warning
+        content
+        :::
+        ::::
+        ```
+        ```sexp
         (Blocks
           (Div ((class_name (warning)) (colons 4))
             (Blocks (Paragraph (Text content))
               (Div ((class_name ()) (colons 3)) (Blocks)))))
+        ```
         |}]
     ;;
 
     let%test_unit "roundtrip: commonmark output is idempotent" =
-      List.iter all_examples ~f:commonmark_of_doc_idempotent
+      List.iter
+        all_examples
+        ~f:(commonmark_of_doc_idempotent ~doc_of_string:of_string ~commonmark_of_doc)
     ;;
   end)
 ;;
