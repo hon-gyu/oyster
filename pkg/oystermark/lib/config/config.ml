@@ -69,10 +69,25 @@ end
 
 (* {1 Sub-configs}  *)
 
-module Ext_struct = struct
-  type t = { enable : bool } [@@deriving yojson] [@@yojson.allow_extra_fields]
+module Struct_style_def = struct
+  type t =
+    | Plain
+    | Graph
 
-  let default = { enable = true }
+  let table = [ "plain", Plain, []; "graph", Graph, [] ]
+  let default = Plain
+end
+
+module Struct_style = Make_string_enum (Struct_style_def)
+
+module Ext_struct = struct
+  type t =
+    { enable : bool
+    ; struct_style : Struct_style.t [@default Struct_style.default]
+    }
+  [@@deriving yojson] [@@yojson.allow_extra_fields]
+
+  let default = { enable = true; struct_style = Struct_style.default }
   let t_of_yojson j = or_default ~default t_of_yojson j
 end
 
@@ -247,7 +262,7 @@ let%expect_test "Config default" =
   [%expect
     {|
     {
-      "ext_struct": { "enable": true },
+      "ext_struct": { "enable": true, "struct_style": "plain" },
       "theme": "bluloco_dark",
       "css_snippets": [],
       "pipeline_profile": "default",
