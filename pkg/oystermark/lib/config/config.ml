@@ -11,6 +11,8 @@
 open Ppx_yojson_conv_lib.Yojson_conv.Primitives
 module J = Yojson.Safe
 
+(** {1 Utils} *)
+
 module type Defaultable = sig
   type t
 
@@ -63,6 +65,16 @@ module Make_string_enum (E : String_enum) = struct
   ;;
 
   let yojson_of_t (t : t) : J.t = `String (to_string t)
+end
+
+(* {1 Sub-configs}  *)
+
+module Ext_struct = struct
+  type t = { enable : bool; } [@@deriving yojson] [@@yojson.allow_extra_fields]
+
+  let default = { enable = true }
+
+  let t_of_yojson j = or_default ~default t_of_yojson j
 end
 
 module Theme_def = struct
@@ -184,7 +196,8 @@ end = struct
 end
 
 type t =
-  { theme : Theme.t [@default Theme.default]
+  { ext_struct : Ext_struct.t [@default Ext_struct.default]
+  ; theme : Theme.t [@default Theme.default]
   ; css_snippets : string list [@default []]
   ; pipeline_profile : Pipeline_profile.t [@default Pipeline_profile.default]
   ; home_graph_view : Home_graph_view.t [@default Home_graph_view.default]
@@ -192,7 +205,8 @@ type t =
 [@@deriving yojson] [@@yojson.allow_extra_fields]
 
 let default : t =
-  { theme = Theme.default
+  { ext_struct = Ext_struct.default
+  ; theme = Theme.default
   ; css_snippets = []
   ; pipeline_profile = Pipeline_profile.default
   ; home_graph_view = Home_graph_view.default
@@ -234,6 +248,7 @@ let%expect_test "Config default" =
   [%expect
     {|
     {
+      "ext_struct": { "enable": true },
       "theme": "bluloco_dark",
       "css_snippets": [],
       "pipeline_profile": "default",
