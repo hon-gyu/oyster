@@ -135,7 +135,7 @@ end = struct
         | _ -> true)
     in
     match segment with
-    | [] -> None
+    | [] -> Some (Inline.Text ("", Meta.none))
     | [ Inline.Text (s, meta) ] -> Some (Inline.Text (String.strip s, meta))
     | [ (Inline.Emphasis _ as e) ] -> Some e
     | [ (Inline.Strong_emphasis _ as e) ] -> Some e

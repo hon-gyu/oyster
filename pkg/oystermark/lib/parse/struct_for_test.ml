@@ -107,11 +107,13 @@ type example =
 
 let mk_example name content : example = { name; content }
 
-let expect_example ex : unit =
-  ex.name |> printf "- name: %s\n";
-  ex.content |> printf "- content: \n```md\n%s\n```\n";
+let expect_example ?paragraph_inline_value s =
+  s |> printf "```md {#original}\n%s\n```\n";
+  print_endline "```debug-view";
+  s |> (doc_of_string ?paragraph_inline_value) |> pp_doc_debug;
+  print_endline "```";
   print_endline "```sexp";
-  ex.content |> doc_of_string |> pp_doc_sexp;
+  s |> doc_of_string |> pp_doc_sexp;
   print_endline "```"
 ;;
 
@@ -429,13 +431,7 @@ let%test_module _ =
       |> List.iteri ~f:(fun i ex ->
         print_endline {%string|Example %{i+1#Int}: %{ex.name}|};
         print_endline (String.make 10 '-');
-        ex.content |> printf "```md {#original}\n%s\n```\n";
-        print_endline "```debug-view";
-        ex.content |> doc_of_string |> pp_doc_debug;
-        print_endline "```";
-        print_endline "```sexp";
-        ex.content |> doc_of_string |> pp_doc_sexp;
-        print_endline "```";
+        ex.content |> expect_example;
         print_endline "");
       [%expect
         {|
@@ -934,8 +930,18 @@ let%test_module "paragraph_inline_value" =
   (module struct
     let%expect_test "enabled (default)" =
       (* Standalone paragraph with inline value is keyed. *)
-      {|foo: bar|} |> doc_of_string |> pp_doc_sexp;
-      [%expect {| (Keyed_block (Text foo) (Paragraph (Text bar))) |}]
+      {|foo: bar|} |> expect_example;
+      [%expect {|
+        ```md {#original}
+        foo: bar
+        ```
+        ```debug-view
+        K(foo, bar)
+        ```
+        ```sexp
+        (Keyed_block (Text foo) (Paragraph (Text bar)))
+        ```
+        |}]
     ;;
 
     let%expect_test "with chain" =
@@ -947,8 +953,18 @@ let%test_module "paragraph_inline_value" =
     let%expect_test "disabled" =
       (* When paragraph_inline_value is false, standalone paragraph
          is not keyed. *)
-      {|foo: bar|} |> doc_of_string ~paragraph_inline_value:false |> pp_doc_sexp;
-      [%expect {| (Paragraph (Text "foo: bar")) |}]
+      {|foo: bar|} |> expect_example ~paragraph_inline_value:false;
+      [%expect {|
+        ```md {#original}
+        foo: bar
+        ```
+        ```debug-view
+        foo: bar
+        ```
+        ```sexp
+        (Keyed_block (Text foo) (Paragraph (Text bar)))
+        ```
+        |}]
     ;;
 
     let%expect_test "disabled does not affect trailing-colon" =
@@ -956,9 +972,87 @@ let%test_module "paragraph_inline_value" =
          paragraph_inline_value is false. *)
       {|foo:
 - bar|}
-      |> doc_of_string ~paragraph_inline_value:false
-      |> pp_doc_sexp;
-      [%expect {| (Blocks (Keyed_block (Text foo) (List (Paragraph (Text bar))))) |}]
+      |> expect_example ~paragraph_inline_value:false;
+      [%expect {|
+        ```md {#original}
+        foo:
+        - bar
+        ```
+        ```debug-view
+        K(foo, List[bar])
+        ```
+        ```sexp
+        (Blocks (Keyed_block (Text foo) (List (Paragraph (Text bar)))))
+        ```
+        |}]
+    ;;
+  end)
+;;
+
+let%test_module "empty_label" =
+  (module struct
+    let%expect_test "empty label in list item" =
+      {|- : a
+- B: b|}
+      |> expect_example;
+      [%expect
+        {|
+        ```md {#original}
+        - : a
+        - B: b
+        ```
+        ```debug-view
+        List[K(, a), K(B,
+        b)]
+        ```
+        ```sexp
+        (List (Keyed_list_item (Text "") (Paragraph (Text a)))
+          (Keyed_list_item (Text B) (Paragraph (Text b))))
+        ```
+        |}]
+    ;;
+
+    let%expect_test "empty label nested under paragraph key" =
+      {|A:
+- : a
+- B: b|}
+      |> expect_example;
+      [%expect
+        {|
+        ```md {#original}
+        A:
+        - : a
+        - B: b
+        ```
+        ```debug-view
+        K(A, List[K(, a), K(B,
+        b)])
+        ```
+        ```sexp
+        (Blocks
+          (Keyed_block (Text A)
+            (List (Keyed_list_item (Text "") (Paragraph (Text a)))
+              (Keyed_list_item (Text B) (Paragraph (Text b))))))
+        ```
+        |}]
+    ;;
+
+    let%expect_test "empty label with trailing colon and body" =
+      {|- :
+  - nested|}
+      |> expect_example;
+      [%expect {|
+        ```md {#original}
+        - :
+          - nested
+        ```
+        ```debug-view
+        List[K(, List[nested])]
+        ```
+        ```sexp
+        (List (Keyed_list_item (Text "") (List (Paragraph (Text nested)))))
+        ```
+        |}]
     ;;
   end)
 ;;
