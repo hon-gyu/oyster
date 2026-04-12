@@ -393,7 +393,7 @@ content
 ::::|}
   ;;
 
-  let all_examples =
+  let examples =
     [ example_basic
     ; example_no_class
     ; example_nested_divs
@@ -537,7 +537,7 @@ let%test_module "Div" =
         Cmarkit_renderer.doc_to_string (Cmarkit_commonmark.renderer ())
       in
       List.iter
-        all_examples
+        examples
         ~f:(commonmark_of_doc_idempotent ~doc_of_string ~commonmark_of_doc)
     ;;
   end)

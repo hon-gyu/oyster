@@ -458,7 +458,7 @@ let%test_module "Div and Struct" =
 
     let%test_unit "roundtrip: commonmark output is idempotent" =
       List.iter
-        all_examples
+        examples
         ~f:(commonmark_of_doc_idempotent ~doc_of_string:of_string ~commonmark_of_doc)
     ;;
   end)

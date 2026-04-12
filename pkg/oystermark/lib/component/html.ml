@@ -299,3 +299,19 @@ let renderer ~(backend_blocks : bool) ~(safe : bool) () : Cmarkit_renderer.t =
 let of_doc ~(backend_blocks : bool) ~(safe : bool) (doc : Doc.t) : string =
   Cmarkit_renderer.doc_to_string (renderer ~backend_blocks ~safe ()) doc
 ;;
+
+let%test_module "not throw" =
+  (module struct
+    let%test_unit _ =
+      let examples : string list =
+        List.concat
+          [ List.map ~f:(fun ex -> ex.content) Parse.Struct.For_test.examples
+          ; Parse.Div.For_test.examples
+          ]
+      in
+      List.iter examples ~f:(fun src ->
+        let doc = Parse.of_string src in
+        ignore (of_doc ~backend_blocks:false ~safe:false doc))
+    ;;
+  end)
+;;
