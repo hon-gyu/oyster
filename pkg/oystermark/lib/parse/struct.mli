@@ -8,6 +8,9 @@ val rewrite_doc : ?paragraph_inline_value:bool -> Cmarkit.Doc.t -> Cmarkit.Doc.t
 
 module For_test : sig
   val count_keyed : Cmarkit.Doc.t -> int
+  val doc_of_string : ?paragraph_inline_value:bool -> string -> Cmarkit.Doc.t
+  val pp_doc_sexp : Cmarkit.Doc.t -> unit
+  val pp_doc_debug : Cmarkit.Doc.t -> unit
 
   type example =
     { name : string
