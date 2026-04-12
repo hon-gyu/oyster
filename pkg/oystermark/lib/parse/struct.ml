@@ -130,6 +130,35 @@ open Cmarkit
 type t = { label : Inline.t }
 type Block.t += Ext_keyed_list_item of t * Block.t | Ext_keyed_block of t * Block.t
 
+let debug_block_renderer : Cmarkit_renderer.block =
+  let open Cmarkit_renderer in
+  fun (c : context) (b : Block.t) ->
+    match b with
+    | Ext_keyed_block ({ label }, body) ->
+      Context.string c "K(";
+      Context.inline c label;
+      Context.string c ", ";
+      Context.block c body;
+      Context.string c ")";
+      true
+    | Ext_keyed_list_item ({ label }, body) ->
+      Context.string c "K(";
+      Context.inline c label;
+      Context.string c ", ";
+      Context.block c body;
+      Context.string c ")";
+      true
+    | Block.List (l, _) ->
+      Context.string c "List[";
+      let items = Block.List'.items l in
+      List.iteri items ~f:(fun i (item, _) ->
+        if i > 0 then Context.string c ", ";
+        Context.block c (Block.List_item.block item));
+      Context.string c "]";
+      true
+    | _ -> false
+;;
+
 let block_commonmark_renderer : Cmarkit_renderer.block =
   let open Cmarkit_renderer in
   fun (c : context) (b : Block.t) ->
@@ -896,11 +925,13 @@ let%test_module "Struct" =
       examples
       |> List.iteri ~f:(fun i ex ->
         printf "Example %d\n" i;
+        print_endline (String.make 10 '-');
         expect_example ex;
         print_endline "");
       [%expect
         {|
         Example 0
+        ----------
         - name: keyed_list_item_with_indented_content
         - content:
         ```md
@@ -915,6 +946,7 @@ let%test_module "Struct" =
         ```
 
         Example 1
+        ----------
         - name: non_example_blank_line
         - content:
         ```md
@@ -927,6 +959,7 @@ let%test_module "Struct" =
         ```
 
         Example 2
+        ----------
         - name: keyed_list_item_with_contiguous_blocks
         - content:
         ```md
@@ -940,6 +973,7 @@ let%test_module "Struct" =
         ```
 
         Example 3
+        ----------
         - name: keyed_paragraph
         - content:
         ```md
@@ -957,6 +991,7 @@ let%test_module "Struct" =
         ```
 
         Example 4
+        ----------
         - name: keyed_paragraph_multiple_children
         - content:
         ```md
@@ -973,6 +1008,7 @@ let%test_module "Struct" =
         ```
 
         Example 5
+        ----------
         - name: nesting
         - content:
         ```md
@@ -989,6 +1025,7 @@ let%test_module "Struct" =
         ```
 
         Example 6
+        ----------
         - name: colon_chain_inline_keying
         - content:
         ```md
@@ -1002,6 +1039,7 @@ let%test_module "Struct" =
         ```
 
         Example 7
+        ----------
         - name: emphasis_keyed_item
         - content:
         ```md
@@ -1016,6 +1054,7 @@ let%test_module "Struct" =
         ```
 
         Example 8
+        ----------
         - name: emphasis_chain
         - content:
         ```md
@@ -1029,6 +1068,7 @@ let%test_module "Struct" =
         ```
 
         Example 9
+        ----------
         - name: non_example_no_colon
         - content:
         ```md
@@ -1040,6 +1080,7 @@ let%test_module "Struct" =
         ```
 
         Example 10
+        ----------
         - name: non_example_colon_in_code_span
         - content:
         ```md
@@ -1053,6 +1094,7 @@ let%test_module "Struct" =
         ```
 
         Example 11
+        ----------
         - name: non_example_mixed_inline
         - content:
         ```md
@@ -1066,6 +1108,7 @@ let%test_module "Struct" =
         ```
 
         Example 12
+        ----------
         - name: escaped_colon
         - content:
         ```md
@@ -1118,3 +1161,15 @@ let%test_module "Struct" =
     ;;
   end)
 ;;
+
+
+let%expect_test "debug-view" =
+  let open For_test in
+  let doc = doc_of_string "- B: b" in
+  let r =
+    Cmarkit_renderer.compose
+      (Cmarkit_commonmark.renderer ())
+      (Cmarkit_renderer.make ~block:debug_block_renderer ())
+  in
+  Cmarkit_renderer.doc_to_string r doc |> print_endline;
+  [%expect {| List[K(B, b)] |}];
