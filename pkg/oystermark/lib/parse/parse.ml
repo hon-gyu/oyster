@@ -51,15 +51,23 @@ let mk_mapper () : Cmarkit.Mapper.t =
     [Cmarkit.Doc.t] with frontmatter embedded as a {!Frontmatter.Frontmatter}
     block and wikilinks/block IDs parsed. Heading slugs are stamped onto
     heading block metadata. *)
-let of_string ?(strict = false) ?(layout = false) ?(locs = true) (s : string)
+let of_string
+      (* Cmarkit config *)
+      ?(strict = false)
+      ?(layout = false)
+      ?(locs = true)
+      (* Oystermark config *)
+      ?(config = Config.default)
+      (s : string)
   : Cmarkit.Doc.t
   =
+  let enable_struct = config.ext_struct.enable in
   let open Cmarkit in
   let yaml_opt, body = Frontmatter.of_string s in
   let cmarkit_doc = Doc.of_string ~strict ~layout ~locs:true body in
   let body_doc = Mapper.map_doc (mk_mapper ()) cmarkit_doc in
   let body_doc = Div.rewrite_doc body_doc in
-  let body_doc = Struct.rewrite_doc body_doc in
+  let body_doc = if enable_struct then Struct.rewrite_doc body_doc else body_doc in
   match yaml_opt, Doc.block body_doc with
   | None, _ -> body_doc
   | Some yaml, Block.Blocks (blocks, meta) ->

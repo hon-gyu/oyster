@@ -27,6 +27,7 @@ module Graph_view = Vault_graph.Graph_view
 let render_vault
       ?(pipeline : Pipeline.t = Pipeline.default ())
       ?(theme : Theme.t = Theme.none)
+      ?(config = Config.default)
       ~(backend_blocks : bool)
       ~(safe : bool)
       (vault_root : string)
@@ -46,7 +47,7 @@ let render_vault
       then (
         let full_path = Filename.concat vault_root rel_path in
         let content = In_channel.read_all full_path in
-        let doc = Parse.of_string content in
+        let doc = Parse.of_string content ~config in
         pipeline.on_parse rel_path doc)
       else [])
   in
