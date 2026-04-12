@@ -524,10 +524,10 @@ let%test_module _ =
         foo: bar
         ```
         ```debug-view
-        foo: bar
+        K(foo, bar)
         ```
         ```sexp
-        (Paragraph (Text "foo: bar"))
+        (Keyed_block (Text foo) (Paragraph (Text bar)))
         ```
 
         Example 9: keyed_paragraph
