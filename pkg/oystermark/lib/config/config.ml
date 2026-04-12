@@ -232,6 +232,56 @@ let of_file (path : string) : t =
   or_default ~default t_of_yojson (J.from_string contents)
 ;;
 
+(* Per-file config from frontmatter
+   ================================ *)
+
+(** Convert a [Yaml.value] to [Yojson.Safe.t]. *)
+let rec yaml_to_yojson : Yaml.value -> J.t = function
+  | `Null -> `Null
+  | `Bool b -> `Bool b
+  | `Float f -> `Float f
+  | `String s -> `String s
+  | `A xs -> `List (List.map yaml_to_yojson xs)
+  | `O pairs -> `Assoc (List.map (fun (k, v) -> k, yaml_to_yojson v) pairs)
+;;
+
+(** Shallow-merge two JSON objects: keys in [overlay] override [base].
+    Non-object inputs: [overlay] wins. *)
+let rec merge_json (base : J.t) (overlay : J.t) : J.t =
+  match base, overlay with
+  | `Assoc base_fields, `Assoc overlay_fields ->
+    let merged =
+      List.fold_left
+        (fun acc (k, v) ->
+          let base_v = List.assoc_opt k acc in
+          let v' =
+            match base_v with
+            | Some bv -> merge_json bv v
+            | None -> v
+          in
+          (k, v') :: List.remove_assoc k acc)
+        base_fields
+        overlay_fields
+    in
+    `Assoc merged
+  | _, overlay -> overlay
+;;
+
+(** Extract per-file config from frontmatter YAML, merged over a base config.
+    Looks for an [oystermark] key in the frontmatter object. *)
+let of_frontmatter ~(base : t) (fm : Yaml.value option) : t =
+  match fm with
+  | None | Some `Null -> base
+  | Some (`O pairs) ->
+    (match List.assoc_opt "oyster" pairs with
+     | None -> base
+     | Some ov ->
+       let base_json = yojson_of_t base in
+       let overlay_json = yaml_to_yojson ov in
+       or_default ~default:base t_of_yojson (merge_json base_json overlay_json))
+  | Some _ -> base
+;;
+
 (* Wire-format contract with [static/graph_view/config.d.ts]
    ----------
    This expect-test pins the JSON shape that the OCaml side serializes for
@@ -255,6 +305,39 @@ let%expect_test "Home_graph_view wire format" =
       "default_tag": "none"
     }
     |}]
+;;
+
+let%expect_test "of_frontmatter overrides ext_struct" =
+  let fm : Yaml.value option =
+    Some
+      (`O
+        [ ( "oyster"
+          , `O [ "ext_struct", `O [ "struct_style", `String "graph" ] ] )
+        ])
+  in
+  let merged = of_frontmatter ~base:default fm in
+  merged |> yojson_of_t |> J.pretty_to_string |> print_endline;
+  [%expect
+    {|
+    {
+      "ext_struct": { "enable": true, "struct_style": "graph" },
+      "theme": "bluloco_dark",
+      "css_snippets": [],
+      "pipeline_profile": "default",
+      "home_graph_view": {
+        "dir": "all",
+        "tag": "all",
+        "default_dir": { "include": [ "*" ] },
+        "default_tag": "none"
+      }
+    }
+    |}]
+;;
+
+let%expect_test "of_frontmatter no oystermark key returns base" =
+  let fm : Yaml.value option = Some (`O [ "title", `String "Hello" ]) in
+  let merged = of_frontmatter ~base:default fm in
+  assert (merged = default)
 ;;
 
 let%expect_test "Config default" =
