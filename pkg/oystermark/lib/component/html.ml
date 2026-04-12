@@ -233,7 +233,60 @@ let render_callout
 
 module Heading_slug = Parse.Heading_slug
 
-let block (c : Cmarkit_renderer.context) : Block.t -> bool = function
+type struct_style =
+  [ `Plain (** label in a <p>, body as-is *)
+  | `Graph (** box/arrow layout mirroring the terminal graph *)
+  ]
+
+let render_struct_plain c label body =
+  C.string c "<div class=\"keyed\">\n<p>";
+  C.inline c label;
+  C.string c "</p>\n";
+  C.block c body;
+  C.string c "</div>\n"
+;;
+
+let render_struct_graph c label body =
+  let label_empty =
+    match label with
+    | Inline.Text ("", _) -> true
+    | _ -> false
+  in
+  let render_list_items l =
+    List.iter (Block.List'.items l) ~f:(fun (item, _) ->
+      C.block c (Block.List_item.block item))
+  in
+  match body with
+  | Block.List (l, _) ->
+    C.string c "<div class=\"keyed-box\">\n";
+    C.string c "<span class=\"keyed-box-title\">";
+    C.inline c label;
+    C.string c "</span>\n";
+    C.string c "<div class=\"keyed-box-body\">\n";
+    render_list_items l;
+    C.string c "</div>\n</div>\n"
+  | Block.Paragraph (p, _) ->
+    let cls = if label_empty then "keyed-entry keyed-entry--anon" else "keyed-entry" in
+    C.string c (sprintf "<div class=\"%s\">\n" cls);
+    if not label_empty then (
+      C.string c "<span class=\"keyed-label\">";
+      C.inline c label;
+      C.string c "</span>\n");
+    C.string c "<span class=\"keyed-value\">";
+    C.inline c (Block.Paragraph.inline p);
+    C.string c "</span>\n</div>\n"
+  | _ ->
+    C.string c "<div class=\"keyed-box\">\n";
+    C.string c "<span class=\"keyed-box-title\">";
+    C.inline c label;
+    C.string c "</span>\n";
+    C.string c "<div class=\"keyed-box-body\">\n";
+    C.block c body;
+    C.string c "</div>\n</div>\n"
+;;
+
+let block ~(struct_style : struct_style) (c : Cmarkit_renderer.context) : Block.t -> bool =
+  function
   | Block.Heading (h, meta) ->
     (match Meta.find Heading_slug.meta_key meta with
      | Some slug ->
@@ -273,11 +326,9 @@ let block (c : Cmarkit_renderer.context) : Block.t -> bool = function
     true
   | Parse.Struct.Ext_keyed_block ({ label }, body)
   | Parse.Struct.Ext_keyed_list_item ({ label }, body) ->
-    C.string c "<div class=\"keyed\">\n<p>";
-    C.inline c label;
-    C.string c "</p>\n";
-    C.block c body;
-    C.string c "</div>\n";
+    (match struct_style with
+     | `Plain -> render_struct_plain c label body
+     | `Graph -> render_struct_graph c label body);
     true
   | Block.Blocks (blocks, meta) ->
     (match Meta.find Embed.embed_meta_key meta with
@@ -290,14 +341,139 @@ let block (c : Cmarkit_renderer.context) : Block.t -> bool = function
   | _ -> false
 ;;
 
-let renderer ~(backend_blocks : bool) ~(safe : bool) () : Cmarkit_renderer.t =
-  let custom = Cmarkit_renderer.make ~inline ~block () in
+let renderer
+      ~(backend_blocks : bool)
+      ~(safe : bool)
+      ?(struct_style : struct_style = `Plain)
+      ()
+  : Cmarkit_renderer.t
+  =
+  let custom = Cmarkit_renderer.make ~inline ~block:(block ~struct_style) () in
   let default = Cmarkit_html.renderer ~backend_blocks ~safe () in
   Cmarkit_renderer.compose default custom
 ;;
 
-let of_doc ~(backend_blocks : bool) ~(safe : bool) (doc : Doc.t) : string =
-  Cmarkit_renderer.doc_to_string (renderer ~backend_blocks ~safe ()) doc
+let of_doc
+      ~(backend_blocks : bool)
+      ~(safe : bool)
+      ?(struct_style : struct_style = `Plain)
+      (doc : Doc.t)
+  : string
+  =
+  Cmarkit_renderer.doc_to_string (renderer ~backend_blocks ~safe ~struct_style ()) doc
+;;
+
+let%expect_test "struct_style: plain vs graph" =
+  let src =
+    {|
+Architecture:
+- : encoder–decoder
+- encoder:
+  - self-attention: multi-head
+  - feed-forward: position-wise MLP
+- decoder:
+  - masked self-attention:
+    - autoregressive
+    - attends positions ≤ i
+  - cross-attention: over encoder output
+|}
+  in
+  let doc = Parse.of_string src in
+  print_string (of_doc ~backend_blocks:false ~safe:false ~struct_style:`Plain doc);
+  print_string "---\n";
+  print_string (of_doc ~backend_blocks:false ~safe:false ~struct_style:`Graph doc);
+  [%expect {|
+    <div class="keyed">
+    <p>Architecture</p>
+    <ul>
+    <li>
+    <div class="keyed">
+    <p></p>
+    <p>encoder–decoder</p>
+    </div>
+    </li>
+    <li>
+    <div class="keyed">
+    <p>encoder</p>
+    <ul>
+    <li>
+    <div class="keyed">
+    <p>self-attention</p>
+    <p>multi-head</p>
+    </div>
+    </li>
+    <li>
+    <div class="keyed">
+    <p>feed-forward</p>
+    <p>position-wise MLP</p>
+    </div>
+    </li>
+    </ul>
+    </div>
+    </li>
+    <li>
+    <div class="keyed">
+    <p>decoder</p>
+    <ul>
+    <li>
+    <div class="keyed">
+    <p>masked self-attention</p>
+    <ul>
+    <li>autoregressive</li>
+    <li>attends positions ≤ i</li>
+    </ul>
+    </div>
+    </li>
+    <li>
+    <div class="keyed">
+    <p>cross-attention</p>
+    <p>over encoder output</p>
+    </div>
+    </li>
+    </ul>
+    </div>
+    </li>
+    </ul>
+    </div>
+    ---
+    <div class="keyed-box">
+    <span class="keyed-box-title">Architecture</span>
+    <div class="keyed-box-body">
+    <div class="keyed-entry keyed-entry--anon">
+    <span class="keyed-value">encoder–decoder</span>
+    </div>
+    <div class="keyed-box">
+    <span class="keyed-box-title">encoder</span>
+    <div class="keyed-box-body">
+    <div class="keyed-entry">
+    <span class="keyed-label">self-attention</span>
+    <span class="keyed-value">multi-head</span>
+    </div>
+    <div class="keyed-entry">
+    <span class="keyed-label">feed-forward</span>
+    <span class="keyed-value">position-wise MLP</span>
+    </div>
+    </div>
+    </div>
+    <div class="keyed-box">
+    <span class="keyed-box-title">decoder</span>
+    <div class="keyed-box-body">
+    <div class="keyed-box">
+    <span class="keyed-box-title">masked self-attention</span>
+    <div class="keyed-box-body">
+    <p>autoregressive</p>
+    <p>attends positions ≤ i</p>
+    </div>
+    </div>
+    <div class="keyed-entry">
+    <span class="keyed-label">cross-attention</span>
+    <span class="keyed-value">over encoder output</span>
+    </div>
+    </div>
+    </div>
+    </div>
+    </div>
+    |}]
 ;;
 
 let%test_module "don't throw" =
