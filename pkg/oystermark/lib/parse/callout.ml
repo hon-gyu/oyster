@@ -272,25 +272,94 @@ let block_map : Cmarkit.Block.t Cmarkit.Mapper.mapper =
   | _ -> Cmarkit.Mapper.default
 ;;
 
+module For_test = struct
+  let examples =
+    [ "[!info] Here's a callout title"
+    ; "[!tip]"
+    ; "[!faq]- Are callouts foldable?"
+    ; "[!note]+ Expanded"
+    ; "[!WARNING] Watch out"
+    ; "not a callout"
+    ; "[!] empty kind"
+    ]
+  ;;
+end
+
 let%expect_test "parse_header basic" =
+  let open For_test in
   let test s =
-    match parse_header s with
-    | Some (c, pos) -> printf !"%{sexp: t} @ %d" c pos
-    | None -> print_string "None"
+    print_endline "```md {#original}";
+    print_endline s;
+    print_endline "```";
+    print_endline "```sexp";
+    (match parse_header s with
+     | Some (c, pos) -> printf !"%{sexp: t} @ %d" c pos
+     | None -> print_string "None");
+    print_endline "\n```"
   in
-  test "[!info] Here's a callout title";
-  [%expect {| ((kind info) (fold ()) (title "Here's a callout title")) @ 30 |}];
-  test "[!tip]";
-  [%expect {| ((kind tip) (fold ()) (title Tip)) @ 6 |}];
-  test "[!faq]- Are callouts foldable?";
-  [%expect
-    {| ((kind faq) (fold (Foldable_closed)) (title "Are callouts foldable?")) @ 30 |}];
-  test "[!note]+ Expanded";
-  [%expect {| ((kind note) (fold (Foldable_open)) (title Expanded)) @ 17 |}];
-  test "[!WARNING] Watch out";
-  [%expect {| ((kind warning) (fold ()) (title "Watch out")) @ 20 |}];
-  test "not a callout";
-  [%expect {| None |}];
-  test "[!] empty kind";
-  [%expect {| None |}]
+  List.iter examples ~f:(fun src -> test src; print_endline "\n---\n";);
+  [%expect {|
+    ```md {#original}
+    [!info] Here's a callout title
+    ```
+    ```sexp
+    ((kind info) (fold ()) (title "Here's a callout title")) @ 30
+    ```
+
+    ---
+
+    ```md {#original}
+    [!tip]
+    ```
+    ```sexp
+    ((kind tip) (fold ()) (title Tip)) @ 6
+    ```
+
+    ---
+
+    ```md {#original}
+    [!faq]- Are callouts foldable?
+    ```
+    ```sexp
+    ((kind faq) (fold (Foldable_closed)) (title "Are callouts foldable?")) @ 30
+    ```
+
+    ---
+
+    ```md {#original}
+    [!note]+ Expanded
+    ```
+    ```sexp
+    ((kind note) (fold (Foldable_open)) (title Expanded)) @ 17
+    ```
+
+    ---
+
+    ```md {#original}
+    [!WARNING] Watch out
+    ```
+    ```sexp
+    ((kind warning) (fold ()) (title "Watch out")) @ 20
+    ```
+
+    ---
+
+    ```md {#original}
+    not a callout
+    ```
+    ```sexp
+    None
+    ```
+
+    ---
+
+    ```md {#original}
+    [!] empty kind
+    ```
+    ```sexp
+    None
+    ```
+
+    ---
+    |}]
 ;;
