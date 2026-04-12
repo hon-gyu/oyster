@@ -399,6 +399,8 @@ let%test_module "Callout" =
         |}]
     ;;
 
-    let%test_unit "dont' throw" = List.iter examples_with_body ~f:(fun src -> test src)
+    let%test_unit "dont' throw" =
+      List.iter examples_with_body ~f:(fun src -> ignore (test src))
+    ;;
   end)
 ;;
