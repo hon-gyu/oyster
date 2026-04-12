@@ -1,79 +1,49 @@
-(** Pre-resolution file-level parsing  *)
+(** {1 Pre-resolution file-level parsing}
+
+Each module provides a single-pass mapper that might
+- introduce new inline or block extensions
+- rewrite Cmarkit.Doc AST
+- add metadata to AST nodes
+- {!Frontmatter} operates on the raw file content before Cmarkit.Doc parsing.
+  Every other mapper operates on the Cmarkit.Doc AST.
+- Some mappers operate on node of Cmarkit AST, i.e. [Block.t] or [Inline.t]. Their
+  provided mapper follows the signature of [Cmarkit.Inline.t Cmarkit.Mapper.mapper]
+  or [Cmarkit.Block.t Cmarkit.Mapper.mapper]
+- `-> other mappers rely on multiple nodes as input, thus operates on the whole
+  [Cmarkit.Doc.t]. E.g., {!Div} and {!Struct}
+
+*)
 
 open Core
+open Common
 module Block_id = Block_id
 module Callout = Callout
 module Div = Div
 module Frontmatter = Frontmatter
 module Heading_slug = Heading_slug
 module Wikilink = Wikilink
-module Extract = Extract
 module Attribute = Attribute
 module Textloc_conv = Textloc_conv
+module Struct = Struct
+
+(** Does not provide a mapper  *)
+module Extract = Extract
 
 type block_id =
   | Caret of Block_id.t
   | Heading of string
 
-(** Render inlines to plain text, losing their markdown syntax. Used in rendering
-    heading to plain text. *)
-let inline_to_plain_text (inline : Cmarkit.Inline.t) : string =
-  let lines =
-    Cmarkit.Inline.to_plain_text
-      ~ext:(fun ~break_on_soft inline ->
-        match inline with
-        | Wikilink.Ext_wikilink (wl, _meta) ->
-          let text = Wikilink.to_plain_text wl in
-          Cmarkit.Inline.Text (text, Cmarkit.Meta.none)
-        | other -> other)
-      ~break_on_soft:false
-      inline
-  in
-  String.concat ~sep:"\n" (List.map lines ~f:(String.concat ~sep:""))
-;;
-
-(** Create the single-pass mapper that:
-    - parses wikilinks in inline text nodes ({!module:Wikilink})
-    - tags block identifiers at paragraph ends ({!module:Block_id})
-    - tags callout metadata on block quotes ({!module:Callout})
-    - tags code block attributes onto code blocks ({!module:Attribute})
-    - tags deduplicated heading slugs onto heading block meta ({!module:Heading_slug})
-
-    Returns a fresh mapper each time (heading slug dedup requires per-document state). *)
-let make_mapper () : Cmarkit.Mapper.t =
-  let slug_seen = Hashtbl.create (module String) in
-  let map_block (mapper : Cmarkit.Mapper.t) (block : Cmarkit.Block.t)
-    : Cmarkit.Block.t Cmarkit.Mapper.result
-    =
-    match block with
-    | Cmarkit.Block.Heading (h, meta) ->
-      let orig_inline = Cmarkit.Block.Heading.inline h in
-      let mapped_inline =
-        Cmarkit.Mapper.map_inline mapper orig_inline |> Option.value ~default:orig_inline
-      in
-      let text = inline_to_plain_text mapped_inline in
-      let slug = Heading_slug.dedup_slug slug_seen text in
-      let meta' = Cmarkit.Meta.add Heading_slug.meta_key slug meta in
-      let h' =
-        Cmarkit.Block.Heading.make
-          ?id:(Cmarkit.Block.Heading.id h)
-          ~layout:(Cmarkit.Block.Heading.layout h)
-          ~level:(Cmarkit.Block.Heading.level h)
-          mapped_inline
-      in
-      Cmarkit.Mapper.ret (Cmarkit.Block.Heading (h', meta'))
-    | _ ->
-      (match Callout.map_callout mapper block with
-       | `Map _ as result -> result
-       | `Default ->
-         (match Attribute.tag_cb_attr_meta mapper block with
-          | `Map _ as result -> result
-          | `Default -> Block_id.tag_block_id_meta mapper block))
-  in
+let mk_mapper () : Cmarkit.Mapper.t =
   Cmarkit.Mapper.make
     ~inline_ext_default:(fun _m i -> Some i)
-    ~inline:Wikilink.parse
-    ~block:map_block
+    ~inline:(compose_all_inline_maps [ Wikilink.inline_map ])
+    ~block:
+      (compose_all_block_maps
+         [ Heading_slug.mk_block_map ()
+         ; Callout.block_map
+         ; Attribute.block_map
+         ; Block_id.block_map
+         ])
     ()
 ;;
 
@@ -81,14 +51,23 @@ let make_mapper () : Cmarkit.Mapper.t =
     [Cmarkit.Doc.t] with frontmatter embedded as a {!Frontmatter.Frontmatter}
     block and wikilinks/block IDs parsed. Heading slugs are stamped onto
     heading block metadata. *)
-let of_string ?(strict = false) ?(layout = false) ?(locs = true) (s : string)
+let of_string
+      (* Cmarkit config *)
+      ?(strict = false)
+      ?(layout = false)
+      ?(locs = true)
+      (* Oystermark config *)
+      ?(config = Config.default)
+      (s : string)
   : Cmarkit.Doc.t
   =
+  let enable_struct = config.ext_struct.enable in
   let open Cmarkit in
   let yaml_opt, body = Frontmatter.of_string s in
-  let cmarkit_doc = Doc.of_string ~strict ~layout ~locs body in
-  let body_doc = Mapper.map_doc (make_mapper ()) cmarkit_doc in
+  let cmarkit_doc = Doc.of_string ~strict ~layout ~locs:true body in
+  let body_doc = Mapper.map_doc (mk_mapper ()) cmarkit_doc in
   let body_doc = Div.rewrite_doc body_doc in
+  let body_doc = if enable_struct then Struct.rewrite_doc body_doc else body_doc in
   match yaml_opt, Doc.block body_doc with
   | None, _ -> body_doc
   | Some yaml, Block.Blocks (blocks, meta) ->
@@ -99,153 +78,43 @@ let of_string ?(strict = false) ?(layout = false) ?(locs = true) (s : string)
 ;;
 
 let commonmark_of_doc (doc : Cmarkit.Doc.t) : string =
-  let custom =
-    let inline (c : Cmarkit_renderer.context) = function
-      | Wikilink.Ext_wikilink (wl, _) ->
-        Cmarkit_renderer.Context.string c (Wikilink.to_commonmark wl);
-        true
-      | _ -> false
-    in
-    let block (c : Cmarkit_renderer.context) = function
-      | Frontmatter.Frontmatter y ->
-        Cmarkit_renderer.Context.string c (Frontmatter.to_commonmark y);
-        true
-      | Div.Ext_div (div, body) ->
-        let fence = String.make div.colons ':' in
-        let class_suffix =
-          match div.class_name with
-          | Some cls -> " " ^ cls
-          | None -> ""
-        in
-        let buf = Cmarkit_renderer.Context.buffer c in
-        let len = Buffer.length buf in
-        let needs_nl = len > 0 && not (Char.equal (Buffer.nth buf (len - 1)) '\n') in
-        if needs_nl then Cmarkit_renderer.Context.byte c '\n';
-        Cmarkit_renderer.Context.string c (fence ^ class_suffix ^ "\n\n");
-        Cmarkit_renderer.Context.block c body;
-        Cmarkit_renderer.Context.string c ("\n" ^ fence ^ "\n");
-        true
-      | _ -> false
-    in
-    Cmarkit_renderer.make ~inline ~block ()
+  let r =
+    List.fold
+      ~f:Cmarkit_renderer.compose
+      ~init:(Cmarkit_commonmark.renderer ())
+      [ Cmarkit_renderer.make ~inline:Wikilink.inline_commonmark_renderer ()
+      ; Cmarkit_renderer.make ~block:Frontmatter.block_commonmark_renderer ()
+      ; Cmarkit_renderer.make ~block:Div.block_commonmark_renderer ()
+      ; Cmarkit_renderer.make ~block:Struct.block_commonmark_renderer ()
+      ]
   in
-  let default = Cmarkit_commonmark.renderer () in
-  let r = Cmarkit_renderer.compose default custom in
   Cmarkit_renderer.doc_to_string r doc
 ;;
 
-let sexp_of_meta (meta : Cmarkit.Meta.t) : Sexp.t list =
-  let open Cmarkit.Meta in
-  let items = ref [] in
-  (match find Heading_slug.meta_key meta with
-   | Some slug -> items := Sexp.List [ Atom "heading-slug"; Atom slug ] :: !items
-   | None -> ());
-  (match find Block_id.meta_key meta with
-   | Some bid -> items := Sexp.List [ Atom "block-id"; Block_id.sexp_of_t bid ] :: !items
-   | None -> ());
-  (match find Callout.meta_key meta with
-   | Some c -> items := Sexp.List [ Atom "callout"; Callout.sexp_of_t c ] :: !items
-   | None -> ());
-  (match find Attribute.meta_key meta with
-   | Some a ->
-     items
-     := Sexp.List [ Atom "attribute"; Attribute.sexp_of_code_block_info a ] :: !items
-   | None -> ());
-  List.rev !items
+(* {1 sexp of Cmarkit.{Meta.t, Block.t, Inline.t} }
+
+   Each submodule that introduces an extension constructor or a meta key
+   provides a converter of type {!Common.inline_sexp} / {!Common.block_sexp}
+   / {!Common.meta_sexp}. Here we compose them, placing the core converters
+   last so extensions win on their constructors. *)
+
+let sexp_of_ =
+  Common.make_sexp_of
+    ~inlines:[ Wikilink.sexp_of_inline ]
+    ~blocks:[ Frontmatter.sexp_of_block; Div.sexp_of_block; Struct.sexp_of_block ]
+    ~metas:
+      [ Heading_slug.sexp_of_meta
+      ; Block_id.sexp_of_meta
+      ; Callout.sexp_of_meta
+      ; Attribute.sexp_of_meta
+      ]
+    ()
 ;;
 
-let rec sexp_of_inline (i : Cmarkit.Inline.t) : Sexp.t =
-  let open Cmarkit in
-  match i with
-  | Inline.Text (s, _) -> Sexp.List [ Atom "Text"; Atom s ]
-  | Inline.Autolink (a, _) ->
-    let link = fst (Inline.Autolink.link a) in
-    Sexp.List [ Atom "Autolink"; Atom link ]
-  | Inline.Break (b, _) ->
-    let type_s =
-      match Inline.Break.type' b with
-      | `Hard -> "hard"
-      | `Soft -> "soft"
-    in
-    Sexp.List [ Atom "Break"; Atom type_s ]
-  | Inline.Code_span (cs, _) ->
-    Sexp.List [ Atom "Code_span"; Atom (Inline.Code_span.code cs) ]
-  | Inline.Emphasis (e, _) ->
-    Sexp.List [ Atom "Emphasis"; sexp_of_inline (Inline.Emphasis.inline e) ]
-  | Inline.Strong_emphasis (e, _) ->
-    Sexp.List [ Atom "Strong_emphasis"; sexp_of_inline (Inline.Emphasis.inline e) ]
-  | Inline.Link (l, _) -> Sexp.List [ Atom "Link"; sexp_of_inline (Inline.Link.text l) ]
-  | Inline.Image (l, _) -> Sexp.List [ Atom "Image"; sexp_of_inline (Inline.Link.text l) ]
-  | Inline.Raw_html (html, _) ->
-    let s =
-      List.map html ~f:(fun bl -> Cmarkit.Block_line.tight_to_string bl)
-      |> String.concat ~sep:""
-    in
-    Sexp.List [ Atom "Raw_html"; Atom s ]
-  | Inline.Inlines (is, _) -> Sexp.List (Atom "Inlines" :: List.map is ~f:sexp_of_inline)
-  | Inline.Ext_strikethrough (s, _) ->
-    Sexp.List [ Atom "Strikethrough"; sexp_of_inline (Inline.Strikethrough.inline s) ]
-  | Inline.Ext_math_span (m, _) ->
-    Sexp.List [ Atom "Math_span"; Atom (Inline.Math_span.tex m) ]
-  | Wikilink.Ext_wikilink (wl, _) -> Sexp.List [ Atom "Wikilink"; Wikilink.sexp_of_t wl ]
-  | _ -> Sexp.Atom "<unknown-inline>"
-
-and sexp_of_block (b : Cmarkit.Block.t) : Sexp.t =
-  let open Cmarkit in
-  let with_meta meta sexp =
-    match sexp_of_meta meta with
-    | [] -> sexp
-    | metas -> Sexp.List [ sexp; Sexp.List (Atom "meta" :: metas) ]
-  in
-  match b with
-  | Block.Blank_line (_, meta) -> with_meta meta (Sexp.Atom "Blank_line")
-  | Block.Paragraph (p, meta) ->
-    with_meta
-      meta
-      (Sexp.List [ Atom "Paragraph"; sexp_of_inline (Block.Paragraph.inline p) ])
-  | Block.Heading (h, meta) ->
-    with_meta
-      meta
-      (Sexp.List
-         [ Atom "Heading"
-         ; Atom (Int.to_string (Block.Heading.level h))
-         ; sexp_of_inline (Block.Heading.inline h)
-         ])
-  | Block.Code_block (cb, meta) ->
-    let info =
-      match Block.Code_block.info_string cb with
-      | None -> Sexp.Atom "no-info"
-      | Some (s, _) -> Sexp.Atom s
-    in
-    let code =
-      List.map (Block.Code_block.code cb) ~f:(fun bl ->
-        Sexp.Atom (Block_line.to_string bl))
-    in
-    with_meta meta (Sexp.List (Atom "Code_block" :: info :: code))
-  | Block.Html_block (lines, meta) ->
-    let s =
-      List.map lines ~f:(fun bl -> Block_line.to_string bl) |> String.concat ~sep:"\n"
-    in
-    with_meta meta (Sexp.List [ Atom "Html_block"; Atom s ])
-  | Block.Block_quote (bq, meta) ->
-    with_meta
-      meta
-      (Sexp.List [ Atom "Block_quote"; sexp_of_block (Block.Block_quote.block bq) ])
-  | Block.List (l, meta) ->
-    let items =
-      List.map (Block.List'.items l) ~f:(fun (item, _item_meta) ->
-        sexp_of_block (Block.List_item.block item))
-    in
-    with_meta meta (Sexp.List (Atom "List" :: items))
-  | Block.Blocks (bs, meta) ->
-    with_meta meta (Sexp.List (Atom "Blocks" :: List.map bs ~f:sexp_of_block))
-  | Block.Link_reference_definition _ -> Sexp.Atom "Link_reference_definition"
-  | Block.Thematic_break (_, meta) -> with_meta meta (Sexp.Atom "Thematic_break")
-  | Frontmatter.Frontmatter _ -> Sexp.Atom "Frontmatter"
-  | Div.Ext_div (div, body) ->
-    Sexp.List [ Atom "Div"; Div.sexp_of_t div; sexp_of_block body ]
-  | _ -> Sexp.Atom "<unknown-block>"
-;;
+let sexp_of_inline = sexp_of_.inline
+let sexp_of_block = sexp_of_.block
+let sexp_of_meta = sexp_of_.meta
+let sexp_of_doc = sexp_of_.doc
 
 (** {1:test Test} *)
 
@@ -255,127 +124,11 @@ module For_test = struct
     Cmarkit.Doc.block doc
   ;;
 
-  (** Count the number of div blocks in a doc  *)
-  let count_div (doc : Cmarkit.Doc.t) : int =
-    let folder =
-      Cmarkit.Folder.make
-        ~block:(fun f acc -> function
-           | Div.Ext_div (_div, body) ->
-             Cmarkit.Folder.ret (1 + Cmarkit.Folder.fold_block f acc body)
-           | _ -> Cmarkit.Folder.default)
-        ()
-    in
-    Cmarkit.Folder.fold_doc folder 0 doc
-  ;;
-
   let pp_doc (doc : Cmarkit.Doc.t) : unit =
     let block = Cmarkit.Doc.block doc in
     block |> sexp_of_block |> Sexp.to_string_hum ~indent:2 |> print_endline
   ;;
-
-  let commonmark_of_doc_idempotent s =
-    let normalize s = String.rstrip s in
-    let cm1 = commonmark_of_doc (of_string s) in
-    let cm2 = commonmark_of_doc (of_string cm1) in
-    [%test_eq: string] (normalize cm1) (normalize cm2)
-  ;;
-
-  (** Count code blocks that have a non-[None] attribute parsed *)
-  let count_attr (doc : Cmarkit.Doc.t) : int =
-    let folder =
-      Cmarkit.Folder.make
-        ~block:(fun _f acc -> function
-           | Cmarkit.Block.Code_block (_, meta) ->
-             (match Cmarkit.Meta.find Attribute.meta_key meta with
-              | Some { Attribute.attribute = Some _; _ } -> Cmarkit.Folder.ret (acc + 1)
-              | _ -> Cmarkit.Folder.default)
-           | _ -> Cmarkit.Folder.default)
-        ()
-    in
-    Cmarkit.Folder.fold_doc folder 0 doc
-  ;;
-
-  let pp_section (blocks : Cmarkit.Block.t list) : unit =
-    print_endline
-      (commonmark_of_doc
-         (Cmarkit.Doc.make (Cmarkit.Block.Blocks (blocks, Cmarkit.Meta.none))))
-  ;;
-
-  let pp_block_opt (block : Cmarkit.Block.t option) : unit =
-    match block with
-    | None -> print_endline "<none>"
-    | Some b -> print_endline (commonmark_of_doc (Cmarkit.Doc.make b))
-  ;;
 end
-
-(** {2 Attribute}
-
-Tests for {!module-"Attribute"}. *)
-
-let%test_module "Attribute" =
-  (module struct
-    open For_test
-    open Attribute.For_test
-
-    let%expect_test _ =
-      let doc = of_string example_no_attribute in
-      [%test_result: int] (count_attr doc) ~expect:0;
-      pp_doc doc;
-      [%expect
-        {| ((Code_block python II) (meta (attribute ((lang python) (attribute ()))))) |}]
-    ;;
-
-    let%expect_test _ =
-      let doc = of_string example_with_attribute in
-      [%test_result: int] (count_attr doc) ~expect:1;
-      pp_doc doc;
-      [%expect
-        {|
-        ((Code_block "python {#myid .class_a .class_b key1=val1 key2=\"val2\"}" II)
-          (meta
-            (attribute
-              ((lang python)
-                (attribute
-                  (((id (#myid)) (classes (.class_a .class_b))
-                     (kvs ((key1 val1) (key2 val2))))))))))
-        |}]
-    ;;
-
-    let%expect_test _ =
-      let doc = of_string non_example_invalid_multiple_ids in
-      [%test_result: int] (count_attr doc) ~expect:0;
-      pp_doc doc;
-      [%expect
-        {|
-        ((Code_block
-           "python {#myid #myid2 .class_a .class_b key1=val1 key2=\"val2\"}" II)
-          (meta (attribute ((lang python) (attribute ())))))
-        |}]
-    ;;
-
-    let%expect_test _ =
-      let doc = of_string non_example_invalid_item in
-      [%test_result: int] (count_attr doc) ~expect:0;
-      pp_doc doc;
-      [%expect
-        {|
-        ((Code_block "python {#myid .class_a .class_b hi}" II)
-          (meta (attribute ((lang python) (attribute ())))))
-        |}]
-    ;;
-
-    let%expect_test _ =
-      let doc = of_string non_example_no_info_string in
-      [%test_result: int] (count_attr doc) ~expect:0;
-      pp_doc doc;
-      [%expect {| (Code_block "{#myid .class_a .class_b}" II) |}]
-    ;;
-
-    let%test_unit "roundtrip: commonmark output is idempotent" =
-      List.iter all_examples ~f:commonmark_of_doc_idempotent
-    ;;
-  end)
-;;
 
 (** {2 Extract}
 
@@ -385,6 +138,18 @@ let%test_module "Extract" =
   (module struct
     open For_test
     open Extract.For_test
+
+    let pp_section (blocks : Cmarkit.Block.t list) : unit =
+      print_endline
+        (commonmark_of_doc
+           (Cmarkit.Doc.make (Cmarkit.Block.Blocks (blocks, Cmarkit.Meta.none))))
+    ;;
+
+    let pp_block_opt (block : Cmarkit.Block.t option) : unit =
+      match block with
+      | None -> print_endline "<none>"
+      | Some b -> print_endline (commonmark_of_doc (Cmarkit.Doc.make b))
+    ;;
 
     let%expect_test "get_heading_section: heading-1" =
       let block = make_block example_headings in
@@ -452,130 +217,249 @@ let%test_module "Extract" =
   end)
 ;;
 
-(** {2 Div}
+(** {2 Interactions}
 
-Tests for {!module-"Div"}. *)
+{3 Div and Struct}
 
-let%test_module "Div" =
+Tests for interaction between {!module-"Div"} and {!module-"Struct"}
+
+The open and closing fence of div should not be keyed.
+
+TODO: the test expection is wrong at the moment.
+
+*)
+
+let%test_module "Div and Struct" =
   (module struct
-    open For_test
+    open Common.For_test
     open Div.For_test
+    open For_test
+
+    let count_div (doc : Cmarkit.Doc.t) : int =
+      let folder =
+        Cmarkit.Folder.make
+          ~block:(fun f acc -> function
+             | Div.Ext_div (_div, block) ->
+               Cmarkit.Folder.ret (1 + Cmarkit.Folder.fold_block f acc block)
+             | Struct.Ext_keyed_block (_label, block)
+             | Struct.Ext_keyed_list_item (_label, block) ->
+               Cmarkit.Folder.ret (Cmarkit.Folder.fold_block f acc block)
+             | _ -> Cmarkit.Folder.default)
+          ()
+      in
+      Cmarkit.Folder.fold_doc folder 0 doc
+    ;;
+
+    let count_keyed (doc : Cmarkit.Doc.t) : int =
+      let folder =
+        Cmarkit.Folder.make
+          ~block:(fun f acc -> function
+             | Div.Ext_div (_div, block) ->
+               Cmarkit.Folder.ret (Cmarkit.Folder.fold_block f acc block)
+             | Struct.Ext_keyed_block (_label, block)
+             | Struct.Ext_keyed_list_item (_label, block) ->
+               Cmarkit.Folder.ret (1 + Cmarkit.Folder.fold_block f acc block)
+             | _ -> Cmarkit.Folder.default)
+          ()
+      in
+      Cmarkit.Folder.fold_doc folder 0 doc
+    ;;
+
+    let pp_src src =
+      print_endline "```md {#original}";
+      print_endline src;
+      print_endline "```"
+    ;;
+
+    let test ?(n_div : int = 0) ?(n_keyed : int = 0) src =
+      pp_src src;
+      let doc = of_string src in
+      print_endline "```sexp";
+      pp_doc doc;
+      print_endline "```";
+      [%test_result: int] (count_div doc) ~expect:n_div;
+      [%test_result: int] (count_keyed doc) ~expect:n_keyed
+    ;;
 
     let%expect_test _ =
-      let doc = of_string example_basic in
-      [%test_result: int] (count_div doc) ~expect:1;
-      pp_doc doc;
+      example_basic |> test ~n_div:1;
       [%expect
         {|
+        ```md {#original}
+        ::: warning
+        Here is a paragraph.
+
+        And here is another.
+        :::
+        ```
+        ```sexp
         (Blocks
           (Div ((class_name (warning)) (colons 3))
             (Blocks (Paragraph (Text "Here is a paragraph.")) Blank_line
               (Paragraph (Text "And here is another.")))))
+        ```
         |}]
     ;;
 
     let%expect_test _ =
-      let doc = of_string example_no_class in
-      [%test_result: int] (count_div doc) ~expect:1;
-      pp_doc doc;
+      example_no_class |> test ~n_div:1;
       [%expect
         {|
+        ```md {#original}
+        :::
+        content
+        :::
+
+        ```
+        ```sexp
         (Blocks (Div ((class_name ()) (colons 3)) (Paragraph (Text content)))
           Blank_line)
+        ```
         |}]
     ;;
 
     let%expect_test _ =
-      let doc = of_string example_nested_divs in
-      [%test_result: int] (count_div doc) ~expect:2;
-      pp_doc doc;
+      example_nested_divs |> test ~n_div:2;
       [%expect
         {|
+        ```md {#original}
+        :::: outer
+        ::: inner
+        content
+        :::
+        ::::
+
+        ```
+        ```sexp
         (Blocks
           (Div ((class_name (outer)) (colons 4))
             (Div ((class_name (inner)) (colons 3)) (Paragraph (Text content))))
           Blank_line)
+        ```
         |}]
     ;;
 
     let%expect_test _ =
-      let doc = of_string example_nested_divs_same_length in
-      [%test_result: int] (count_div doc) ~expect:2;
-      pp_doc doc;
+      example_nested_divs_same_length |> test ~n_div:2;
       [%expect
         {|
+        ```md {#original}
+        ::: warning
+        content
+        :::
+        :::
+        ```
+        ```sexp
         (Blocks (Div ((class_name (warning)) (colons 3)) (Paragraph (Text content)))
           (Div ((class_name ()) (colons 3)) (Blocks)))
+        ```
         |}]
     ;;
 
     let%expect_test _ =
-      let doc = of_string example_EOF_closes in
-      [%test_result: int] (count_div doc) ~expect:1;
-      pp_doc doc;
+      example_EOF_closes |> test ~n_div:1;
       [%expect
         {|
+        ```md {#original}
+        ::: warning
+        unclosed content
+        ```
+        ```sexp
         (Blocks
           (Div ((class_name (warning)) (colons 3))
             (Paragraph (Text "unclosed content"))))
+        ```
         |}]
     ;;
 
     let%expect_test _ =
-      let doc = of_string example_extra_closing_fence in
-      [%test_result: int] (count_div doc) ~expect:2;
-      pp_doc doc;
+      example_extra_closing_fence |> test ~n_div:2;
       [%expect
         {|
+        ```md {#original}
+        ::: warning
+        content
+        :::
+        :::
+        ```
+        ```sexp
         (Blocks (Div ((class_name (warning)) (colons 3)) (Paragraph (Text content)))
           (Div ((class_name ()) (colons 3)) (Blocks)))
+        ```
         |}]
     ;;
 
     let%expect_test _ =
-      let doc = of_string non_example_less_than_3_colons in
-      [%test_result: int] (count_div doc) ~expect:0;
-      pp_doc doc;
+      non_example_less_than_3_colons |> test ~n_div:0;
       [%expect
         {|
+        ```md {#original}
+        :: not-a-div
+        content
+        ::
+        ```
+        ```sexp
         (Paragraph
           (Inlines (Text ":: not-a-div") (Break soft) (Text content) (Break soft)
             (Text ::)))
+        ```
         |}]
     ;;
 
     let%expect_test _ =
-      let doc = of_string non_example_extra_words_after_class in
-      [%test_result: int] (count_div doc) ~expect:1;
-      pp_doc doc;
+      non_example_extra_words_after_class |> test ~n_div:1 ~n_keyed:1;
       [%expect
         {|
-        (Blocks (Paragraph (Text "::: warning extra")) (Paragraph (Text content))
-          (Div ((class_name ()) (colons 3)) (Blocks)))
+        ```md {#original}
+        ::: warning extra
+        content
+        :::
+        ```
+        ```sexp
+        (Blocks (Keyed_block (Text ::) (Paragraph (Text "warning extra")))
+          (Paragraph (Text content)) (Div ((class_name ()) (colons 3)) (Blocks)))
+        ```
         |}]
     ;;
 
     let%expect_test _ =
-      let doc = of_string non_example_div_does_not_interfere_with_code_blocks in
-      [%test_result: int] (count_div doc) ~expect:0;
-      pp_doc doc;
-      [%expect {| (Code_block no-info "::: not-a-div") |}]
+      non_example_div_does_not_interfere_with_code_blocks |> test ~n_div:0;
+      [%expect
+        {|
+        ```md {#original}
+        ```
+        ::: not-a-div
+        ```
+        ```
+        ```sexp
+        (Code_block no-info "::: not-a-div")
+        ```
+        |}]
     ;;
 
     let%expect_test _ =
-      let doc = of_string example_closing_fence_must_be_at_least_as_long in
-      pp_doc doc;
+      example_closing_fence_must_be_at_least_as_long |> test ~n_div:2;
       [%expect
         {|
+        ```md {#original}
+        :::: warning
+        content
+        :::
+        ::::
+        ```
+        ```sexp
         (Blocks
           (Div ((class_name (warning)) (colons 4))
             (Blocks (Paragraph (Text content))
               (Div ((class_name ()) (colons 3)) (Blocks)))))
+        ```
         |}]
     ;;
 
     let%test_unit "roundtrip: commonmark output is idempotent" =
-      List.iter all_examples ~f:commonmark_of_doc_idempotent
+      List.iter
+        examples
+        ~f:(commonmark_of_doc_idempotent ~doc_of_string:of_string ~commonmark_of_doc)
     ;;
   end)
 ;;

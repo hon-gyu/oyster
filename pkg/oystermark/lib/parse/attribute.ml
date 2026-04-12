@@ -1,12 +1,14 @@
-(** Pandoc code block attribute parsing.
-    Implements {!page-"pandoc-attribute"}
+(** {1 Pandoc code block attribute parsing}
 
-    Attribute will be attached to the code block if it can be parsed out.
+    - Implements {!page-"pandoc-attribute"}
+    - Attribute will be attached to the metadata code block if it can be parsed out.
+    - Only codeblock's metadata will be changed.
 
-    Note: we didn't really consider the number of spaces between cmark info string and attribute.
+    Note: we didn't really consider the number of spaces between cmark info string (lang) and attribute.
 *)
 open Core
 
+open Common
 open Cmarkit
 
 type t =
@@ -25,6 +27,12 @@ type code_block_info =
 
 let empty = { id = None; classes = []; kvs = [] }
 let meta_key : code_block_info Cmarkit.Meta.key = Cmarkit.Meta.key ()
+
+let sexp_of_meta : Common.meta_sexp =
+  fun meta ->
+  Cmarkit.Meta.find meta_key meta
+  |> Option.map ~f:(fun a -> Sexp.List [ Atom "attribute"; sexp_of_code_block_info a ])
+;;
 
 let strip_paired_double_quotes (s : string) : string =
   if
@@ -90,7 +98,8 @@ let of_string_exn (s : string) : t =
     Invariant: whenever a [code_block_info] is attached, [lang] is a non-empty string.
     Callers can therefore match on [Meta.find meta_key meta] and rely on [lang] always
     being meaningful — there is no need for [lang : string option]. *)
-let tag_cb_attr_meta (mapper : Mapper.t) (b : Block.t) : Block.t Mapper.result =
+let block_map : Block.t Mapper.mapper =
+  fun (mapper : Mapper.t) (b : Block.t) : Block.t Mapper.result ->
   match b with
   | Cmarkit.Block.Code_block (cb, cb_meta) ->
     (match Block.Code_block.info_string cb with
@@ -123,6 +132,21 @@ let tag_cb_attr_meta (mapper : Mapper.t) (b : Block.t) : Block.t Mapper.result =
 ;;
 
 module For_test = struct
+  (** Count code blocks that have a non-[None] attribute parsed *)
+  let count_attr (doc : Cmarkit.Doc.t) : int =
+    let folder =
+      Cmarkit.Folder.make
+        ~block:(fun _f acc -> function
+           | Cmarkit.Block.Code_block (_, meta) ->
+             (match Cmarkit.Meta.find meta_key meta with
+              | Some { attribute = Some _; _ } -> Cmarkit.Folder.ret (acc + 1)
+              | _ -> Cmarkit.Folder.default)
+           | _ -> Cmarkit.Folder.default)
+        ()
+    in
+    Cmarkit.Folder.fold_doc folder 0 doc
+  ;;
+
   let example_no_attribute =
     {|```python
 II
@@ -153,7 +177,7 @@ II
 ```|}
   ;;
 
-  let all_examples =
+  let examples =
     [ example_no_attribute
     ; example_with_attribute
     ; non_example_invalid_multiple_ids
@@ -187,6 +211,79 @@ let%test_module "parse attribute" =
     let%expect_test "invalid attribute: invalid syntax" =
       parse {|#myid .class_a .class_b key1=val1 key2="val2" hi|};
       [%expect {| (Error "Invalid attributes: hi") |}]
+    ;;
+  end)
+;;
+
+let%test_module "Doc" =
+  (module struct
+    open Common.For_test
+    open For_test
+
+    let doc_of_string s = mk_doc_of_string ~block:block_map () s
+    let pp_doc doc = mk_pp_doc ~metas:[ sexp_of_meta ] () doc
+
+    let%expect_test _ =
+      let doc = doc_of_string example_no_attribute in
+      [%test_result: int] (count_attr doc) ~expect:0;
+      pp_doc doc;
+      [%expect
+        {| ((Code_block python II) (meta (attribute ((lang python) (attribute ()))))) |}]
+    ;;
+
+    let%expect_test _ =
+      let doc = doc_of_string example_with_attribute in
+      [%test_result: int] (count_attr doc) ~expect:1;
+      pp_doc doc;
+      [%expect
+        {|
+        ((Code_block "python {#myid .class_a .class_b key1=val1 key2=\"val2\"}" II)
+          (meta
+            (attribute
+              ((lang python)
+                (attribute
+                  (((id (#myid)) (classes (.class_a .class_b))
+                     (kvs ((key1 val1) (key2 val2))))))))))
+        |}]
+    ;;
+
+    let%expect_test _ =
+      let doc = doc_of_string non_example_invalid_multiple_ids in
+      [%test_result: int] (count_attr doc) ~expect:0;
+      pp_doc doc;
+      [%expect
+        {|
+        ((Code_block
+           "python {#myid #myid2 .class_a .class_b key1=val1 key2=\"val2\"}" II)
+          (meta (attribute ((lang python) (attribute ())))))
+        |}]
+    ;;
+
+    let%expect_test _ =
+      let doc = doc_of_string non_example_invalid_item in
+      [%test_result: int] (count_attr doc) ~expect:0;
+      pp_doc doc;
+      [%expect
+        {|
+        ((Code_block "python {#myid .class_a .class_b hi}" II)
+          (meta (attribute ((lang python) (attribute ())))))
+        |}]
+    ;;
+
+    let%expect_test _ =
+      let doc = doc_of_string non_example_no_info_string in
+      [%test_result: int] (count_attr doc) ~expect:0;
+      pp_doc doc;
+      [%expect {| (Code_block "{#myid .class_a .class_b}" II) |}]
+    ;;
+
+    let%test_unit "roundtrip: commonmark output is idempotent" =
+      let commonmark_of_doc =
+        Cmarkit_renderer.doc_to_string (Cmarkit_commonmark.renderer ())
+      in
+      List.iter
+        examples
+        ~f:(commonmark_of_doc_idempotent ~doc_of_string ~commonmark_of_doc)
     ;;
   end)
 ;;

@@ -59,7 +59,7 @@ let do_render ~verbose ~config ~theme ~vault_root ~output_dir =
   let cache = Cache.load_cache ~dir:output_dir in
   let pipeline : Pipeline.t = Pipeline.of_config ~cache ~config () in
   let results =
-    render_vault ~pipeline ~theme ~backend_blocks:true ~safe:false vault_root
+    render_vault ~pipeline ~theme ~config ~backend_blocks:true ~safe:false vault_root
   in
   Cache.save_cache cache ~dir:output_dir;
   List.iteri results ~f:(fun i (out_rel, html) ->

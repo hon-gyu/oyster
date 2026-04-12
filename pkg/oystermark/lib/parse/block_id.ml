@@ -1,4 +1,8 @@
-(** Obsidian caret block identifier
+(** {1 Obsidian caret block identifier}
+
+  - Adds metadata only
+
+  {1 Syntax}
 
   ```markdown
   (* Inline at end of paragraph *)
@@ -32,6 +36,12 @@ type t =
 [@@deriving sexp]
 
 let meta_key : t Cmarkit.Meta.key = Cmarkit.Meta.key ()
+
+let sexp_of_meta : Common.meta_sexp =
+  fun meta ->
+  Cmarkit.Meta.find meta_key meta
+  |> Option.map ~f:(fun bid -> Sexp.List [ Atom "block-id"; sexp_of_t bid ])
+;;
 
 let is_valid_block_id (s : string) : bool =
   String.length s > 0
@@ -69,7 +79,8 @@ let extract_block_id_from_inline (inline : Cmarkit.Inline.t) : t option =
 ;;
 
 (** Block mapper that attaches block IDs to paragraphs' metadata if they have one. *)
-let tag_block_id_meta (mapper : Mapper.t) (block : Block.t) : Block.t Mapper.result =
+let block_map : Block.t Mapper.mapper =
+  fun (mapper : Mapper.t) (block : Block.t) : Block.t Mapper.result ->
   match block with
   | Block.Paragraph (p, meta) ->
     let inline = Block.Paragraph.inline p in

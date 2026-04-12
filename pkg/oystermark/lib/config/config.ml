@@ -11,6 +11,8 @@
 open Ppx_yojson_conv_lib.Yojson_conv.Primitives
 module J = Yojson.Safe
 
+(** {1 Utils} *)
+
 module type Defaultable = sig
   type t
 
@@ -63,6 +65,30 @@ module Make_string_enum (E : String_enum) = struct
   ;;
 
   let yojson_of_t (t : t) : J.t = `String (to_string t)
+end
+
+(* {1 Sub-configs}  *)
+
+module Struct_style_def = struct
+  type t =
+    | Plain
+    | Graph
+
+  let table = [ "plain", Plain, []; "graph", Graph, [] ]
+  let default = Plain
+end
+
+module Struct_style = Make_string_enum (Struct_style_def)
+
+module Ext_struct = struct
+  type t =
+    { enable : bool
+    ; struct_style : Struct_style.t [@default Struct_style.default]
+    }
+  [@@deriving yojson] [@@yojson.allow_extra_fields]
+
+  let default = { enable = true; struct_style = Struct_style.default }
+  let t_of_yojson j = or_default ~default t_of_yojson j
 end
 
 module Theme_def = struct
@@ -184,7 +210,8 @@ end = struct
 end
 
 type t =
-  { theme : Theme.t [@default Theme.default]
+  { ext_struct : Ext_struct.t [@default Ext_struct.default]
+  ; theme : Theme.t [@default Theme.default]
   ; css_snippets : string list [@default []]
   ; pipeline_profile : Pipeline_profile.t [@default Pipeline_profile.default]
   ; home_graph_view : Home_graph_view.t [@default Home_graph_view.default]
@@ -192,7 +219,8 @@ type t =
 [@@deriving yojson] [@@yojson.allow_extra_fields]
 
 let default : t =
-  { theme = Theme.default
+  { ext_struct = Ext_struct.default
+  ; theme = Theme.default
   ; css_snippets = []
   ; pipeline_profile = Pipeline_profile.default
   ; home_graph_view = Home_graph_view.default
@@ -202,6 +230,66 @@ let default : t =
 let of_file (path : string) : t =
   let contents : string = In_channel.with_open_text path In_channel.input_all in
   or_default ~default t_of_yojson (J.from_string contents)
+;;
+
+let rec merge_json (base : J.t) (overlay : J.t) : J.t =
+  match base, overlay with
+  | `Assoc base_fields, `Assoc overlay_fields ->
+    let merged =
+      List.fold_left
+        (fun acc (k, v) ->
+           let base_v = List.assoc_opt k acc in
+           let v' =
+             match base_v with
+             | Some bv -> merge_json bv v
+             | None -> v
+           in
+           (k, v') :: List.remove_assoc k acc)
+        base_fields
+        overlay_fields
+    in
+    `Assoc merged
+  | _, overlay -> overlay
+;;
+
+(** Merge two configs: keys in [overlay] override [base].
+    Non-object inputs: [overlay] wins. *)
+let merge (base : t) (overlay : t) : t =
+  let base_j = yojson_of_t base in
+  let overlay_j = yojson_of_t overlay in
+  let j = merge_json base_j overlay_j in
+  t_of_yojson j
+;;
+
+(* Per-file config from frontmatter
+   ================================ *)
+
+(** Convert a [Yaml.value] to [Yojson.Safe.t]. *)
+let rec yaml_to_yojson : Yaml.value -> J.t = function
+  | `Null -> `Null
+  | `Bool b -> `Bool b
+  | `Float f -> `Float f
+  | `String s -> `String s
+  | `A xs -> `List (List.map yaml_to_yojson xs)
+  | `O pairs -> `Assoc (List.map (fun (k, v) -> k, yaml_to_yojson v) pairs)
+;;
+
+(** Extract per-file config from frontmatter YAML, merged over [default].
+    Merges the raw JSON onto [default]'s JSON {e before} parsing into {!t},
+ *)
+let of_frontmatter ?(default = default) ?(config_key = "oyster") (fm : Yaml.value option)
+  : t
+  =
+  match fm with
+  | None | Some `Null -> default
+  | Some (`O pairs) ->
+    (match List.assoc_opt config_key pairs with
+     | None -> default
+     | Some ov_y ->
+       let base_j = yojson_of_t default in
+       let overlay_j = yaml_to_yojson ov_y in
+       or_default ~default t_of_yojson (merge_json base_j overlay_j))
+  | Some _ -> default
 ;;
 
 (* Wire-format contract with [static/graph_view/config.d.ts]
@@ -229,11 +317,41 @@ let%expect_test "Home_graph_view wire format" =
     |}]
 ;;
 
+let%expect_test "of_frontmatter overrides ext_struct" =
+  let fm : Yaml.value option =
+    Some (`O [ "oyster", `O [ "ext_struct", `O [ "struct_style", `String "graph" ] ] ])
+  in
+  let merged = fm |> of_frontmatter |> fun fm -> merge default fm in
+  merged |> yojson_of_t |> J.pretty_to_string |> print_endline;
+  [%expect
+    {|
+    {
+      "ext_struct": { "enable": true, "struct_style": "graph" },
+      "theme": "bluloco_dark",
+      "css_snippets": [],
+      "pipeline_profile": "default",
+      "home_graph_view": {
+        "dir": "all",
+        "tag": "all",
+        "default_dir": { "include": [ "*" ] },
+        "default_tag": "none"
+      }
+    }
+    |}]
+;;
+
+let%expect_test "of_frontmatter no oystermark key returns base" =
+  let fm : Yaml.value option = Some (`O [ "title", `String "Hello" ]) in
+  let merged = fm |> of_frontmatter |> fun fm -> merge default fm in
+  assert (merged = default)
+;;
+
 let%expect_test "Config default" =
   default |> yojson_of_t |> J.pretty_to_string |> print_endline;
   [%expect
     {|
     {
+      "ext_struct": { "enable": true, "struct_style": "plain" },
       "theme": "bluloco_dark",
       "css_snippets": [],
       "pipeline_profile": "default",

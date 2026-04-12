@@ -35,7 +35,7 @@ type executor = exec_ctx -> output list
     Cells are numbered in document order starting from 0.
 
     [lang] and [attr] are populated from the {!Attribute.code_block_info} attached to the
-    block by {!Attribute.tag_cb_attr_meta} during parsing, which tags every fenced code
+    block by {!Attribute.block_map} during parsing, which tags every fenced code
     block that has a non-empty info string. *)
 let extract_code_blocks (doc : Cmarkit.Doc.t) : cell list =
   let block_id = ref 0 in

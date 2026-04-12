@@ -138,7 +138,7 @@ let%expect_test "parse" =
     List.map parse_cases ~f:(fun (name, input) ->
       let node = text_node ~base:0 input in
       let result =
-        match Wikilink.parse dummy_mapper node with
+        match Wikilink.inline_map dummy_mapper node with
         | `Default -> "Default"
         | `Map None -> "Deleted"
         | `Map (Some inline) -> pp_inline inline

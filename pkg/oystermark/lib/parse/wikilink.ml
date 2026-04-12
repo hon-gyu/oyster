@@ -68,8 +68,25 @@ let%expect_test "to_commonmark" =
 (** Inline extension constructor for wikilinks. *)
 type Inline.t += Ext_wikilink of t node
 
+let inline_commonmark_renderer : Cmarkit_renderer.inline =
+  let open Cmarkit_renderer in
+  fun (c : context) (i : Inline.t) ->
+    match i with
+    | Ext_wikilink (wl, _) ->
+      Context.string c (to_commonmark wl);
+      true
+    | _ -> false
+;;
+
 (** Meta key to tag wikilink nodes. *)
 let meta_key : unit Meta.key = Meta.key ()
+
+let sexp_of_inline : Common.inline_sexp =
+  fun _recurse i ->
+  match i with
+  | Ext_wikilink (wl, _) -> Some (Sexp.List [ Atom "Wikilink"; sexp_of_t wl ])
+  | _ -> None
+;;
 
 (** Parse a fragment string (the part after '#') into a fragment value. *)
 let parse_fragment (frag_str : string) : fragment option =
@@ -141,7 +158,8 @@ let is_escaped s pos = pos > 0 && Char.equal (String.get s (pos - 1)) '\\'
     list of plain [Text] and [Ext_wikilink] nodes spliced via [Inlines].
     Returns [Mapper.default] for non-[Text] nodes or when no \[\[…\]\] is present,
     so the mapper falls through to its default behaviour. *)
-let parse (_mapper : Mapper.t) (i : Inline.t) : Inline.t Mapper.result =
+let inline_map : Inline.t Mapper.mapper =
+  fun (_mapper : Mapper.t) (i : Inline.t) : Inline.t Mapper.result ->
   match i with
   | Inline.Text (text, meta) ->
     let len = String.length text in
