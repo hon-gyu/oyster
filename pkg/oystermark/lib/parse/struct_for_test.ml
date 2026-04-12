@@ -115,12 +115,12 @@ let expect_example ex : unit =
   print_endline "```"
 ;;
 
-(* Basics — spec §1-4 *)
+(* Basics *)
 
-(** spec §1: [- foo: bar] → inline-value list item *)
+(** [- foo: bar] → inline-value list item *)
 let inline_value_list_item = mk_example "inline_value_list_item" {|- foo: bar|}
 
-(** spec §2: [- foo:] with indented body *)
+(** [- foo:] with indented body *)
 let keyed_list_item_with_indented_content =
   mk_example
     "keyed_list_item_with_indented_content"
@@ -129,15 +129,15 @@ let keyed_list_item_with_indented_content =
   - baz|}
 ;;
 
-(** spec §3: [- foo:] alone (no body, no following) → not keyed *)
+(** [- foo:] alone (no body, no following) → not keyed *)
 let no_body_no_following = mk_example "no_body_no_following" {|- foo:|}
 
-(* Chains — spec §5-8 *)
+(* Chains *)
 
-(** spec §5: [- a: b: c] — chain of 2 labels + inline value *)
+(** [- a: b: c] — chain of 2 labels + inline value *)
 let chain_with_value = mk_example "chain_with_value" {|- a: b: c|}
 
-(** spec §6: [- a: b:] with indented body — chain in trailing-colon form *)
+(** [- a: b:] with indented body — chain in trailing-colon form *)
 let colon_chain_inline_keying =
   mk_example
     "colon_chain_inline_keying"
@@ -145,7 +145,7 @@ let colon_chain_inline_keying =
   - baz|}
 ;;
 
-(** spec §7: [- a: b: c:] with indented body — chain of 3 labels *)
+(** [- a: b: c:] with indented body — chain of 3 labels *)
 let three_label_chain =
   mk_example
     "three_label_chain"
@@ -153,7 +153,7 @@ let three_label_chain =
   - baz|}
 ;;
 
-(** spec §8: two independent inline-value siblings — no cross-item absorption *)
+(** two independent inline-value siblings — no cross-item absorption *)
 let two_independent_siblings =
   mk_example
     "two_independent_siblings"
@@ -161,12 +161,32 @@ let two_independent_siblings =
 - x: y|}
 ;;
 
-(* Paragraphs — spec §9-10 *)
+(** Three levels: A is keyed around the list; each item is keyed
+      with an inline value. *)
+let three_levels =
+  mk_example
+    "three_levels"
+    {|A:
+- B: b
+- C: c|}
+;;
 
-(** spec §9: [foo: bar] standalone paragraph → inline-value keyed block *)
+(** Four levels: A -> B -> b -> C.  The first item's trailing colon ([b:]) makes [b]
+a label, and [b] absorbs the following [C: c] sibling as its nested body. *)
+let four_levels =
+  mk_example
+    "four_levels"
+    {|A:
+- B: b:
+- C: c|}
+;;
+
+(* Paragraphs *)
+
+(** [foo: bar] standalone paragraph → inline-value keyed block *)
 let paragraph_inline_value = mk_example "paragraph_inline_value" {|foo: bar|}
 
-(** spec §9: same, with [paragraph_inline_value = false] → not keyed *)
+(** same, with [paragraph_inline_value = false] → not keyed *)
 let paragraph_inline_value_disabled =
   mk_example "paragraph_inline_value_disabled" {|foo: bar|}
 ;;
@@ -192,7 +212,7 @@ let keyed_paragraph_multiple_children =
 some text|}
 ;;
 
-(** spec §10: [foo: bar:] paragraph + indented body — chain on paragraph *)
+(** [foo: bar:] paragraph + indented body — chain on paragraph *)
 let paragraph_chain =
   mk_example
     "paragraph_chain"
@@ -210,30 +230,30 @@ let nesting =
 - qux|}
 ;;
 
-(* Value contents — spec §11-15 *)
+(* Value contents *)
 
-(** spec §11: value may contain mixed inline content *)
+(** value may contain mixed inline content *)
 let mixed_inline_value = mk_example "mixed_inline_value" {|- foo: bar *baz* qux|}
 
-(** spec §12: code span in value — only [foo] is the label, code interior is opaque *)
+(** code span in value — only [foo] is the label, code interior is opaque *)
 let code_span_in_value = mk_example "code_span_in_value" {|- foo: `code: thing`|}
 
-(** spec §13: trailing space after colon — cross-line absorption does not fire *)
+(** trailing space after colon — cross-line absorption does not fire *)
 let non_example_trailing_space =
   mk_example "non_example_trailing_space" "- foo: \nfollowing"
 ;;
 
-(** spec §14: no space after colon → not keyed *)
+(** no space after colon → not keyed *)
 let non_example_no_space_after_colon =
   mk_example "non_example_no_space_after_colon" {|- foo:bar|}
 ;;
 
-(** spec §15: URL label — [://] has no space, so only one split on [": "] *)
+(** URL label — [://] has no space, so only one split on [": "] *)
 let url_as_label = mk_example "url_as_label" {|- http://x.com: click here|}
 
-(* Escapes — spec §16 *)
+(* Escapes *)
 
-(** spec §16: [\\\\:] in source → [\\:] in AST → escaped, not keyed *)
+(** [\\\\:] in source → [\\:] in AST → escaped, not keyed *)
 let escaped_colon =
   mk_example
     "escaped_colon"
@@ -241,9 +261,9 @@ let escaped_colon =
 - bar|}
 ;;
 
-(* Emphasis / labels — spec §18-20 *)
+(* Emphasis / labels *)
 
-(** spec §18: emphasis label with trailing-colon form *)
+(** emphasis label with trailing-colon form *)
 let emphasis_keyed_item =
   mk_example
     "emphasis_keyed_item"
@@ -252,7 +272,7 @@ let emphasis_keyed_item =
   - baz|}
 ;;
 
-(** spec §18: emphasis label with inline-value form *)
+(** emphasis label with inline-value form *)
 let emphasis_inline_value = mk_example "emphasis_inline_value" {|- *foo*: bar|}
 
 (** emphasis label in chain (trailing-colon form) *)
@@ -263,7 +283,7 @@ let emphasis_chain =
   - baz|}
 ;;
 
-(** spec §19: mixed-inline paragraph — not keyed because label segment is mixed *)
+(** mixed-inline paragraph — not keyed because label segment is mixed *)
 let non_example_mixed_inline =
   mk_example
     "non_example_mixed_inline"
@@ -271,15 +291,15 @@ let non_example_mixed_inline =
 following|}
 ;;
 
-(** spec §19: mixed-inline list item — not keyed *)
+(** mixed-inline list item — not keyed *)
 let non_example_mixed_inline_list_item =
   mk_example "non_example_mixed_inline_list_item" {|- *foo* x: bar|}
 ;;
 
-(** spec §20: value is unrestricted — mixed inline in value is fine *)
+(** value is unrestricted — mixed inline in value is fine *)
 let free_form_value = mk_example "free_form_value" {|- foo: *bar* x|}
 
-(* Trailing colon on last item — spec §21-22 *)
+(* Trailing colon on last item *)
 
 (** blank line between trailing-colon item and following block → no absorption *)
 let non_example_blank_line =
@@ -290,7 +310,7 @@ let non_example_blank_line =
 bar|}
 ;;
 
-(** spec §21: [b:] absorbs following [text] even when a non-keyed sibling precedes it *)
+(** [b:] absorbs following [text] even when a non-keyed sibling precedes it *)
 let last_item_absorbs_following_text =
   mk_example
     "last_item_absorbs_following_text"
@@ -299,7 +319,7 @@ let last_item_absorbs_following_text =
 text|}
 ;;
 
-(** spec §22: same as §21, but the preceding sibling has an inline value *)
+(** same as §21, but the preceding sibling has an inline value *)
 let last_item_absorbs_following_text_2 =
   mk_example
     "last_item_absorbs_following_text_2"
@@ -318,7 +338,7 @@ bar
 ```|}
 ;;
 
-(* Non-examples — general *)
+(* Non-examples *)
 
 let non_example_no_colon =
   mk_example
@@ -336,9 +356,11 @@ following paragraph|}
 ;;
 
 let examples =
-  (* Basics *)
-  [ inline_value_list_item
+  [ (* Basics *)
+    inline_value_list_item
   ; keyed_list_item_with_indented_content
+  ; three_levels
+  ; four_levels
   ; no_body_no_following (* Chains *)
   ; chain_with_value
   ; colon_chain_inline_keying
@@ -446,7 +468,44 @@ let%test_module _ =
             (List (Paragraph (Text bar)) (Paragraph (Text baz)))))
         ```
 
-        Example 3: no_body_no_following
+        Example 3: three_levels
+        ----------
+        ```md {#original}
+        A:
+        - B: b
+        - C: c
+        ```
+        ```debug-view
+        K(A, List[K(B, b), K(C,
+        c)])
+        ```
+        ```sexp
+        (Blocks
+          (Keyed_block (Text A)
+            (List (Keyed_list_item (Text B) (Paragraph (Text b)))
+              (Keyed_list_item (Text C) (Paragraph (Text c))))))
+        ```
+
+        Example 4: four_levels
+        ----------
+        ```md {#original}
+        A:
+        - B: b:
+        - C: c
+        ```
+        ```debug-view
+        K(A, List[K(B, K(b, List[K(C, c)]))])
+        ```
+        ```sexp
+        (Blocks
+          (Keyed_block (Text A)
+            (List
+              (Keyed_list_item (Text B)
+                (Keyed_list_item (Text b)
+                  (List (Keyed_list_item (Text C) (Paragraph (Text c)))))))))
+        ```
+
+        Example 5: no_body_no_following
         ----------
         ```md {#original}
         - foo:
@@ -458,7 +517,7 @@ let%test_module _ =
         (List (Paragraph (Text foo:)))
         ```
 
-        Example 4: chain_with_value
+        Example 6: chain_with_value
         ----------
         ```md {#original}
         - a: b: c
@@ -471,7 +530,7 @@ let%test_module _ =
           (Keyed_list_item (Text a) (Keyed_list_item (Text b) (Paragraph (Text c)))))
         ```
 
-        Example 5: colon_chain_inline_keying
+        Example 7: colon_chain_inline_keying
         ----------
         ```md {#original}
         - foo: bar:
@@ -486,7 +545,7 @@ let%test_module _ =
             (Keyed_list_item (Text bar) (List (Paragraph (Text baz))))))
         ```
 
-        Example 6: three_label_chain
+        Example 8: three_label_chain
         ----------
         ```md {#original}
         - a: b: c:
@@ -502,7 +561,7 @@ let%test_module _ =
               (Keyed_list_item (Text c) (List (Paragraph (Text baz)))))))
         ```
 
-        Example 7: two_independent_siblings
+        Example 9: two_independent_siblings
         ----------
         ```md {#original}
         - a: b: c
@@ -518,7 +577,7 @@ let%test_module _ =
           (Keyed_list_item (Text x) (Paragraph (Text y))))
         ```
 
-        Example 8: paragraph_inline_value
+        Example 10: paragraph_inline_value
         ----------
         ```md {#original}
         foo: bar
@@ -530,7 +589,7 @@ let%test_module _ =
         (Keyed_block (Text foo) (Paragraph (Text bar)))
         ```
 
-        Example 9: keyed_paragraph
+        Example 11: keyed_paragraph
         ----------
         ```md {#original}
         foo:
@@ -552,7 +611,7 @@ let%test_module _ =
           Blank_line (Paragraph (Text bee)))
         ```
 
-        Example 10: keyed_paragraph_multiple_children
+        Example 12: keyed_paragraph_multiple_children
         ----------
         ```md {#original}
         foo:
@@ -572,7 +631,7 @@ let%test_module _ =
               (Paragraph (Inlines (Text baz) (Break soft) (Text "some text"))))))
         ```
 
-        Example 11: paragraph_chain
+        Example 13: paragraph_chain
         ----------
         ```md {#original}
         foo: bar:
@@ -587,7 +646,7 @@ let%test_module _ =
             (Keyed_block (Text bar) (List (Paragraph (Text baz))))))
         ```
 
-        Example 12: nesting
+        Example 14: nesting
         ----------
         ```md {#original}
         foo:
@@ -606,7 +665,7 @@ let%test_module _ =
               (Paragraph (Text qux)))))
         ```
 
-        Example 13: mixed_inline_value
+        Example 15: mixed_inline_value
         ----------
         ```md {#original}
         - foo: bar *baz* qux
@@ -620,7 +679,7 @@ let%test_module _ =
             (Paragraph (Inlines (Text "bar ") (Emphasis (Text baz)) (Text " qux")))))
         ```
 
-        Example 14: code_span_in_value
+        Example 16: code_span_in_value
         ----------
         ```md {#original}
         - foo: `code: thing`
@@ -632,7 +691,7 @@ let%test_module _ =
         (List (Keyed_list_item (Text foo) (Paragraph (Code_span "code: thing"))))
         ```
 
-        Example 15: non_example_trailing_space
+        Example 17: non_example_trailing_space
         ----------
         ```md {#original}
         - foo:
@@ -646,7 +705,7 @@ let%test_module _ =
         (List (Paragraph (Inlines (Text foo:) (Break soft) (Text following))))
         ```
 
-        Example 16: non_example_no_space_after_colon
+        Example 18: non_example_no_space_after_colon
         ----------
         ```md {#original}
         - foo:bar
@@ -658,7 +717,7 @@ let%test_module _ =
         (List (Paragraph (Text foo:bar)))
         ```
 
-        Example 17: url_as_label
+        Example 19: url_as_label
         ----------
         ```md {#original}
         - http://x.com: click here
@@ -670,7 +729,7 @@ let%test_module _ =
         (List (Keyed_list_item (Text http://x.com) (Paragraph (Text "click here"))))
         ```
 
-        Example 18: escaped_colon
+        Example 20: escaped_colon
         ----------
         ```md {#original}
         - foo\\:
@@ -684,7 +743,7 @@ let%test_module _ =
         (List (Paragraph (Text "foo\\:")) (Paragraph (Text bar)))
         ```
 
-        Example 19: emphasis_keyed_item
+        Example 21: emphasis_keyed_item
         ----------
         ```md {#original}
         - *foo*:
@@ -701,7 +760,7 @@ let%test_module _ =
             (List (Paragraph (Text bar)) (Paragraph (Text baz)))))
         ```
 
-        Example 20: emphasis_inline_value
+        Example 22: emphasis_inline_value
         ----------
         ```md {#original}
         - *foo*: bar
@@ -713,7 +772,7 @@ let%test_module _ =
         (List (Keyed_list_item (Emphasis (Text foo)) (Paragraph (Text bar))))
         ```
 
-        Example 21: emphasis_chain
+        Example 23: emphasis_chain
         ----------
         ```md {#original}
         - *foo*: bar:
@@ -728,7 +787,7 @@ let%test_module _ =
             (Keyed_list_item (Text bar) (List (Paragraph (Text baz))))))
         ```
 
-        Example 22: non_example_mixed_inline
+        Example 24: non_example_mixed_inline
         ----------
         ```md {#original}
         *foo* bar:
@@ -744,7 +803,7 @@ let%test_module _ =
             (Text following)))
         ```
 
-        Example 23: non_example_mixed_inline_list_item
+        Example 25: non_example_mixed_inline_list_item
         ----------
         ```md {#original}
         - *foo* x: bar
@@ -756,7 +815,7 @@ let%test_module _ =
         (List (Paragraph (Inlines (Emphasis (Text foo)) (Text " x: bar"))))
         ```
 
-        Example 24: free_form_value
+        Example 26: free_form_value
         ----------
         ```md {#original}
         - foo: *bar* x
@@ -770,7 +829,7 @@ let%test_module _ =
             (Paragraph (Inlines (Emphasis (Text bar)) (Text " x")))))
         ```
 
-        Example 25: non_example_blank_line
+        Example 27: non_example_blank_line
         ----------
         ```md {#original}
         - foo:
@@ -786,7 +845,7 @@ let%test_module _ =
         (Blocks (List (Paragraph (Text foo:))) Blank_line (Paragraph (Text bar)))
         ```
 
-        Example 26: last_item_absorbs_following_text
+        Example 28: last_item_absorbs_following_text
         ----------
         ```md {#original}
         - a
@@ -803,7 +862,7 @@ let%test_module _ =
           (Paragraph (Inlines (Text b:) (Break soft) (Text text))))
         ```
 
-        Example 27: last_item_absorbs_following_text_2
+        Example 29: last_item_absorbs_following_text_2
         ----------
         ```md {#original}
         - a: x
@@ -820,7 +879,7 @@ let%test_module _ =
           (Paragraph (Inlines (Text b:) (Break soft) (Text text))))
         ```
 
-        Example 28: keyed_list_item_with_contiguous_blocks
+        Example 30: keyed_list_item_with_contiguous_blocks
         ----------
         ```md {#original}
         - foo:
@@ -837,7 +896,7 @@ let%test_module _ =
         (Blocks (List (Keyed_list_item (Text foo) (Code_block no-info bar))))
         ```
 
-        Example 29: non_example_no_colon
+        Example 31: non_example_no_colon
         ----------
         ```md {#original}
         - foo
@@ -851,7 +910,7 @@ let%test_module _ =
         (List (Paragraph (Text foo)) (Paragraph (Text bar)))
         ```
 
-        Example 30: non_example_colon_in_code_span
+        Example 32: non_example_colon_in_code_span
         ----------
         ```md {#original}
         text with `code:`
@@ -868,44 +927,38 @@ let%test_module _ =
         ```
         |}]
     ;;
+  end)
+;;
 
-    let%expect_test _ =
-      (* Two levels: A is keyed around the list; each item is keyed
-         with an inline value. *)
-      let eg =
-        {|A:
-- B: b
-- C: c|}
-      in
-      eg |> doc_of_string |> pp_doc_sexp;
-      [%expect
-        {|
-        (Blocks
-          (Keyed_block (Text A)
-            (List (Keyed_list_item (Text B) (Paragraph (Text b)))
-              (Keyed_list_item (Text C) (Paragraph (Text c))))))
-        |}]
+let%test_module "paragraph_inline_value" =
+  (module struct
+    let%expect_test "enabled (default)" =
+      (* Standalone paragraph with inline value is keyed. *)
+      {|foo: bar|} |> doc_of_string |> pp_doc_sexp;
+      [%expect {| (Keyed_block (Text foo) (Paragraph (Text bar))) |}]
     ;;
 
-    let%expect_test _ =
-      (* Four levels: A -> B -> b -> C.  The first item's trailing
-         colon ([b:]) makes [b] a label, and [b] absorbs the
-         following [C: c] sibling as its nested body. *)
-      let eg =
-        {|A:
-- B: b:
-- C: c|}
-      in
-      eg |> doc_of_string |> pp_doc_sexp;
-      [%expect
-        {|
-        (Blocks
-          (Keyed_block (Text A)
-            (List
-              (Keyed_list_item (Text B)
-                (Keyed_list_item (Text b)
-                  (List (Keyed_list_item (Text C) (Paragraph (Text c)))))))))
-        |}]
+    let%expect_test "with chain" =
+      (* Paragraph chain without trailing-colon absorption. *)
+      {|a: b: c|} |> doc_of_string |> pp_doc_sexp;
+      [%expect {| (Keyed_block (Text a) (Keyed_block (Text b) (Paragraph (Text c)))) |}]
+    ;;
+
+    let%expect_test "disabled" =
+      (* When paragraph_inline_value is false, standalone paragraph
+         is not keyed. *)
+      {|foo: bar|} |> doc_of_string ~paragraph_inline_value:false |> pp_doc_sexp;
+      [%expect {| (Paragraph (Text "foo: bar")) |}]
+    ;;
+
+    let%expect_test "disabled does not affect trailing-colon" =
+      (* Trailing-colon paragraph absorption still works even when
+         paragraph_inline_value is false. *)
+      {|foo:
+- bar|}
+      |> doc_of_string ~paragraph_inline_value:false
+      |> pp_doc_sexp;
+      [%expect {| (Blocks (Keyed_block (Text foo) (List (Paragraph (Text bar))))) |}]
     ;;
   end)
 ;;
