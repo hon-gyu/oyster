@@ -268,7 +268,8 @@ let render_struct_graph c label body =
   | Block.Paragraph (p, _) ->
     let cls = if label_empty then "keyed-entry keyed-entry--anon" else "keyed-entry" in
     C.string c (sprintf "<div class=\"%s\">\n" cls);
-    if not label_empty then (
+    if not label_empty
+    then (
       C.string c "<span class=\"keyed-label\">";
       C.inline c label;
       C.string c "</span>\n");
@@ -285,8 +286,8 @@ let render_struct_graph c label body =
     C.string c "</div>\n</div>\n"
 ;;
 
-let block ~(struct_style : struct_style) (c : Cmarkit_renderer.context) : Block.t -> bool =
-  function
+let block ~(struct_style : struct_style) (c : Cmarkit_renderer.context) : Block.t -> bool
+  = function
   | Block.Heading (h, meta) ->
     (match Meta.find Heading_slug.meta_key meta with
      | Some slug ->
@@ -356,14 +357,26 @@ let renderer
 let of_doc
       ~(backend_blocks : bool)
       ~(safe : bool)
-      ?(struct_style : struct_style = `Plain)
-      (doc : Doc.t)
+      ?(config = Config.default)
+      (* ?(struct_style : struct_style = `Plain) *)
+        (doc : Doc.t)
   : string
   =
+  let struct_style : struct_style =
+    match config.ext_struct.struct_style with
+    | Config.Struct_style_def.Plain -> `Plain
+    | Config.Struct_style_def.Graph -> `Graph
+  in
   Cmarkit_renderer.doc_to_string (renderer ~backend_blocks ~safe ~struct_style ()) doc
 ;;
 
 let%expect_test "struct_style: plain vs graph" =
+  let pp_doc struct_style doc =
+    Cmarkit_renderer.doc_to_string
+      (renderer ~backend_blocks:false ~safe:false ~struct_style ())
+      doc
+    |> print_string
+  in
   let src =
     {|
 Architecture:
@@ -379,10 +392,11 @@ Architecture:
 |}
   in
   let doc = Parse.of_string src in
-  print_string (of_doc ~backend_blocks:false ~safe:false ~struct_style:`Plain doc);
+  pp_doc `Plain doc;
   print_string "---\n";
-  print_string (of_doc ~backend_blocks:false ~safe:false ~struct_style:`Graph doc);
-  [%expect {|
+  pp_doc `Graph doc;
+  [%expect
+    {|
     <div class="keyed">
     <p>Architecture</p>
     <ul>

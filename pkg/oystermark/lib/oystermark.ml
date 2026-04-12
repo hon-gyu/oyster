@@ -83,12 +83,10 @@ let render_vault
   List.filter_map final_vault.docs ~f:(fun (rel_path, final) ->
     if String.is_suffix rel_path ~suffix:".md"
     then (
-      let struct_style : Component.Html.struct_style =
-        match config.ext_struct.struct_style with
-        | Config.Struct_style.Plain -> `Plain
-        | Config.Struct_style.Graph -> `Graph
-      in
-      let body = Html.of_doc ~backend_blocks ~safe ~struct_style final in
+      let fm = Parse.Frontmatter.of_doc final in
+      let fm_config = Config.of_frontmatter fm in
+      let config = Config.merge config fm_config in
+      let body = Html.of_doc ~backend_blocks ~safe ~config final in
       let url_path = Html.note_url_path rel_path in
       let title : string = Component.title_of_path rel_path in
       let nav : string = Component.nav_of_url_path url_path in
