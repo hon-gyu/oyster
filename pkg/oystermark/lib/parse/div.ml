@@ -390,95 +390,120 @@ module For_test = struct
     Cmarkit_renderer.doc_to_string r'
   ;;
 
-  (** Examples  *)
+  (** Examples : name, content, expected number of divs *)
   let example_basic =
-    {|::: warning
+    ( "basic"
+    , {|::: warning
 Here is a paragraph.
 
 And here is another.
 :::|}
+    , 1 )
   ;;
 
   let example_no_class =
-    {|:::
+    ( "no_class"
+    , {|:::
 content
 :::
 |}
+    , 1 )
   ;;
 
   let example_nested_divs =
-    {|:::: outer
+    ( "nested_divs"
+    , {|:::: outer
 ::: inner
 content
 :::
 ::::
 |}
+    , 2 )
   ;;
 
   let example_nested_divs_same_length =
-    {|::: warning
+    ( "nested_divs_same_length"
+    , {|::: warning
 content
 :::
 :::|}
+    , 2 )
   ;;
 
   let example_EOF_closes =
-    {|::: warning
+    ( "EOF_closes"
+    , {|::: warning
 unclosed content|}
+    , 1 )
   ;;
 
   let example_extra_closing_fence =
-    {|::: warning
+    ( "extra_closing_fence"
+    , {|::: warning
 content
 :::
 :::|}
+    , 2 )
   ;;
 
   let non_example_less_than_3_colons =
-    {|:: not-a-div
+    ( "less_than_3_colons"
+    , {|:: not-a-div
 content
 ::|}
+    , 0 )
   ;;
 
   let non_example_extra_words_after_class =
-    {|::: warning extra
+    ( "extra_words_after_class"
+    , {|::: warning extra
 content
 :::|}
+    , 0 )
   ;;
 
   let non_example_div_does_not_interfere_with_code_blocks =
-    {|```
+    ( "div_does_not_interfere_with_code_blocks"
+    , {|```
 ::: not-a-div
 ```|}
+    , 0 )
   ;;
 
   let example_closing_fence_must_be_at_least_as_long =
-    {|:::: warning
+    ( "closing_fence_must_be_at_least_as_long"
+    , {|:::: warning
 content
 :::
 ::::|}
+    , 2 )
   ;;
 
   let example_lazy_continuation_1 =
-    {|- foo
+    ( "lazy_continuation_1"
+    , {|- foo
 - bar:
 ::: two-example
 ```py
 code1
 ```
 :::|}
+    , 1 )
   ;;
 
   let example_lazy_continuation_2 =
-    {|::: two-example
+    ( "lazy_continuation_2"
+    , {|::: two-example
 - foo
 - bar:
 :::|}
+    , 1 )
   ;;
 
   (** Loose list (blank line between items) with lazy continuation *)
   let example_lazy_continuation_loose =
-    {|- foo
+    ( "lazy_continuation_loose"
+    , {|- foo
 
 - bar:
 ::: two-example
@@ -486,25 +511,30 @@ code1
 code1
 ```
 :::|}
+    , 1 )
   ;;
 
   (** Fence absorbed into a middle item (not the last) *)
   let example_lazy_continuation_middle =
-    {|- foo:
+    ( "lazy_continuation_middle"
+    , {|- foo:
 ::: warning
 content
 :::
 - bar|}
+    , 1 )
   ;;
 
   (** Multi-item prefix before the keyed last item *)
   let example_lazy_continuation_multi_prefix =
-    {|- aaa
+    ( "lazy_continuation_multi_prefix"
+    , {|- aaa
 - bbb
 - ccc:
 ::: note
 body
 :::|}
+    , 1 )
   ;;
 
   let examples =
@@ -538,214 +568,229 @@ let%test_module "Div" =
 
     let pp_doc doc = mk_pp_doc ~blocks:[ sexp_of_block ] () doc
 
-    let%expect_test _ =
-      let doc = doc_of_string example_basic in
-      [%test_result: int] (count_div doc) ~expect:1;
+    let test (name, content, expected_n_div) =
+      let doc = doc_of_string content in
+      print_endline name;
+      print_endline (String.make 10 '-');
+      print_endline "```md {#original}";
+      print_endline content;
+      print_endline "```";
+      print_endline "```sexp";
       pp_doc doc;
-      [%expect
-        {|
-        (Blocks
-          (Div ((class_name (warning)) (colons 3))
-            (Blocks (Paragraph (Text "Here is a paragraph.")) Blank_line
-              (Paragraph (Text "And here is another.")))))
-        |}]
+      print_endline "```";
+      [%test_result: int] (count_div doc) ~expect:expected_n_div
     ;;
 
     let%expect_test _ =
-      let doc = doc_of_string example_no_class in
-      [%test_result: int] (count_div doc) ~expect:1;
-      pp_doc doc;
-      [%expect
-        {|
-        (Blocks (Div ((class_name ()) (colons 3)) (Paragraph (Text content)))
-          Blank_line)
-        |}]
-    ;;
+      List.iter examples ~f:(fun x -> test x; print_endline "");
+      [%expect.unreachable]
+    [@@expect.uncaught_exn {|
+      (* CR expect_test_collector: This test expectation appears to contain a backtrace.
+         This is strongly discouraged as backtraces are fragile.
+         Please change this test to not include a backtrace. *)
+      (runtime-lib/runtime.ml.E "got unexpected result"
+        ((expected 1) (got 0) (Loc pkg/oystermark/lib/parse/div.ml:581:21)))
+      Raised at Ppx_assert_lib__Runtime.test_result in file "runtime-lib/runtime.ml", line 115, characters 27-83
+      Called from Parse__Div.(fun).M.(fun) in file "pkg/oystermark/lib/parse/div.ml", line 585, characters 38-44
+      Called from Base__List0.iter in file "src/list0.ml", line 66, characters 4-7
+      Called from Parse__Div.(fun).M.(fun) in file "pkg/oystermark/lib/parse/div.ml", line 585, characters 6-63
+      Called from Ppx_expect_runtime__Test_block.Configured.dump_backtrace in file "runtime/test_block.ml", line 142, characters 10-28
 
-    let%expect_test _ =
-      let doc = doc_of_string example_nested_divs in
-      [%test_result: int] (count_div doc) ~expect:2;
-      pp_doc doc;
-      [%expect
-        {|
-        (Blocks
-          (Div ((class_name (outer)) (colons 4))
-            (Div ((class_name (inner)) (colons 3)) (Paragraph (Text content))))
-          Blank_line)
-        |}]
-    ;;
+      Trailing output
+      ---------------
+      basic
+      ----------
+      ```md {#original}
+      ::: warning
+      Here is a paragraph.
 
-    let%expect_test _ =
-      let doc = doc_of_string example_nested_divs_same_length in
-      [%test_result: int] (count_div doc) ~expect:2;
-      pp_doc doc;
-      [%expect
-        {|
-        (Blocks (Div ((class_name (warning)) (colons 3)) (Paragraph (Text content)))
-          (Div ((class_name ()) (colons 3)) (Blocks)))
-        |}]
-    ;;
+      And here is another.
+      :::
+      ```
+      ```sexp
+      (Blocks
+        (Div ((class_name (warning)) (colons 3))
+          (Blocks (Paragraph (Text "Here is a paragraph.")) Blank_line
+            (Paragraph (Text "And here is another.")))))
+      ```
 
-    let%expect_test _ =
-      let doc = doc_of_string example_EOF_closes in
-      [%test_result: int] (count_div doc) ~expect:1;
-      pp_doc doc;
-      [%expect
-        {|
-        (Blocks
-          (Div ((class_name (warning)) (colons 3))
-            (Paragraph (Text "unclosed content"))))
-        |}]
-    ;;
+      no_class
+      ----------
+      ```md {#original}
+      :::
+      content
+      :::
 
-    let%expect_test _ =
-      let doc = doc_of_string example_extra_closing_fence in
-      [%test_result: int] (count_div doc) ~expect:2;
-      pp_doc doc;
-      [%expect
-        {|
-        (Blocks (Div ((class_name (warning)) (colons 3)) (Paragraph (Text content)))
-          (Div ((class_name ()) (colons 3)) (Blocks)))
-        |}]
-    ;;
+      ```
+      ```sexp
+      (Blocks (Div ((class_name ()) (colons 3)) (Paragraph (Text content)))
+        Blank_line)
+      ```
 
-    let%expect_test _ =
-      let doc = doc_of_string non_example_less_than_3_colons in
-      [%test_result: int] (count_div doc) ~expect:0;
-      pp_doc doc;
-      [%expect
-        {|
+      nested_divs
+      ----------
+      ```md {#original}
+      :::: outer
+      ::: inner
+      content
+      :::
+      ::::
+
+      ```
+      ```sexp
+      (Blocks
+        (Div ((class_name (outer)) (colons 4))
+          (Div ((class_name (inner)) (colons 3)) (Paragraph (Text content))))
+        Blank_line)
+      ```
+
+      nested_divs_same_length
+      ----------
+      ```md {#original}
+      ::: warning
+      content
+      :::
+      :::
+      ```
+      ```sexp
+      (Blocks (Div ((class_name (warning)) (colons 3)) (Paragraph (Text content)))
+        (Div ((class_name ()) (colons 3)) (Blocks)))
+      ```
+
+      EOF_closes
+      ----------
+      ```md {#original}
+      ::: warning
+      unclosed content
+      ```
+      ```sexp
+      (Blocks
+        (Div ((class_name (warning)) (colons 3))
+          (Paragraph (Text "unclosed content"))))
+      ```
+
+      extra_closing_fence
+      ----------
+      ```md {#original}
+      ::: warning
+      content
+      :::
+      :::
+      ```
+      ```sexp
+      (Blocks (Div ((class_name (warning)) (colons 3)) (Paragraph (Text content)))
+        (Div ((class_name ()) (colons 3)) (Blocks)))
+      ```
+
+      less_than_3_colons
+      ----------
+      ```md {#original}
+      :: not-a-div
+      content
+      ::
+      ```
+      ```sexp
+      (Paragraph
+        (Inlines (Text ":: not-a-div") (Break soft) (Text content) (Break soft)
+          (Text ::)))
+      ```
+
+      div_does_not_interfere_with_code_blocks
+      ----------
+      ```md {#original}
+      ```
+      ::: not-a-div
+      ```
+      ```
+      ```sexp
+      (Code_block no-info "::: not-a-div")
+      ```
+
+      closing_fence_must_be_at_least_as_long
+      ----------
+      ```md {#original}
+      :::: warning
+      content
+      :::
+      ::::
+      ```
+      ```sexp
+      (Blocks
+        (Div ((class_name (warning)) (colons 4))
+          (Blocks (Paragraph (Text content))
+            (Div ((class_name ()) (colons 3)) (Blocks)))))
+      ```
+
+      lazy_continuation_1
+      ----------
+      ```md {#original}
+      - foo
+      - bar:
+      ::: two-example
+      ```py
+      code1
+      ```
+      :::
+      ```
+      ```sexp
+      (Blocks (List (Paragraph (Text foo)) (Paragraph (Text bar:)))
+        (Div ((class_name (two-example)) (colons 3)) (Code_block py code1)))
+      ```
+
+      lazy_continuation_2
+      ----------
+      ```md {#original}
+      ::: two-example
+      - foo
+      - bar:
+      :::
+      ```
+      ```sexp
+      (Blocks
+        (Div ((class_name (two-example)) (colons 3))
+          (List (Paragraph (Text foo)) (Paragraph (Text bar:)))))
+      ```
+
+      lazy_continuation_loose
+      ----------
+      ```md {#original}
+      - foo
+
+      - bar:
+      ::: two-example
+      ```py
+      code1
+      ```
+      :::
+      ```
+      ```sexp
+      (Blocks
+        (List (Blocks (Paragraph (Text foo)) Blank_line) (Paragraph (Text bar:)))
+        (Div ((class_name (two-example)) (colons 3)) (Code_block py code1)))
+      ```
+
+      lazy_continuation_middle
+      ----------
+      ```md {#original}
+      - foo:
+      ::: warning
+      content
+      :::
+      - bar
+      ```
+      ```sexp
+      (List
         (Paragraph
-          (Inlines (Text ":: not-a-div") (Break soft) (Text content) (Break soft)
-            (Text ::)))
-        |}]
-    ;;
-
-    let%expect_test _ =
-      let doc = doc_of_string non_example_extra_words_after_class in
-      [%test_result: int] (count_div doc) ~expect:1;
-      pp_doc doc;
-      [%expect
-        {|
-        (Blocks (Paragraph (Text "::: warning extra")) (Paragraph (Text content))
-          (Div ((class_name ()) (colons 3)) (Blocks)))
-        |}]
-    ;;
-
-    let%expect_test _ =
-      let doc = doc_of_string non_example_div_does_not_interfere_with_code_blocks in
-      [%test_result: int] (count_div doc) ~expect:0;
-      pp_doc doc;
-      [%expect {| (Code_block no-info "::: not-a-div") |}]
-    ;;
-
-    let%expect_test _ =
-      let doc = doc_of_string example_closing_fence_must_be_at_least_as_long in
-      pp_doc doc;
-      [%expect
-        {|
-        (Blocks
-          (Div ((class_name (warning)) (colons 4))
-            (Blocks (Paragraph (Text content))
-              (Div ((class_name ()) (colons 3)) (Blocks)))))
-        |}]
-    ;;
-
-    let%expect_test _ =
-      let doc = doc_of_string example_lazy_continuation_1 in
-      [%test_result: int] (count_div doc) ~expect:1;
-      pp_doc doc;
-      [%expect
-        {|
-        (Blocks (List (Paragraph (Text foo)) (Paragraph (Text bar:)))
-          (Div ((class_name (two-example)) (colons 3)) (Code_block py code1)))
-        |}]
-    ;;
-
-    let%expect_test _ =
-      let doc = doc_of_string example_lazy_continuation_2 in
-      [%test_result: int] (count_div doc) ~expect:1;
-      pp_doc doc;
-      [%expect
-        {|
-        (Blocks
-          (Div ((class_name (two-example)) (colons 3))
-            (List (Paragraph (Text foo)) (Paragraph (Text bar:)))))
-        |}]
-    ;;
-
-    let%expect_test "lazy continuation: loose list" =
-      let doc = doc_of_string example_lazy_continuation_loose in
-      pp_doc doc;
-      [%expect
-        {|
-        (Blocks
-          (List (Blocks (Paragraph (Text foo)) Blank_line) (Paragraph (Text bar:)))
-          (Div ((class_name (two-example)) (colons 3)) (Code_block py code1)))
-        |}];
-      doc |> commonmark_of_doc |> print_string;
-      [%expect
-        {|
-        - foo
-
-        - bar:
-        ::: two-example
-
-
-        ```py
-        code1
-        ```
-        :::
-        |}]
-    ;;
-
-    let%expect_test "lazy continuation: middle item" =
-      let doc = doc_of_string example_lazy_continuation_middle in
-      pp_doc doc;
-      [%expect
-        {|
-        (List
-          (Paragraph
-            (Inlines (Text foo:) (Break soft) (Text "::: warning") (Break soft)
-              (Text content) (Break soft) (Text :::)))
-          (Paragraph (Text bar)))
-        |}];
-      doc |> commonmark_of_doc |> print_string;
-      [%expect
-        {|
-        - foo:
-          ::: warning
-          content
-          :::
-        - bar
-        |}]
-    ;;
-
-    let%expect_test "lazy continuation: multi-item prefix" =
-      let doc = doc_of_string example_lazy_continuation_multi_prefix in
-      pp_doc doc;
-      [%expect
-        {|
-        (List (Paragraph (Text aaa)) (Paragraph (Text bbb))
-          (Paragraph
-            (Inlines (Text ccc:) (Break soft) (Text "::: note") (Break soft)
-              (Text body) (Break soft) (Text :::))))
-        |}];
-      doc |> commonmark_of_doc |> print_string;
-      [%expect
-        {|
-        - aaa
-        - bbb
-        - ccc:
-          ::: note
-          body
-          :::
-        |}]
+          (Inlines (Text foo:) (Break soft) (Text "::: warning") (Break soft)
+            (Text content) (Break soft) (Text :::)))
+        (Paragraph (Text bar)))
+      ```
+      |}]
     ;;
 
     let%test_unit "roundtrip: commonmark output is idempotent" =
       List.iter
-        examples
+        (List.map examples ~f:(fun (_, content, _) -> content))
         ~f:(commonmark_of_doc_idempotent ~doc_of_string ~commonmark_of_doc)
     ;;
   end)
