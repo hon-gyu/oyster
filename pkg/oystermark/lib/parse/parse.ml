@@ -313,8 +313,7 @@ let%test_module "Div and Struct" =
 
         ```
         ```sexp
-        (Blocks (Div ((class_name ()) (colons 3)) (Paragraph (Text content)))
-          Blank_line)
+        (Blocks (Div ((class_name ()) (colons 3)) (Paragraph (Text content))))
         ```
         |}]
     ;;
@@ -334,8 +333,7 @@ let%test_module "Div and Struct" =
         ```sexp
         (Blocks
           (Div ((class_name (outer)) (colons 4))
-            (Div ((class_name (inner)) (colons 3)) (Paragraph (Text content))))
-          Blank_line)
+            (Div ((class_name (inner)) (colons 3)) (Paragraph (Text content)))))
         ```
         |}]
     ;;
