@@ -495,3 +495,29 @@ details.callout:not([open]) > summary::after {
     --callout-color: 173, 191, 120;
     --callout-icon: lucide-square-chevron-right;
 }
+
+/* Struct (keyed) — graph style. Conservative: thin rectangle outlines,
+   no font-weight/size changes; hover tints the child body. */
+.keyed-box {
+    border: 1px solid var(--border);
+    margin: 0.25rem 0;
+    padding: 0.2rem 0.5rem;
+}
+.keyed-box-body {
+    padding: 0.1rem 0.4rem;
+}
+.keyed-box-title,
+.keyed-label {
+    border: 1px solid var(--border);
+    padding: 0 0.3rem;
+    margin-right: 0.3rem;
+}
+.keyed-box-title:hover,
+.keyed-label:hover {
+    background: var(--bg-alt);
+    color: var(--fg);
+}
+.keyed-box:has(> .keyed-box-title:hover) > .keyed-box-body,
+.keyed-entry:has(> .keyed-label:hover) > .keyed-value {
+    background: var(--bg-alt);
+}
