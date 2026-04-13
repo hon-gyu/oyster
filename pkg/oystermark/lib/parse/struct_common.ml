@@ -172,6 +172,7 @@ end = struct
     | [ (Inline.Emphasis _ as e) ] -> Some e
     | [ (Inline.Strong_emphasis _ as e) ] -> Some e
     | [ (Inline.Code_span _ as e) ] -> Some e
+    | [ (Inline.Autolink _ as e) ] -> Some e
     | _ -> None
   ;;
 
