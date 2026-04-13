@@ -75,7 +75,7 @@ module Struct_style_def = struct
     | Graph
 
   let table = [ "plain", Plain, []; "graph", Graph, [] ]
-  let default = Graph
+  let default = Plain
 end
 
 module Struct_style = Make_string_enum (Struct_style_def)

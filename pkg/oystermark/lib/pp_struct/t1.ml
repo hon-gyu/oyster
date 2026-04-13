@@ -39,7 +39,9 @@ Attention:
 
 let () =
   let doc = doc_of_string example in
-  let body = html_of_doc `Graph doc in
+  let body_1 = html_of_doc `Graph doc in
+  let body_2 = html_of_doc `Plain doc in
+  let body = body_1 ^ "<p>^ Graph, Plain v</p>" ^ body_2 in
   let page : Theme.page =
     { title = "Struct"; body; url_path = ""; nav = ""; sidebar = "" }
   in

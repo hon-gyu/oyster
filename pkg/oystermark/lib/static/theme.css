@@ -500,17 +500,17 @@ details.callout:not([open]) > summary::after {
    no font-weight/size changes; hover tints the child body. */
 .keyed-box {
     border: 1px solid var(--border);
-    margin: 0.25rem 0;
-    padding: 0.2rem 0.5rem;
+    padding: 0 0.5rem;
 }
 .keyed-box-body {
-    padding: 0.1rem 0.4rem;
+    padding: 0;
 }
 .keyed-box-title,
 .keyed-label {
     border: 1px solid var(--border);
     padding: 0 0.3rem;
     margin-right: 0.3rem;
+    line-height: 1;
 }
 .keyed-box-title:hover,
 .keyed-label:hover {
@@ -519,5 +519,19 @@ details.callout:not([open]) > summary::after {
 }
 .keyed-box:has(> .keyed-box-title:hover) > .keyed-box-body,
 .keyed-entry:has(> .keyed-label:hover) > .keyed-value {
+    background: var(--bg-alt);
+}
+
+/* Struct (keyed) — plain style. Boxed label; keep default line spacing. */
+.keyed > p:first-child {
+    display: inline-block;
+    border: 1px solid var(--border);
+    padding: 0 0.3rem;
+    margin: 0;
+}
+.keyed > p:first-child:hover {
+    background: var(--bg-alt);
+}
+.keyed:has(> p:first-child:hover) > :not(p:first-child) {
     background: var(--bg-alt);
 }

@@ -594,65 +594,44 @@ details.callout:not([open]) > summary::after {
 }
 
 
-/* Struct (keyed) — graph style */
+/* Struct (keyed) — graph style. Conservative: thin rectangle outlines,
+   no font-weight/size changes; hover tints the child body. */
 .keyed-box {
     border: 1px solid var(--border);
-    border-radius: 4px;
-    margin: 0.4rem 0;
-    padding: 0.3rem 0.6rem;
-}
-.keyed-box-title {
-    display: inline-block;
-    font-weight: 600;
-    color: var(--fg);
-    cursor: default;
-    padding: 0 0.25rem;
-    border-radius: 3px;
-    transition: background 0.15s;
+    padding: 0 0.5rem;
 }
 .keyed-box-body {
-    margin-left: 0.75rem;
-    padding: 0.15rem 0.4rem;
-    border-left: 1px solid var(--border);
-    transition: background 0.15s;
+    padding: 0;
 }
-.keyed-box-title:hover {
-    background: var(--bg-alt, rgba(127, 127, 127, 0.12));
+.keyed-box-title,
+.keyed-label {
+    border: 1px solid var(--border);
+    padding: 0 0.3rem;
+    margin-right: 0.3rem;
+    line-height: 1;
 }
-.keyed-box:has(> .keyed-box-title:hover) > .keyed-box-body {
-    background: var(--bg-alt, rgba(127, 127, 127, 0.08));
+.keyed-box-title:hover,
+.keyed-label:hover {
+    background: var(--bg-alt);
+    color: var(--fg);
+}
+.keyed-box:has(> .keyed-box-title:hover) > .keyed-box-body,
+.keyed-entry:has(> .keyed-label:hover) > .keyed-value {
+    background: var(--bg-alt);
 }
 
-.keyed-entry {
-    display: flex;
-    gap: 0.4rem;
-    padding: 0.1rem 0.25rem;
-    border-radius: 3px;
+/* Struct (keyed) — plain style. Boxed label; keep default line spacing. */
+.keyed > p:first-child {
+    display: inline-block;
+    border: 1px solid var(--border);
+    padding: 0 0.3rem;
+    margin: 0;
 }
-.keyed-label {
-    font-weight: 600;
-    color: var(--fg);
-    cursor: default;
-    padding: 0 0.25rem;
-    border-radius: 3px;
-    transition: background 0.15s;
+.keyed > p:first-child:hover {
+    background: var(--bg-alt);
 }
-.keyed-label::after {
-    content: ":";
-    color: var(--fg-dim);
-    margin-left: 0.1rem;
-}
-.keyed-value {
-    color: var(--fg);
-    transition: background 0.15s;
-    padding: 0 0.25rem;
-    border-radius: 3px;
-}
-.keyed-entry:has(> .keyed-label:hover) > .keyed-value {
-    background: var(--bg-alt, rgba(127, 127, 127, 0.12));
-}
-.keyed-entry--anon > .keyed-value {
-    color: var(--fg-dim);
+.keyed:has(> p:first-child:hover) > :not(p:first-child) {
+    background: var(--bg-alt);
 }
 
 </style>
@@ -757,6 +736,128 @@ details.callout:not([open]) > summary::after {
 </div>
 </div>
 </div>
+</div>
+<p>^ Graph, Plain v</p><div class="keyed">
+<p>Architecture</p>
+<ul>
+<li>
+<div class="keyed">
+<p></p>
+<p>encoder–decoder. each half is a stack of six identical layers. self-attention and position-wise feed-forward replace recurrent and convolutional layers</p>
+</div>
+</li>
+<li>
+<div class="keyed">
+<p>encoder</p>
+<ul>
+<li>
+<div class="keyed">
+<p>self-attention</p>
+<p>multi-head, every position attends to every other input position</p>
+</div>
+</li>
+<li>
+<div class="keyed">
+<p>feed-forward</p>
+<p>position-wise MLP, applied independently at each step</p>
+</div>
+</li>
+<li>
+<div class="keyed">
+<p>residual + norm</p>
+<p>a residual connection wraps each sub-layer, followed by layer normalization</p>
+</div>
+</li>
+</ul>
+</div>
+</li>
+<li>
+<div class="keyed">
+<p>decoder</p>
+<ul>
+<li>
+<div class="keyed">
+<p>masked self-attention sub-layer</p>
+<ul>
+<li>like the encoder's, but autoregressive</li>
+<li>position <code>i</code> can only attend to positions <code>≤ i</code></li>
+</ul>
+</div>
+</li>
+<li>
+<div class="keyed">
+<p>cross-attention</p>
+<p>multi-head attention over the encoder output.</p>
+</div>
+</li>
+<li>
+<div class="keyed">
+<p>feed-forward sub-layer</p>
+<p>same as on the encoder side</p>
+</div>
+</li>
+<li>
+<div class="keyed">
+<p>residual + norm</p>
+<ul>
+<li>as in the encoder</li>
+</ul>
+</div>
+</li>
+</ul>
+</div>
+</li>
+</ul>
+</div>
+<div class="keyed">
+<p>Attention</p>
+<ul>
+<li>
+<div class="keyed">
+<p>scaled dot-product</p>
+<ul>
+<li>
+<div class="keyed">
+<p>definition</p>
+<p><code>softmax(QKᵀ / √dₖ) V</code></p>
+</div>
+</li>
+<li>
+<div class="keyed">
+<p><code>√dₖ</code></p>
+<ul>
+<li>dot products grow like <code>√dₖ</code> as the key dimension grows. dividing keeps the softmax out of its saturation regime, so gradients don't vanish</li>
+</ul>
+</div>
+</li>
+</ul>
+</div>
+</li>
+<li>
+<div class="keyed">
+<p>multi-head</p>
+<ul>
+<li>
+<div class="keyed">
+<p>procedure</p>
+<ul>
+<li>run <code>h = 8</code> attention functions in parallel over learned linear projections of <code>Q</code>, <code>K</code>, <code>V</code>.</li>
+<li>concatenate the heads and project.</li>
+</ul>
+</div>
+</li>
+<li>
+<div class="keyed">
+<p>why multiple heads</p>
+<ul>
+<li>each head can attend to a different representation subspace. a single softmax over averaged features cannot recover this.</li>
+</ul>
+</div>
+</li>
+</ul>
+</div>
+</li>
+</ul>
 </div>
 </main>
 </div>
