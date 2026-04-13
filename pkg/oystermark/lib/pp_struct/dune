@@ -1,7 +1,21 @@
 (library
  (name pp_struct)
  (public_name oystermark.pp_struct)
+ (modules pp_struct)
  (libraries cmarkit core parse)
  (inline_tests)
  (preprocess
   (pps ppx_jane ppx_string ppx_quick_test)))
+
+(test
+ (name t1)
+ (modules t1)
+ (libraries cmarkit core parse component oystermark)
+ )
+
+(rule
+  (alias runtest)
+  (mode (promote (until-clean)))
+  (target t1.expected.html)
+  (deps t1.expected)
+  (action (copy %{deps} %{target})))
