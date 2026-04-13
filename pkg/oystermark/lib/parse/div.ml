@@ -201,7 +201,44 @@ and extract_fences_in_list (block : Cmarkit.Block.t) : Cmarkit.Block.t list =
     (match split_paragraph_fences p meta with
      | None -> [ block ]
      | Some blocks -> blocks)
+  | Cmarkit.Block.List (l, list_meta) -> extract_fences_from_list l list_meta
   | other -> [ extract_fences other ]
+
+(** When cmarkit absorbs a [:::] fence as a lazy continuation line
+    inside a list item paragraph, we need to split it out so the fence
+    ends up at the parent level where div grouping can see it. *)
+and extract_fences_from_list (l : Cmarkit.Block.List'.t) (list_meta : Cmarkit.Meta.t)
+  : Cmarkit.Block.t list
+  =
+  let items = Cmarkit.Block.List'.items l in
+  let list_block = Cmarkit.Block.List (l, list_meta) in
+  match List.rev items with
+  | [] -> [ list_block ]
+  | (last_item, last_item_meta) :: rev_rest ->
+    (match Cmarkit.Block.List_item.block last_item with
+     | Cmarkit.Block.Paragraph (p, pmeta) ->
+       (match split_paragraph_fences p pmeta with
+        | None -> [ list_block ]
+        | Some (first :: extracted) ->
+          let new_item =
+            Cmarkit.Block.List_item.make
+              ~before_marker:(Cmarkit.Block.List_item.before_marker last_item)
+              ~marker:(Cmarkit.Block.List_item.marker last_item)
+              ~after_marker:(Cmarkit.Block.List_item.after_marker last_item)
+              first
+          in
+          let new_items = List.rev ((new_item, last_item_meta) :: rev_rest) in
+          let new_list =
+            Cmarkit.Block.List
+              ( Cmarkit.Block.List'.make
+                  ~tight:(Cmarkit.Block.List'.tight l)
+                  (Cmarkit.Block.List'.type' l)
+                  new_items
+              , list_meta )
+          in
+          new_list :: extracted
+        | Some [] -> [ list_block ])
+     | _ -> [ list_block ])
 ;;
 
 let is_blank_line : Cmarkit.Block.t -> bool = function
@@ -393,6 +430,23 @@ content
 ::::|}
   ;;
 
+  let example_lazy_continuation_1 =
+    {|- foo
+- bar:
+::: two-example
+```py
+code1
+```
+:::|}
+  ;;
+
+  let example_lazy_continuation_2 =
+    {|::: two-example
+- foo
+- bar:
+:::|}
+  ;;
+
   let examples =
     [ example_basic
     ; example_no_class
@@ -403,6 +457,8 @@ content
     ; non_example_less_than_3_colons
     ; non_example_div_does_not_interfere_with_code_blocks
     ; example_closing_fence_must_be_at_least_as_long
+    ; example_lazy_continuation_1
+    ; example_lazy_continuation_2
     ]
   ;;
 end
@@ -529,6 +585,27 @@ let%test_module "Div" =
           (Div ((class_name (warning)) (colons 4))
             (Blocks (Paragraph (Text content))
               (Div ((class_name ()) (colons 3)) (Blocks)))))
+        |}]
+    ;;
+
+    let%expect_test _ =
+      let doc = doc_of_string example_lazy_continuation_1 in
+      [%test_result: int] (count_div doc) ~expect:1;
+      pp_doc doc;
+      [%expect {|
+        (Blocks (List (Paragraph (Text foo)) (Paragraph (Text bar:)))
+          (Div ((class_name (two-example)) (colons 3)) (Code_block py code1)))
+        |}]
+    ;;
+
+    let%expect_test _ =
+      let doc = doc_of_string example_lazy_continuation_2 in
+      [%test_result: int] (count_div doc) ~expect:1;
+      pp_doc doc;
+      [%expect {|
+        (Blocks
+          (Div ((class_name (two-example)) (colons 3))
+            (List (Paragraph (Text foo)) (Paragraph (Text bar:)))))
         |}]
     ;;
 
