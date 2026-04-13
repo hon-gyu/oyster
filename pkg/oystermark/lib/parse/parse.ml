@@ -229,6 +229,8 @@ The open and closing fence of div should not be keyed.
 
 let%test_module "Div and Struct" =
   (module struct
+    let full_commonmark_of_doc = commonmark_of_doc
+
     open Common.For_test
     open Div.For_test
     open For_test
@@ -500,7 +502,7 @@ code2
     let%test_unit "roundtrip: commonmark output is idempotent" =
       List.iter
         examples
-        ~f:(commonmark_of_doc_idempotent ~doc_of_string:of_string ~commonmark_of_doc)
+        ~f:(commonmark_of_doc_idempotent ~doc_of_string:of_string ~commonmark_of_doc:full_commonmark_of_doc)
     ;;
   end)
 ;;
