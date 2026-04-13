@@ -370,13 +370,18 @@ let of_doc
   Cmarkit_renderer.doc_to_string (renderer ~backend_blocks ~safe ~struct_style ()) doc
 ;;
 
-let%expect_test "struct_style: plain vs graph" =
-  let pp_doc struct_style doc =
+module For_test = struct
+  let html_of_doc struct_style doc =
     Cmarkit_renderer.doc_to_string
       (renderer ~backend_blocks:false ~safe:false ~struct_style ())
       doc
-    |> print_string
-  in
+  ;;
+
+  let pp_doc struct_style doc = html_of_doc struct_style doc |> print_string
+end
+
+let%expect_test "struct_style: plain vs graph" =
+  let open For_test in
   let src =
     {|
 Architecture:
