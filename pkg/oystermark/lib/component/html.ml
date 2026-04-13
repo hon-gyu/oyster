@@ -496,7 +496,7 @@ let%test_module "don't throw" =
       let examples : string list =
         List.concat
           [ List.map ~f:(fun ex -> ex.content) Parse.Struct.For_test.examples
-          ; Parse.Div.For_test.examples
+          ; List.map ~f:(fun (_, content, _) -> content) Parse.Div.For_test.examples
           ; Parse.Callout.For_test.examples
           ; Parse.Attribute.For_test.examples
           ]

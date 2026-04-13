@@ -108,18 +108,21 @@ let paragraph_fence (block : Cmarkit.Block.t) : (int * string option) option =
   | _ -> None
 ;;
 
-(** Pass 1: extract fence lines from paragraph inlines *)
-include (
-struct
-  (** Flatten top-level [Inlines] wrappers. *)
+module Split_paragraph : sig
+  (** Split a paragraph into multiple blocks when fence lines are mixed in
+      with regular content.  Returns [None] if no splitting is needed. *)
+  val split_paragraph_fences
+    :  Cmarkit.Block.Paragraph.t
+    -> Cmarkit.Meta.t
+    -> Cmarkit.Block.t list option
+end = struct
   let rec flatten_inlines (i : Cmarkit.Inline.t) : Cmarkit.Inline.t list =
     match i with
     | Cmarkit.Inline.Inlines (is, _) -> List.concat_map is ~f:flatten_inlines
     | other -> [ other ]
   ;;
 
-  (** Split a flat inline list at [Break `Soft] boundaries into per-line groups. *)
-  let split_at_soft_breaks (nodes : Cmarkit.Inline.t list) : Cmarkit.Inline.t list list =
+  let split_at_soft_breaks nodes =
     let rec go acc cur = function
       | [] ->
         let groups = List.rev (List.rev cur :: acc) in
@@ -132,76 +135,134 @@ struct
     go [] [] nodes
   ;;
 
-  (** Turn a group of inline nodes back into a single inline. *)
-  let inline_of_group (group : Cmarkit.Inline.t list) : Cmarkit.Inline.t =
-    match group with
-    | [ single ] -> single
-    | multiple -> Cmarkit.Inline.Inlines (multiple, Cmarkit.Meta.none)
-  ;;
-
-  (** Check whether a single-line inline group is a fence. *)
-  let group_is_fence (group : Cmarkit.Inline.t list) : bool =
-    match group with
+  let group_is_fence = function
     | [ Cmarkit.Inline.Text (s, _) ] -> Option.is_some (parse_fence s)
     | _ -> false
   ;;
 
-  (** Split a paragraph into multiple blocks when fence lines are mixed in
-    with regular content.  Returns [None] if no splitting is needed. *)
   let split_paragraph_fences (p : Cmarkit.Block.Paragraph.t) (meta : Cmarkit.Meta.t)
     : Cmarkit.Block.t list option
     =
     let inline = Cmarkit.Block.Paragraph.inline p in
-    let flat = flatten_inlines inline in
-    let lines = split_at_soft_breaks flat in
+    let lines = split_at_soft_breaks (flatten_inlines inline) in
     if List.length lines <= 1
-    then None (* single-line paragraph — nothing to split *)
-    else (
-      let has_fence = List.exists lines ~f:group_is_fence in
-      if not has_fence
-      then None
-      else
-        Some
-          (List.mapi lines ~f:(fun i group ->
-             let para_inline = inline_of_group group in
-             let para = Cmarkit.Block.Paragraph.make para_inline in
-             (* Preserve original meta on the first sub-paragraph *)
-             let m = if i = 0 then meta else Cmarkit.Meta.none in
-             Cmarkit.Block.Paragraph (para, m))))
+    then None
+    else if not (List.exists lines ~f:group_is_fence)
+    then None
+    else
+      Some
+        (List.mapi lines ~f:(fun i group ->
+           let para_inline =
+             match group with
+             | [ single ] -> single
+             | multiple -> Cmarkit.Inline.Inlines (multiple, Cmarkit.Meta.none)
+           in
+           let para = Cmarkit.Block.Paragraph.make para_inline in
+           let m = if i = 0 then meta else Cmarkit.Meta.none in
+           Cmarkit.Block.Paragraph (para, m)))
   ;;
-end :
-sig
-  val split_paragraph_fences
-    :  Cmarkit.Block.Paragraph.t
-    -> Cmarkit.Meta.t
-    -> Cmarkit.Block.t list option
-end)
+end
 
 (** Pass 1 of 2: walk the block tree and split paragraphs that contain fence lines
     mixed with other content. After this pass every fence is a standalone
-    single-[Text] paragraph. *)
-let rec extract_fences (block : Cmarkit.Block.t) : Cmarkit.Block.t =
+    single-[Text] paragraph.
+
+    Returns a list because splitting a paragraph or list may produce multiple
+    sibling blocks. *)
+let rec extract_fences (block : Cmarkit.Block.t) : Cmarkit.Block.t list =
   match block with
   | Cmarkit.Block.Blocks (blocks, meta) ->
-    let blocks' = List.concat_map blocks ~f:extract_fences_in_list in
-    Cmarkit.Block.Blocks (blocks', meta)
+    [ Cmarkit.Block.Blocks (List.concat_map blocks ~f:extract_fences, meta) ]
   | Cmarkit.Block.Block_quote (bq, meta) ->
     let inner = Cmarkit.Block.Block_quote.block bq in
-    let inner' = extract_fences inner in
-    Cmarkit.Block.Block_quote (Cmarkit.Block.Block_quote.make inner', meta)
+    let inner' =
+      match extract_fences inner with
+      | [ single ] -> single
+      | multiple -> Cmarkit.Block.Blocks (multiple, Cmarkit.Meta.none)
+    in
+    [ Cmarkit.Block.Block_quote (Cmarkit.Block.Block_quote.make inner', meta) ]
+  | Cmarkit.Block.List (l, list_meta) -> extract_fences_from_list l list_meta
   | Cmarkit.Block.Paragraph (p, meta) ->
-    (match split_paragraph_fences p meta with
-     | None -> block
-     | Some blocks -> Cmarkit.Block.Blocks (blocks, Cmarkit.Meta.none))
-  | _ -> block
+    (match Split_paragraph.split_paragraph_fences p meta with
+     | Some blocks -> blocks
+     | None -> [ block ])
+  | _ -> [ block ]
 
-and extract_fences_in_list (block : Cmarkit.Block.t) : Cmarkit.Block.t list =
-  match block with
-  | Cmarkit.Block.Paragraph (p, meta) ->
-    (match split_paragraph_fences p meta with
-     | None -> [ block ]
-     | Some blocks -> blocks)
-  | other -> [ extract_fences other ]
+(** When cmarkit absorbs a [:::] fence as a lazy continuation line
+    inside a list item paragraph, we need to split it out so the fence
+    ends up at the parent level where div grouping can see it. *)
+and extract_fences_from_list (l : Cmarkit.Block.List'.t) (list_meta : Cmarkit.Meta.t)
+  : Cmarkit.Block.t list
+  =
+  let items = Cmarkit.Block.List'.items l in
+  let list_block = Cmarkit.Block.List (l, list_meta) in
+  let rebuild_item item block =
+    Cmarkit.Block.List_item.make
+      ~before_marker:(Cmarkit.Block.List_item.before_marker item)
+      ~marker:(Cmarkit.Block.List_item.marker item)
+      ~after_marker:(Cmarkit.Block.List_item.after_marker item)
+      block
+  in
+  let rebuild_list new_items =
+    Cmarkit.Block.List
+      ( Cmarkit.Block.List'.make
+          ~tight:(Cmarkit.Block.List'.tight l)
+          (Cmarkit.Block.List'.type' l)
+          new_items
+      , list_meta )
+  in
+  let try_split_item item =
+    let try_split_paragraph p pmeta ~wrap_item =
+      match Split_paragraph.split_paragraph_fences p pmeta with
+      | None -> None
+      | Some [] -> None
+      | Some (first :: extracted) -> Some (wrap_item first, extracted)
+    in
+    match Cmarkit.Block.List_item.block item with
+    | Cmarkit.Block.Paragraph (p, pmeta) -> try_split_paragraph p pmeta ~wrap_item:Fun.id
+    | Cmarkit.Block.Blocks (Cmarkit.Block.Paragraph (p, pmeta) :: rest, bmeta) ->
+      (* Strip trailing blank lines that cmarkit adds for loose lists;
+         they would otherwise become spurious sub-blocks in the item. *)
+      let rest =
+        List.filter rest ~f:(fun b ->
+          match b with
+          | Cmarkit.Block.Blank_line _ -> false
+          | _ -> true)
+      in
+      let wrap_item first =
+        match rest with
+        | [] -> first
+        | _ -> Cmarkit.Block.Blocks (first :: rest, bmeta)
+      in
+      try_split_paragraph p pmeta ~wrap_item
+    | _ -> None
+  in
+  (* Find the first item whose paragraph contains fence lines. *)
+  let rec find_split prefix = function
+    | [] -> None
+    | (item, item_meta) :: rest ->
+      (match try_split_item item with
+       | Some (new_block, extracted) ->
+         let new_item = rebuild_item item new_block in
+         Some (List.rev ((new_item, item_meta) :: prefix), extracted, rest)
+       | None -> find_split ((item, item_meta) :: prefix) rest)
+  in
+  match find_split [] items with
+  | None -> [ list_block ]
+  | Some (before_items, extracted, after_items) ->
+    let after =
+      match after_items with
+      | [] -> []
+      | _ ->
+        let after_l =
+          Cmarkit.Block.List'.make
+            ~tight:(Cmarkit.Block.List'.tight l)
+            (Cmarkit.Block.List'.type' l)
+            after_items
+        in
+        extract_fences_from_list after_l list_meta
+    in
+    rebuild_list before_items :: (extracted @ after)
 ;;
 
 let is_blank_line : Cmarkit.Block.t -> bool = function
@@ -219,76 +280,51 @@ let strip_surrounding_blanks (blocks : Cmarkit.Block.t list) : Cmarkit.Block.t l
 ;;
 
 (** Rewrite a list of sibling blocks, collecting div fences into [Ext_div] nodes.
-    Pass 2 of 2: match fences and group children into Ext_div
-*)
+    Pass 2 of 2: match fences and group children into Ext_div *)
 let rec rewrite_block_list (blocks : Cmarkit.Block.t list) : Cmarkit.Block.t list =
-  let arr = Array.of_list blocks in
-  let len = Array.length arr in
-  let result = ref [] in
-  let i = ref 0 in
-  while !i < len do
-    match paragraph_fence arr.(!i) with
-    | Some (colons, class_name) ->
-      incr i;
-      let body_blocks, new_i = collect_body colons arr !i len in
-      i := new_i;
-      let body_blocks = rewrite_block_list body_blocks in
-      let body_blocks = strip_surrounding_blanks body_blocks in
-      let body =
-        match body_blocks with
-        | [] -> Cmarkit.Block.Blocks ([], Cmarkit.Meta.none)
-        | [ single ] -> single
-        | multiple -> Cmarkit.Block.Blocks (multiple, Cmarkit.Meta.none)
-      in
-      result := Ext_div ({ class_name; colons }, body) :: !result
-    | None ->
-      result := rewrite_within_block arr.(!i) :: !result;
-      incr i
-  done;
-  List.rev !result
+  match blocks with
+  | [] -> []
+  | block :: rest ->
+    (match paragraph_fence block with
+     | Some (colons, class_name) ->
+       let body_blocks, remaining = collect_body colons rest in
+       let body_blocks = rewrite_block_list body_blocks in
+       let body_blocks = strip_surrounding_blanks body_blocks in
+       let body =
+         match body_blocks with
+         | [] -> Cmarkit.Block.Blocks ([], Cmarkit.Meta.none)
+         | [ single ] -> single
+         | multiple -> Cmarkit.Block.Blocks (multiple, Cmarkit.Meta.none)
+       in
+       Ext_div ({ class_name; colons }, body) :: rewrite_block_list remaining
+     | None -> rewrite_within_block block :: rewrite_block_list rest)
 
 (** Collect blocks until a closing fence matching [open_colons] is found.
-    Tracks nested named opening fences so their matching closing fences are
-    not mistaken for ours. *)
-and collect_body
-      (open_colons : int)
-      (arr : Cmarkit.Block.t array)
-      (start : int)
-      (len : int)
-  : Cmarkit.Block.t list * int
+    Tracks nested named opening fences (as a list used as a stack) so their
+    matching closing fences are not mistaken for ours.  Skips one trailing
+    blank line after the closing fence to prevent roundtrip accumulation. *)
+and collect_body (open_colons : int) (blocks : Cmarkit.Block.t list)
+  : Cmarkit.Block.t list * Cmarkit.Block.t list
   =
-  let collected = ref [] in
-  let i = ref start in
-  let nesting : int Stack.t = Stack.create () in
-  let found_close = ref false in
-  while !i < len && not !found_close do
-    match paragraph_fence arr.(!i) with
-    | Some (colons, Some _) ->
-      (* Named opening fence -- track for nesting *)
-      Stack.push nesting colons;
-      collected := arr.(!i) :: !collected;
-      incr i
-    | Some (colons, None) ->
-      if (not (Stack.is_empty nesting)) && colons >= Stack.top_exn nesting
-      then (
-        (* Closes the innermost nested div *)
-        ignore (Stack.pop_exn nesting : int);
-        collected := arr.(!i) :: !collected;
-        incr i)
-      else if colons >= open_colons
-      then (
-        (* Closes our div *)
-        found_close := true;
-        incr i)
-      else (
-        (* Doesn't match anything -- treat as content *)
-        collected := arr.(!i) :: !collected;
-        incr i)
-    | None ->
-      collected := arr.(!i) :: !collected;
-      incr i
-  done;
-  List.rev !collected, !i
+  let rec go nesting acc = function
+    | [] -> List.rev acc, []
+    | block :: rest ->
+      (match paragraph_fence block with
+       | Some (colons, Some _) -> go (colons :: nesting) (block :: acc) rest
+       | Some (colons, None) ->
+         (match nesting with
+          | top :: nesting_rest when colons >= top -> go nesting_rest (block :: acc) rest
+          | _ when colons >= open_colons ->
+            let rest =
+              match rest with
+              | b :: rest' when is_blank_line b -> rest'
+              | _ -> rest
+            in
+            List.rev acc, rest
+          | _ -> go nesting (block :: acc) rest)
+       | None -> go nesting (block :: acc) rest)
+  in
+  go [] [] blocks
 
 (** Recurse into block containers to rewrite div fences in their children. *)
 and rewrite_within_block (block : Cmarkit.Block.t) : Cmarkit.Block.t =
@@ -305,7 +341,11 @@ and rewrite_within_block (block : Cmarkit.Block.t) : Cmarkit.Block.t =
 (** Process a document: extract fences (pass 1) then group into divs (pass 2). *)
 let rewrite_doc (doc : Cmarkit.Doc.t) : Cmarkit.Doc.t =
   let block = Cmarkit.Doc.block doc in
-  let block' = extract_fences block in
+  let block' =
+    match extract_fences block with
+    | [ single ] -> single
+    | multiple -> Cmarkit.Block.Blocks (multiple, Cmarkit.Meta.none)
+  in
   let block' = rewrite_within_block block' in
   if phys_equal block block' then doc else Cmarkit.Doc.make block'
 ;;
@@ -324,73 +364,157 @@ module For_test = struct
     Cmarkit.Folder.fold_doc folder 0 doc
   ;;
 
-  (** Examples  *)
+  let commonmark_of_doc =
+    let r = Cmarkit_renderer.make ~block:block_commonmark_renderer () in
+    let r' = Cmarkit_renderer.compose (Cmarkit_commonmark.renderer ()) r in
+    Cmarkit_renderer.doc_to_string r'
+  ;;
+
+  (** Examples : name, content, expected number of divs *)
   let example_basic =
-    {|::: warning
+    ( "basic"
+    , {|::: warning
 Here is a paragraph.
 
 And here is another.
 :::|}
+    , 1 )
   ;;
 
   let example_no_class =
-    {|:::
+    ( "no_class"
+    , {|:::
 content
 :::
 |}
+    , 1 )
   ;;
 
   let example_nested_divs =
-    {|:::: outer
+    ( "nested_divs"
+    , {|:::: outer
 ::: inner
 content
 :::
 ::::
 |}
+    , 2 )
   ;;
 
   let example_nested_divs_same_length =
-    {|::: warning
+    ( "nested_divs_same_length"
+    , {|::: warning
 content
 :::
 :::|}
+    , 2 )
   ;;
 
   let example_EOF_closes =
-    {|::: warning
+    ( "EOF_closes"
+    , {|::: warning
 unclosed content|}
+    , 1 )
   ;;
 
   let example_extra_closing_fence =
-    {|::: warning
+    ( "extra_closing_fence"
+    , {|::: warning
 content
 :::
 :::|}
+    , 2 )
   ;;
 
   let non_example_less_than_3_colons =
-    {|:: not-a-div
+    ( "less_than_3_colons"
+    , {|:: not-a-div
 content
 ::|}
+    , 0 )
   ;;
 
   let non_example_extra_words_after_class =
-    {|::: warning extra
+    ( "extra_words_after_class"
+    , {|::: warning extra
 content
 :::|}
+    , 0 )
   ;;
 
   let non_example_div_does_not_interfere_with_code_blocks =
-    {|```
+    ( "div_does_not_interfere_with_code_blocks"
+    , {|```
 ::: not-a-div
 ```|}
+    , 0 )
   ;;
 
   let example_closing_fence_must_be_at_least_as_long =
-    {|:::: warning
+    ( "closing_fence_must_be_at_least_as_long"
+    , {|:::: warning
 content
 :::
 ::::|}
+    , 2 )
+  ;;
+
+  let example_lazy_continuation_1 =
+    ( "lazy_continuation_1"
+    , {|- foo
+- bar:
+::: foo
+```py
+code1
+```
+:::|}
+    , 1 )
+  ;;
+
+  let example_lazy_continuation_2 =
+    ( "lazy_continuation_2"
+    , {|::: foo
+- foo
+- bar:
+:::|}
+    , 1 )
+  ;;
+
+  (** Loose list (blank line between items) with lazy continuation *)
+  let example_lazy_continuation_loose =
+    ( "lazy_continuation_loose"
+    , {|- foo
+
+- bar:
+::: foo
+```py
+code1
+```
+:::|}
+    , 1 )
+  ;;
+
+  (** Fence absorbed into a middle item (not the last) *)
+  let example_lazy_continuation_middle =
+    ( "lazy_continuation_middle"
+    , {|- foo:
+::: warning
+content
+:::
+- bar|}
+    , 1 )
+  ;;
+
+  (** Multi-item prefix before the keyed last item *)
+  let example_lazy_continuation_multi_prefix =
+    ( "lazy_continuation_multi_prefix"
+    , {|- aaa
+- bbb
+- ccc:
+::: note
+body
+:::|}
+    , 1 )
   ;;
 
   let examples =
@@ -403,6 +527,11 @@ content
     ; non_example_less_than_3_colons
     ; non_example_div_does_not_interfere_with_code_blocks
     ; example_closing_fence_must_be_at_least_as_long
+    ; example_lazy_continuation_1
+    ; example_lazy_continuation_2
+    ; example_lazy_continuation_loose
+    ; example_lazy_continuation_middle
+    ; example_lazy_continuation_multi_prefix
     ]
   ;;
 end
@@ -419,125 +548,231 @@ let%test_module "Div" =
 
     let pp_doc doc = mk_pp_doc ~blocks:[ sexp_of_block ] () doc
 
-    let%expect_test _ =
-      let doc = doc_of_string example_basic in
-      [%test_result: int] (count_div doc) ~expect:1;
+    let test (name, content, expected_n_div) =
+      let doc = doc_of_string content in
+      print_endline name;
+      print_endline (String.make 10 '-');
+      print_endline "```md {#original}";
+      print_endline content;
+      print_endline "```";
+      print_endline "```sexp";
       pp_doc doc;
+      print_endline "```";
+      [%test_result: int] (count_div doc) ~expect:expected_n_div
+    ;;
+
+    let%expect_test _ =
+      List.iter examples ~f:(fun x ->
+        test x;
+        print_endline "");
       [%expect
         {|
+        basic
+        ----------
+        ```md {#original}
+        ::: warning
+        Here is a paragraph.
+
+        And here is another.
+        :::
+        ```
+        ```sexp
         (Blocks
           (Div ((class_name (warning)) (colons 3))
             (Blocks (Paragraph (Text "Here is a paragraph.")) Blank_line
               (Paragraph (Text "And here is another.")))))
-        |}]
-    ;;
+        ```
 
-    let%expect_test _ =
-      let doc = doc_of_string example_no_class in
-      [%test_result: int] (count_div doc) ~expect:1;
-      pp_doc doc;
-      [%expect
-        {|
-        (Blocks (Div ((class_name ()) (colons 3)) (Paragraph (Text content)))
-          Blank_line)
-        |}]
-    ;;
+        no_class
+        ----------
+        ```md {#original}
+        :::
+        content
+        :::
 
-    let%expect_test _ =
-      let doc = doc_of_string example_nested_divs in
-      [%test_result: int] (count_div doc) ~expect:2;
-      pp_doc doc;
-      [%expect
-        {|
+        ```
+        ```sexp
+        (Blocks (Div ((class_name ()) (colons 3)) (Paragraph (Text content))))
+        ```
+
+        nested_divs
+        ----------
+        ```md {#original}
+        :::: outer
+        ::: inner
+        content
+        :::
+        ::::
+
+        ```
+        ```sexp
         (Blocks
           (Div ((class_name (outer)) (colons 4))
-            (Div ((class_name (inner)) (colons 3)) (Paragraph (Text content))))
-          Blank_line)
-        |}]
-    ;;
+            (Div ((class_name (inner)) (colons 3)) (Paragraph (Text content)))))
+        ```
 
-    let%expect_test _ =
-      let doc = doc_of_string example_nested_divs_same_length in
-      [%test_result: int] (count_div doc) ~expect:2;
-      pp_doc doc;
-      [%expect
-        {|
+        nested_divs_same_length
+        ----------
+        ```md {#original}
+        ::: warning
+        content
+        :::
+        :::
+        ```
+        ```sexp
         (Blocks (Div ((class_name (warning)) (colons 3)) (Paragraph (Text content)))
           (Div ((class_name ()) (colons 3)) (Blocks)))
-        |}]
-    ;;
+        ```
 
-    let%expect_test _ =
-      let doc = doc_of_string example_EOF_closes in
-      [%test_result: int] (count_div doc) ~expect:1;
-      pp_doc doc;
-      [%expect
-        {|
+        EOF_closes
+        ----------
+        ```md {#original}
+        ::: warning
+        unclosed content
+        ```
+        ```sexp
         (Blocks
           (Div ((class_name (warning)) (colons 3))
             (Paragraph (Text "unclosed content"))))
-        |}]
-    ;;
+        ```
 
-    let%expect_test _ =
-      let doc = doc_of_string example_extra_closing_fence in
-      [%test_result: int] (count_div doc) ~expect:2;
-      pp_doc doc;
-      [%expect
-        {|
+        extra_closing_fence
+        ----------
+        ```md {#original}
+        ::: warning
+        content
+        :::
+        :::
+        ```
+        ```sexp
         (Blocks (Div ((class_name (warning)) (colons 3)) (Paragraph (Text content)))
           (Div ((class_name ()) (colons 3)) (Blocks)))
-        |}]
-    ;;
+        ```
 
-    let%expect_test _ =
-      let doc = doc_of_string non_example_less_than_3_colons in
-      [%test_result: int] (count_div doc) ~expect:0;
-      pp_doc doc;
-      [%expect
-        {|
+        less_than_3_colons
+        ----------
+        ```md {#original}
+        :: not-a-div
+        content
+        ::
+        ```
+        ```sexp
         (Paragraph
           (Inlines (Text ":: not-a-div") (Break soft) (Text content) (Break soft)
             (Text ::)))
-        |}]
-    ;;
+        ```
 
-    let%expect_test _ =
-      let doc = doc_of_string non_example_extra_words_after_class in
-      [%test_result: int] (count_div doc) ~expect:1;
-      pp_doc doc;
-      [%expect
-        {|
-        (Blocks (Paragraph (Text "::: warning extra")) (Paragraph (Text content))
-          (Div ((class_name ()) (colons 3)) (Blocks)))
-        |}]
-    ;;
+        div_does_not_interfere_with_code_blocks
+        ----------
+        ```md {#original}
+        ```
+        ::: not-a-div
+        ```
+        ```
+        ```sexp
+        (Code_block no-info "::: not-a-div")
+        ```
 
-    let%expect_test _ =
-      let doc = doc_of_string non_example_div_does_not_interfere_with_code_blocks in
-      [%test_result: int] (count_div doc) ~expect:0;
-      pp_doc doc;
-      [%expect {| (Code_block no-info "::: not-a-div") |}]
-    ;;
-
-    let%expect_test _ =
-      let doc = doc_of_string example_closing_fence_must_be_at_least_as_long in
-      pp_doc doc;
-      [%expect
-        {|
+        closing_fence_must_be_at_least_as_long
+        ----------
+        ```md {#original}
+        :::: warning
+        content
+        :::
+        ::::
+        ```
+        ```sexp
         (Blocks
           (Div ((class_name (warning)) (colons 4))
             (Blocks (Paragraph (Text content))
               (Div ((class_name ()) (colons 3)) (Blocks)))))
+        ```
+
+        lazy_continuation_1
+        ----------
+        ```md {#original}
+        - foo
+        - bar:
+        ::: foo
+        ```py
+        code1
+        ```
+        :::
+        ```
+        ```sexp
+        (Blocks (List (Paragraph (Text foo)) (Paragraph (Text bar:)))
+          (Div ((class_name (foo)) (colons 3)) (Code_block py code1)))
+        ```
+
+        lazy_continuation_2
+        ----------
+        ```md {#original}
+        ::: foo
+        - foo
+        - bar:
+        :::
+        ```
+        ```sexp
+        (Blocks
+          (Div ((class_name (foo)) (colons 3))
+            (List (Paragraph (Text foo)) (Paragraph (Text bar:)))))
+        ```
+
+        lazy_continuation_loose
+        ----------
+        ```md {#original}
+        - foo
+
+        - bar:
+        ::: foo
+        ```py
+        code1
+        ```
+        :::
+        ```
+        ```sexp
+        (Blocks
+          (List (Blocks (Paragraph (Text foo)) Blank_line) (Paragraph (Text bar:)))
+          (Div ((class_name (foo)) (colons 3)) (Code_block py code1)))
+        ```
+
+        lazy_continuation_middle
+        ----------
+        ```md {#original}
+        - foo:
+        ::: warning
+        content
+        :::
+        - bar
+        ```
+        ```sexp
+        (Blocks (List (Paragraph (Text foo:)))
+          (Div ((class_name (warning)) (colons 3)) (Paragraph (Text content)))
+          (List (Paragraph (Text bar))))
+        ```
+
+        lazy_continuation_multi_prefix
+        ----------
+        ```md {#original}
+        - aaa
+        - bbb
+        - ccc:
+        ::: note
+        body
+        :::
+        ```
+        ```sexp
+        (Blocks
+          (List (Paragraph (Text aaa)) (Paragraph (Text bbb))
+            (Paragraph (Text ccc:)))
+          (Div ((class_name (note)) (colons 3)) (Paragraph (Text body))))
+        ```
         |}]
     ;;
 
     let%test_unit "roundtrip: commonmark output is idempotent" =
-      let commonmark_of_doc =
-        Cmarkit_renderer.doc_to_string (Cmarkit_commonmark.renderer ())
-      in
       List.iter
-        examples
+        (List.map examples ~f:(fun (_, content, _) -> content))
         ~f:(commonmark_of_doc_idempotent ~doc_of_string ~commonmark_of_doc)
     ;;
   end)

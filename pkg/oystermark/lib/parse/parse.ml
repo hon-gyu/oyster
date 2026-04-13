@@ -225,12 +225,12 @@ Tests for interaction between {!module-"Div"} and {!module-"Struct"}
 
 The open and closing fence of div should not be keyed.
 
-TODO: the test expection is wrong at the moment.
-
 *)
 
 let%test_module "Div and Struct" =
   (module struct
+    let full_commonmark_of_doc = commonmark_of_doc
+
     open Common.For_test
     open Div.For_test
     open For_test
@@ -271,7 +271,7 @@ let%test_module "Div and Struct" =
       print_endline "```"
     ;;
 
-    let test ?(n_div : int = 0) ?(n_keyed : int = 0) src =
+    let test ?(n_div : int = 0) ?(n_keyed : int = 0) (_name, src, _expected_n_div) =
       pp_src src;
       let doc = of_string src in
       print_endline "```sexp";
@@ -312,8 +312,7 @@ let%test_module "Div and Struct" =
 
         ```
         ```sexp
-        (Blocks (Div ((class_name ()) (colons 3)) (Paragraph (Text content)))
-          Blank_line)
+        (Blocks (Div ((class_name ()) (colons 3)) (Paragraph (Text content))))
         ```
         |}]
     ;;
@@ -333,8 +332,7 @@ let%test_module "Div and Struct" =
         ```sexp
         (Blocks
           (Div ((class_name (outer)) (colons 4))
-            (Div ((class_name (inner)) (colons 3)) (Paragraph (Text content))))
-          Blank_line)
+            (Div ((class_name (inner)) (colons 3)) (Paragraph (Text content)))))
         ```
         |}]
     ;;
@@ -456,10 +454,56 @@ let%test_module "Div and Struct" =
         |}]
     ;;
 
+    let example_absorb_two_codeblocks =
+      {|- foo
+- bar:
+::: two-example
+```py
+code1
+```
+```js
+code2
+```
+:::|}
+    ;;
+
+    let%expect_test _ =
+      test ~n_div:1 ~n_keyed:1 ("", example_absorb_two_codeblocks, 0);
+      [%expect
+        {|
+        ```md {#original}
+        - foo
+        - bar:
+        ::: two-example
+        ```py
+        code1
+        ```
+        ```js
+        code2
+        ```
+        :::
+        ```
+        ```sexp
+        (Blocks
+          (List (Paragraph (Text foo))
+            (Keyed_list_item (Text bar)
+              (Div ((class_name (two-example)) (colons 3))
+                (Blocks
+                  ((Code_block py code1)
+                    (meta (attribute ((lang py) (attribute ())))))
+                  ((Code_block js code2)
+                    (meta (attribute ((lang js) (attribute ()))))))))))
+        ```
+        |}]
+    ;;
+
     let%test_unit "roundtrip: commonmark output is idempotent" =
       List.iter
-        examples
-        ~f:(commonmark_of_doc_idempotent ~doc_of_string:of_string ~commonmark_of_doc)
+        (List.map examples ~f:(fun (_, content, _) -> content))
+        ~f:
+          (commonmark_of_doc_idempotent
+             ~doc_of_string:of_string
+             ~commonmark_of_doc:full_commonmark_of_doc)
     ;;
   end)
 ;;

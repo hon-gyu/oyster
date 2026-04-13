@@ -313,6 +313,8 @@ let non_example_mixed_inline_list_item =
 (** value is unrestricted — mixed inline in value is fine *)
 let free_form_value = mk_example "free_form_value" {|- foo: *bar* x|}
 
+let autolink = mk_example "autolink" {|- <http://foo.bar.baz>: bat|}
+
 (* Trailing colon on last item *)
 
 (** blank line between trailing-colon item and following block → no absorption *)
@@ -419,6 +421,7 @@ let examples =
   ; emphasis_chain
   ; non_example_mixed_inline
   ; non_example_mixed_inline_list_item
+  ; autolink
   ; free_form_value (* Trailing colon on last item *)
   ; non_example_blank_line
   ; last_item_absorbs_following_text
@@ -849,7 +852,19 @@ let%test_module _ =
         (List (Paragraph (Inlines (Emphasis (Text foo)) (Text " x: bar"))))
         ```
 
-        Example 26: free_form_value
+        Example 26: autolink
+        ----------
+        ```md {#original}
+        - <http://foo.bar.baz>: bat
+        ```
+        ```debug-view
+        List[K(<http://foo.bar.baz>, bat)]
+        ```
+        ```sexp
+        (List (Keyed_list_item (Autolink http://foo.bar.baz) (Paragraph (Text bat))))
+        ```
+
+        Example 27: free_form_value
         ----------
         ```md {#original}
         - foo: *bar* x
@@ -863,7 +878,7 @@ let%test_module _ =
             (Paragraph (Inlines (Emphasis (Text bar)) (Text " x")))))
         ```
 
-        Example 27: non_example_blank_line
+        Example 28: non_example_blank_line
         ----------
         ```md {#original}
         - foo:
@@ -879,7 +894,7 @@ let%test_module _ =
         (Blocks (List (Paragraph (Text foo:))) Blank_line (Paragraph (Text bar)))
         ```
 
-        Example 28: last_item_absorbs_following_text
+        Example 29: last_item_absorbs_following_text
         ----------
         ```md {#original}
         - a
@@ -896,7 +911,7 @@ let%test_module _ =
           (Paragraph (Inlines (Text b:) (Break soft) (Text text))))
         ```
 
-        Example 29: last_item_absorbs_following_text_2
+        Example 30: last_item_absorbs_following_text_2
         ----------
         ```md {#original}
         - a: x
@@ -913,7 +928,7 @@ let%test_module _ =
           (Paragraph (Inlines (Text b:) (Break soft) (Text text))))
         ```
 
-        Example 30: keyed_list_item_with_contiguous_blocks
+        Example 31: keyed_list_item_with_contiguous_blocks
         ----------
         ```md {#original}
         - foo:
@@ -930,7 +945,7 @@ let%test_module _ =
         (Blocks (List (Keyed_list_item (Text foo) (Code_block no-info bar))))
         ```
 
-        Example 31: empty_label_in_list_item
+        Example 32: empty_label_in_list_item
         ----------
         ```md {#original}
         - : a
@@ -945,7 +960,7 @@ let%test_module _ =
           (Keyed_list_item (Text B) (Paragraph (Text b))))
         ```
 
-        Example 32: empty_label_nested_under_paragraph_key
+        Example 33: empty_label_nested_under_paragraph_key
         ----------
         ```md {#original}
         A:
@@ -963,7 +978,7 @@ let%test_module _ =
               (Keyed_list_item (Text B) (Paragraph (Text b))))))
         ```
 
-        Example 33: empty_label_with_trailing_colon_and_body
+        Example 34: empty_label_with_trailing_colon_and_body
         ----------
         ```md {#original}
         - :
@@ -976,7 +991,7 @@ let%test_module _ =
         (List (Keyed_list_item (Text "") (List (Paragraph (Text nested)))))
         ```
 
-        Example 34: non_example_no_colon
+        Example 35: non_example_no_colon
         ----------
         ```md {#original}
         - foo
@@ -990,7 +1005,7 @@ let%test_module _ =
         (List (Paragraph (Text foo)) (Paragraph (Text bar)))
         ```
 
-        Example 35: non_example_colon_in_code_span
+        Example 36: non_example_colon_in_code_span
         ----------
         ```md {#original}
         text with `code:`
