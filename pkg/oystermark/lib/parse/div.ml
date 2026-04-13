@@ -466,7 +466,7 @@ content
     ( "lazy_continuation_1"
     , {|- foo
 - bar:
-::: two-example
+::: foo
 ```py
 code1
 ```
@@ -476,7 +476,7 @@ code1
 
   let example_lazy_continuation_2 =
     ( "lazy_continuation_2"
-    , {|::: two-example
+    , {|::: foo
 - foo
 - bar:
 :::|}
@@ -489,7 +489,7 @@ code1
     , {|- foo
 
 - bar:
-::: two-example
+::: foo
 ```py
 code1
 ```
@@ -693,7 +693,7 @@ let%test_module "Div" =
         ```md {#original}
         - foo
         - bar:
-        ::: two-example
+        ::: foo
         ```py
         code1
         ```
@@ -701,20 +701,20 @@ let%test_module "Div" =
         ```
         ```sexp
         (Blocks (List (Paragraph (Text foo)) (Paragraph (Text bar:)))
-          (Div ((class_name (two-example)) (colons 3)) (Code_block py code1)))
+          (Div ((class_name (foo)) (colons 3)) (Code_block py code1)))
         ```
 
         lazy_continuation_2
         ----------
         ```md {#original}
-        ::: two-example
+        ::: foo
         - foo
         - bar:
         :::
         ```
         ```sexp
         (Blocks
-          (Div ((class_name (two-example)) (colons 3))
+          (Div ((class_name (foo)) (colons 3))
             (List (Paragraph (Text foo)) (Paragraph (Text bar:)))))
         ```
 
@@ -724,7 +724,7 @@ let%test_module "Div" =
         - foo
 
         - bar:
-        ::: two-example
+        ::: foo
         ```py
         code1
         ```
@@ -733,7 +733,7 @@ let%test_module "Div" =
         ```sexp
         (Blocks
           (List (Blocks (Paragraph (Text foo)) Blank_line) (Paragraph (Text bar:)))
-          (Div ((class_name (two-example)) (colons 3)) (Code_block py code1)))
+          (Div ((class_name (foo)) (colons 3)) (Code_block py code1)))
         ```
 
         lazy_continuation_middle
