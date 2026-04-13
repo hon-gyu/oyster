@@ -384,6 +384,12 @@ module For_test = struct
     Cmarkit.Folder.fold_doc folder 0 doc
   ;;
 
+  let commonmark_of_doc =
+    let r = Cmarkit_renderer.make ~block:block_commonmark_renderer () in
+    let r' = Cmarkit_renderer.compose (Cmarkit_commonmark.renderer ()) r in
+    Cmarkit_renderer.doc_to_string r'
+  ;;
+
   (** Examples  *)
   let example_basic =
     {|::: warning
@@ -470,6 +476,37 @@ code1
 :::|}
   ;;
 
+  (** Loose list (blank line between items) with lazy continuation *)
+  let example_lazy_continuation_loose =
+    {|- foo
+
+- bar:
+::: two-example
+```py
+code1
+```
+:::|}
+  ;;
+
+  (** Fence absorbed into a middle item (not the last) *)
+  let example_lazy_continuation_middle =
+    {|- foo:
+::: warning
+content
+:::
+- bar|}
+  ;;
+
+  (** Multi-item prefix before the keyed last item *)
+  let example_lazy_continuation_multi_prefix =
+    {|- aaa
+- bbb
+- ccc:
+::: note
+body
+:::|}
+  ;;
+
   let examples =
     [ example_basic
     ; example_no_class
@@ -482,6 +519,9 @@ code1
     ; example_closing_fence_must_be_at_least_as_long
     ; example_lazy_continuation_1
     ; example_lazy_continuation_2
+    ; example_lazy_continuation_loose
+    ; example_lazy_continuation_middle
+    ; example_lazy_continuation_multi_prefix
     ]
   ;;
 end
@@ -615,7 +655,8 @@ let%test_module "Div" =
       let doc = doc_of_string example_lazy_continuation_1 in
       [%test_result: int] (count_div doc) ~expect:1;
       pp_doc doc;
-      [%expect {|
+      [%expect
+        {|
         (Blocks (List (Paragraph (Text foo)) (Paragraph (Text bar:)))
           (Div ((class_name (two-example)) (colons 3)) (Code_block py code1)))
         |}]
@@ -625,17 +666,84 @@ let%test_module "Div" =
       let doc = doc_of_string example_lazy_continuation_2 in
       [%test_result: int] (count_div doc) ~expect:1;
       pp_doc doc;
-      [%expect {|
+      [%expect
+        {|
         (Blocks
           (Div ((class_name (two-example)) (colons 3))
             (List (Paragraph (Text foo)) (Paragraph (Text bar:)))))
         |}]
     ;;
 
+    let%expect_test "lazy continuation: loose list" =
+      let doc = doc_of_string example_lazy_continuation_loose in
+      pp_doc doc;
+      [%expect
+        {|
+        (Blocks
+          (List (Blocks (Paragraph (Text foo)) Blank_line) (Paragraph (Text bar:)))
+          (Div ((class_name (two-example)) (colons 3)) (Code_block py code1)))
+        |}];
+      doc |> commonmark_of_doc |> print_string;
+      [%expect
+        {|
+        - foo
+
+        - bar:
+        ::: two-example
+
+
+        ```py
+        code1
+        ```
+        :::
+        |}]
+    ;;
+
+    let%expect_test "lazy continuation: middle item" =
+      let doc = doc_of_string example_lazy_continuation_middle in
+      pp_doc doc;
+      [%expect
+        {|
+        (List
+          (Paragraph
+            (Inlines (Text foo:) (Break soft) (Text "::: warning") (Break soft)
+              (Text content) (Break soft) (Text :::)))
+          (Paragraph (Text bar)))
+        |}];
+      doc |> commonmark_of_doc |> print_string;
+      [%expect
+        {|
+        - foo:
+          ::: warning
+          content
+          :::
+        - bar
+        |}]
+    ;;
+
+    let%expect_test "lazy continuation: multi-item prefix" =
+      let doc = doc_of_string example_lazy_continuation_multi_prefix in
+      pp_doc doc;
+      [%expect
+        {|
+        (List (Paragraph (Text aaa)) (Paragraph (Text bbb))
+          (Paragraph
+            (Inlines (Text ccc:) (Break soft) (Text "::: note") (Break soft)
+              (Text body) (Break soft) (Text :::))))
+        |}];
+      doc |> commonmark_of_doc |> print_string;
+      [%expect
+        {|
+        - aaa
+        - bbb
+        - ccc:
+          ::: note
+          body
+          :::
+        |}]
+    ;;
+
     let%test_unit "roundtrip: commonmark output is idempotent" =
-      let commonmark_of_doc =
-        Cmarkit_renderer.doc_to_string (Cmarkit_commonmark.renderer ())
-      in
       List.iter
         examples
         ~f:(commonmark_of_doc_idempotent ~doc_of_string ~commonmark_of_doc)
