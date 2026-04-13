@@ -219,8 +219,7 @@ and extract_fences_from_list (l : Cmarkit.Block.List'.t) (list_meta : Cmarkit.Me
       | Some (first :: extracted) -> Some (wrap_item first, extracted)
     in
     match Cmarkit.Block.List_item.block item with
-    | Cmarkit.Block.Paragraph (p, pmeta) ->
-      try_split_paragraph p pmeta ~wrap_item:Fun.id
+    | Cmarkit.Block.Paragraph (p, pmeta) -> try_split_paragraph p pmeta ~wrap_item:Fun.id
     | Cmarkit.Block.Blocks (Cmarkit.Block.Paragraph (p, pmeta) :: rest, bmeta) ->
       (* Strip trailing blank lines that cmarkit adds for loose lists;
          they would otherwise become spurious sub-blocks in the item. *)
@@ -311,12 +310,10 @@ and collect_body (open_colons : int) (blocks : Cmarkit.Block.t list)
     | [] -> List.rev acc, []
     | block :: rest ->
       (match paragraph_fence block with
-       | Some (colons, Some _) ->
-         go (colons :: nesting) (block :: acc) rest
+       | Some (colons, Some _) -> go (colons :: nesting) (block :: acc) rest
        | Some (colons, None) ->
          (match nesting with
-          | top :: nesting_rest when colons >= top ->
-            go nesting_rest (block :: acc) rest
+          | top :: nesting_rest when colons >= top -> go nesting_rest (block :: acc) rest
           | _ when colons >= open_colons ->
             let rest =
               match rest with
@@ -565,8 +562,11 @@ let%test_module "Div" =
     ;;
 
     let%expect_test _ =
-      List.iter examples ~f:(fun x -> test x; print_endline "");
-      [%expect {|
+      List.iter examples ~f:(fun x ->
+        test x;
+        print_endline "");
+      [%expect
+        {|
         basic
         ----------
         ```md {#original}
@@ -768,7 +768,6 @@ let%test_module "Div" =
           (Div ((class_name (note)) (colons 3)) (Paragraph (Text body))))
         ```
         |}]
-
     ;;
 
     let%test_unit "roundtrip: commonmark output is idempotent" =
