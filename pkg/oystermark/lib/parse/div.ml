@@ -212,32 +212,55 @@ and extract_fences_from_list (l : Cmarkit.Block.List'.t) (list_meta : Cmarkit.Me
   =
   let items = Cmarkit.Block.List'.items l in
   let list_block = Cmarkit.Block.List (l, list_meta) in
+  let rebuild_item item block =
+    Cmarkit.Block.List_item.make
+      ~before_marker:(Cmarkit.Block.List_item.before_marker item)
+      ~marker:(Cmarkit.Block.List_item.marker item)
+      ~after_marker:(Cmarkit.Block.List_item.after_marker item)
+      block
+  in
+  let rebuild_list new_items =
+    Cmarkit.Block.List
+      ( Cmarkit.Block.List'.make
+          ~tight:(Cmarkit.Block.List'.tight l)
+          (Cmarkit.Block.List'.type' l)
+          new_items
+      , list_meta )
+  in
   match List.rev items with
   | [] -> [ list_block ]
   | (last_item, last_item_meta) :: rev_rest ->
+    let try_split_paragraph p pmeta ~wrap_item =
+      match split_paragraph_fences p pmeta with
+      | None -> None
+      | Some [] -> None
+      | Some (first :: extracted) ->
+        let new_item = rebuild_item last_item (wrap_item first) in
+        let new_items = List.rev ((new_item, last_item_meta) :: rev_rest) in
+        Some (rebuild_list new_items :: extracted)
+    in
     (match Cmarkit.Block.List_item.block last_item with
      | Cmarkit.Block.Paragraph (p, pmeta) ->
-       (match split_paragraph_fences p pmeta with
-        | None -> [ list_block ]
-        | Some (first :: extracted) ->
-          let new_item =
-            Cmarkit.Block.List_item.make
-              ~before_marker:(Cmarkit.Block.List_item.before_marker last_item)
-              ~marker:(Cmarkit.Block.List_item.marker last_item)
-              ~after_marker:(Cmarkit.Block.List_item.after_marker last_item)
-              first
-          in
-          let new_items = List.rev ((new_item, last_item_meta) :: rev_rest) in
-          let new_list =
-            Cmarkit.Block.List
-              ( Cmarkit.Block.List'.make
-                  ~tight:(Cmarkit.Block.List'.tight l)
-                  (Cmarkit.Block.List'.type' l)
-                  new_items
-              , list_meta )
-          in
-          new_list :: extracted
-        | Some [] -> [ list_block ])
+       (match try_split_paragraph p pmeta ~wrap_item:Fun.id with
+        | Some result -> result
+        | None -> [ list_block ])
+     | Cmarkit.Block.Blocks (Cmarkit.Block.Paragraph (p, pmeta) :: rest, bmeta) ->
+       (* Strip trailing blank lines that cmarkit adds for loose lists;
+          they would otherwise become spurious sub-blocks in the item. *)
+       let rest =
+         List.filter rest ~f:(fun b ->
+           match b with
+           | Cmarkit.Block.Blank_line _ -> false
+           | _ -> true)
+       in
+       let wrap_item first =
+         match rest with
+         | [] -> first
+         | _ -> Cmarkit.Block.Blocks (first :: rest, bmeta)
+       in
+       (match try_split_paragraph p pmeta ~wrap_item with
+        | Some result -> result
+        | None -> [ list_block ])
      | _ -> [ list_block ])
 ;;
 

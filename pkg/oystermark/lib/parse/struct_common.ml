@@ -33,6 +33,13 @@ let debug_block_renderer : Cmarkit_renderer.block =
     | _ -> false
 ;;
 
+let ensure_newline (c : Cmarkit_renderer.context) : unit =
+  let buf = Cmarkit_renderer.Context.buffer c in
+  let len = Buffer.length buf in
+  if len > 0 && not (Char.equal (Buffer.nth buf (len - 1)) '\n')
+  then Cmarkit_renderer.Context.byte c '\n'
+;;
+
 let block_commonmark_renderer : Cmarkit_renderer.block =
   let open Cmarkit_renderer in
   fun (c : context) (b : Block.t) ->
@@ -43,11 +50,36 @@ let block_commonmark_renderer : Cmarkit_renderer.block =
       Context.block c body;
       true
     | Ext_keyed_list_item ({ label }, body) ->
+      ensure_newline c;
       Context.string c "- ";
       Context.inline c label;
       Context.string c ":\n";
       Context.block c body;
       true
+    | Block.List (l, list_meta) ->
+      (* When the last item is keyed and absorbed following content,
+         render it outside the list so the body is not indented under
+         the list item — cmarkit's indent system would otherwise nest
+         it, breaking the commonmark round-trip. *)
+      let items = Block.List'.items l in
+      (match List.rev items with
+       | (last_item, _) :: rev_prefix ->
+         (match Block.List_item.block last_item with
+          | Ext_keyed_list_item _ ->
+            if not (List.is_empty rev_prefix)
+            then
+              Context.block
+                c
+                (Block.List
+                   ( Block.List'.make
+                       ~tight:true
+                       (Block.List'.type' l)
+                       (List.rev rev_prefix)
+                   , list_meta ));
+            Context.block c (Block.List_item.block last_item);
+            true
+          | _ -> false)
+       | _ -> false)
     | _ -> false
 ;;
 

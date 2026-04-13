@@ -225,8 +225,6 @@ Tests for interaction between {!module-"Div"} and {!module-"Struct"}
 
 The open and closing fence of div should not be keyed.
 
-TODO: the test expection is wrong at the moment.
-
 *)
 
 let%test_module "Div and Struct" =
@@ -454,6 +452,49 @@ let%test_module "Div and Struct" =
               (Div ((class_name ()) (colons 3)) (Blocks)))))
         ```
         |}]
+    ;;
+
+    let example_absorb_two_codeblocks =
+      {|- foo
+- bar:
+::: two-example
+```py
+code1
+```
+```js
+code2
+```
+:::|}
+    ;;
+
+    let%expect_test _ =
+      example_absorb_two_codeblocks |> test ~n_div:1 ~n_keyed:1;
+      [%expect {|
+        ```md {#original}
+        - foo
+        - bar:
+        ::: two-example
+        ```py
+        code1
+        ```
+        ```js
+        code2
+        ```
+        :::
+        ```
+        ```sexp
+        (Blocks
+          (List (Paragraph (Text foo))
+            (Keyed_list_item (Text bar)
+              (Div ((class_name (two-example)) (colons 3))
+                (Blocks
+                  ((Code_block py code1)
+                    (meta (attribute ((lang py) (attribute ())))))
+                  ((Code_block js code2)
+                    (meta (attribute ((lang js) (attribute ()))))))))))
+        ```
+        |}]
+
     ;;
 
     let%test_unit "roundtrip: commonmark output is idempotent" =
