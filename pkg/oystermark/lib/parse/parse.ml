@@ -271,8 +271,7 @@ let%test_module "Div and Struct" =
       print_endline "```"
     ;;
 
-    let test  ?(n_div : int = 0) ?(n_keyed : int = 0) (_name, src, _expected_n_div) =
-
+    let test ?(n_div : int = 0) ?(n_keyed : int = 0) (_name, src, _expected_n_div) =
       pp_src src;
       let doc = of_string src in
       print_endline "```sexp";
@@ -470,7 +469,8 @@ code2
 
     let%expect_test _ =
       test ~n_div:1 ~n_keyed:1 ("", example_absorb_two_codeblocks, 0);
-      [%expect {|
+      [%expect
+        {|
         ```md {#original}
         - foo
         - bar:
@@ -495,13 +495,15 @@ code2
                     (meta (attribute ((lang js) (attribute ()))))))))))
         ```
         |}]
-
     ;;
 
     let%test_unit "roundtrip: commonmark output is idempotent" =
       List.iter
         (List.map examples ~f:(fun (_, content, _) -> content))
-        ~f:(commonmark_of_doc_idempotent ~doc_of_string:of_string ~commonmark_of_doc:full_commonmark_of_doc)
+        ~f:
+          (commonmark_of_doc_idempotent
+             ~doc_of_string:of_string
+             ~commonmark_of_doc:full_commonmark_of_doc)
     ;;
   end)
 ;;
