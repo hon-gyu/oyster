@@ -500,8 +500,8 @@ details.callout:not([open]) > summary::after {
    Single HTML shape across all styles; variants live in data-* attributes:
      data-style:  plain | basic | graph
      data-body:   paragraph | list   (absent for other body types)
-     data-anon:   present when label is empty (no label span emitted)
-     data-single: present when body is a single-item list
+     data-empty-label: present when label is empty (no label span emitted)
+     data-single-list-item: present when body is a single-item list
 */
 
 .keyed-label {

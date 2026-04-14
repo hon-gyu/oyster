@@ -268,21 +268,17 @@ let render_struct ~(style : struct_style) c label body =
     | Block.List (l, _) ->
       let single =
         match Block.List'.items l with
-        | [ _ ] -> " data-single"
+        | [ _ ] -> " data-single-list-item"
         | _ -> ""
       in
       " data-body=\"list\"", single
     | _ -> "", ""
   in
-  let anon_attr = if label_empty then " data-anon" else "" in
+  let emtpy_label_attr = if label_empty then " data-empty-label" else "" in
+  let struct_style_attr_str = struct_style_attr style in
   C.string
     c
-    (sprintf
-       "<div class=\"keyed\" data-style=\"%s\"%s%s%s>\n"
-       (struct_style_attr style)
-       body_attr
-       anon_attr
-       single_attr);
+    {%string|<div class="keyed" data-style="%{struct_style_attr_str}"%{body_attr}%{emtpy_label_attr}%{single_attr}>\n|};
   if not label_empty
   then (
     C.string c "<span class=\"keyed-label\">";
