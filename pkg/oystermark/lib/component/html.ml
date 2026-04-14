@@ -239,10 +239,10 @@ type struct_style =
   | `Graph (** basic style plus box/arrow layout for nested structs *)
   ]
 
-let struct_style_class : struct_style -> string = function
-  | `Plain -> "keyed--style-plain"
-  | `Basic -> "keyed--style-basic"
-  | `Graph -> "keyed--style-graph"
+let struct_style_attr : struct_style -> string = function
+  | `Plain -> "plain"
+  | `Basic -> "basic"
+  | `Graph -> "graph"
 ;;
 
 let label_is_empty : Inline.t -> bool = function
@@ -251,35 +251,38 @@ let label_is_empty : Inline.t -> bool = function
 ;;
 
 (* Render a keyed block (or keyed list item) with a uniform HTML shape:
-     <div class="keyed [style] [modifiers]">
+     <div class="keyed" data-style="..." [data-body="..."] [data-anon] [data-single]>
        <span class="keyed-label">label</span>   (omitted when label is empty)
        <div class="keyed-body">body-as-rendered</div>
      </div>
 
-    Style and body-shape are surfaced as modifier classes so styling lives
+    Style and body-shape are surfaced as data-attributes so styling lives
     entirely in CSS. The body is rendered via [C.block], so [<ul>]/[<li>]
     wrapping is preserved — nested keyed-list-items remain inside their
     parent list rather than being unwrapped. *)
 let render_struct ~(style : struct_style) c label body =
   let label_empty = label_is_empty label in
-  let shape_classes =
+  let body_attr, single_attr =
     match body with
-    | Block.Paragraph _ -> [ "keyed--paragraph" ]
+    | Block.Paragraph _ -> " data-body=\"paragraph\"", ""
     | Block.List (l, _) ->
       let single =
         match Block.List'.items l with
-        | [ _ ] -> [ "keyed--list-single" ]
-        | _ -> []
+        | [ _ ] -> " data-single"
+        | _ -> ""
       in
-      "keyed--list" :: single
-    | _ -> []
+      " data-body=\"list\"", single
+    | _ -> "", ""
   in
-  let anon_class = if label_empty then [ "keyed--anon" ] else [] in
-  let classes =
-    "keyed" :: struct_style_class style :: (anon_class @ shape_classes)
-    |> String.concat ~sep:" "
-  in
-  C.string c (sprintf "<div class=\"%s\">\n" classes);
+  let anon_attr = if label_empty then " data-anon" else "" in
+  C.string
+    c
+    (sprintf
+       "<div class=\"keyed\" data-style=\"%s\"%s%s%s>\n"
+       (struct_style_attr style)
+       body_attr
+       anon_attr
+       single_attr);
   if not label_empty
   then (
     C.string c "<span class=\"keyed-label\">";
@@ -406,24 +409,24 @@ Single:
   pp_doc `Plain doc;
   [%expect
     {|
-    <div class="keyed keyed--style-plain keyed--list">
+    <div class="keyed" data-style="plain" data-body="list">
     <span class="keyed-label">Architecture</span>
     <div class="keyed-body">
     <ul>
     <li>
-    <div class="keyed keyed--style-plain keyed--anon keyed--paragraph">
+    <div class="keyed" data-style="plain" data-body="paragraph" data-anon>
     <div class="keyed-body">
     <p>encoder–decoder</p>
     </div>
     </div>
     </li>
     <li>
-    <div class="keyed keyed--style-plain keyed--list">
+    <div class="keyed" data-style="plain" data-body="list">
     <span class="keyed-label">encoder</span>
     <div class="keyed-body">
     <ul>
     <li>
-    <div class="keyed keyed--style-plain keyed--paragraph">
+    <div class="keyed" data-style="plain" data-body="paragraph">
     <span class="keyed-label">self-attention</span>
     <div class="keyed-body">
     <p>multi-head</p>
@@ -431,7 +434,7 @@ Single:
     </div>
     </li>
     <li>
-    <div class="keyed keyed--style-plain keyed--paragraph">
+    <div class="keyed" data-style="plain" data-body="paragraph">
     <span class="keyed-label">feed-forward</span>
     <div class="keyed-body">
     <p>position-wise MLP</p>
@@ -443,12 +446,12 @@ Single:
     </div>
     </li>
     <li>
-    <div class="keyed keyed--style-plain keyed--list">
+    <div class="keyed" data-style="plain" data-body="list">
     <span class="keyed-label">decoder</span>
     <div class="keyed-body">
     <ul>
     <li>
-    <div class="keyed keyed--style-plain keyed--list">
+    <div class="keyed" data-style="plain" data-body="list">
     <span class="keyed-label">masked self-attention</span>
     <div class="keyed-body">
     <ul>
@@ -459,7 +462,7 @@ Single:
     </div>
     </li>
     <li>
-    <div class="keyed keyed--style-plain keyed--paragraph">
+    <div class="keyed" data-style="plain" data-body="paragraph">
     <span class="keyed-label">cross-attention</span>
     <div class="keyed-body">
     <p>over encoder output</p>
@@ -473,12 +476,12 @@ Single:
     </ul>
     </div>
     </div>
-    <div class="keyed keyed--style-plain keyed--list keyed--list-single">
+    <div class="keyed" data-style="plain" data-body="list" data-single>
     <span class="keyed-label">Single</span>
     <div class="keyed-body">
     <ul>
     <li>
-    <div class="keyed keyed--style-plain keyed--paragraph">
+    <div class="keyed" data-style="plain" data-body="paragraph">
     <span class="keyed-label">only-child</span>
     <div class="keyed-body">
     <p>sole entry</p>
@@ -491,24 +494,23 @@ Single:
     |}]
 ;;
 
-let%expect_test "struct: style class differs across plain/basic/graph" =
+let%expect_test "struct: data-style differs across plain/basic/graph" =
   let open For_test in
   let src = {|Key: value|} in
   let doc = Parse.of_string src in
-  let strip_style s =
-    (* Show just the first line of each rendering; it carries the style class. *)
+  let first_line s =
     match String.split_lines s with
     | first :: _ -> first
     | [] -> ""
   in
   List.iter [ `Plain; `Basic; `Graph ] ~f:(fun style ->
     let rendered = html_of_doc style doc in
-    print_endline (strip_style rendered));
+    print_endline (first_line rendered));
   [%expect
     {|
-    <div class="keyed keyed--style-plain keyed--paragraph">
-    <div class="keyed keyed--style-basic keyed--paragraph">
-    <div class="keyed keyed--style-graph keyed--paragraph">
+    <div class="keyed" data-style="plain" data-body="paragraph">
+    <div class="keyed" data-style="basic" data-body="paragraph">
+    <div class="keyed" data-style="graph" data-body="paragraph">
     |}]
 ;;
 

@@ -496,42 +496,49 @@ details.callout:not([open]) > summary::after {
     --callout-icon: lucide-square-chevron-right;
 }
 
-/* Struct (keyed) — graph style. Conservative: thin rectangle outlines,
-   no font-weight/size changes; hover tints the child body. */
-.keyed-box {
-    border: 1px solid var(--border);
-    padding: 0 0.5rem;
-}
-.keyed-box-body {
-    padding: 0;
-}
-.keyed-box-title,
+/* Struct (keyed blocks).
+   Single HTML shape across all styles; variants live in data-* attributes:
+     data-style:  plain | basic | graph
+     data-body:   paragraph | list   (absent for other body types)
+     data-anon:   present when label is empty (no label span emitted)
+     data-single: present when body is a single-item list
+*/
+
 .keyed-label {
+    margin-right: 0.3rem;
+}
+
+/* Paragraph bodies: keep label and body on one line. Applies to every style. */
+.keyed[data-body="paragraph"] > .keyed-body,
+.keyed[data-body="paragraph"] > .keyed-body > p {
+    display: inline;
+    margin: 0;
+}
+
+/* Basic: boxed label; hover highlights both label and body.
+   Graph inherits these rules via the selector group below. */
+.keyed[data-style="basic"] > .keyed-label,
+.keyed[data-style="graph"] > .keyed-label {
     border: 1px solid var(--border);
     padding: 0 0.3rem;
-    margin-right: 0.3rem;
     line-height: 1;
 }
-.keyed-box-title:hover,
-.keyed-label:hover {
-    background: var(--bg-alt);
-    color: var(--fg);
-}
-.keyed-box:has(> .keyed-box-title:hover) > .keyed-box-body,
-.keyed-entry:has(> .keyed-label:hover) > .keyed-value {
+.keyed[data-style="basic"]:has(> .keyed-label:hover) > .keyed-label,
+.keyed[data-style="graph"]:has(> .keyed-label:hover) > .keyed-label,
+.keyed[data-style="basic"]:has(> .keyed-label:hover) > .keyed-body,
+.keyed[data-style="graph"]:has(> .keyed-label:hover) > .keyed-body {
     background: var(--bg-alt);
 }
 
-/* Struct (keyed) — plain style. Boxed label; keep default line spacing. */
-.keyed > p:first-child {
-    display: inline-block;
+/* Graph: outline box around non-paragraph bodies; strip list bullets so
+   nested keyed entries sit flush inside the box. */
+.keyed[data-style="graph"][data-body="list"],
+.keyed[data-style="graph"]:not([data-body]) {
     border: 1px solid var(--border);
-    padding: 0 0.3rem;
-    margin: 0;
+    padding: 0 0.5rem;
 }
-.keyed > p:first-child:hover {
-    background: var(--bg-alt);
-}
-.keyed:has(> p:first-child:hover) > :not(p:first-child) {
-    background: var(--bg-alt);
+.keyed[data-style="graph"] > .keyed-body > ul,
+.keyed[data-style="graph"] > .keyed-body > ol {
+    list-style: none;
+    padding-left: 0;
 }

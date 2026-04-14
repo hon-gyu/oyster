@@ -28,14 +28,7 @@ let backlink_context : string = "backlink-context"
 let breadcrumb : string = "breadcrumb"
 let sep : string = "sep"
 
-(* Struct (keyed blocks) *)
+(* Struct (keyed blocks) — variant info lives in data-* attributes, not classes. *)
 let keyed : string = "keyed"
 let keyed_label : string = "keyed-label"
 let keyed_body : string = "keyed-body"
-let keyed_mod_anon : string = "keyed--anon"
-let keyed_mod_paragraph : string = "keyed--paragraph"
-let keyed_mod_list : string = "keyed--list"
-let keyed_mod_list_single : string = "keyed--list-single"
-let keyed_mod_style_plain : string = "keyed--style-plain"
-let keyed_mod_style_basic : string = "keyed--style-basic"
-let keyed_mod_style_graph : string = "keyed--style-graph"
