@@ -260,8 +260,9 @@ let label_is_empty : Inline.t -> bool = function
     entirely in CSS. The body is rendered via [C.block], so [<ul>]/[<li>]
     wrapping is preserved — nested keyed-list-items remain inside their
     parent list rather than being unwrapped. *)
-let render_struct ~(style : struct_style) c label body =
+let render_struct ~(style : struct_style) (label_kind : [ `Paragraph | `List_item ]) c label body =
   let label_empty = label_is_empty label in
+  let label_kind_attr = match label_kind with `Paragraph -> "paragraph" | `List_item -> "list-item" in
   let body_attr, single_attr =
     match body with
     | Block.Paragraph _ -> " data-body=\"paragraph\"", ""
@@ -278,13 +279,11 @@ let render_struct ~(style : struct_style) c label body =
   let struct_style_attr_str = struct_style_attr style in
   C.string
     c
-    {%string|<div class="keyed" data-style="%{struct_style_attr_str}"%{body_attr}%{emtpy_label_attr}%{single_attr}>\n|};
-  if not label_empty
-  then (
-    C.string c "<span class=\"keyed-label\">";
-    C.inline c label;
-    C.string c "</span>\n");
-  C.string c "<div class=\"keyed-body\">\n";
+    {%string|<div class="keyed" data-label-kind="%{label_kind_attr}" data-style="%{struct_style_attr_str}"%{body_attr}%{emtpy_label_attr}%{single_attr}>|};
+  (* Always emit a label span, even when empty *)
+  C.string c "<span class=\"keyed-label\">";
+  if not label_empty then C.inline c label;
+  C.string c "</span>\n<div class=\"keyed-body\">\n";
   C.block c body;
   C.string c "</div>\n</div>\n"
 ;;
@@ -328,9 +327,11 @@ let block ~(struct_style : struct_style) (c : Cmarkit_renderer.context) : Block.
     C.block c body;
     C.string c "</div>\n";
     true
-  | Parse.Struct.Ext_keyed_block ({ label }, body)
+  | Parse.Struct.Ext_keyed_block ({ label }, body) ->
+    render_struct ~style:struct_style `Paragraph c label body;
+    true
   | Parse.Struct.Ext_keyed_list_item ({ label }, body) ->
-    render_struct ~style:struct_style c label body;
+    render_struct ~style:struct_style `List_item c label body;
     true
   | Block.Blocks (blocks, meta) ->
     (match Meta.find Embed.embed_meta_key meta with
@@ -405,33 +406,29 @@ Single:
   pp_doc `Plain doc;
   [%expect
     {|
-    <div class="keyed" data-style="plain" data-body="list">
-    <span class="keyed-label">Architecture</span>
+    <div class="keyed" data-label-kind="paragraph" data-style="plain" data-body="list"><span class="keyed-label">Architecture</span>
     <div class="keyed-body">
     <ul>
     <li>
-    <div class="keyed" data-style="plain" data-body="paragraph" data-anon>
+    <div class="keyed" data-label-kind="list-item" data-style="plain" data-body="paragraph" data-empty-label><span class="keyed-label"></span>
     <div class="keyed-body">
     <p>encoder–decoder</p>
     </div>
     </div>
     </li>
     <li>
-    <div class="keyed" data-style="plain" data-body="list">
-    <span class="keyed-label">encoder</span>
+    <div class="keyed" data-label-kind="list-item" data-style="plain" data-body="list"><span class="keyed-label">encoder</span>
     <div class="keyed-body">
     <ul>
     <li>
-    <div class="keyed" data-style="plain" data-body="paragraph">
-    <span class="keyed-label">self-attention</span>
+    <div class="keyed" data-label-kind="list-item" data-style="plain" data-body="paragraph"><span class="keyed-label">self-attention</span>
     <div class="keyed-body">
     <p>multi-head</p>
     </div>
     </div>
     </li>
     <li>
-    <div class="keyed" data-style="plain" data-body="paragraph">
-    <span class="keyed-label">feed-forward</span>
+    <div class="keyed" data-label-kind="list-item" data-style="plain" data-body="paragraph"><span class="keyed-label">feed-forward</span>
     <div class="keyed-body">
     <p>position-wise MLP</p>
     </div>
@@ -442,13 +439,11 @@ Single:
     </div>
     </li>
     <li>
-    <div class="keyed" data-style="plain" data-body="list">
-    <span class="keyed-label">decoder</span>
+    <div class="keyed" data-label-kind="list-item" data-style="plain" data-body="list"><span class="keyed-label">decoder</span>
     <div class="keyed-body">
     <ul>
     <li>
-    <div class="keyed" data-style="plain" data-body="list">
-    <span class="keyed-label">masked self-attention</span>
+    <div class="keyed" data-label-kind="list-item" data-style="plain" data-body="list"><span class="keyed-label">masked self-attention</span>
     <div class="keyed-body">
     <ul>
     <li>autoregressive</li>
@@ -458,8 +453,7 @@ Single:
     </div>
     </li>
     <li>
-    <div class="keyed" data-style="plain" data-body="paragraph">
-    <span class="keyed-label">cross-attention</span>
+    <div class="keyed" data-label-kind="list-item" data-style="plain" data-body="paragraph"><span class="keyed-label">cross-attention</span>
     <div class="keyed-body">
     <p>over encoder output</p>
     </div>
@@ -472,13 +466,11 @@ Single:
     </ul>
     </div>
     </div>
-    <div class="keyed" data-style="plain" data-body="list" data-single>
-    <span class="keyed-label">Single</span>
+    <div class="keyed" data-label-kind="paragraph" data-style="plain" data-body="list" data-single-list-item><span class="keyed-label">Single</span>
     <div class="keyed-body">
     <ul>
     <li>
-    <div class="keyed" data-style="plain" data-body="paragraph">
-    <span class="keyed-label">only-child</span>
+    <div class="keyed" data-label-kind="list-item" data-style="plain" data-body="paragraph"><span class="keyed-label">only-child</span>
     <div class="keyed-body">
     <p>sole entry</p>
     </div>
@@ -504,9 +496,9 @@ let%expect_test "struct: data-style differs across plain/basic/graph" =
     print_endline (first_line rendered));
   [%expect
     {|
-    <div class="keyed" data-style="plain" data-body="paragraph">
-    <div class="keyed" data-style="basic" data-body="paragraph">
-    <div class="keyed" data-style="graph" data-body="paragraph">
+    <div class="keyed" data-label-kind="paragraph" data-style="plain" data-body="paragraph"><span class="keyed-label">Key</span>
+    <div class="keyed" data-label-kind="paragraph" data-style="basic" data-body="paragraph"><span class="keyed-label">Key</span>
+    <div class="keyed" data-label-kind="paragraph" data-style="graph" data-body="paragraph"><span class="keyed-label">Key</span>
     |}]
 ;;
 

@@ -504,8 +504,19 @@ details.callout:not([open]) > summary::after {
      data-single-list-item: present when body is a single-item list
 */
 
-.keyed-label {
+/*.keyed-label {
     margin-right: 0.3rem;
+}*/
+
+/* Empty label: keep the span in the DOM as an anchor for future styling,
+   but hide it so it reserves no visual space by default. Override
+   [data-empty-label] > .keyed-label to render a placeholder/marker. */
+.keyed[data-empty-label] > .keyed-label {
+    display: none;
+}
+
+.keyed[data-style='plain'] > .keyed-label::after {
+    content: ":";
 }
 
 /* Paragraph bodies: keep label and body on one line. Applies to every style. */
@@ -517,11 +528,15 @@ details.callout:not([open]) > summary::after {
 
 /* Basic: boxed label; hover highlights both label and body.
    Graph inherits these rules via the selector group below. */
-.keyed[data-style="basic"] > .keyed-label,
-.keyed[data-style="graph"] > .keyed-label {
+.keyed[data-style="basic"][data-label-kind="list-item"] > .keyed-label,
+.keyed[data-style="graph"][data-label-kind="list-item"] > .keyed-label {
     border: 1px solid var(--border);
     padding: 0 0.3rem;
     line-height: 1;
+}
+.keyed[data-style="basic"][data-label-kind="paragraph"] > .keyed-label,
+.keyed[data-style="graph"][data-label-kind="paragraph"] > .keyed-label {
+    font-weight: bold;
 }
 .keyed[data-style="basic"]:has(> .keyed-label:hover) > .keyed-label,
 .keyed[data-style="graph"]:has(> .keyed-label:hover) > .keyed-label,
@@ -531,14 +546,17 @@ details.callout:not([open]) > summary::after {
 }
 
 /* Graph: outline box around non-paragraph bodies; strip list bullets so
-   nested keyed entries sit flush inside the box. */
-.keyed[data-style="graph"][data-body="list"],
-.keyed[data-style="graph"]:not([data-body]) {
+    nested keyed entries sit flush inside the box. */
+.keyed[data-style="graph"][data-body="list"] {
     border: 1px solid var(--border);
-    padding: 0 0.5rem;
+    padding: 0.5rem 0.5rem 0.5rem 0.5rem;
 }
-.keyed[data-style="graph"] > .keyed-body > ul,
+.keyed[data-style="graph"][data-body="list"][data-label-kind="paragraph"] {
+    border: 1px solid var(--border);
+    padding: 0.7em 0.7rem 0.7rem 0.7rem;
+}
+/*.keyed[data-style="graph"] > .keyed-body > ul,
 .keyed[data-style="graph"] > .keyed-body > ol {
     list-style: none;
     padding-left: 0;
-}
+}*/
