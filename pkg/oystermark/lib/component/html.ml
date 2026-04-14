@@ -234,56 +234,60 @@ let render_callout
 module Heading_slug = Parse.Heading_slug
 
 type struct_style =
-  [ `Plain (** label in a <p>, body as-is *)
-  | `Graph (** box/arrow layout mirroring the terminal graph *)
+  [ `Plain (** no visible styling, as close to plain CommonMark as possible *)
+  | `Basic (** boxed label with hover highlighting of label and body *)
+  | `Graph (** basic style plus box/arrow layout for nested structs *)
   ]
 
-let render_struct_plain c label body =
-  C.string c "<div class=\"keyed\">\n<p>";
-  C.inline c label;
-  C.string c "</p>\n";
-  C.block c body;
-  C.string c "</div>\n"
+let struct_style_class : struct_style -> string = function
+  | `Plain -> "keyed--style-plain"
+  | `Basic -> "keyed--style-basic"
+  | `Graph -> "keyed--style-graph"
 ;;
 
-let render_struct_graph c label body =
-  let label_empty =
-    match label with
-    | Inline.Text ("", _) -> true
-    | _ -> false
+let label_is_empty : Inline.t -> bool = function
+  | Inline.Text ("", _) -> true
+  | _ -> false
+;;
+
+(* Render a keyed block (or keyed list item) with a uniform HTML shape:
+     <div class="keyed [style] [modifiers]">
+       <span class="keyed-label">label</span>   (omitted when label is empty)
+       <div class="keyed-body">body-as-rendered</div>
+     </div>
+
+    Style and body-shape are surfaced as modifier classes so styling lives
+    entirely in CSS. The body is rendered via [C.block], so [<ul>]/[<li>]
+    wrapping is preserved — nested keyed-list-items remain inside their
+    parent list rather than being unwrapped. *)
+let render_struct ~(style : struct_style) c label body =
+  let label_empty = label_is_empty label in
+  let shape_classes =
+    match body with
+    | Block.Paragraph _ -> [ "keyed--paragraph" ]
+    | Block.List (l, _) ->
+      let single =
+        match Block.List'.items l with
+        | [ _ ] -> [ "keyed--list-single" ]
+        | _ -> []
+      in
+      "keyed--list" :: single
+    | _ -> []
   in
-  let render_list_items l =
-    List.iter (Block.List'.items l) ~f:(fun (item, _) ->
-      C.block c (Block.List_item.block item))
+  let anon_class = if label_empty then [ "keyed--anon" ] else [] in
+  let classes =
+    "keyed" :: struct_style_class style :: (anon_class @ shape_classes)
+    |> String.concat ~sep:" "
   in
-  match body with
-  | Block.List (l, _) ->
-    C.string c "<div class=\"keyed-box\">\n";
-    C.string c "<span class=\"keyed-box-title\">";
+  C.string c (sprintf "<div class=\"%s\">\n" classes);
+  if not label_empty
+  then (
+    C.string c "<span class=\"keyed-label\">";
     C.inline c label;
-    C.string c "</span>\n";
-    C.string c "<div class=\"keyed-box-body\">\n";
-    render_list_items l;
-    C.string c "</div>\n</div>\n"
-  | Block.Paragraph (p, _) ->
-    let cls = if label_empty then "keyed-entry keyed-entry--anon" else "keyed-entry" in
-    C.string c (sprintf "<div class=\"%s\">\n" cls);
-    if not label_empty
-    then (
-      C.string c "<span class=\"keyed-label\">";
-      C.inline c label;
-      C.string c "</span>\n");
-    C.string c "<span class=\"keyed-value\">";
-    C.inline c (Block.Paragraph.inline p);
-    C.string c "</span>\n</div>\n"
-  | _ ->
-    C.string c "<div class=\"keyed-box\">\n";
-    C.string c "<span class=\"keyed-box-title\">";
-    C.inline c label;
-    C.string c "</span>\n";
-    C.string c "<div class=\"keyed-box-body\">\n";
-    C.block c body;
-    C.string c "</div>\n</div>\n"
+    C.string c "</span>\n");
+  C.string c "<div class=\"keyed-body\">\n";
+  C.block c body;
+  C.string c "</div>\n</div>\n"
 ;;
 
 let block ~(struct_style : struct_style) (c : Cmarkit_renderer.context) : Block.t -> bool
@@ -327,9 +331,7 @@ let block ~(struct_style : struct_style) (c : Cmarkit_renderer.context) : Block.
     true
   | Parse.Struct.Ext_keyed_block ({ label }, body)
   | Parse.Struct.Ext_keyed_list_item ({ label }, body) ->
-    (match struct_style with
-     | `Plain -> render_struct_plain c label body
-     | `Graph -> render_struct_graph c label body);
+    render_struct ~style:struct_style c label body;
     true
   | Block.Blocks (blocks, meta) ->
     (match Meta.find Embed.embed_meta_key meta with
@@ -365,6 +367,7 @@ let of_doc
   let struct_style : struct_style =
     match config.ext_struct.struct_style with
     | Config.Struct_style_def.Plain -> `Plain
+    | Config.Struct_style_def.Basic -> `Basic
     | Config.Struct_style_def.Graph -> `Graph
   in
   Cmarkit_renderer.doc_to_string (renderer ~backend_blocks ~safe ~struct_style ()) doc
@@ -380,7 +383,7 @@ module For_test = struct
   let pp_doc struct_style doc = html_of_doc struct_style doc |> print_string
 end
 
-let%expect_test "struct_style: plain vs graph" =
+let%expect_test "struct: unified HTML across styles" =
   let open For_test in
   let src =
     {|
@@ -394,104 +397,118 @@ Architecture:
     - autoregressive
     - attends positions ≤ i
   - cross-attention: over encoder output
+
+Single:
+- only-child: sole entry
 |}
   in
   let doc = Parse.of_string src in
   pp_doc `Plain doc;
-  print_string "---\n";
-  pp_doc `Graph doc;
   [%expect
     {|
-    <div class="keyed">
-    <p>Architecture</p>
+    <div class="keyed keyed--style-plain keyed--list">
+    <span class="keyed-label">Architecture</span>
+    <div class="keyed-body">
     <ul>
     <li>
-    <div class="keyed">
-    <p></p>
+    <div class="keyed keyed--style-plain keyed--anon keyed--paragraph">
+    <div class="keyed-body">
     <p>encoder–decoder</p>
     </div>
-    </li>
-    <li>
-    <div class="keyed">
-    <p>encoder</p>
-    <ul>
-    <li>
-    <div class="keyed">
-    <p>self-attention</p>
-    <p>multi-head</p>
     </div>
     </li>
     <li>
-    <div class="keyed">
-    <p>feed-forward</p>
+    <div class="keyed keyed--style-plain keyed--list">
+    <span class="keyed-label">encoder</span>
+    <div class="keyed-body">
+    <ul>
+    <li>
+    <div class="keyed keyed--style-plain keyed--paragraph">
+    <span class="keyed-label">self-attention</span>
+    <div class="keyed-body">
+    <p>multi-head</p>
+    </div>
+    </div>
+    </li>
+    <li>
+    <div class="keyed keyed--style-plain keyed--paragraph">
+    <span class="keyed-label">feed-forward</span>
+    <div class="keyed-body">
     <p>position-wise MLP</p>
+    </div>
     </div>
     </li>
     </ul>
     </div>
+    </div>
     </li>
     <li>
-    <div class="keyed">
-    <p>decoder</p>
+    <div class="keyed keyed--style-plain keyed--list">
+    <span class="keyed-label">decoder</span>
+    <div class="keyed-body">
     <ul>
     <li>
-    <div class="keyed">
-    <p>masked self-attention</p>
+    <div class="keyed keyed--style-plain keyed--list">
+    <span class="keyed-label">masked self-attention</span>
+    <div class="keyed-body">
     <ul>
     <li>autoregressive</li>
     <li>attends positions ≤ i</li>
     </ul>
     </div>
+    </div>
     </li>
     <li>
-    <div class="keyed">
-    <p>cross-attention</p>
+    <div class="keyed keyed--style-plain keyed--paragraph">
+    <span class="keyed-label">cross-attention</span>
+    <div class="keyed-body">
     <p>over encoder output</p>
     </div>
-    </li>
-    </ul>
     </div>
     </li>
     </ul>
     </div>
-    ---
-    <div class="keyed-box">
-    <span class="keyed-box-title">Architecture</span>
-    <div class="keyed-box-body">
-    <div class="keyed-entry keyed-entry--anon">
-    <span class="keyed-value">encoder–decoder</span>
     </div>
-    <div class="keyed-box">
-    <span class="keyed-box-title">encoder</span>
-    <div class="keyed-box-body">
-    <div class="keyed-entry">
-    <span class="keyed-label">self-attention</span>
-    <span class="keyed-value">multi-head</span>
-    </div>
-    <div class="keyed-entry">
-    <span class="keyed-label">feed-forward</span>
-    <span class="keyed-value">position-wise MLP</span>
+    </li>
+    </ul>
     </div>
     </div>
-    </div>
-    <div class="keyed-box">
-    <span class="keyed-box-title">decoder</span>
-    <div class="keyed-box-body">
-    <div class="keyed-box">
-    <span class="keyed-box-title">masked self-attention</span>
-    <div class="keyed-box-body">
-    <p>autoregressive</p>
-    <p>attends positions ≤ i</p>
-    </div>
-    </div>
-    <div class="keyed-entry">
-    <span class="keyed-label">cross-attention</span>
-    <span class="keyed-value">over encoder output</span>
+    <div class="keyed keyed--style-plain keyed--list keyed--list-single">
+    <span class="keyed-label">Single</span>
+    <div class="keyed-body">
+    <ul>
+    <li>
+    <div class="keyed keyed--style-plain keyed--paragraph">
+    <span class="keyed-label">only-child</span>
+    <div class="keyed-body">
+    <p>sole entry</p>
     </div>
     </div>
+    </li>
+    </ul>
     </div>
     </div>
-    </div>
+    |}]
+;;
+
+let%expect_test "struct: style class differs across plain/basic/graph" =
+  let open For_test in
+  let src = {|Key: value|} in
+  let doc = Parse.of_string src in
+  let strip_style s =
+    (* Show just the first line of each rendering; it carries the style class. *)
+    match String.split_lines s with
+    | first :: _ -> first
+    | [] -> ""
+  in
+  List.iter [ `Plain; `Basic; `Graph ] ~f:(fun style ->
+    let rendered = html_of_doc style doc in
+    print_endline (strip_style rendered));
+  [%expect
+    {|
+    <div class="keyed keyed--style-plain keyed--paragraph">
+    <div class="keyed keyed--style-basic keyed--paragraph">
+    <div class="keyed keyed--style-graph keyed--paragraph">
     |}]
 ;;
 
