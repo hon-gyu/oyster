@@ -7,15 +7,15 @@
  (preprocess
   (pps ppx_jane ppx_string ppx_quick_test)))
 
-(test
+(executable
  (name t1)
  (modules t1)
- (libraries cmarkit core parse component oystermark)
- )
+ (libraries cmarkit core parse component oystermark))
 
 (rule
-  (alias runtest)
-  (mode (promote (until-clean)))
-  (target t1.expected.html)
-  (deps t1.expected)
-  (action (copy %{deps} %{target})))
+ (with-stdout-to t1.output.html (run ./t1.exe)))
+
+(rule
+ (alias runtest)
+ (mode (promote (until-clean)))
+ (action (diff t1.expected.html t1.output.html)))

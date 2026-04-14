@@ -72,9 +72,10 @@ end
 module Struct_style_def = struct
   type t =
     | Plain
+    | Basic
     | Graph
 
-  let table = [ "plain", Plain, []; "graph", Graph, [] ]
+  let table = [ "plain", Plain, []; "basic", Basic, []; "graph", Graph, [] ]
   let default = Plain
 end
 

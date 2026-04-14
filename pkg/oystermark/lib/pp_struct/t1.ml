@@ -39,9 +39,14 @@ Attention:
 
 let () =
   let doc = doc_of_string example in
-  let body_1 = html_of_doc `Graph doc in
-  let body_2 = html_of_doc `Plain doc in
-  let body = body_1 ^ "<p>^ Graph, Plain v</p>" ^ body_2 in
+  let section label style =
+    sprintf "<hr><p><b>%s</b></p>\n%s" label (html_of_doc style doc)
+  in
+  let body =
+    String.concat
+      ~sep:"\n"
+      [ section "plain" `Plain; section "basic" `Basic; section "graph" `Graph ]
+  in
   let page : Theme.page =
     { title = "Struct"; body; url_path = ""; nav = ""; sidebar = "" }
   in

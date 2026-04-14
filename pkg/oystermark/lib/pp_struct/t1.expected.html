@@ -594,44 +594,114 @@ details.callout:not([open]) > summary::after {
 }
 
 
-/* Struct (keyed) — graph style. Conservative: thin rectangle outlines,
-   no font-weight/size changes; hover tints the child body. */
-.keyed-box {
-    border: 1px solid var(--border);
-    padding: 0 0.5rem;
+/* Struct (keyed blocks).
+   Single HTML shape across all styles; variants live in data-* attributes:
+     data-default-style:    plain | basic | graph   (set by the renderer)
+     data-body:              paragraph | list       (absent for other body types)
+     data-empty-label:       present when label is empty (no label span emitted)
+     data-single-list-item:  present when body is a single-item list
+
+   A struct inherits its style from the nearest ancestor `.struct-style-<x>`
+   wrapper (emitted via an Ext_div with a matching class). When no ancestor
+   override exists, `data-default-style` drives the styling. Each visual
+   rule below has two variants: one keyed on an ancestor class, and one
+   fallback keyed on data-default-style. */
+
+/* Empty label: keep the span in the DOM as an anchor for future styling,
+   but hide it so it reserves no visual space by default. */
+.keyed[data-empty-label] > .keyed-label {
+    display: none;
 }
-.keyed-box-body {
-    padding: 0;
+
+/* Paragraph bodies: keep label and body on one line. Applies to every style. */
+.keyed[data-body="paragraph"] > .keyed-body,
+.keyed[data-body="paragraph"] > .keyed-body > p {
+    display: inline;
+    margin: 0;
 }
-.keyed-box-title,
-.keyed-label {
+
+/* Plain: trailing colon after the label */
+.struct-style-plain .keyed > .keyed-label::after,
+.keyed[data-default-style="plain"]:not(
+        .struct-style-basic *,
+        .struct-style-graph *
+    ) > .keyed-label::after {
+    content: ":";
+}
+
+/* Suppress the plain colon inside basic/graph overrides. */
+.struct-style-basic .keyed > .keyed-label::after,
+.struct-style-graph .keyed > .keyed-label::after {
+    content: none;
+}
+
+/* Basic / Graph shared: boxed list-item label, bold paragraph
+   label, hover highlights both label and body. */
+.struct-style-basic .keyed[data-label-kind="list-item"] > .keyed-label,
+.struct-style-graph .keyed[data-label-kind="list-item"] > .keyed-label,
+.keyed[data-default-style="basic"][data-label-kind="list-item"]:not(
+        .struct-style-plain *
+    ) > .keyed-label,
+.keyed[data-default-style="graph"][data-label-kind="list-item"]:not(
+        .struct-style-plain *
+    ) > .keyed-label {
     border: 1px solid var(--border);
     padding: 0 0.3rem;
-    margin-right: 0.3rem;
     line-height: 1;
 }
-.keyed-box-title:hover,
-.keyed-label:hover {
-    background: var(--bg-alt);
-    color: var(--fg);
+
+.struct-style-basic .keyed[data-label-kind="paragraph"] > .keyed-label,
+.struct-style-graph .keyed[data-label-kind="paragraph"] > .keyed-label,
+.keyed[data-default-style="basic"][data-label-kind="paragraph"]:not(
+        .struct-style-plain *
+    ) > .keyed-label,
+.keyed[data-default-style="graph"][data-label-kind="paragraph"]:not(
+        .struct-style-plain *
+    ) > .keyed-label {
+    font-weight: bold;
 }
-.keyed-box:has(> .keyed-box-title:hover) > .keyed-box-body,
-.keyed-entry:has(> .keyed-label:hover) > .keyed-value {
+
+.struct-style-basic .keyed:has(> .keyed-label:hover) > .keyed-label,
+.struct-style-basic .keyed:has(> .keyed-label:hover) > .keyed-body,
+.struct-style-graph .keyed:has(> .keyed-label:hover) > .keyed-label,
+.struct-style-graph .keyed:has(> .keyed-label:hover) > .keyed-body,
+.keyed[data-default-style="basic"]:not(.struct-style-plain *):has(
+        > .keyed-label:hover
+    ) > .keyed-label,
+.keyed[data-default-style="basic"]:not(.struct-style-plain *):has(
+        > .keyed-label:hover
+    ) > .keyed-body,
+.keyed[data-default-style="graph"]:not(.struct-style-plain *):has(
+        > .keyed-label:hover
+    ) > .keyed-label,
+.keyed[data-default-style="graph"]:not(.struct-style-plain *):has(
+        > .keyed-label:hover
+    ) > .keyed-body {
     background: var(--bg-alt);
 }
 
-/* Struct (keyed) — plain style. Boxed label; keep default line spacing. */
-.keyed > p:first-child {
-    display: inline-block;
+/* Graph-only: outline box around list bodies */
+.struct-style-graph .keyed[data-body="list"],
+.keyed[data-default-style="graph"][data-body="list"]:not(
+        .struct-style-plain *,
+        .struct-style-basic *
+    ) {
     border: 1px solid var(--border);
-    padding: 0 0.3rem;
-    margin: 0;
+    padding: 0.5rem;
 }
-.keyed > p:first-child:hover {
-    background: var(--bg-alt);
+.struct-style-graph .keyed[data-body="list"][data-label-kind="paragraph"],
+.keyed[data-default-style="graph"][data-body="list"][data-label-kind="paragraph"]:not(
+        .struct-style-plain *,
+        .struct-style-basic *
+    ) {
+    padding: 0.7rem;
 }
-.keyed:has(> p:first-child:hover) > :not(p:first-child) {
-    background: var(--bg-alt);
+
+/* Plain/basic overrides should strip any inherited graph outline. */
+.struct-style-plain .keyed[data-body="list"],
+.struct-style-basic .keyed[data-body="list"] {
+    border: none;
+    padding: 0;
 }
 
 </style>
@@ -648,216 +718,430 @@ details.callout:not([open]) > summary::after {
 <div class="sidebar-handle" onclick="document.body.classList.toggle('sidebar-collapsed')" aria-label="Toggle sidebar"></div>
 <main>
 <h1 class="page-title">Struct</h1>
-<div class="keyed-box">
-<span class="keyed-box-title">Architecture</span>
-<div class="keyed-box-body">
-<div class="keyed-entry keyed-entry--anon">
-<span class="keyed-value">encoder–decoder. each half is a stack of six identical layers. self-attention and position-wise feed-forward replace recurrent and convolutional layers</span>
-</div>
-<div class="keyed-box">
-<span class="keyed-box-title">encoder</span>
-<div class="keyed-box-body">
-<div class="keyed-entry">
-<span class="keyed-label">self-attention</span>
-<span class="keyed-value">multi-head, every position attends to every other input position</span>
-</div>
-<div class="keyed-entry">
-<span class="keyed-label">feed-forward</span>
-<span class="keyed-value">position-wise MLP, applied independently at each step</span>
-</div>
-<div class="keyed-entry">
-<span class="keyed-label">residual + norm</span>
-<span class="keyed-value">a residual connection wraps each sub-layer, followed by layer normalization</span>
-</div>
-</div>
-</div>
-<div class="keyed-box">
-<span class="keyed-box-title">decoder</span>
-<div class="keyed-box-body">
-<div class="keyed-box">
-<span class="keyed-box-title">masked self-attention sub-layer</span>
-<div class="keyed-box-body">
-<p>like the encoder's, but autoregressive</p>
-<p>position <code>i</code> can only attend to positions <code>≤ i</code></p>
-</div>
-</div>
-<div class="keyed-entry">
-<span class="keyed-label">cross-attention</span>
-<span class="keyed-value">multi-head attention over the encoder output.</span>
-</div>
-<div class="keyed-entry">
-<span class="keyed-label">feed-forward sub-layer</span>
-<span class="keyed-value">same as on the encoder side</span>
-</div>
-<div class="keyed-box">
-<span class="keyed-box-title">residual + norm</span>
-<div class="keyed-box-body">
-<p>as in the encoder</p>
-</div>
-</div>
-</div>
-</div>
-</div>
-</div>
-<div class="keyed-box">
-<span class="keyed-box-title">Attention</span>
-<div class="keyed-box-body">
-<div class="keyed-box">
-<span class="keyed-box-title">scaled dot-product</span>
-<div class="keyed-box-body">
-<div class="keyed-entry">
-<span class="keyed-label">definition</span>
-<span class="keyed-value"><code>softmax(QKᵀ / √dₖ) V</code></span>
-</div>
-<div class="keyed-box">
-<span class="keyed-box-title"><code>√dₖ</code></span>
-<div class="keyed-box-body">
-<p>dot products grow like <code>√dₖ</code> as the key dimension grows. dividing keeps the softmax out of its saturation regime, so gradients don't vanish</p>
-</div>
-</div>
-</div>
-</div>
-<div class="keyed-box">
-<span class="keyed-box-title">multi-head</span>
-<div class="keyed-box-body">
-<div class="keyed-box">
-<span class="keyed-box-title">procedure</span>
-<div class="keyed-box-body">
-<p>run <code>h = 8</code> attention functions in parallel over learned linear projections of <code>Q</code>, <code>K</code>, <code>V</code>.</p>
-<p>concatenate the heads and project.</p>
-</div>
-</div>
-<div class="keyed-box">
-<span class="keyed-box-title">why multiple heads</span>
-<div class="keyed-box-body">
-<p>each head can attend to a different representation subspace. a single softmax over averaged features cannot recover this.</p>
-</div>
-</div>
-</div>
-</div>
-</div>
-</div>
-<p>^ Graph, Plain v</p><div class="keyed">
-<p>Architecture</p>
+<hr><p><b>plain</b></p>
+<div class="keyed" data-label-kind="paragraph" data-default-style="plain" data-body="list"><span class="keyed-label">Architecture</span>
+<div class="keyed-body">
 <ul>
 <li>
-<div class="keyed">
-<p></p>
+<div class="keyed" data-label-kind="list-item" data-default-style="plain" data-body="paragraph" data-empty-label><span class="keyed-label"></span>
+<div class="keyed-body">
 <p>encoder–decoder. each half is a stack of six identical layers. self-attention and position-wise feed-forward replace recurrent and convolutional layers</p>
 </div>
+</div>
 </li>
 <li>
-<div class="keyed">
-<p>encoder</p>
+<div class="keyed" data-label-kind="list-item" data-default-style="plain" data-body="list"><span class="keyed-label">encoder</span>
+<div class="keyed-body">
 <ul>
 <li>
-<div class="keyed">
-<p>self-attention</p>
+<div class="keyed" data-label-kind="list-item" data-default-style="plain" data-body="paragraph"><span class="keyed-label">self-attention</span>
+<div class="keyed-body">
 <p>multi-head, every position attends to every other input position</p>
 </div>
-</li>
-<li>
-<div class="keyed">
-<p>feed-forward</p>
-<p>position-wise MLP, applied independently at each step</p>
 </div>
 </li>
 <li>
-<div class="keyed">
-<p>residual + norm</p>
+<div class="keyed" data-label-kind="list-item" data-default-style="plain" data-body="paragraph"><span class="keyed-label">feed-forward</span>
+<div class="keyed-body">
+<p>position-wise MLP, applied independently at each step</p>
+</div>
+</div>
+</li>
+<li>
+<div class="keyed" data-label-kind="list-item" data-default-style="plain" data-body="paragraph"><span class="keyed-label">residual + norm</span>
+<div class="keyed-body">
 <p>a residual connection wraps each sub-layer, followed by layer normalization</p>
+</div>
 </div>
 </li>
 </ul>
 </div>
+</div>
 </li>
 <li>
-<div class="keyed">
-<p>decoder</p>
+<div class="keyed" data-label-kind="list-item" data-default-style="plain" data-body="list"><span class="keyed-label">decoder</span>
+<div class="keyed-body">
 <ul>
 <li>
-<div class="keyed">
-<p>masked self-attention sub-layer</p>
+<div class="keyed" data-label-kind="list-item" data-default-style="plain" data-body="list"><span class="keyed-label">masked self-attention sub-layer</span>
+<div class="keyed-body">
 <ul>
 <li>like the encoder's, but autoregressive</li>
 <li>position <code>i</code> can only attend to positions <code>≤ i</code></li>
 </ul>
 </div>
+</div>
 </li>
 <li>
-<div class="keyed">
-<p>cross-attention</p>
+<div class="keyed" data-label-kind="list-item" data-default-style="plain" data-body="paragraph"><span class="keyed-label">cross-attention</span>
+<div class="keyed-body">
 <p>multi-head attention over the encoder output.</p>
 </div>
-</li>
-<li>
-<div class="keyed">
-<p>feed-forward sub-layer</p>
-<p>same as on the encoder side</p>
 </div>
 </li>
 <li>
-<div class="keyed">
-<p>residual + norm</p>
+<div class="keyed" data-label-kind="list-item" data-default-style="plain" data-body="paragraph"><span class="keyed-label">feed-forward sub-layer</span>
+<div class="keyed-body">
+<p>same as on the encoder side</p>
+</div>
+</div>
+</li>
+<li>
+<div class="keyed" data-label-kind="list-item" data-default-style="plain" data-body="list" data-single-list-item><span class="keyed-label">residual + norm</span>
+<div class="keyed-body">
 <ul>
 <li>as in the encoder</li>
 </ul>
 </div>
-</li>
-</ul>
 </div>
 </li>
 </ul>
 </div>
-<div class="keyed">
-<p>Attention</p>
+</div>
+</li>
+</ul>
+</div>
+</div>
+<div class="keyed" data-label-kind="paragraph" data-default-style="plain" data-body="list"><span class="keyed-label">Attention</span>
+<div class="keyed-body">
 <ul>
 <li>
-<div class="keyed">
-<p>scaled dot-product</p>
+<div class="keyed" data-label-kind="list-item" data-default-style="plain" data-body="list"><span class="keyed-label">scaled dot-product</span>
+<div class="keyed-body">
 <ul>
 <li>
-<div class="keyed">
-<p>definition</p>
+<div class="keyed" data-label-kind="list-item" data-default-style="plain" data-body="paragraph"><span class="keyed-label">definition</span>
+<div class="keyed-body">
 <p><code>softmax(QKᵀ / √dₖ) V</code></p>
 </div>
+</div>
 </li>
 <li>
-<div class="keyed">
-<p><code>√dₖ</code></p>
+<div class="keyed" data-label-kind="list-item" data-default-style="plain" data-body="list" data-single-list-item><span class="keyed-label"><code>√dₖ</code></span>
+<div class="keyed-body">
 <ul>
 <li>dot products grow like <code>√dₖ</code> as the key dimension grows. dividing keeps the softmax out of its saturation regime, so gradients don't vanish</li>
 </ul>
 </div>
+</div>
 </li>
 </ul>
 </div>
+</div>
 </li>
 <li>
-<div class="keyed">
-<p>multi-head</p>
+<div class="keyed" data-label-kind="list-item" data-default-style="plain" data-body="list"><span class="keyed-label">multi-head</span>
+<div class="keyed-body">
 <ul>
 <li>
-<div class="keyed">
-<p>procedure</p>
+<div class="keyed" data-label-kind="list-item" data-default-style="plain" data-body="list"><span class="keyed-label">procedure</span>
+<div class="keyed-body">
 <ul>
 <li>run <code>h = 8</code> attention functions in parallel over learned linear projections of <code>Q</code>, <code>K</code>, <code>V</code>.</li>
 <li>concatenate the heads and project.</li>
 </ul>
 </div>
+</div>
 </li>
 <li>
-<div class="keyed">
-<p>why multiple heads</p>
+<div class="keyed" data-label-kind="list-item" data-default-style="plain" data-body="list" data-single-list-item><span class="keyed-label">why multiple heads</span>
+<div class="keyed-body">
 <ul>
 <li>each head can attend to a different representation subspace. a single softmax over averaged features cannot recover this.</li>
 </ul>
 </div>
-</li>
-</ul>
 </div>
 </li>
 </ul>
+</div>
+</div>
+</li>
+</ul>
+</div>
+</div>
+
+<hr><p><b>basic</b></p>
+<div class="keyed" data-label-kind="paragraph" data-default-style="basic" data-body="list"><span class="keyed-label">Architecture</span>
+<div class="keyed-body">
+<ul>
+<li>
+<div class="keyed" data-label-kind="list-item" data-default-style="basic" data-body="paragraph" data-empty-label><span class="keyed-label"></span>
+<div class="keyed-body">
+<p>encoder–decoder. each half is a stack of six identical layers. self-attention and position-wise feed-forward replace recurrent and convolutional layers</p>
+</div>
+</div>
+</li>
+<li>
+<div class="keyed" data-label-kind="list-item" data-default-style="basic" data-body="list"><span class="keyed-label">encoder</span>
+<div class="keyed-body">
+<ul>
+<li>
+<div class="keyed" data-label-kind="list-item" data-default-style="basic" data-body="paragraph"><span class="keyed-label">self-attention</span>
+<div class="keyed-body">
+<p>multi-head, every position attends to every other input position</p>
+</div>
+</div>
+</li>
+<li>
+<div class="keyed" data-label-kind="list-item" data-default-style="basic" data-body="paragraph"><span class="keyed-label">feed-forward</span>
+<div class="keyed-body">
+<p>position-wise MLP, applied independently at each step</p>
+</div>
+</div>
+</li>
+<li>
+<div class="keyed" data-label-kind="list-item" data-default-style="basic" data-body="paragraph"><span class="keyed-label">residual + norm</span>
+<div class="keyed-body">
+<p>a residual connection wraps each sub-layer, followed by layer normalization</p>
+</div>
+</div>
+</li>
+</ul>
+</div>
+</div>
+</li>
+<li>
+<div class="keyed" data-label-kind="list-item" data-default-style="basic" data-body="list"><span class="keyed-label">decoder</span>
+<div class="keyed-body">
+<ul>
+<li>
+<div class="keyed" data-label-kind="list-item" data-default-style="basic" data-body="list"><span class="keyed-label">masked self-attention sub-layer</span>
+<div class="keyed-body">
+<ul>
+<li>like the encoder's, but autoregressive</li>
+<li>position <code>i</code> can only attend to positions <code>≤ i</code></li>
+</ul>
+</div>
+</div>
+</li>
+<li>
+<div class="keyed" data-label-kind="list-item" data-default-style="basic" data-body="paragraph"><span class="keyed-label">cross-attention</span>
+<div class="keyed-body">
+<p>multi-head attention over the encoder output.</p>
+</div>
+</div>
+</li>
+<li>
+<div class="keyed" data-label-kind="list-item" data-default-style="basic" data-body="paragraph"><span class="keyed-label">feed-forward sub-layer</span>
+<div class="keyed-body">
+<p>same as on the encoder side</p>
+</div>
+</div>
+</li>
+<li>
+<div class="keyed" data-label-kind="list-item" data-default-style="basic" data-body="list" data-single-list-item><span class="keyed-label">residual + norm</span>
+<div class="keyed-body">
+<ul>
+<li>as in the encoder</li>
+</ul>
+</div>
+</div>
+</li>
+</ul>
+</div>
+</div>
+</li>
+</ul>
+</div>
+</div>
+<div class="keyed" data-label-kind="paragraph" data-default-style="basic" data-body="list"><span class="keyed-label">Attention</span>
+<div class="keyed-body">
+<ul>
+<li>
+<div class="keyed" data-label-kind="list-item" data-default-style="basic" data-body="list"><span class="keyed-label">scaled dot-product</span>
+<div class="keyed-body">
+<ul>
+<li>
+<div class="keyed" data-label-kind="list-item" data-default-style="basic" data-body="paragraph"><span class="keyed-label">definition</span>
+<div class="keyed-body">
+<p><code>softmax(QKᵀ / √dₖ) V</code></p>
+</div>
+</div>
+</li>
+<li>
+<div class="keyed" data-label-kind="list-item" data-default-style="basic" data-body="list" data-single-list-item><span class="keyed-label"><code>√dₖ</code></span>
+<div class="keyed-body">
+<ul>
+<li>dot products grow like <code>√dₖ</code> as the key dimension grows. dividing keeps the softmax out of its saturation regime, so gradients don't vanish</li>
+</ul>
+</div>
+</div>
+</li>
+</ul>
+</div>
+</div>
+</li>
+<li>
+<div class="keyed" data-label-kind="list-item" data-default-style="basic" data-body="list"><span class="keyed-label">multi-head</span>
+<div class="keyed-body">
+<ul>
+<li>
+<div class="keyed" data-label-kind="list-item" data-default-style="basic" data-body="list"><span class="keyed-label">procedure</span>
+<div class="keyed-body">
+<ul>
+<li>run <code>h = 8</code> attention functions in parallel over learned linear projections of <code>Q</code>, <code>K</code>, <code>V</code>.</li>
+<li>concatenate the heads and project.</li>
+</ul>
+</div>
+</div>
+</li>
+<li>
+<div class="keyed" data-label-kind="list-item" data-default-style="basic" data-body="list" data-single-list-item><span class="keyed-label">why multiple heads</span>
+<div class="keyed-body">
+<ul>
+<li>each head can attend to a different representation subspace. a single softmax over averaged features cannot recover this.</li>
+</ul>
+</div>
+</div>
+</li>
+</ul>
+</div>
+</div>
+</li>
+</ul>
+</div>
+</div>
+
+<hr><p><b>graph</b></p>
+<div class="keyed" data-label-kind="paragraph" data-default-style="graph" data-body="list"><span class="keyed-label">Architecture</span>
+<div class="keyed-body">
+<ul>
+<li>
+<div class="keyed" data-label-kind="list-item" data-default-style="graph" data-body="paragraph" data-empty-label><span class="keyed-label"></span>
+<div class="keyed-body">
+<p>encoder–decoder. each half is a stack of six identical layers. self-attention and position-wise feed-forward replace recurrent and convolutional layers</p>
+</div>
+</div>
+</li>
+<li>
+<div class="keyed" data-label-kind="list-item" data-default-style="graph" data-body="list"><span class="keyed-label">encoder</span>
+<div class="keyed-body">
+<ul>
+<li>
+<div class="keyed" data-label-kind="list-item" data-default-style="graph" data-body="paragraph"><span class="keyed-label">self-attention</span>
+<div class="keyed-body">
+<p>multi-head, every position attends to every other input position</p>
+</div>
+</div>
+</li>
+<li>
+<div class="keyed" data-label-kind="list-item" data-default-style="graph" data-body="paragraph"><span class="keyed-label">feed-forward</span>
+<div class="keyed-body">
+<p>position-wise MLP, applied independently at each step</p>
+</div>
+</div>
+</li>
+<li>
+<div class="keyed" data-label-kind="list-item" data-default-style="graph" data-body="paragraph"><span class="keyed-label">residual + norm</span>
+<div class="keyed-body">
+<p>a residual connection wraps each sub-layer, followed by layer normalization</p>
+</div>
+</div>
+</li>
+</ul>
+</div>
+</div>
+</li>
+<li>
+<div class="keyed" data-label-kind="list-item" data-default-style="graph" data-body="list"><span class="keyed-label">decoder</span>
+<div class="keyed-body">
+<ul>
+<li>
+<div class="keyed" data-label-kind="list-item" data-default-style="graph" data-body="list"><span class="keyed-label">masked self-attention sub-layer</span>
+<div class="keyed-body">
+<ul>
+<li>like the encoder's, but autoregressive</li>
+<li>position <code>i</code> can only attend to positions <code>≤ i</code></li>
+</ul>
+</div>
+</div>
+</li>
+<li>
+<div class="keyed" data-label-kind="list-item" data-default-style="graph" data-body="paragraph"><span class="keyed-label">cross-attention</span>
+<div class="keyed-body">
+<p>multi-head attention over the encoder output.</p>
+</div>
+</div>
+</li>
+<li>
+<div class="keyed" data-label-kind="list-item" data-default-style="graph" data-body="paragraph"><span class="keyed-label">feed-forward sub-layer</span>
+<div class="keyed-body">
+<p>same as on the encoder side</p>
+</div>
+</div>
+</li>
+<li>
+<div class="keyed" data-label-kind="list-item" data-default-style="graph" data-body="list" data-single-list-item><span class="keyed-label">residual + norm</span>
+<div class="keyed-body">
+<ul>
+<li>as in the encoder</li>
+</ul>
+</div>
+</div>
+</li>
+</ul>
+</div>
+</div>
+</li>
+</ul>
+</div>
+</div>
+<div class="keyed" data-label-kind="paragraph" data-default-style="graph" data-body="list"><span class="keyed-label">Attention</span>
+<div class="keyed-body">
+<ul>
+<li>
+<div class="keyed" data-label-kind="list-item" data-default-style="graph" data-body="list"><span class="keyed-label">scaled dot-product</span>
+<div class="keyed-body">
+<ul>
+<li>
+<div class="keyed" data-label-kind="list-item" data-default-style="graph" data-body="paragraph"><span class="keyed-label">definition</span>
+<div class="keyed-body">
+<p><code>softmax(QKᵀ / √dₖ) V</code></p>
+</div>
+</div>
+</li>
+<li>
+<div class="keyed" data-label-kind="list-item" data-default-style="graph" data-body="list" data-single-list-item><span class="keyed-label"><code>√dₖ</code></span>
+<div class="keyed-body">
+<ul>
+<li>dot products grow like <code>√dₖ</code> as the key dimension grows. dividing keeps the softmax out of its saturation regime, so gradients don't vanish</li>
+</ul>
+</div>
+</div>
+</li>
+</ul>
+</div>
+</div>
+</li>
+<li>
+<div class="keyed" data-label-kind="list-item" data-default-style="graph" data-body="list"><span class="keyed-label">multi-head</span>
+<div class="keyed-body">
+<ul>
+<li>
+<div class="keyed" data-label-kind="list-item" data-default-style="graph" data-body="list"><span class="keyed-label">procedure</span>
+<div class="keyed-body">
+<ul>
+<li>run <code>h = 8</code> attention functions in parallel over learned linear projections of <code>Q</code>, <code>K</code>, <code>V</code>.</li>
+<li>concatenate the heads and project.</li>
+</ul>
+</div>
+</div>
+</li>
+<li>
+<div class="keyed" data-label-kind="list-item" data-default-style="graph" data-body="list" data-single-list-item><span class="keyed-label">why multiple heads</span>
+<div class="keyed-body">
+<ul>
+<li>each head can attend to a different representation subspace. a single softmax over averaged features cannot recover this.</li>
+</ul>
+</div>
+</div>
+</li>
+</ul>
+</div>
+</div>
+</li>
+</ul>
+</div>
 </div>
 </main>
 </div>

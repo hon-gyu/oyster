@@ -496,42 +496,112 @@ details.callout:not([open]) > summary::after {
     --callout-icon: lucide-square-chevron-right;
 }
 
-/* Struct (keyed) — graph style. Conservative: thin rectangle outlines,
-   no font-weight/size changes; hover tints the child body. */
-.keyed-box {
-    border: 1px solid var(--border);
-    padding: 0 0.5rem;
+/* Struct (keyed blocks).
+   Single HTML shape across all styles; variants live in data-* attributes:
+     data-default-style:    plain | basic | graph   (set by the renderer)
+     data-body:              paragraph | list       (absent for other body types)
+     data-empty-label:       present when label is empty (no label span emitted)
+     data-single-list-item:  present when body is a single-item list
+
+   A struct inherits its style from the nearest ancestor `.struct-style-<x>`
+   wrapper (emitted via an Ext_div with a matching class). When no ancestor
+   override exists, `data-default-style` drives the styling. Each visual
+   rule below has two variants: one keyed on an ancestor class, and one
+   fallback keyed on data-default-style. */
+
+/* Empty label: keep the span in the DOM as an anchor for future styling,
+   but hide it so it reserves no visual space by default. */
+.keyed[data-empty-label] > .keyed-label {
+    display: none;
 }
-.keyed-box-body {
-    padding: 0;
+
+/* Paragraph bodies: keep label and body on one line. Applies to every style. */
+.keyed[data-body="paragraph"] > .keyed-body,
+.keyed[data-body="paragraph"] > .keyed-body > p {
+    display: inline;
+    margin: 0;
 }
-.keyed-box-title,
-.keyed-label {
+
+/* Plain: trailing colon after the label */
+.struct-style-plain .keyed > .keyed-label::after,
+.keyed[data-default-style="plain"]:not(
+        .struct-style-basic *,
+        .struct-style-graph *
+    ) > .keyed-label::after {
+    content: ":";
+}
+
+/* Suppress the plain colon inside basic/graph overrides. */
+.struct-style-basic .keyed > .keyed-label::after,
+.struct-style-graph .keyed > .keyed-label::after {
+    content: none;
+}
+
+/* Basic / Graph shared: boxed list-item label, bold paragraph
+   label, hover highlights both label and body. */
+.struct-style-basic .keyed[data-label-kind="list-item"] > .keyed-label,
+.struct-style-graph .keyed[data-label-kind="list-item"] > .keyed-label,
+.keyed[data-default-style="basic"][data-label-kind="list-item"]:not(
+        .struct-style-plain *
+    ) > .keyed-label,
+.keyed[data-default-style="graph"][data-label-kind="list-item"]:not(
+        .struct-style-plain *
+    ) > .keyed-label {
     border: 1px solid var(--border);
     padding: 0 0.3rem;
-    margin-right: 0.3rem;
     line-height: 1;
 }
-.keyed-box-title:hover,
-.keyed-label:hover {
-    background: var(--bg-alt);
-    color: var(--fg);
+
+.struct-style-basic .keyed[data-label-kind="paragraph"] > .keyed-label,
+.struct-style-graph .keyed[data-label-kind="paragraph"] > .keyed-label,
+.keyed[data-default-style="basic"][data-label-kind="paragraph"]:not(
+        .struct-style-plain *
+    ) > .keyed-label,
+.keyed[data-default-style="graph"][data-label-kind="paragraph"]:not(
+        .struct-style-plain *
+    ) > .keyed-label {
+    font-weight: bold;
 }
-.keyed-box:has(> .keyed-box-title:hover) > .keyed-box-body,
-.keyed-entry:has(> .keyed-label:hover) > .keyed-value {
+
+.struct-style-basic .keyed:has(> .keyed-label:hover) > .keyed-label,
+.struct-style-basic .keyed:has(> .keyed-label:hover) > .keyed-body,
+.struct-style-graph .keyed:has(> .keyed-label:hover) > .keyed-label,
+.struct-style-graph .keyed:has(> .keyed-label:hover) > .keyed-body,
+.keyed[data-default-style="basic"]:not(.struct-style-plain *):has(
+        > .keyed-label:hover
+    ) > .keyed-label,
+.keyed[data-default-style="basic"]:not(.struct-style-plain *):has(
+        > .keyed-label:hover
+    ) > .keyed-body,
+.keyed[data-default-style="graph"]:not(.struct-style-plain *):has(
+        > .keyed-label:hover
+    ) > .keyed-label,
+.keyed[data-default-style="graph"]:not(.struct-style-plain *):has(
+        > .keyed-label:hover
+    ) > .keyed-body {
     background: var(--bg-alt);
 }
 
-/* Struct (keyed) — plain style. Boxed label; keep default line spacing. */
-.keyed > p:first-child {
-    display: inline-block;
+/* Graph-only: outline box around list bodies */
+.struct-style-graph .keyed[data-body="list"],
+.keyed[data-default-style="graph"][data-body="list"]:not(
+        .struct-style-plain *,
+        .struct-style-basic *
+    ) {
     border: 1px solid var(--border);
-    padding: 0 0.3rem;
-    margin: 0;
+    padding: 0.5rem;
 }
-.keyed > p:first-child:hover {
-    background: var(--bg-alt);
+.struct-style-graph .keyed[data-body="list"][data-label-kind="paragraph"],
+.keyed[data-default-style="graph"][data-body="list"][data-label-kind="paragraph"]:not(
+        .struct-style-plain *,
+        .struct-style-basic *
+    ) {
+    padding: 0.7rem;
 }
-.keyed:has(> p:first-child:hover) > :not(p:first-child) {
-    background: var(--bg-alt);
+
+/* Plain/basic overrides should strip any inherited graph outline. */
+.struct-style-plain .keyed[data-body="list"],
+.struct-style-basic .keyed[data-body="list"] {
+    border: none;
+    padding: 0;
 }
