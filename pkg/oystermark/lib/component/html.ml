@@ -279,7 +279,7 @@ let render_struct ~(style : struct_style) (label_kind : [ `Paragraph | `List_ite
   let struct_style_attr_str = struct_style_attr style in
   C.string
     c
-    {%string|<div class="keyed" data-label-kind="%{label_kind_attr}" data-style="%{struct_style_attr_str}"%{body_attr}%{emtpy_label_attr}%{single_attr}>|};
+    {%string|<div class="keyed" data-label-kind="%{label_kind_attr}" data-default-style="%{struct_style_attr_str}"%{body_attr}%{emtpy_label_attr}%{single_attr}>|};
   (* Always emit a label span, even when empty *)
   C.string c "<span class=\"keyed-label\">";
   if not label_empty then C.inline c label;
@@ -406,29 +406,29 @@ Single:
   pp_doc `Plain doc;
   [%expect
     {|
-    <div class="keyed" data-label-kind="paragraph" data-style="plain" data-body="list"><span class="keyed-label">Architecture</span>
+    <div class="keyed" data-label-kind="paragraph" data-default-style="plain" data-body="list"><span class="keyed-label">Architecture</span>
     <div class="keyed-body">
     <ul>
     <li>
-    <div class="keyed" data-label-kind="list-item" data-style="plain" data-body="paragraph" data-empty-label><span class="keyed-label"></span>
+    <div class="keyed" data-label-kind="list-item" data-default-style="plain" data-body="paragraph" data-empty-label><span class="keyed-label"></span>
     <div class="keyed-body">
     <p>encoder–decoder</p>
     </div>
     </div>
     </li>
     <li>
-    <div class="keyed" data-label-kind="list-item" data-style="plain" data-body="list"><span class="keyed-label">encoder</span>
+    <div class="keyed" data-label-kind="list-item" data-default-style="plain" data-body="list"><span class="keyed-label">encoder</span>
     <div class="keyed-body">
     <ul>
     <li>
-    <div class="keyed" data-label-kind="list-item" data-style="plain" data-body="paragraph"><span class="keyed-label">self-attention</span>
+    <div class="keyed" data-label-kind="list-item" data-default-style="plain" data-body="paragraph"><span class="keyed-label">self-attention</span>
     <div class="keyed-body">
     <p>multi-head</p>
     </div>
     </div>
     </li>
     <li>
-    <div class="keyed" data-label-kind="list-item" data-style="plain" data-body="paragraph"><span class="keyed-label">feed-forward</span>
+    <div class="keyed" data-label-kind="list-item" data-default-style="plain" data-body="paragraph"><span class="keyed-label">feed-forward</span>
     <div class="keyed-body">
     <p>position-wise MLP</p>
     </div>
@@ -439,11 +439,11 @@ Single:
     </div>
     </li>
     <li>
-    <div class="keyed" data-label-kind="list-item" data-style="plain" data-body="list"><span class="keyed-label">decoder</span>
+    <div class="keyed" data-label-kind="list-item" data-default-style="plain" data-body="list"><span class="keyed-label">decoder</span>
     <div class="keyed-body">
     <ul>
     <li>
-    <div class="keyed" data-label-kind="list-item" data-style="plain" data-body="list"><span class="keyed-label">masked self-attention</span>
+    <div class="keyed" data-label-kind="list-item" data-default-style="plain" data-body="list"><span class="keyed-label">masked self-attention</span>
     <div class="keyed-body">
     <ul>
     <li>autoregressive</li>
@@ -453,7 +453,7 @@ Single:
     </div>
     </li>
     <li>
-    <div class="keyed" data-label-kind="list-item" data-style="plain" data-body="paragraph"><span class="keyed-label">cross-attention</span>
+    <div class="keyed" data-label-kind="list-item" data-default-style="plain" data-body="paragraph"><span class="keyed-label">cross-attention</span>
     <div class="keyed-body">
     <p>over encoder output</p>
     </div>
@@ -466,11 +466,11 @@ Single:
     </ul>
     </div>
     </div>
-    <div class="keyed" data-label-kind="paragraph" data-style="plain" data-body="list" data-single-list-item><span class="keyed-label">Single</span>
+    <div class="keyed" data-label-kind="paragraph" data-default-style="plain" data-body="list" data-single-list-item><span class="keyed-label">Single</span>
     <div class="keyed-body">
     <ul>
     <li>
-    <div class="keyed" data-label-kind="list-item" data-style="plain" data-body="paragraph"><span class="keyed-label">only-child</span>
+    <div class="keyed" data-label-kind="list-item" data-default-style="plain" data-body="paragraph"><span class="keyed-label">only-child</span>
     <div class="keyed-body">
     <p>sole entry</p>
     </div>
@@ -496,9 +496,9 @@ let%expect_test "struct: data-style differs across plain/basic/graph" =
     print_endline (first_line rendered));
   [%expect
     {|
-    <div class="keyed" data-label-kind="paragraph" data-style="plain" data-body="paragraph"><span class="keyed-label">Key</span>
-    <div class="keyed" data-label-kind="paragraph" data-style="basic" data-body="paragraph"><span class="keyed-label">Key</span>
-    <div class="keyed" data-label-kind="paragraph" data-style="graph" data-body="paragraph"><span class="keyed-label">Key</span>
+    <div class="keyed" data-label-kind="paragraph" data-default-style="plain" data-body="paragraph"><span class="keyed-label">Key</span>
+    <div class="keyed" data-label-kind="paragraph" data-default-style="basic" data-body="paragraph"><span class="keyed-label">Key</span>
+    <div class="keyed" data-label-kind="paragraph" data-default-style="graph" data-body="paragraph"><span class="keyed-label">Key</span>
     |}]
 ;;
 
