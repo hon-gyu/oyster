@@ -11,7 +11,7 @@ doc: "https://url/to/documentation"
 bug-reports: "https://github.com/username/reponame/issues"
 depends: [
   "ocaml"
-  "dune" {>= "3.21" & >= "3.21"}
+  "dune" {>= "3.22" & >= "3.21"}
   "cmarkit"
   "core"
   "core_unix"
