@@ -594,113 +594,222 @@ details.callout:not([open]) > summary::after {
 }
 
 
-/* Struct (keyed blocks).
-   Single HTML shape across all styles; variants live in data-* attributes:
-     data-default-style:    plain | basic | graph   (set by the renderer)
-     data-body:              paragraph | list       (absent for other body types)
-     data-empty-label:       present when label is empty (no label span emitted)
-     data-single-list-item:  present when body is a single-item list
+/* ============================================================
+   Struct (keyed blocks)
+   ============================================================
 
-   A struct inherits its style from the nearest ancestor `.struct-style-<x>`
-   wrapper (emitted via an Ext_div with a matching class). When no ancestor
-   override exists, `data-default-style` drives the styling. Each visual
-   rule below has two variants: one keyed on an ancestor class, and one
-   fallback keyed on data-default-style. */
+   HTML shape (uniform across all styles, emitted by the renderer):
 
-/* Empty label: keep the span in the DOM as an anchor for future styling,
-   but hide it so it reserves no visual space by default. */
+     <div class="keyed"
+          data-default-style="plain|basic|graph"
+          data-label-kind="paragraph|list-item"
+          data-body="paragraph|list"
+          [data-empty-label] [data-single-list-item]>
+       <span class="keyed-label">…</span>
+       <div class="keyed-body">…</div>
+     </div>
+
+   Plain / basic / graph differ only in CSS.
+
+   Style resolution
+   ----------------
+   Each visual rule has two selector forms:
+     (1) `.struct-style-<X> .keyed …`
+         — nearest `.struct-style-<X>` ancestor wrapper wins
+           (wrappers are emitted via Ext_div).
+     (2) `.keyed[data-default-style="X"]:not(.struct-style-Y *, .struct-style-Z *) …`
+         — falls back to the renderer's default attribute when no
+           wrapper overrides.
+
+   Graph — two visual modes, keyed on `data-body`
+   ----------------------------------------------
+     data-body="list":        box with the label sitting on the top
+                              border (╭─ label ─╮ … ╰──╯).
+                              `.keyed` gets `position: relative` +
+                              border + padding; `.keyed-label` is
+                              absolutely positioned onto the top
+                              edge with `background: var(--bg)`
+                              carving a notch in the border.
+
+     data-body="paragraph":   arrow form "-- label -> value".
+                              No border. "--" on `.keyed::before`,
+                              "->" on `.keyed-body::before`.
+
+   Graph — three pseudo-element zones
+   ----------------------------------
+     .keyed::before   .keyed-label   .keyed-body::before   .keyed-body (value)
+         "--"            foo               "-> "                 bar
+        (zone 1)       (zone 2)          (zone 3)              (zone 4)
+
+   Hover tints zones 2+4 (`.keyed-label` + `.keyed-body`). Zone 1 is
+   a sibling of the body, outside either tint zone — naturally
+   unaffected. Zone 3 is inside the body (would tint) so it gets an
+   explicit `background: var(--bg)` to stay page-colored. Result:
+   arrows never tint; label + value both do.
+
+   Empty-label case (`data-empty-label`, e.g. `- : value`):
+     `.keyed-label` is `display: none`; the zone-1 "--" pseudo is
+     suppressed via `:not([data-empty-label])`; only "-> value"
+     renders.
+
+   Spacing knobs
+   -------------
+     - Top-level structs (label-kind=paragraph): `margin-block` on
+       `.keyed[data-label-kind="paragraph"]`.
+     - Gap between nested graph boxes (list-item list-body siblings):
+       `margin-top` on `.keyed[data-label-kind="list-item"][data-body="list"]`
+       in the graph section. */
+
+/* ---- common ------------------------------------------------ */
+
 .keyed[data-empty-label] > .keyed-label {
     display: none;
 }
 
-/* Paragraph bodies: keep label and body on one line. Applies to every style. */
+/* Paragraph body: label and body on one line. */
 .keyed[data-body="paragraph"] > .keyed-body,
 .keyed[data-body="paragraph"] > .keyed-body > p {
     display: inline;
     margin: 0;
 }
 
-/* Plain: trailing colon after the label */
+/* Top-level structs (label-kind=paragraph) get vertical breathing room. */
+.keyed[data-label-kind="paragraph"] {
+    margin-block: 1.5rem;
+}
+
+/* ---- plain: trailing colon --------------------------------- */
+
 .struct-style-plain .keyed > .keyed-label::after,
-.keyed[data-default-style="plain"]:not(
-        .struct-style-basic *,
-        .struct-style-graph *
-    ) > .keyed-label::after {
+.keyed[data-default-style="plain"]:not(.struct-style-basic *, .struct-style-graph *)
+    > .keyed-label::after {
     content: ":";
 }
 
-/* Suppress the plain colon inside basic/graph overrides. */
-.struct-style-basic .keyed > .keyed-label::after,
-.struct-style-graph .keyed > .keyed-label::after {
+/* Suppress the plain colon when basic or graph is effective. */
+:is(.struct-style-basic, .struct-style-graph) .keyed > .keyed-label::after {
     content: none;
 }
 
-/* Basic / Graph shared: boxed list-item label, bold paragraph
-   label, hover highlights both label and body. */
-.struct-style-basic .keyed[data-label-kind="list-item"] > .keyed-label,
-.struct-style-graph .keyed[data-label-kind="list-item"] > .keyed-label,
-.keyed[data-default-style="basic"][data-label-kind="list-item"]:not(
-        .struct-style-plain *
-    ) > .keyed-label,
-.keyed[data-default-style="graph"][data-label-kind="list-item"]:not(
-        .struct-style-plain *
-    ) > .keyed-label {
+/* ---- basic + graph: shared label styling ------------------- */
+
+/* Boxed list-item labels. */
+:is(.struct-style-basic, .struct-style-graph)
+    .keyed[data-label-kind="list-item"] > .keyed-label,
+.keyed:is([data-default-style="basic"], [data-default-style="graph"])[data-label-kind="list-item"]:not(.struct-style-plain *)
+    > .keyed-label {
     border: 1px solid var(--border);
     padding: 0 0.3rem;
     line-height: 1;
 }
 
-.struct-style-basic .keyed[data-label-kind="paragraph"] > .keyed-label,
-.struct-style-graph .keyed[data-label-kind="paragraph"] > .keyed-label,
-.keyed[data-default-style="basic"][data-label-kind="paragraph"]:not(
-        .struct-style-plain *
-    ) > .keyed-label,
-.keyed[data-default-style="graph"][data-label-kind="paragraph"]:not(
-        .struct-style-plain *
-    ) > .keyed-label {
+/* Bold paragraph labels. */
+:is(.struct-style-basic, .struct-style-graph)
+    .keyed[data-label-kind="paragraph"] > .keyed-label,
+.keyed:is([data-default-style="basic"], [data-default-style="graph"])[data-label-kind="paragraph"]:not(.struct-style-plain *)
+    > .keyed-label {
     font-weight: bold;
 }
 
-.struct-style-basic .keyed:has(> .keyed-label:hover) > .keyed-label,
-.struct-style-basic .keyed:has(> .keyed-label:hover) > .keyed-body,
-.struct-style-graph .keyed:has(> .keyed-label:hover) > .keyed-label,
-.struct-style-graph .keyed:has(> .keyed-label:hover) > .keyed-body,
-.keyed[data-default-style="basic"]:not(.struct-style-plain *):has(
-        > .keyed-label:hover
-    ) > .keyed-label,
-.keyed[data-default-style="basic"]:not(.struct-style-plain *):has(
-        > .keyed-label:hover
-    ) > .keyed-body,
-.keyed[data-default-style="graph"]:not(.struct-style-plain *):has(
-        > .keyed-label:hover
-    ) > .keyed-label,
-.keyed[data-default-style="graph"]:not(.struct-style-plain *):has(
-        > .keyed-label:hover
-    ) > .keyed-body {
+/* Hover: label-hover tints both the label and the body. The graph
+   arrow "--" lives on .keyed::before (a sibling of the body, outside
+   either tint zone); the "->" lives on .keyed-body::before and gets
+   an explicit background below to stay un-tinted. */
+:is(.struct-style-basic, .struct-style-graph) .keyed:has(> .keyed-label:hover) > .keyed-label,
+:is(.struct-style-basic, .struct-style-graph) .keyed:has(> .keyed-label:hover) > .keyed-body,
+.keyed:is([data-default-style="basic"], [data-default-style="graph"]):not(.struct-style-plain *):has(> .keyed-label:hover) > .keyed-label,
+.keyed:is([data-default-style="basic"], [data-default-style="graph"]):not(.struct-style-plain *):has(> .keyed-label:hover) > .keyed-body {
     background: var(--bg-alt);
 }
 
-/* Graph-only: outline box around list bodies */
+/* ---- graph ------------------------------------------------- */
+
+/* List body → outlined box with the label on the top border
+   (╭─ label ─╮ … ╰──╯). */
 .struct-style-graph .keyed[data-body="list"],
-.keyed[data-default-style="graph"][data-body="list"]:not(
-        .struct-style-plain *,
-        .struct-style-basic *
-    ) {
+.keyed[data-default-style="graph"][data-body="list"]:not(.struct-style-plain *, .struct-style-basic *) {
+    position: relative;
     border: 1px solid var(--border);
-    padding: 0.5rem;
-}
-.struct-style-graph .keyed[data-body="list"][data-label-kind="paragraph"],
-.keyed[data-default-style="graph"][data-body="list"][data-label-kind="paragraph"]:not(
-        .struct-style-plain *,
-        .struct-style-basic *
-    ) {
-    padding: 0.7rem;
+    border-radius: 4px;
+    padding: 1rem 0.8rem 0.6rem;
 }
 
-/* Plain/basic overrides should strip any inherited graph outline. */
+/* Label promoted into the top border. Solid parent-bg background
+   "cuts" the border behind the label to form the notch. */
+.struct-style-graph .keyed[data-body="list"] > .keyed-label,
+.keyed[data-default-style="graph"][data-body="list"]:not(.struct-style-plain *, .struct-style-basic *)
+    > .keyed-label {
+    position: absolute;
+    top: 0;
+    left: 0.7rem;
+    transform: translateY(-50%);
+    padding: 0 0.4rem;
+    line-height: 1;
+    background: var(--bg);
+    border: none;
+    /*font-weight: bold;*/
+}
+
+/* Nested (list-item label-kind) list-body boxes get top-gap from siblings. */
+.struct-style-graph .keyed[data-label-kind="list-item"][data-body="list"],
+.keyed[data-default-style="graph"][data-label-kind="list-item"][data-body="list"]:not(.struct-style-plain *, .struct-style-basic *) {
+    margin-top: 0.9rem;
+}
+
+/* Strip <ul> bullets/indent so nesting reads as boxes-within-boxes. */
+.struct-style-graph .keyed[data-body="list"] > .keyed-body > ul,
+.keyed[data-default-style="graph"][data-body="list"]:not(.struct-style-plain *, .struct-style-basic *)
+    > .keyed-body > ul {
+    list-style: none;
+    padding-left: 0;
+    margin: 0;
+}
+
+/* Paragraph body → arrow form "-- label -> value". The "--" sits on
+   .keyed::before and "->" on .keyed-body::before, deliberately outside
+   .keyed-label so the label-hover highlight doesn't tint them. */
+.struct-style-graph .keyed[data-body="paragraph"]:not([data-empty-label])::before,
+.keyed[data-default-style="graph"][data-body="paragraph"]:not([data-empty-label], .struct-style-plain *, .struct-style-basic *)::before {
+    content: "--";
+    margin-right: 0.25rem;
+    color: var(--fg-dim);
+}
+
+.struct-style-graph .keyed[data-body="paragraph"] > .keyed-body::before,
+.keyed[data-default-style="graph"][data-body="paragraph"]:not(.struct-style-plain *, .struct-style-basic *)
+    > .keyed-body::before {
+    content: "->";
+    margin-right: 0.5rem;
+    color: var(--fg-dim);
+    background: var(--bg);
+}
+
+/* Paragraph-body list-item labels in graph: arrow-form, not boxed.
+   Overrides the shared basic/graph boxed-label rule above. */
+.struct-style-graph .keyed[data-body="paragraph"][data-label-kind="list-item"] > .keyed-label,
+.keyed[data-default-style="graph"][data-body="paragraph"][data-label-kind="list-item"]:not(.struct-style-plain *, .struct-style-basic *)
+    > .keyed-label {
+    border: none;
+    padding: 0;
+    line-height: inherit;
+    /*font-weight: bold;*/
+}
+
+/* ---- plain/basic: undo any inherited graph visuals --------- */
+
 .struct-style-plain .keyed[data-body="list"],
 .struct-style-basic .keyed[data-body="list"] {
+    position: static;
     border: none;
+    border-radius: 0;
+    padding: 0;
+    margin-top: 0;
+}
+.struct-style-plain .keyed[data-body="list"] > .keyed-label,
+.struct-style-basic .keyed[data-body="list"] > .keyed-label {
+    position: static;
+    transform: none;
+    background: transparent;
     padding: 0;
 }
 

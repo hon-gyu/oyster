@@ -13,9 +13,9 @@
  (libraries cmarkit core parse component oystermark))
 
 (rule
- (with-stdout-to t1.output.html (run ./t1.exe)))
+ (with-stdout-to t1.output (run ./t1.exe)))
 
 (rule
  (alias runtest)
  (mode (promote (until-clean)))
- (action (diff t1.expected.html t1.output.html)))
+ (action (diff t1.expected.html t1.output)))
