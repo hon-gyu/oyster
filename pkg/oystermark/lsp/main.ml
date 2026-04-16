@@ -5,7 +5,7 @@ open Linol_eio
 
 let build_vault = Oystermark.Vault.of_root_path ~skip_expand:true
 
-class oystermark_server =
+class oystermark_server ~sw =
   object (self)
     inherit Linol_eio.Jsonrpc2.server as super
 
@@ -19,7 +19,7 @@ class oystermark_server =
         {!page-"feature-document-sync"}. *)
     val open_docs : String.Hash_set.t = String.Hash_set.create ()
 
-    method spawn_query_handler f = Linol_eio.spawn f
+    method spawn_query_handler f = Linol_eio.spawn ~sw f
     method! config_definition = Some (`Bool true)
     method! config_hover = Some (`Bool true)
     method! config_inlay_hints = Some (`Bool true)
@@ -321,7 +321,9 @@ let () =
   @@ fun () ->
   if enable_otel then Opentelemetry_trace.setup ();
   Trace_core.set_process_name "oystermark-lsp";
-  let s = new oystermark_server in
+  Eio.Switch.run
+  @@ fun sw ->
+  let s = new oystermark_server ~sw in
   let server = Linol_eio.Jsonrpc2.create_stdio ~env s in
   Linol_eio.Jsonrpc2.run server
 ;;
