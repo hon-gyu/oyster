@@ -593,6 +593,27 @@ details.callout:not([open]) > summary::after {
     content: none;
 }
 
+/* Plain list-item: render exactly like regular CommonMark — the
+   struct wrapper and its body should not introduce their own block
+   boxes, so the label flows inline with the body and a following
+   nested list continues on the next line. `display: contents`
+   promotes children into the parent list-item's formatting context;
+   the first paragraph is inlined with zero margin so
+   "label: body-text" stays on one line. */
+.struct-style-plain .keyed[data-label-kind="list-item"],
+.struct-style-plain .keyed[data-label-kind="list-item"] > .keyed-body,
+.keyed[data-default-style="plain"][data-label-kind="list-item"]:not(.struct-style-basic *, .struct-style-graph *),
+.keyed[data-default-style="plain"][data-label-kind="list-item"]:not(.struct-style-basic *, .struct-style-graph *)
+    > .keyed-body {
+    display: contents;
+}
+.struct-style-plain .keyed[data-label-kind="list-item"] > .keyed-body > p:first-child,
+.keyed[data-default-style="plain"][data-label-kind="list-item"]:not(.struct-style-basic *, .struct-style-graph *)
+    > .keyed-body > p:first-child {
+    display: inline;
+    margin: 0;
+}
+
 /* ---- basic + graph: shared label styling ------------------- */
 
 /* Boxed list-item labels. */
