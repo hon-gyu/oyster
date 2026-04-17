@@ -694,6 +694,23 @@ details.callout:not([open]) > summary::after {
     line-height: 1;
 }
 
+/* Mixed body (leading paragraph + nested list, no `data-body` attr):
+   flow the first paragraph next to the boxed label, then let the
+   nested list continue below. `.keyed-body` stays a real box (unlike
+   the plain case) so the label-hover background tint still paints it;
+   `display: inline` lets its first `<p>` share the line with the
+   label, and the trailing block `<ul>` escapes the inline into its
+   own block below. */
+.keyed:is([data-style="basic"], [data-style="graph"])[data-label-kind="list-item"]:not([data-body])
+    > .keyed-body {
+    display: inline;
+}
+.keyed:is([data-style="basic"], [data-style="graph"])[data-label-kind="list-item"]:not([data-body])
+    > .keyed-body > p:first-child {
+    display: inline;
+    margin: 0;
+}
+
 /* Bold paragraph labels. */
 .keyed:is([data-style="basic"], [data-style="graph"])[data-label-kind="paragraph"]
     > .keyed-label {
@@ -733,9 +750,20 @@ details.callout:not([open]) > summary::after {
     border: none;
 }
 
-/* Nested (list-item label-kind) list-body boxes get top-gap from siblings. */
+/* Nested (list-item label-kind) list-body boxes: keep the label in
+   the first content line rather than promoting it onto the top
+   border. The enclosing `<li>`'s native marker aligns with the first
+   line-box of its principal block, so an in-flow label sits next to
+   the bullet — a border-promoted label would float above it. */
 .keyed[data-style="graph"][data-label-kind="list-item"][data-body="list"] {
     margin-top: 0.9rem;
+    padding-top: 0.4rem;
+}
+.keyed[data-style="graph"][data-label-kind="list-item"][data-body="list"]
+    > .keyed-label {
+    position: static;
+    transform: none;
+    background: transparent;
 }
 
 /* Strip <ul> bullets/indent so nesting reads as boxes-within-boxes. */
