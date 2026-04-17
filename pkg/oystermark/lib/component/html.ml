@@ -401,7 +401,7 @@ let of_doc
   : string
   =
   let struct_style : struct_style =
-    match config.ext_struct.struct_style with
+    match config.ext_struct.style with
     | Config.Struct_style_def.Plain -> `Plain
     | Config.Struct_style_def.Basic -> `Basic
     | Config.Struct_style_def.Graph -> `Graph

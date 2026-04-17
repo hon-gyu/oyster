@@ -84,11 +84,11 @@ module Struct_style = Make_string_enum (Struct_style_def)
 module Ext_struct = struct
   type t =
     { enable : bool
-    ; struct_style : Struct_style.t [@default Struct_style.default]
+    ; style : Struct_style.t [@default Struct_style.default]
     }
   [@@deriving yojson] [@@yojson.allow_extra_fields]
 
-  let default = { enable = true; struct_style = Struct_style.default }
+  let default = { enable = true; style = Struct_style.default }
   let t_of_yojson j = or_default ~default t_of_yojson j
 end
 
@@ -327,7 +327,7 @@ let%expect_test "of_frontmatter overrides ext_struct" =
   [%expect
     {|
     {
-      "ext_struct": { "enable": true, "struct_style": "graph" },
+      "ext_struct": { "enable": true, "style": "plain" },
       "theme": "bluloco_dark",
       "css_snippets": [],
       "pipeline_profile": "default",
@@ -352,7 +352,7 @@ let%expect_test "Config default" =
   [%expect
     {|
     {
-      "ext_struct": { "enable": true, "struct_style": "plain" },
+      "ext_struct": { "enable": true, "style": "plain" },
       "theme": "bluloco_dark",
       "css_snippets": [],
       "pipeline_profile": "default",
