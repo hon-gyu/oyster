@@ -33,15 +33,22 @@ type toc_entry =
       }
 
 (** Build a [toc_entry list] from a flat list of relative paths.
-    Paths are grouped by directory, producing nested entries for shared prefixes. *)
-let build_toc_entries (paths : string list) : toc_entry list =
-  let rec build (entries : (string list * string) list) : toc_entry list =
-    let (by_head : (string * (string list * string)) list list) =
+    Paths are grouped by directory, producing nested entries for shared prefixes.
+
+    @param compare_head if given, orders the top-level entries by their head
+      segment; nested levels always sort alphabetically. *)
+let build_toc_entries
+      ?(compare_head : (string -> string -> int) option)
+      (paths : string list)
+  : toc_entry list
+  =
+  let rec build ~(compare : string -> string -> int) entries : toc_entry list =
+    let by_head =
       List.filter_map entries ~f:(fun (segs, path) ->
         match segs with
         | [] -> None
         | hd :: tl -> Some (hd, (tl, path)))
-      |> List.sort ~compare:(fun (a, _) (b, _) -> String.compare a b)
+      |> List.sort ~compare:(fun (a, _) (b, _) -> compare a b)
       |> List.group ~break:(fun (a, _) (b, _) -> not (String.equal a b))
     in
     List.filter_map by_head ~f:(function
@@ -49,16 +56,17 @@ let build_toc_entries (paths : string list) : toc_entry list =
       | [ (name, ([], path)) ] -> Some (Leaf { name; path })
       | (name, _) :: _ as group ->
         let children = List.map group ~f:snd in
-        Some (Dir { name; children = build children }))
+        Some (Dir { name; children = build ~compare:String.compare children }))
   in
-  build (List.map paths ~f:(fun p -> String.split p ~on:'/', p))
+  let compare = Option.value compare_head ~default:String.compare in
+  build ~compare (List.map paths ~f:(fun p -> String.split p ~on:'/', p))
 ;;
 
 (** Render a table of contents as a nested [<ul>] tree from a list of relative paths.
     Paths are grouped by directory, producing nested lists for shared prefixes.
     Markdown file names are stripped of their extension.
-    [dir_href_f] maps a directory name to an optional href; if [None], no anchor
-    is added to the directory entry. *)
+    @param dir_href_f maps a directory name to an optional href; if [None], no anchor
+      is added to the directory entry. *)
 let toc_html
       ?(dir_href_f = fun dir -> Some (dir ^ "/index"))
       ?(leaf_href_f : (string -> string) option)
@@ -156,12 +164,15 @@ let%expect_test "toc_html" =
     of relative paths. Leaf entries become wikilinks; directories become nested
     sub-lists with either plain text or wikilink labels.
 
-    [path_prefix] is prepended to each entry's path for wikilink resolution.
-    [dir_link] when [true] renders directory labels as wikilinks to
-    [dir/index]; when [false] renders them as plain text. *)
+    @param path_prefix is prepended to each entry's path for wikilink resolution.
+    @param dir_link when [true] renders directory labels as wikilinks to
+      [dir/index]; when [false] renders them as plain text.
+    @param compare_head if given, orders the top-level entries by their head
+      segment; nested levels always sort alphabetically. *)
 let toc_cmark_list
       ?(path_prefix : string = "")
       ?(dir_link : bool = false)
+      ?(compare_head : (string -> string -> int) option)
       (paths : string list)
   : Cmarkit.Block.t
   =
@@ -220,7 +231,7 @@ let toc_cmark_list
     in
     ul items
   in
-  render_entries ~prefix:"" (build_toc_entries paths)
+  render_entries ~prefix:"" (build_toc_entries ?compare_head paths)
 ;;
 
 let%expect_test "toc_cmark_list" =
