@@ -130,6 +130,71 @@ end
 
 module Pipeline_profile = Make_string_enum (Pipeline_profile_def)
 
+(** Ordering spec for TOC generation.
+
+    A list of name patterns with a single wildcard [*] acting as a placeholder
+    for "everything not otherwise matched". The position of [*] determines
+    where unmatched entries land; items before [*] come first, items after
+    come last.
+
+    Patterns match a TOC entry's top-level segment name (with any [.md]
+    extension stripped). Items with equal rank tiebreak alphabetically.
+
+    Examples:
+    - [\[ "introduction"; "guides"; "*"; "changelog" \]] — fixed head, fixed tail
+    - [\[ "*" \]] (default) — no custom order; everything sorts alphabetically
+    - [\[ "*"; "appendix" \]] — push a specific name to the end *)
+module Toc_order : sig
+  type t = string list
+
+  val default : t
+  val t_of_yojson : J.t -> t
+  val yojson_of_t : t -> J.t
+
+  (** Rank of [name] under [patterns]. Lower ranks sort earlier. *)
+  val rank_of : t -> string -> int
+end = struct
+  type t = string list
+
+  let default : t = [ "*" ]
+
+  let find_index (f : 'a -> bool) (xs : 'a list) : int option =
+    let rec loop i = function
+      | [] -> None
+      | x :: _ when f x -> Some i
+      | _ :: rest -> loop (i + 1) rest
+    in
+    loop 0 xs
+  ;;
+
+  let is_wildcard (s : string) : bool = String.equal s "*"
+
+  let validate (xs : t) : t =
+    let wildcard_count = List.length (List.filter is_wildcard xs) in
+    if wildcard_count > 1 then failwith "toc_order: at most one '*' allowed";
+    xs
+  ;;
+
+  let t_of_yojson (j : J.t) : t =
+    or_default ~default (fun j -> j |> list_of_yojson string_of_yojson |> validate) j
+  ;;
+
+  let yojson_of_t (xs : t) : J.t = yojson_of_list yojson_of_string xs
+
+  let rank_of (patterns : t) (name : string) : int =
+    let wildcard_rank =
+      match find_index is_wildcard patterns with
+      | Some i -> i
+      | None -> max_int
+    in
+    match
+      find_index (fun p -> (not (is_wildcard p)) && String.equal p name) patterns
+    with
+    | Some i -> i
+    | None -> wildcard_rank
+  ;;
+end
+
 (** A selector for include/exclude lists. JSON shape:
     - [`String "all"] -> [Include_all]
     - [`String "none"] -> [Exclude_all]
@@ -218,6 +283,7 @@ type t =
   ; css_snippets : string list [@default []]
   ; pipeline_profile : Pipeline_profile.t [@default Pipeline_profile.default]
   ; home_graph_view : Home_graph_view.t [@default Home_graph_view.default]
+  ; toc_order : Toc_order.t [@default Toc_order.default]
   }
 [@@deriving yojson] [@@yojson.allow_extra_fields]
 
@@ -227,6 +293,7 @@ let default : t =
   ; css_snippets = []
   ; pipeline_profile = Pipeline_profile.default
   ; home_graph_view = Home_graph_view.default
+  ; toc_order = Toc_order.default
   }
 ;;
 
@@ -339,7 +406,8 @@ let%expect_test "of_frontmatter overrides ext_struct" =
         "tag": "all",
         "default_dir": { "include": [ "*" ] },
         "default_tag": "none"
-      }
+      },
+      "toc_order": [ "*" ]
     }
     |}]
 ;;
@@ -348,6 +416,40 @@ let%expect_test "of_frontmatter no oystermark key returns base" =
   let fm : Yaml.value option = Some (`O [ "title", `String "Hello" ]) in
   let merged = fm |> of_frontmatter |> fun fm -> merge default fm in
   assert (merged = default)
+;;
+
+let%expect_test "Toc_order.rank_of" =
+  let patterns = [ "intro"; "guides"; "*"; "changelog" ] in
+  List.iter
+    (fun name -> Printf.printf "%s -> %d\n" name (Toc_order.rank_of patterns name))
+    [ "intro"; "guides"; "random"; "changelog"; "other" ];
+  [%expect
+    {|
+    intro -> 0
+    guides -> 1
+    random -> 2
+    changelog -> 3
+    other -> 2
+    |}]
+;;
+
+let%expect_test "Toc_order no wildcard — unmatched go last" =
+  let patterns = [ "intro"; "guides" ] in
+  List.iter
+    (fun name -> Printf.printf "%s -> %d\n" name (Toc_order.rank_of patterns name))
+    [ "intro"; "other" ];
+  [%expect
+    {|
+    intro -> 0
+    other -> 4611686018427387903
+    |}]
+;;
+
+let%expect_test "Toc_order two wildcards falls back to default" =
+  let j : J.t = `List [ `String "*"; `String "foo"; `String "*" ] in
+  let parsed = Toc_order.t_of_yojson j in
+  print_endline (J.to_string (Toc_order.yojson_of_t parsed));
+  [%expect {| ["*"] |}]
 ;;
 
 let%expect_test "Config default" =
@@ -364,7 +466,8 @@ let%expect_test "Config default" =
         "tag": "all",
         "default_dir": { "include": [ "*" ] },
         "default_tag": "none"
-      }
+      },
+      "toc_order": [ "*" ]
     }
     |}]
 ;;
