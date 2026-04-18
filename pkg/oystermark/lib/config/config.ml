@@ -210,6 +210,8 @@ end = struct
   let t_of_yojson j = or_default ~default t_of_yojson j
 end
 
+(** {1 Config config} *)
+
 type t =
   { ext_struct : Ext_struct.t [@default Ext_struct.default]
   ; theme : Theme.t [@default Theme.default]
@@ -262,8 +264,7 @@ let merge (base : t) (overlay : t) : t =
   t_of_yojson j
 ;;
 
-(* Per-file config from frontmatter
-   ================================ *)
+(** {1 Per-file config from frontmatter} *)
 
 (** Convert a [Yaml.value] to [Yojson.Safe.t]. *)
 let rec yaml_to_yojson : Yaml.value -> J.t = function
@@ -292,6 +293,8 @@ let of_frontmatter ?(default = default) ?(config_key = "oyster") (fm : Yaml.valu
        or_default ~default t_of_yojson (merge_json base_j overlay_j))
   | Some _ -> default
 ;;
+
+(** {1 Tests} *)
 
 (* Wire-format contract with [static/graph_view/config.d.ts]
    ----------

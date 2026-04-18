@@ -15,7 +15,7 @@ include On_parse
 include Code_exec_
 
 (** Add TOC to page named "home.md".
-    [dir_link] controls whether directory entries in the TOC are rendered as
+    @param dir_link controls whether directory entries in the TOC are rendered as
     wikilinks (to [dir/index]) or plain text.  Set to [true] when [dir_index]
     is also in the pipeline. *)
 let home_toc ?(dir_link : bool = false) () : t =
