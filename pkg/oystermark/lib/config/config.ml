@@ -187,9 +187,7 @@ end = struct
       | Some i -> i
       | None -> max_int
     in
-    match
-      find_index (fun p -> (not (is_wildcard p)) && String.equal p name) patterns
-    with
+    match find_index (fun p -> (not (is_wildcard p)) && String.equal p name) patterns with
     | Some i -> i
     | None -> wildcard_rank
   ;;

@@ -39,7 +39,7 @@ let compare_path_of_toc_order (toc_order : Config.Toc_order.t) : string -> strin
 let home_toc
       ?(dir_link : bool = false)
       ?(toc_order : Config.Toc_order.t = Config.Toc_order.default)
-      ?(home_path : string = (Config.Home.default).path)
+      ?(home_path : string = Config.Home.default.path)
       ()
   : t
   =
@@ -161,7 +161,7 @@ let backlinks : t =
     default. See {!Config.Home} for [home_path]. *)
 let home_graph
       ?(config : Config.Home_graph_view.t = Config.Home_graph_view.default)
-      ?(home_path : string = (Config.Home.default).path)
+      ?(home_path : string = Config.Home.default.path)
       ()
   : t
   =

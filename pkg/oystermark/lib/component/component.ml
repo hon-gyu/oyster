@@ -275,9 +275,7 @@ let%expect_test "toc_cmark_list with path_prefix" =
     |}]
 ;;
 
-let%expect_test "toc_cmark_list with compare_path — full-path ordering at every \
-                 level"
-  =
+let%expect_test "toc_cmark_list with compare_path — full-path ordering at every level" =
   let paths = [ "guides/a.md"; "guides/b.md"; "intro.md" ] in
   (* Move [guides] ahead of [intro] at the top level, and inside [guides]
      move [b] ahead of [a]. Both rules use full qualified paths. *)
@@ -598,9 +596,7 @@ end
     Always includes a Home link. Adds intermediate directory links as ancestors.
     Does not include the current page itself.
     Example: url_path="/foo/bar/" → Home / foo *)
-let nav_of_url_path ?(home_path = (Config.Home.default).path) (url_path : string)
-  : html
-  =
+let nav_of_url_path ?(home_path = Config.Home.default.path) (url_path : string) : html =
   let sep : string = {|<span class="sep">/</span>|} in
   let home_href = Html.note_url_path home_path in
   let home : string = {%string|<a href="%{home_href}">Home</a>|} in
