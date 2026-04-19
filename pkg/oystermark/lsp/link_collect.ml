@@ -40,7 +40,13 @@ let collect_links (doc : Cmarkit.Doc.t) : located_link list =
           let link_ref = Oystermark.Vault.Link_ref.of_wikilink wl in
           try_add_link acc link_ref (Cmarkit.Meta.textloc meta)
         | _ -> acc)
-      ~block_ext_default:(fun _f acc _b -> acc)
+      ~block_ext_default:(fun f acc b ->
+        match b with
+        | Oystermark.Parse.Struct.Ext_keyed_list_item ({ label }, inner)
+        | Oystermark.Parse.Struct.Ext_keyed_block ({ label }, inner) ->
+          let acc = Cmarkit.Folder.fold_inline f acc label in
+          Cmarkit.Folder.fold_block f acc inner
+        | _ -> acc)
       ~inline:(fun _f acc i ->
         match i with
         | Cmarkit.Inline.Link (link, meta) | Cmarkit.Inline.Image (link, meta) ->
