@@ -14,10 +14,11 @@ include On_discover
 include On_parse
 include Code_exec_
 
-(** Top-level comparator for TOC entries from a {!Config.Toc_order.t}.
-    Ranks by [toc_order], tiebreaking alphabetically. Strips [.md] before
-    matching so patterns like ["readme"] match both leaves and dirs. *)
-let compare_head_of_toc_order (toc_order : Config.Toc_order.t) : string -> string -> int =
+(** Full-path comparator for TOC entries from a {!Config.Toc_order.t}.
+    Ranks each path by [toc_order], tiebreaking alphabetically. Strips [.md]
+    before matching so a pattern like ["guides/intro"] matches both
+    ["guides/intro.md"] (leaf) and ["guides/intro"] (dir). *)
+let compare_path_of_toc_order (toc_order : Config.Toc_order.t) : string -> string -> int =
   let strip (s : string) : string =
     match String.chop_suffix s ~suffix:".md" with
     | Some s -> s
@@ -40,7 +41,7 @@ let home_toc
       ()
   : t
   =
-  let compare_head = compare_head_of_toc_order toc_order in
+  let compare_path = compare_path_of_toc_order toc_order in
   let on_vault : Vault.t -> Vault.t =
     map_each_doc (fun (ctx : Vault.t) (path : string) (doc : Cmarkit.Doc.t) ->
       if not (String.equal path "home.md")
@@ -50,7 +51,7 @@ let home_toc
           List.filter_map (Vault.all_entry_paths ctx) ~f:(fun p ->
             if String.is_suffix p ~suffix:"/" then None else Some p)
         in
-        let toc_cmark_list = Component.toc_cmark_list ~dir_link ~compare_head toc_paths in
+        let toc_cmark_list = Component.toc_cmark_list ~dir_link ~compare_path toc_paths in
         let block_mapper = add_block `Append toc_cmark_list in
         let mapper = Cmarkit.Mapper.make ~block:block_mapper () in
         let new_home = Cmarkit.Mapper.map_doc mapper doc in
@@ -73,7 +74,7 @@ let dir_index
       ()
   : t
   =
-  let compare_head = compare_head_of_toc_order toc_order in
+  let compare_path = compare_path_of_toc_order toc_order in
   let on_vault (ctx : Vault.t) : Vault.t =
     let doc_paths : string list = List.map ctx.docs ~f:fst in
     let non_empty_dirs : string list =
@@ -122,7 +123,7 @@ let dir_index
               Component.toc_cmark_list
                 ~path_prefix:dir_path
                 ~dir_link:true
-                ~compare_head
+                ~compare_path
                 rel_children
             in
             Some (index_path, Cmarkit.Doc.make toc_block))))
