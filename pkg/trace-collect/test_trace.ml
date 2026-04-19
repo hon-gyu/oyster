@@ -21,7 +21,7 @@ let%expect_test "trace_pp" =
     let _ = g 3 in
     ());
   print_s [%sexp (Trace_collect.span_names t : string list)];
-  [%expect {| (inside-f right-before-f g) |}];
+  [%expect {| (g right-before-f inside-f) |}];
   let spans = Trace_collect.spans t |> Trace_collect.Span_pipeline.normalize_duration in
   print_string (Trace_collect.Trace_pp.format ~tree_chars:Utf8 ~style:Indented spans);
   [%expect

@@ -18,20 +18,48 @@ let duration_nanos (sp : OT.span) =
 ;;
 
 (** Replace each span's duration with [rank * 1us], where rank is the
-    1-based position of the span in [spans].  No timing is read or compared,
-    so the output is deterministic given a fixed input order.
+    1-based position of the span when sorted by
+    [(end_time asc, depth desc, start_time asc)].
 
-    When used with {!Trace_collect.spans} on single-threaded sequential code
-    (and an unbatched exporter), spans arrive in completion order — innermost
-    first — so the innermost span gets [1us] and the outermost gets the
-    highest value.  This ordering is not guaranteed for concurrent or batched
-    traces.
+    End-time order matches completion order: in single-threaded sequential
+    code, innermost spans close before their parents and earlier siblings
+    close before later ones, so the innermost/earliest span gets [1us] and
+    the outermost/latest gets the highest value.  The [depth desc] tiebreaker
+    handles the case where nested spans collide at clock resolution (child
+    must still rank before parent); [start_time asc] then orders true
+    siblings deterministically.
 
-    Commonly used in tests to make spans determinsitic
-    *)
+    Commonly used in tests to make spans deterministic. *)
 let normalize_duration (spans : OT.span list) : OT.span list =
+  let by_id = Hashtbl.create (module String) in
+  List.iter spans ~f:(fun (sp : OT.span) ->
+    Hashtbl.set by_id ~key:(span_id_hex sp.span_id) ~data:sp);
+  let depth_cache = Hashtbl.create (module String) in
+  let rec depth_of (sp : OT.span) : int =
+    let key = span_id_hex sp.span_id in
+    match Hashtbl.find depth_cache key with
+    | Some d -> d
+    | None ->
+      let parent_key = span_id_hex sp.parent_span_id in
+      let d =
+        match Hashtbl.find by_id parent_key with
+        | None -> 0
+        | Some parent -> 1 + depth_of parent
+      in
+      Hashtbl.set depth_cache ~key ~data:d;
+      d
+  in
+  let sorted =
+    List.sort spans ~compare:(fun (a : OT.span) (b : OT.span) ->
+      match Int64.compare a.end_time_unix_nano b.end_time_unix_nano with
+      | 0 ->
+        (match Int.compare (depth_of b) (depth_of a) with
+         | 0 -> Int64.compare a.start_time_unix_nano b.start_time_unix_nano
+         | c -> c)
+      | c -> c)
+  in
   let ranks = Hashtbl.create (module String) in
-  List.iteri spans ~f:(fun i sp ->
+  List.iteri sorted ~f:(fun i sp ->
     Hashtbl.set ranks ~key:(span_id_hex sp.span_id) ~data:(i + 1));
   List.map spans ~f:(fun sp ->
     let sp' = OT.copy_span sp in
