@@ -14,21 +14,46 @@ include On_discover
 include On_parse
 include Code_exec_
 
-(** Add TOC to page named "home.md".
-    [dir_link] controls whether directory entries in the TOC are rendered as
+(** Full-path comparator for TOC entries from a {!Config.Toc_order.t}.
+    Ranks each path by [toc_order], tiebreaking alphabetically. Strips [.md]
+    before matching so a pattern like ["guides/intro"] matches both
+    ["guides/intro.md"] (leaf) and ["guides/intro"] (dir). *)
+let compare_path_of_toc_order (toc_order : Config.Toc_order.t) : string -> string -> int =
+  let strip (s : string) : string =
+    match String.chop_suffix s ~suffix:".md" with
+    | Some s -> s
+    | None -> s
+  in
+  fun a b ->
+    let ra = Config.Toc_order.rank_of toc_order (strip a) in
+    let rb = Config.Toc_order.rank_of toc_order (strip b) in
+    if ra <> rb then Int.compare ra rb else String.compare a b
+;;
+
+(** Add TOC to the home page.
+    @param dir_link controls whether directory entries in the TOC are rendered as
     wikilinks (to [dir/index]) or plain text.  Set to [true] when [dir_index]
-    is also in the pipeline. *)
-let home_toc ?(dir_link : bool = false) () : t =
+    is also in the pipeline.
+    @param toc_order orders top-level TOC entries; see {!Config.Toc_order}.
+    @param home_path path of the home page; see {!Config.Home}. *)
+let home_toc
+      ?(dir_link : bool = false)
+      ?(toc_order : Config.Toc_order.t = Config.Toc_order.default)
+      ?(home_path : string = Config.Home.default.path)
+      ()
+  : t
+  =
+  let compare_path = compare_path_of_toc_order toc_order in
   let on_vault : Vault.t -> Vault.t =
     map_each_doc (fun (ctx : Vault.t) (path : string) (doc : Cmarkit.Doc.t) ->
-      if not (String.equal path "home.md")
+      if not (String.equal path home_path)
       then [ path, doc ]
       else (
         let toc_paths : string list =
           List.filter_map (Vault.all_entry_paths ctx) ~f:(fun p ->
             if String.is_suffix p ~suffix:"/" then None else Some p)
         in
-        let toc_cmark_list = Component.toc_cmark_list ~dir_link toc_paths in
+        let toc_cmark_list = Component.toc_cmark_list ~dir_link ~compare_path toc_paths in
         let block_mapper = add_block `Append toc_cmark_list in
         let mapper = Cmarkit.Mapper.make ~block:block_mapper () in
         let new_home = Cmarkit.Mapper.map_doc mapper doc in
@@ -40,10 +65,18 @@ let home_toc ?(dir_link : bool = false) () : t =
 (** Generate an index page for each directory entry.
     For a dir path like [subdir/], emits [(subdir/index.md, toc_doc)] where
     [toc_doc] is a page listing the directory's children.
-    [immediate_only] when [true] lists only direct children (files and subdirs);
-    when [false] lists all descendants as a nested tree.
-    Skips if [dir/index.md] already exists in the vault. *)
-let dir_index ?(immediate_only : bool = false) () : t =
+    Skips if [dir/index.md] already exists in the vault.
+    @param immediate_only when [true] lists only direct children (files and subdirs);
+      when [false] lists all descendants as a nested tree.
+    @param toc_order the order to use for TOC entries.
+     *)
+let dir_index
+      ?(immediate_only : bool = false)
+      ?(toc_order : Config.Toc_order.t = Config.Toc_order.default)
+      ()
+  : t
+  =
+  let compare_path = compare_path_of_toc_order toc_order in
   let on_vault (ctx : Vault.t) : Vault.t =
     let doc_paths : string list = List.map ctx.docs ~f:fst in
     let non_empty_dirs : string list =
@@ -89,7 +122,11 @@ let dir_index ?(immediate_only : bool = false) () : t =
                 else None)
             in
             let toc_block : Cmarkit.Block.t =
-              Component.toc_cmark_list ~path_prefix:dir_path ~dir_link:true rel_children
+              Component.toc_cmark_list
+                ~path_prefix:dir_path
+                ~dir_link:true
+                ~compare_path
+                rel_children
             in
             Some (index_path, Cmarkit.Doc.make toc_block))))
     in
@@ -119,10 +156,13 @@ let backlinks : t =
   make ~on_vault ()
 ;;
 
-(** Append an interactive graph widget to [home.md].
+(** Append an interactive graph widget to the home page.
     [view] controls which dir/tag clusters appear and which are selected by
-    default. *)
-let home_graph ?(config : Config.Home_graph_view.t = Config.Home_graph_view.default) ()
+    default. See {!Config.Home} for [home_path]. *)
+let home_graph
+      ?(config : Config.Home_graph_view.t = Config.Home_graph_view.default)
+      ?(home_path : string = Config.Home.default.path)
+      ()
   : t
   =
   let open Vault_graph in
@@ -132,7 +172,7 @@ let home_graph ?(config : Config.Home_graph_view.t = Config.Home_graph_view.defa
     let html = to_widget_html ~config g in
     let docs =
       List.map ctx.docs ~f:(fun (path, doc) ->
-        if not (String.equal path "home.md")
+        if not (String.equal path home_path)
         then path, doc
         else (
           let block_mapper = add_html_code_block `Append html in
@@ -161,9 +201,9 @@ let default ?(cache : Cache.cache option) ?(config : Config.t = Config.default) 
   >> py_executor ?cache ()
   >> dot_render ()
   >> backlinks
-  >> home_graph ~config:config.home_graph_view ()
-  >> home_toc ~dir_link:true ()
-  >> dir_index ()
+  >> home_graph ~config:config.home_graph_view ~home_path:config.home.path ()
+  >> home_toc ~dir_link:true ~toc_order:config.toc_order ~home_path:config.home.path ()
+  >> dir_index ~toc_order:config.toc_order ()
 ;;
 
 let basic : t = id >> backlinks

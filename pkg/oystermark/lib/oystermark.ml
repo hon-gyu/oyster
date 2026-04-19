@@ -78,6 +78,7 @@ let render_vault
       ~leaf_href_f:Html.file_url_path
       ~collapsible:true
       ~collapsed_by_default:true
+      ~compare_path:(Pipeline.compare_path_of_toc_order config.toc_order)
       sidebar_paths
   in
   List.filter_map final_vault.docs ~f:(fun (rel_path, final) ->
@@ -89,8 +90,10 @@ let render_vault
       let body = Html.of_doc ~backend_blocks ~safe ~config final in
       let url_path = Html.note_url_path rel_path in
       let title : string = Component.title_of_path rel_path in
-      let nav : string = Component.nav_of_url_path url_path in
-      let sidebar : string = if String.equal rel_path "home.md" then "" else sidebar in
+      let nav : string = Component.nav_of_url_path ~home_path:config.home.path url_path in
+      let sidebar : string =
+        if String.equal rel_path config.home.path then "" else sidebar
+      in
       let page = Theme.{ title; body; url_path; nav; sidebar } in
       let html = theme page in
       Some (Html.note_output_path rel_path, html))

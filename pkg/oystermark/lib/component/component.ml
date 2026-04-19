@@ -33,15 +33,33 @@ type toc_entry =
       }
 
 (** Build a [toc_entry list] from a flat list of relative paths.
-    Paths are grouped by directory, producing nested entries for shared prefixes. *)
-let build_toc_entries (paths : string list) : toc_entry list =
-  let rec build (entries : (string list * string) list) : toc_entry list =
-    let (by_head : (string * (string list * string)) list list) =
+    Paths are grouped by directory, producing nested entries for shared prefixes.
+
+    @param compare_path if given, orders entries at every level by their full
+      qualified path (the head segment joined to the prefix built from
+      [path_prefix] and ancestor dirs). When omitted, entries sort
+      alphabetically by head segment.
+    @param path_prefix prepended to every path when calling [compare_path], so
+      patterns can match the same way regardless of whether the caller passes
+      root-relative or dir-relative paths. *)
+let build_toc_entries
+      ?(compare_path : (string -> string -> int) option)
+      ?(path_prefix : string = "")
+      (paths : string list)
+  : toc_entry list
+  =
+  let rec build ~(prefix : string) entries : toc_entry list =
+    let compare =
+      match compare_path with
+      | Some c -> fun a b -> c (prefix ^ a) (prefix ^ b)
+      | None -> String.compare
+    in
+    let by_head =
       List.filter_map entries ~f:(fun (segs, path) ->
         match segs with
         | [] -> None
         | hd :: tl -> Some (hd, (tl, path)))
-      |> List.sort ~compare:(fun (a, _) (b, _) -> String.compare a b)
+      |> List.sort ~compare:(fun (a, _) (b, _) -> compare a b)
       |> List.group ~break:(fun (a, _) (b, _) -> not (String.equal a b))
     in
     List.filter_map by_head ~f:(function
@@ -49,21 +67,22 @@ let build_toc_entries (paths : string list) : toc_entry list =
       | [ (name, ([], path)) ] -> Some (Leaf { name; path })
       | (name, _) :: _ as group ->
         let children = List.map group ~f:snd in
-        Some (Dir { name; children = build children }))
+        Some (Dir { name; children = build ~prefix:(prefix ^ name ^ "/") children }))
   in
-  build (List.map paths ~f:(fun p -> String.split p ~on:'/', p))
+  build ~prefix:path_prefix (List.map paths ~f:(fun p -> String.split p ~on:'/', p))
 ;;
 
 (** Render a table of contents as a nested [<ul>] tree from a list of relative paths.
     Paths are grouped by directory, producing nested lists for shared prefixes.
     Markdown file names are stripped of their extension.
-    [dir_href_f] maps a directory name to an optional href; if [None], no anchor
-    is added to the directory entry. *)
+    @param dir_href_f maps a directory name to an optional href; if [None], no anchor
+      is added to the directory entry. *)
 let toc_html
       ?(dir_href_f = fun dir -> Some (dir ^ "/index"))
       ?(leaf_href_f : (string -> string) option)
       ?(collapsible = false)
       ?(collapsed_by_default = false)
+      ?(compare_path : (string -> string -> int) option)
       (paths : string list)
   : html
   =
@@ -99,7 +118,7 @@ let toc_html
     in
     "<ul>\n" ^ String.concat ~sep:"\n" items ^ "\n</ul>"
   in
-  render_entries (build_toc_entries paths)
+  render_entries (build_toc_entries ?compare_path paths)
 ;;
 
 let%expect_test "toc_html" =
@@ -156,12 +175,15 @@ let%expect_test "toc_html" =
     of relative paths. Leaf entries become wikilinks; directories become nested
     sub-lists with either plain text or wikilink labels.
 
-    [path_prefix] is prepended to each entry's path for wikilink resolution.
-    [dir_link] when [true] renders directory labels as wikilinks to
-    [dir/index]; when [false] renders them as plain text. *)
+    @param path_prefix is prepended to each entry's path for wikilink resolution.
+    @param dir_link when [true] renders directory labels as wikilinks to
+      [dir/index]; when [false] renders them as plain text.
+    @param compare_path if given, orders entries at every level by their full
+      qualified path (built from [path_prefix] + ancestor dirs + head). *)
 let toc_cmark_list
       ?(path_prefix : string = "")
       ?(dir_link : bool = false)
+      ?(compare_path : (string -> string -> int) option)
       (paths : string list)
   : Cmarkit.Block.t
   =
@@ -220,7 +242,7 @@ let toc_cmark_list
     in
     ul items
   in
-  render_entries ~prefix:"" (build_toc_entries paths)
+  render_entries ~prefix:"" (build_toc_entries ?compare_path ~path_prefix paths)
 ;;
 
 let%expect_test "toc_cmark_list" =
@@ -253,16 +275,43 @@ let%expect_test "toc_cmark_list with path_prefix" =
     |}]
 ;;
 
+let%expect_test "toc_cmark_list with compare_path — full-path ordering at every level" =
+  let paths = [ "guides/a.md"; "guides/b.md"; "intro.md" ] in
+  (* Move [guides] ahead of [intro] at the top level, and inside [guides]
+     move [b] ahead of [a]. Both rules use full qualified paths. *)
+  let rank s =
+    match s with
+    | "guides" -> 0
+    | "guides/b" -> 0
+    | "intro" -> 1
+    | "guides/a" -> 1
+    | _ -> 2
+  in
+  let strip s =
+    match String.chop_suffix s ~suffix:".md" with
+    | Some s -> s
+    | None -> s
+  in
+  let compare_path a b = Int.compare (rank (strip a)) (rank (strip b)) in
+  let block = toc_cmark_list ~compare_path paths in
+  print_endline (Parse.commonmark_of_doc (Cmarkit.Doc.make block));
+  [%expect
+    {|
+    - guides
+      - [[guides/b|b]]
+      - [[guides/a|a]]
+    - [[intro]]
+    |}]
+;;
+
 (** Create title element for each doc based on their note name.
     Special handling:
-    - for home.md, should be `Home`
     - for dir/index.md, should be `dir`
 *)
 let title_of_path (rel_path : string) : string =
   let basename : string = Filename.basename rel_path in
   let name : string = strip_md_ext basename in
   match name with
-  | "home" -> "Home"
   | "index" ->
     let dir : string = Filename.dirname rel_path in
     Filename.basename dir
@@ -547,7 +596,7 @@ end
     Always includes a Home link. Adds intermediate directory links as ancestors.
     Does not include the current page itself.
     Example: url_path="/foo/bar/" → Home / foo *)
-let nav_of_url_path ?(home_path = "home.md") (url_path : string) : html =
+let nav_of_url_path ?(home_path = Config.Home.default.path) (url_path : string) : html =
   let sep : string = {|<span class="sep">/</span>|} in
   let home_href = Html.note_url_path home_path in
   let home : string = {%string|<a href="%{home_href}">Home</a>|} in
