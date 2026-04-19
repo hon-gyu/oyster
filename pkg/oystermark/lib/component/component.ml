@@ -308,14 +308,12 @@ let%expect_test "toc_cmark_list with compare_path — full-path ordering at ever
 
 (** Create title element for each doc based on their note name.
     Special handling:
-    - for home.md, should be `Home`
     - for dir/index.md, should be `dir`
 *)
 let title_of_path (rel_path : string) : string =
   let basename : string = Filename.basename rel_path in
   let name : string = strip_md_ext basename in
   match name with
-  | "home" -> "Home"
   | "index" ->
     let dir : string = Filename.dirname rel_path in
     Filename.basename dir
