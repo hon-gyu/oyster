@@ -600,7 +600,9 @@ end
     Always includes a Home link. Adds intermediate directory links as ancestors.
     Does not include the current page itself.
     Example: url_path="/foo/bar/" → Home / foo *)
-let nav_of_url_path ?(home_path = "home.md") (url_path : string) : html =
+let nav_of_url_path ?(home_path = (Config.Home.default).path) (url_path : string)
+  : html
+  =
   let sep : string = {|<span class="sep">/</span>|} in
   let home_href = Html.note_url_path home_path in
   let home : string = {%string|<a href="%{home_href}">Home</a>|} in

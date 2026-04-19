@@ -232,6 +232,14 @@ end = struct
   ;;
 end
 
+module Home = struct
+  type t = { path : string [@default "home.md"] }
+  [@@deriving yojson] [@@yojson.allow_extra_fields]
+
+  let default = { path = "home.md" }
+  let t_of_yojson j = or_default ~default t_of_yojson j
+end
+
 module Home_graph_view : sig
   type t =
     { dir : Selector.t (** Dir to use as clusters *)
@@ -283,6 +291,7 @@ type t =
   ; css_snippets : string list [@default []]
   ; pipeline_profile : Pipeline_profile.t [@default Pipeline_profile.default]
   ; home_graph_view : Home_graph_view.t [@default Home_graph_view.default]
+  ; home : Home.t [@default Home.default]
   ; toc_order : Toc_order.t [@default Toc_order.default]
   }
 [@@deriving yojson] [@@yojson.allow_extra_fields]
@@ -293,6 +302,7 @@ let default : t =
   ; css_snippets = []
   ; pipeline_profile = Pipeline_profile.default
   ; home_graph_view = Home_graph_view.default
+  ; home = Home.default
   ; toc_order = Toc_order.default
   }
 ;;
@@ -407,6 +417,7 @@ let%expect_test "of_frontmatter overrides ext_struct" =
         "default_dir": { "include": [ "*" ] },
         "default_tag": "none"
       },
+      "home": { "path": "home.md" },
       "toc_order": [ "*" ]
     }
     |}]
@@ -467,6 +478,7 @@ let%expect_test "Config default" =
         "default_dir": { "include": [ "*" ] },
         "default_tag": "none"
       },
+      "home": { "path": "home.md" },
       "toc_order": [ "*" ]
     }
     |}]

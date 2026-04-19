@@ -30,21 +30,23 @@ let compare_path_of_toc_order (toc_order : Config.Toc_order.t) : string -> strin
     if ra <> rb then Int.compare ra rb else String.compare a b
 ;;
 
-(** Add TOC to page named "home.md".
+(** Add TOC to the home page.
     @param dir_link controls whether directory entries in the TOC are rendered as
     wikilinks (to [dir/index]) or plain text.  Set to [true] when [dir_index]
     is also in the pipeline.
-    @param toc_order orders top-level TOC entries; see {!Config.Toc_order}. *)
+    @param toc_order orders top-level TOC entries; see {!Config.Toc_order}.
+    @param home_path path of the home page; see {!Config.Home}. *)
 let home_toc
       ?(dir_link : bool = false)
       ?(toc_order : Config.Toc_order.t = Config.Toc_order.default)
+      ?(home_path : string = (Config.Home.default).path)
       ()
   : t
   =
   let compare_path = compare_path_of_toc_order toc_order in
   let on_vault : Vault.t -> Vault.t =
     map_each_doc (fun (ctx : Vault.t) (path : string) (doc : Cmarkit.Doc.t) ->
-      if not (String.equal path "home.md")
+      if not (String.equal path home_path)
       then [ path, doc ]
       else (
         let toc_paths : string list =
@@ -154,10 +156,13 @@ let backlinks : t =
   make ~on_vault ()
 ;;
 
-(** Append an interactive graph widget to [home.md].
+(** Append an interactive graph widget to the home page.
     [view] controls which dir/tag clusters appear and which are selected by
-    default. *)
-let home_graph ?(config : Config.Home_graph_view.t = Config.Home_graph_view.default) ()
+    default. See {!Config.Home} for [home_path]. *)
+let home_graph
+      ?(config : Config.Home_graph_view.t = Config.Home_graph_view.default)
+      ?(home_path : string = (Config.Home.default).path)
+      ()
   : t
   =
   let open Vault_graph in
@@ -167,7 +172,7 @@ let home_graph ?(config : Config.Home_graph_view.t = Config.Home_graph_view.defa
     let html = to_widget_html ~config g in
     let docs =
       List.map ctx.docs ~f:(fun (path, doc) ->
-        if not (String.equal path "home.md")
+        if not (String.equal path home_path)
         then path, doc
         else (
           let block_mapper = add_html_code_block `Append html in
@@ -196,8 +201,8 @@ let default ?(cache : Cache.cache option) ?(config : Config.t = Config.default) 
   >> py_executor ?cache ()
   >> dot_render ()
   >> backlinks
-  >> home_graph ~config:config.home_graph_view ()
-  >> home_toc ~dir_link:true ~toc_order:config.toc_order ()
+  >> home_graph ~config:config.home_graph_view ~home_path:config.home.path ()
+  >> home_toc ~dir_link:true ~toc_order:config.toc_order ~home_path:config.home.path ()
   >> dir_index ~toc_order:config.toc_order ()
 ;;
 
