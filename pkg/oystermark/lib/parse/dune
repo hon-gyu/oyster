@@ -1,6 +1,6 @@
 (library
  (name parse)
- (public_name oystermark.parse)
+ (public_name oystermark-core)
  (libraries cmarkit core yaml config)
  (inline_tests)
  (preprocess
