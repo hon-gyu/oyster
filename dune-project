@@ -16,6 +16,25 @@
 (documentation https://url/to/documentation)
 
 (package
+ (name oystermark-core)
+ (synopsis "Oystermark parser: CommonMark and various extensions")
+ (description
+  "Pre-resolution, file-level parsing of Oystermark documents.")
+ (depends
+  ocaml
+  (dune
+   (>= 3.21))
+  cmarkit
+  core
+  yaml
+  yojson
+  ppx_jane
+  ppx_string
+  ppx_quick_test
+  ppx_yojson_conv
+  (ppx_expect :with-test)))
+
+(package
  (name oystermark)
  (synopsis "A short synopsis")
  (description "A longer description")
@@ -23,6 +42,7 @@
   ocaml
   (dune
    (>= 3.21))
+  oystermark-core
   cmarkit
   core
   core_unix

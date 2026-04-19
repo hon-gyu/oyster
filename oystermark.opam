@@ -12,6 +12,7 @@ bug-reports: "https://github.com/username/reponame/issues"
 depends: [
   "ocaml"
   "dune" {>= "3.22" & >= "3.21"}
+  "oystermark-core"
   "cmarkit"
   "core"
   "core_unix"
