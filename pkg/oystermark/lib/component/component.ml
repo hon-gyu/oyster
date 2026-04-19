@@ -82,6 +82,7 @@ let toc_html
       ?(leaf_href_f : (string -> string) option)
       ?(collapsible = false)
       ?(collapsed_by_default = false)
+      ?(compare_path : (string -> string -> int) option)
       (paths : string list)
   : html
   =
@@ -117,7 +118,7 @@ let toc_html
     in
     "<ul>\n" ^ String.concat ~sep:"\n" items ^ "\n</ul>"
   in
-  render_entries (build_toc_entries paths)
+  render_entries (build_toc_entries ?compare_path paths)
 ;;
 
 let%expect_test "toc_html" =

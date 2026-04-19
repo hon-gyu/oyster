@@ -78,6 +78,7 @@ let render_vault
       ~leaf_href_f:Html.file_url_path
       ~collapsible:true
       ~collapsed_by_default:true
+      ~compare_path:(Pipeline.compare_path_of_toc_order config.toc_order)
       sidebar_paths
   in
   List.filter_map final_vault.docs ~f:(fun (rel_path, final) ->
