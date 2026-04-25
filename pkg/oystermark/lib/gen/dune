@@ -1,0 +1,6 @@
+(library
+ (name gen)
+ (libraries parse cmarkit qcheck)
+ (inline_tests)
+ (preprocess
+  (pps ppx_jane ppx_string ppx_deriving_qcheck)))
