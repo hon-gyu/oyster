@@ -301,3 +301,46 @@ content
     </div>
     |}]
 ;;
+
+(* Inline attributes
+   ==================================================================== *)
+
+let%expect_test "inline attr: bare text → span" =
+  render "avant{lang=fr}";
+  [%expect {| <p><span lang="fr">avant</span></p> |}]
+;;
+
+let%expect_test "inline attr: id and class on text" =
+  render "word{#my-id .highlight}";
+  [%expect {| <p><span id="my-id" class="highlight">word</span></p> |}]
+;;
+
+let%expect_test "inline attr: emphasis" =
+  render "_em_{.note}";
+  [%expect {| <p><em class="note">em</em></p> |}]
+;;
+
+let%expect_test "inline attr: strong" =
+  render "**bold**{#b .big}";
+  [%expect {| <p><strong id="b" class="big">bold</strong></p> |}]
+;;
+
+let%expect_test "inline attr: code span" =
+  render "`code`{.lang}";
+  [%expect {| <p><code class="lang">code</code></p> |}]
+;;
+
+let%expect_test "inline attr: resolved link" =
+  render "[text](Note%202){.ext}";
+  [%expect {| <p><a href="/Note 2/" class="ext">text</a></p> |}]
+;;
+
+let%expect_test "inline attr: unresolved link merges class" =
+  render "[text](nonexistent){.ext}";
+  [%expect {| <p><a href="#" class="ext unresolved">text</a></p> |}]
+;;
+
+let%expect_test "inline attr: no attr leaves output unchanged" =
+  render "_em_";
+  [%expect {| <p><em>em</em></p> |}]
+;;
