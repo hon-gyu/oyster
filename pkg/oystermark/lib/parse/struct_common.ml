@@ -455,32 +455,49 @@ end = struct
 
   and handle_list l list_meta rest =
     let items = Block.List'.items l in
-    let items, rest = rewrite_list_items l items rest in
+    let rec loop items rest =
+      let items, rest, absorbed = rewrite_list_items l items rest in
+      if absorbed
+      then (
+        match rest with
+        | Block.List (l', _) :: rest'
+          when Poly.equal (Block.List'.type' l) (Block.List'.type' l') ->
+          let more_items, rest' = loop (Block.List'.items l') rest' in
+          items @ more_items, rest'
+        | _ -> items, rest)
+      else items, rest
+    in
+    let items, rest = loop items rest in
     make_list l list_meta items :: rewrite_block_list rest
 
   and rewrite_list_items
         (l : Block.List'.t)
         (items : Block.List_item.t node list)
         (following : Block.t list)
-    : Block.List_item.t node list * Block.t list
+    : Block.List_item.t node list * Block.t list * bool
     =
     match items with
-    | [] -> [], following
+    | [] -> [], following, false
     | [ (item, meta) ] ->
-      let item', following = rewrite_last_item item following in
-      [ item', meta ], following
+      let item', following, absorbed = rewrite_last_item item following in
+      [ item', meta ], following, absorbed
     | (item, meta) :: rest_items ->
       (match try_tag_non_last_item l item rest_items with
-       | `Absorbed_rest new_block -> [ rebuild_item item new_block, meta ], following
+       | `Absorbed_rest new_block ->
+         [ rebuild_item item new_block, meta ], following, false
        | `Tagged new_block ->
-         let rest_items, following = rewrite_list_items l rest_items following in
-         (rebuild_item item new_block, meta) :: rest_items, following
+         let rest_items, following, absorbed =
+           rewrite_list_items l rest_items following
+         in
+         (rebuild_item item new_block, meta) :: rest_items, following, absorbed
        | `Untouched ->
          let block = Block.List_item.block item in
          let block' = rewrite_within_block block in
          let item = if phys_equal block block' then item else rebuild_item item block' in
-         let rest_items, following = rewrite_list_items l rest_items following in
-         (item, meta) :: rest_items, following)
+         let rest_items, following, absorbed =
+           rewrite_list_items l rest_items following
+         in
+         (item, meta) :: rest_items, following, absorbed)
 
   and try_tag_non_last_item
         (l : Block.List'.t)
@@ -505,12 +522,12 @@ end = struct
          else (
            (* Bare trailing-colon middle item absorbs remaining siblings
               as a nested list of the same type. *)
-           let absorbed_items, _ = rewrite_list_items l rest_items [] in
+           let absorbed_items, _, _ = rewrite_list_items l rest_items [] in
            let nested_list = make_list l Meta.none absorbed_items in
            `Absorbed_rest (build_nested_keyed ~make_node:mk_keyed_item labels nested_list)))
 
   and rewrite_last_item (item : Block.List_item.t) (following : Block.t list)
-    : Block.List_item.t * Block.t list
+    : Block.List_item.t * Block.t list * bool
     =
     let recurse_item () =
       let block = Block.List_item.block item in
@@ -518,31 +535,31 @@ end = struct
       if phys_equal block block' then item else rebuild_item item block'
     in
     match list_item_paragraph item with
-    | None -> recurse_item (), following
+    | None -> recurse_item (), following, false
     | Some (p, sub_blocks) ->
       (match Colon.decompose (Block.Paragraph.inline p) with
-       | None -> recurse_item (), following
+       | None -> recurse_item (), following, false
        | Some (Colon.Chain_with_value (labels, value)) ->
          let sub_blocks = rewrite_block_list sub_blocks in
          let body = wrap_blocks (value_paragraph value :: sub_blocks) in
          let new_block = build_nested_keyed ~make_node:mk_keyed_item labels body in
-         rebuild_item item new_block, following
+         rebuild_item item new_block, following, false
        | Some (Colon.Chain_trailing_colon labels) ->
          if not (List.is_empty sub_blocks)
          then (
            let sub_blocks = rewrite_block_list sub_blocks in
            let body = wrap_blocks sub_blocks in
            let new_block = build_nested_keyed ~make_node:mk_keyed_item labels body in
-           rebuild_item item new_block, following)
+           rebuild_item item new_block, following, false)
          else (
            let absorbed, remaining = span_non_blank following in
            if List.is_empty absorbed
-           then item, following
+           then item, following, false
            else (
              let absorbed = rewrite_block_list absorbed in
              let body = wrap_blocks absorbed in
              let new_block = build_nested_keyed ~make_node:mk_keyed_item labels body in
-             rebuild_item item new_block, remaining)))
+             rebuild_item item new_block, remaining, true)))
 
   and rewrite_within_block (block : Block.t) : Block.t =
     match block with
