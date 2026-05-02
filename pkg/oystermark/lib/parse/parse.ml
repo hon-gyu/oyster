@@ -22,7 +22,7 @@ module Div = Div
 module Frontmatter = Frontmatter
 module Heading_slug = Heading_slug
 module Wikilink = Wikilink
-module Attribute = Attribute
+module Cb_attribute = Cb_attribute
 module Textloc_conv = Textloc_conv
 module Struct = Struct
 
@@ -41,7 +41,7 @@ let mk_mapper () : Cmarkit.Mapper.t =
       (compose_all_block_maps
          [ Heading_slug.mk_block_map ()
          ; Callout.block_map
-         ; Attribute.block_map
+         ; Cb_attribute.block_map
          ; Block_id.block_map
          ])
     ()
@@ -106,7 +106,7 @@ let sexp_of_ =
       [ Heading_slug.sexp_of_meta
       ; Block_id.sexp_of_meta
       ; Callout.sexp_of_meta
-      ; Attribute.sexp_of_meta
+      ; Cb_attribute.sexp_of_meta
       ]
     ()
 ;;

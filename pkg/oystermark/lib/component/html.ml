@@ -546,7 +546,7 @@ let%test_module "don't throw" =
           [ List.map ~f:(fun ex -> ex.content) Parse.Struct.For_test.examples
           ; List.map ~f:(fun (_, content, _) -> content) Parse.Div.For_test.examples
           ; Parse.Callout.For_test.examples
-          ; Parse.Attribute.For_test.examples
+          ; Parse.Cb_attribute.For_test.examples
           ]
       in
       List.iter examples ~f:(fun src ->

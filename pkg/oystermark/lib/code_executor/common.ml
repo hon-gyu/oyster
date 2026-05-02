@@ -1,7 +1,7 @@
 (** Core types and AST extraction shared by all code-executor sub-modules. *)
 
 open Core
-module Attribute = Parse.Attribute
+module Cb_attribute = Parse.Cb_attribute
 module Frontmatter = Parse.Frontmatter
 
 (** Config key for Oyster-specific frontmatter in frontmatter *)
@@ -11,7 +11,7 @@ type cell =
   { id : int
     (** Unique code block id. Most of the time it will be the order of appearance in code blocks in the document *)
   ; lang : string option
-  ; attr : Attribute.t option
+  ; attr : Cb_attribute.t option
   ; content : string
   }
 [@@deriving sexp_of]
@@ -34,8 +34,8 @@ type executor = exec_ctx -> output list
 (** Walk the Cmarkit AST and collect every fenced code block as a {!cell}.
     Cells are numbered in document order starting from 0.
 
-    [lang] and [attr] are populated from the {!Attribute.code_block_info} attached to the
-    block by {!Attribute.block_map} during parsing, which tags every fenced code
+    [lang] and [attr] are populated from the {!Cb_attribute.code_block_info} attached to the
+    block by {!Cb_attribute.block_map} during parsing, which tags every fenced code
     block that has a non-empty info string. *)
 let extract_code_blocks (doc : Cmarkit.Doc.t) : cell list =
   let block_id = ref 0 in
@@ -48,7 +48,7 @@ let extract_code_blocks (doc : Cmarkit.Doc.t) : cell list =
         List.map (Cmarkit.Block.Code_block.code cb) ~f:Cmarkit.Block_line.to_string
         |> String.concat ~sep:"\n"
       in
-      let cb_info = Cmarkit.Meta.find Attribute.meta_key meta in
+      let cb_info = Cmarkit.Meta.find Cb_attribute.meta_key meta in
       let cell =
         { id = !block_id
         ; lang = cb_info |> Option.map ~f:(fun ci -> ci.lang)
@@ -96,7 +96,7 @@ let extract_exec_ctx (doc : Cmarkit.Doc.t) : exec_ctx =
     optionally restricted further by [attr_filter]. *)
 let filter_cells
       ~(lang_filter : string -> bool)
-      ~(attr_filter : Attribute.t option -> bool)
+      ~(attr_filter : Cb_attribute.t option -> bool)
       (cells : cell list)
   : cell list
   =
@@ -110,7 +110,7 @@ let filter_cells
   - Returns default session [ "1" ] if no attribute is present.
   - Returns default session [ "1" ] if no [session_id] key is found.
 *)
-let session_id_of_attr (attr_opt : Attribute.t option) : string =
+let session_id_of_attr (attr_opt : Cb_attribute.t option) : string =
   attr_opt
   |> Option.value_map ~default:"1" ~f:(fun attr ->
     List.Assoc.find attr.kvs ~equal:String.equal "session_id"
@@ -124,8 +124,8 @@ let session_id_of_attr (attr_opt : Attribute.t option) : string =
 *)
 let filter_group_cells
       ~(lang_filter : string -> bool)
-      ~(attr_filter : Attribute.t option -> bool)
-      ~(attr_session_map : Attribute.t option -> string)
+      ~(attr_filter : Cb_attribute.t option -> bool)
+      ~(attr_session_map : Cb_attribute.t option -> string)
       (cells : cell list)
   : (string * cell list) list
   =
