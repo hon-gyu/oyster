@@ -154,6 +154,45 @@ let of_string_exn (s : string) : t =
   | Error e -> raise (Error.to_exn e)
 ;;
 
+(** Serialize a value for [key=...] output. Bare (unquoted) iff the value
+    contains only ASCII alphanumerics, underscore, colon, or hyphen.
+    Otherwise emit double-quoted, with backslashes and quotes inside escaped. *)
+let serialize_value (v : string) : string =
+  let bare_ok c =
+    Char.is_alphanum c || Char.equal c '_' || Char.equal c ':' || Char.equal c '-'
+  in
+  if (not (String.is_empty v)) && String.for_all v ~f:bare_ok
+  then v
+  else (
+    let buf = Buffer.create (String.length v + 2) in
+    Buffer.add_char buf '"';
+    String.iter v ~f:(fun c ->
+      match c with
+      | '\\' | '"' ->
+        Buffer.add_char buf '\\';
+        Buffer.add_char buf c
+      | _ -> Buffer.add_char buf c);
+    Buffer.add_char buf '"';
+    Buffer.contents buf)
+;;
+
+(** Serialize an [Attribute.t] back to brace-content syntax (without
+    surrounding [{}]). Order: id, classes, kvs — matching how most
+    rendered output reads. *)
+let to_string (t : t) : string =
+  let parts = [] in
+  let parts =
+    match t.id with
+    | Some id -> id :: parts
+    | None -> parts
+  in
+  let parts = parts @ t.classes in
+  let parts =
+    parts @ List.map t.kvs ~f:(fun (k, v) -> k ^ "=" ^ serialize_value v)
+  in
+  String.concat ~sep:" " parts
+;;
+
 let%test_module "parse" =
   (module struct
     let parse (s : string) : unit =

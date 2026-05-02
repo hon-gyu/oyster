@@ -1,6 +1,6 @@
 (** {0 Block attributes}
 
-    Implements of the Djot block attribute syntax. A line of the form
+    Implements the Djot block attribute syntax. A line of the form
     [{...}] immediately preceding a block-level element attaches the
     attribute spec to that block's metadata. Repeated specifiers stack
     via {!Attribute.merge}.
@@ -9,28 +9,67 @@
 
     A doc-level rewrite that walks every list of sibling blocks and
     looks for runs of "attribute paragraphs" — paragraphs whose textual
-    content is one or more [{...}] groups, separated by whitespace. A
-    run that is immediately followed (no [Blank_line] in between) by a
-    non-attribute block is consumed: the merged attribute is stamped
-    onto the next block's metadata and the attribute paragraphs are
-    removed from the AST. Orphan attribute paragraphs (followed by a
-    blank line, or trailing the document) are left as plain paragraphs.
+    content is one or more [{...}] groups, separated by whitespace.
+    Each run becomes an {!Ext_attribute_lines} block (preserving the
+    source structure for round-trip and folding). When the run is
+    immediately followed (no [Blank_line] in between) by a non-attribute
+    block, the merged attribute is also stamped onto that block's
+    metadata via {!meta_key}.
 
     The rewrite recurses into block containers ([Blocks], [Block_quote],
     list items, and {!Div.Ext_div}) so attributes work inside them.
+
+    {1 AST}
+
+    The resolved attribute lives in two places after the rewrite:
+    - {!Ext_attribute_lines} carries the source-level [{...}] specs so
+      the commonmark renderer can faithfully re-emit them and folders
+      can see the literal source structure.
+    - The target block's [Meta.t] carries the {e merged} attribute under
+      {!meta_key} so renderers can read it without scanning siblings.
 *)
 
 open Core
 open Cmarkit
 open Common
 
+(** Attached to the target block (Heading/Paragraph/Code_block/...) when
+    one or more preceding {!Ext_attribute_lines} blocks merge into it. *)
 let meta_key : Attribute.t Cmarkit.Meta.key = Cmarkit.Meta.key ()
+
+(** A literal run of [{...}] source lines. Produced by the rewrite for
+    every attribute paragraph it encounters, whether or not the run
+    successfully attaches to a following block. *)
+type Cmarkit.Block.t += Ext_attribute_lines of Attribute.t list
 
 let sexp_of_meta : Common.meta_sexp =
   fun meta ->
   Cmarkit.Meta.find meta_key meta
   |> Option.map ~f:(fun a ->
-    Sexp.List [ Atom "djot_attribute"; Attribute.sexp_of_t a ])
+    Sexp.List [ Atom "block_attribute"; Attribute.sexp_of_t a ])
+;;
+
+let sexp_of_block : block_sexp =
+  fun ~recurse_inline:_ ~recurse_block:_ ~with_meta:_ b ->
+  match b with
+  | Ext_attribute_lines specs ->
+    Some
+      (Sexp.List
+         (Atom "Attribute_lines" :: List.map specs ~f:Attribute.sexp_of_t))
+  | _ -> None
+;;
+
+let block_commonmark_renderer : Cmarkit_renderer.block =
+  let open Cmarkit_renderer in
+  fun (c : context) (b : Block.t) ->
+    match b with
+    | Ext_attribute_lines specs ->
+      List.iter specs ~f:(fun spec ->
+        Context.string c "{";
+        Context.string c (Attribute.to_string spec);
+        Context.string c "}\n");
+      true
+    | _ -> false
 ;;
 
 (* Detecting attribute paragraphs
@@ -219,32 +258,32 @@ let is_blank_line : Block.t -> bool = function
 ;;
 
 (** Rewrite a sibling block list: collapse consecutive attribute
-    paragraphs and attach to the following non-attribute block. *)
+    paragraphs into {!Ext_attribute_lines} runs and stamp the merged
+    attribute onto the next non-attribute block when one immediately
+    follows (no blank line in between). *)
 let rec rewrite_block_list (blocks : Block.t list) : Block.t list =
   let blocks = List.concat_map blocks ~f:split_attr_prefix in
+  let flush_orphan pending =
+    (* Orphan: emit the run as Ext_attribute_lines, no attaching. *)
+    match List.rev pending with
+    | [] -> []
+    | specs -> [ Ext_attribute_lines specs ]
+  in
   let rec go pending = function
-    | [] ->
-      (* Orphan attributes at end-of-list: leave as paragraphs. *)
-      List.rev_map pending ~f:fst
+    | [] -> flush_orphan pending
     | block :: rest ->
       (match attr_paragraph_spec block with
-       | Some spec -> go ((block, spec) :: pending) rest
+       | Some spec -> go (spec :: pending) rest
        | None ->
-         if is_blank_line block && not (List.is_empty pending)
-         then
-           (* Blank line breaks the association — flush pending as plain
-              paragraphs, keep the blank line, continue. *)
-           List.rev_map pending ~f:fst @ (block :: go [] rest)
+         if is_blank_line block
+         then flush_orphan pending @ (block :: go [] rest)
          else (
            let block' = rewrite_within_block block in
-           match pending with
+           match List.rev pending with
            | [] -> block' :: go [] rest
-           | _ ->
-             let merged =
-               List.rev_map pending ~f:snd
-               |> List.reduce_exn ~f:Attribute.merge
-             in
-             attach_attr merged block' :: go [] rest))
+           | specs ->
+             let merged = List.reduce_exn specs ~f:Attribute.merge in
+             Ext_attribute_lines specs :: attach_attr merged block' :: go [] rest))
   in
   go [] blocks
 
@@ -283,10 +322,23 @@ let rewrite_doc (doc : Doc.t) : Doc.t =
   if phys_equal block block' then doc else Doc.make block'
 ;;
 
+(** Default folder/mapper continuation for [Ext_attribute_lines]. The
+    constructor is a leaf (no inner block to recurse into), so the
+    accumulator passes through unchanged. Other extensions in this
+    library expose similar [block_ext_*] helpers; downstream folders
+    that traverse the post-rewrite AST should compose them. *)
+let block_ext_fold : (Block.t, 'a) Folder.fold =
+  fun _f acc b ->
+  match b with
+  | Ext_attribute_lines _ -> acc
+  | _ -> acc
+;;
+
 module For_test = struct
   let count_with_attr (doc : Doc.t) : int =
     let folder =
       Folder.make
+        ~block_ext_default:block_ext_fold
         ~block:(fun _f acc b ->
           let m =
             match b with
@@ -318,7 +370,7 @@ let%test_module "Djot block attributes" =
     ;;
 
     let pp_doc (doc : Doc.t) : unit =
-      mk_pp_doc ~metas:[ sexp_of_meta ] () doc
+      mk_pp_doc ~blocks:[ sexp_of_block ] ~metas:[ sexp_of_meta ] () doc
     ;;
 
     let%expect_test "single attribute on paragraph" =
@@ -327,8 +379,9 @@ let%test_module "Djot block attributes" =
       pp_doc doc;
       [%expect
         {|
-        ((Paragraph (Text "Don't forget to turn off the water!"))
-          (meta (djot_attribute ((id (#water)) (classes ()) (kvs ())))))
+        (Blocks (Attribute_lines ((id (#water)) (classes ()) (kvs ())))
+          ((Paragraph (Text "Don't forget to turn off the water!"))
+            (meta (block_attribute ((id (#water)) (classes ()) (kvs ()))))))
         |}]
     ;;
 
@@ -340,9 +393,13 @@ let%test_module "Djot block attributes" =
       pp_doc doc;
       [%expect
         {|
-        ((Paragraph (Text "Don't forget!"))
-          (meta
-            (djot_attribute ((id (#water)) (classes (.important .large)) (kvs ())))))
+        (Blocks
+          (Attribute_lines ((id (#water)) (classes ()) (kvs ()))
+            ((id ()) (classes (.important .large)) (kvs ())))
+          ((Paragraph (Text "Don't forget!"))
+            (meta
+              (block_attribute
+                ((id (#water)) (classes (.important .large)) (kvs ()))))))
         |}]
     ;;
 
@@ -354,9 +411,9 @@ let%test_module "Djot block attributes" =
       pp_doc doc;
       [%expect
         {|
-        (Blocks
+        (Blocks (Attribute_lines ((id ()) (classes ()) (kvs ((source Iliad)))))
           ((Block_quote (Paragraph (Text "Sing, muse, of the wrath of Achilles")))
-            (meta (djot_attribute ((id ()) (classes ()) (kvs ((source Iliad))))))))
+            (meta (block_attribute ((id ()) (classes ()) (kvs ((source Iliad))))))))
         |}]
     ;;
 
@@ -366,7 +423,7 @@ let%test_module "Djot block attributes" =
       pp_doc doc;
       [%expect
         {|
-        (Blocks (Paragraph (Text {#water})) Blank_line
+        (Blocks (Attribute_lines ((id (#water)) (classes ()) (kvs ()))) Blank_line
           (Paragraph (Text "Don't forget!")))
         |}]
     ;;
@@ -378,8 +435,25 @@ let%test_module "Djot block attributes" =
       [%expect
         {|
         (Blocks (Paragraph (Text "Some text")) Blank_line
-          (Paragraph (Text {#trailing})))
+          (Attribute_lines ((id (#trailing)) (classes ()) (kvs ()))))
         |}]
+    ;;
+
+    let%test_unit "commonmark roundtrip is idempotent" =
+      let renderer =
+        Cmarkit_renderer.compose
+          (Cmarkit_commonmark.renderer ())
+          (Cmarkit_renderer.make ~block:block_commonmark_renderer ())
+      in
+      let commonmark_of_doc = Cmarkit_renderer.doc_to_string renderer in
+      List.iter
+        [ "{#water}\nDon't forget!"
+        ; "{#water}\n{.important .large}\nDon't forget!"
+        ; "{source=\"Iliad\"}\n> Sing, muse, of the wrath of Achilles"
+        ; "{key=\"my value\"}\nThe paragraph."
+        ; "{#orphan}\n\nSome text"
+        ]
+        ~f:(commonmark_of_doc_idempotent ~doc_of_string ~commonmark_of_doc)
     ;;
   end)
 ;;

@@ -232,6 +232,56 @@ let render_callout
 ;;
 
 module Heading_slug = Parse.Heading_slug
+module Attribute = Parse.Attribute
+module Block_attribute = Parse.Block_attribute
+module Cb_attribute = Parse.Cb_attribute
+
+(* Attribute rendering
+================================== *)
+
+let buffer_add_attr_value (buf : Buffer.t) (s : string) : unit =
+  String.iter s ~f:(fun c ->
+    match c with
+    | '&' -> Buffer.add_string buf "&amp;"
+    | '"' -> Buffer.add_string buf "&quot;"
+    | '<' -> Buffer.add_string buf "&lt;"
+    | '>' -> Buffer.add_string buf "&gt;"
+    | _ -> Buffer.add_char buf c)
+;;
+
+let strip_id_marker s = String.chop_prefix_if_exists s ~prefix:"#"
+let strip_class_marker s = String.chop_prefix_if_exists s ~prefix:"."
+
+(** Render an [Attribute.t] as a leading-space-prefixed sequence of HTML
+    attributes: [` id="x" class="a b" key="value"`]. With [~key_prefix],
+    every attribute name (including [id] and [class]) is prefixed —
+    used for the data-* path on code blocks. *)
+let attribute_html_attrs ?(key_prefix = "") (a : Attribute.t) : string =
+  let buf = Buffer.create 32 in
+  let emit (k : string) (v : string) =
+    Buffer.add_char buf ' ';
+    Buffer.add_string buf key_prefix;
+    Buffer.add_string buf k;
+    Buffer.add_string buf "=\"";
+    buffer_add_attr_value buf v;
+    Buffer.add_char buf '"'
+  in
+  Option.iter a.id ~f:(fun id -> emit "id" (strip_id_marker id));
+  if not (List.is_empty a.classes)
+  then (
+    let classes =
+      String.concat ~sep:" " (List.map a.classes ~f:strip_class_marker)
+    in
+    emit "class" classes);
+  List.iter a.kvs ~f:(fun (k, v) -> emit k v);
+  Buffer.contents buf
+;;
+
+let block_attr_html (meta : Meta.t) : string =
+  match Meta.find Block_attribute.meta_key meta with
+  | None -> ""
+  | Some a -> attribute_html_attrs a
+;;
 
 type struct_style =
   [ `Plain (** no visible styling, as close to plain CommonMark as possible *)
@@ -318,32 +368,91 @@ let render_struct
 let block ~(struct_style : struct_style ref) (c : Cmarkit_renderer.context)
   : Block.t -> bool
   = function
+  | Block_attribute.Ext_attribute_lines _ ->
+    (* The literal [{...}] source lines are kept in the AST for
+       round-trip and structural fidelity, but contribute no HTML —
+       the resolved spec is on the next block's meta. *)
+    true
   | Block.Heading (h, meta) ->
-    (match Meta.find Heading_slug.meta_key meta with
-     | Some slug ->
+    let slug = Meta.find Heading_slug.meta_key meta in
+    let attr = Meta.find Block_attribute.meta_key meta in
+    (match slug, attr with
+     | None, None -> false
+     | _, _ ->
        let level = Block.Heading.level h in
-       C.string c (sprintf "<h%d id=\"%s\">" level slug);
+       (* Block_attribute id wins over slug if both present (djot says
+          last id wins; the user-written attribute is more specific). *)
+       let id_attr =
+         match attr with
+         | Some { id = Some id; _ } -> sprintf " id=\"%s\"" (strip_id_marker id)
+         | _ ->
+           (match slug with
+            | Some s -> sprintf " id=\"%s\"" s
+            | None -> "")
+       in
+       let other_attrs =
+         match attr with
+         | None -> ""
+         | Some a -> attribute_html_attrs { a with id = None }
+       in
+       C.string c (sprintf "<h%d%s%s>" level id_attr other_attrs);
        C.inline c (Block.Heading.inline h);
        C.string c (sprintf "</h%d>\n" level);
-       true
-     | None -> false)
+       true)
   | Block.Block_quote (bq, meta) ->
     (match Meta.find Callout.meta_key meta with
      | Some callout ->
        render_callout c bq callout;
        true
-     | None -> false)
+     | None ->
+       (match Meta.find Block_attribute.meta_key meta with
+        | None -> false
+        | Some a ->
+          C.string c (sprintf "<blockquote%s>\n" (attribute_html_attrs a));
+          C.block c (Block.Block_quote.block bq);
+          C.string c "</blockquote>\n";
+          true))
   | Block.Paragraph (p, meta) ->
-    (* Render a paragraph with block-id. The ^blockid text stays visible
-        (it's part of the inline content). We add an id to the <p> for linking. *)
-    (match Meta.find Block_id.meta_key meta with
-     | Some (block_id : Block_id.t) ->
-       let id = "^" ^ block_id.id in
-       C.string c (Format.asprintf "<p id=\"%s\">" id);
+    let block_id = Meta.find Block_id.meta_key meta in
+    let attr = Meta.find Block_attribute.meta_key meta in
+    (match block_id, attr with
+     | None, None -> false
+     | _, _ ->
+       let id_attr =
+         match attr with
+         | Some { id = Some id; _ } -> sprintf " id=\"%s\"" (strip_id_marker id)
+         | _ ->
+           (match block_id with
+            | Some (b : Block_id.t) -> sprintf " id=\"^%s\"" b.id
+            | None -> "")
+       in
+       let other_attrs =
+         match attr with
+         | None -> ""
+         | Some a -> attribute_html_attrs { a with id = None }
+       in
+       C.string c (sprintf "<p%s%s>" id_attr other_attrs);
        C.inline c (Block.Paragraph.inline p);
        C.string c "</p>\n";
-       true
-     | None -> false)
+       true)
+  | Block.Code_block (cb, meta) ->
+    (* Render with [data-attr-*] when a Pandoc-style attribute is
+       attached. Otherwise let the default cmarkit_html renderer
+       handle it. *)
+    (match Meta.find Cb_attribute.meta_key meta with
+     | None | Some { attribute = None; _ } -> false
+     | Some { lang; attribute = Some attr } ->
+       let data_attrs = attribute_html_attrs ~key_prefix:"data-attr-" attr in
+       C.string c "<pre><code class=\"language-";
+       C.string c lang;
+       C.string c "\"";
+       C.string c data_attrs;
+       C.string c ">";
+       List.iter (Block.Code_block.code cb) ~f:(fun bl ->
+         Cmarkit_html.html_escaped_string c (Block_line.to_string bl);
+         C.byte c '\n');
+       C.string c "</code></pre>\n";
+       true)
   | Parse.Frontmatter.Frontmatter y ->
     let inner = Parse.Frontmatter.to_html (Some y) in
     C.string c (sprintf "<div class=\"frontmatter\">%s</div>\n" inner);
@@ -418,6 +527,53 @@ module For_test = struct
 
   let pp_doc struct_style doc = html_of_doc struct_style doc |> print_string
 end
+
+let%expect_test "block attribute on paragraph" =
+  let open For_test in
+  let doc = Parse.of_string "{#water .important key=\"my val\"}\nDon't forget!" in
+  pp_doc `Plain doc;
+  [%expect
+    {| <p id="water" class="important" key="my val">Don't forget!</p> |}]
+;;
+
+let%expect_test "block attribute on heading combines with slug; attr id wins" =
+  let open For_test in
+  let doc = Parse.of_string "{#custom .big}\n# Hello world" in
+  pp_doc `Plain doc;
+  [%expect {| <h1 id="custom" class="big">Hello world</h1> |}]
+;;
+
+let%expect_test "block attribute on blockquote" =
+  let open For_test in
+  let doc = Parse.of_string "{source=\"Iliad\"}\n> Sing, muse" in
+  pp_doc `Plain doc;
+  [%expect
+    {|
+    <blockquote source="Iliad">
+    <p>Sing, muse</p>
+    </blockquote>
+    |}]
+;;
+
+let%expect_test "code block pandoc attribute renders as data-attr-*" =
+  let open For_test in
+  let src = "```python {#snippet .runnable timeout=30}\nprint('hi')\n```" in
+  let doc = Parse.of_string src in
+  pp_doc `Plain doc;
+  [%expect
+    {|
+    <pre><code class="language-python" data-attr-id="snippet" data-attr-class="runnable" data-attr-timeout="30">print('hi')
+    </code></pre>
+    |}]
+;;
+
+let%expect_test "Ext_attribute_lines emits no HTML" =
+  let open For_test in
+  (* Orphan attribute paragraph (followed by blank line, no target) *)
+  let doc = Parse.of_string "{#orphan}\n\nA paragraph." in
+  pp_doc `Plain doc;
+  [%expect {| <p>A paragraph.</p> |}]
+;;
 
 let%expect_test "struct: unified HTML across styles" =
   let open For_test in

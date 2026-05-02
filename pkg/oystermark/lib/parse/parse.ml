@@ -89,6 +89,7 @@ let commonmark_of_doc (doc : Cmarkit.Doc.t) : string =
       ; Cmarkit_renderer.make ~block:Frontmatter.block_commonmark_renderer ()
       ; Cmarkit_renderer.make ~block:Div.block_commonmark_renderer ()
       ; Cmarkit_renderer.make ~block:Struct.block_commonmark_renderer ()
+      ; Cmarkit_renderer.make ~block:Block_attribute.block_commonmark_renderer ()
       ]
   in
   Cmarkit_renderer.doc_to_string r doc
@@ -104,7 +105,12 @@ let commonmark_of_doc (doc : Cmarkit.Doc.t) : string =
 let sexp_of_ =
   Common.make_sexp_of
     ~inlines:[ Wikilink.sexp_of_inline ]
-    ~blocks:[ Frontmatter.sexp_of_block; Div.sexp_of_block; Struct.sexp_of_block ]
+    ~blocks:
+      [ Frontmatter.sexp_of_block
+      ; Div.sexp_of_block
+      ; Struct.sexp_of_block
+      ; Block_attribute.sexp_of_block
+      ]
     ~metas:
       [ Heading_slug.sexp_of_meta
       ; Block_id.sexp_of_meta
