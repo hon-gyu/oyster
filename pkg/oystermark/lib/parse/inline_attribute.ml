@@ -349,57 +349,10 @@ let inline_map : Inline.t Mapper.mapper =
    ===== *)
 
 module For_test = struct
-  (** Recursively walk an inline tree, printing it as an sexp where any
-      node carrying an inline-attribute meta is wrapped:
-      [(<inline-sexp> (meta (inline_attribute <attr>)))]. *)
-  let rec sexp_of_inline (i : Inline.t) : Sexp.t =
-    let body : Sexp.t =
-      match i with
-      | Inline.Text (s, _) -> Sexp.List [ Atom "Text"; Atom s ]
-      | Inline.Break (b, _) ->
-        let t =
-          match Inline.Break.type' b with
-          | `Hard -> "hard"
-          | `Soft -> "soft"
-        in
-        Sexp.List [ Atom "Break"; Atom t ]
-      | Inline.Emphasis (e, _) ->
-        Sexp.List [ Atom "Emphasis"; sexp_of_inline (Inline.Emphasis.inline e) ]
-      | Inline.Strong_emphasis (e, _) ->
-        Sexp.List [ Atom "Strong_emphasis"; sexp_of_inline (Inline.Emphasis.inline e) ]
-      | Inline.Code_span (cs, _) ->
-        Sexp.List [ Atom "Code_span"; Atom (Inline.Code_span.code cs) ]
-      | Inline.Link (l, _) ->
-        Sexp.List [ Atom "Link"; sexp_of_inline (Inline.Link.text l) ]
-      | Inline.Image (l, _) ->
-        Sexp.List [ Atom "Image"; sexp_of_inline (Inline.Link.text l) ]
-      | Inline.Inlines (is, _) ->
-        Sexp.List (Atom "Inlines" :: List.map is ~f:sexp_of_inline)
-      | _ -> Sexp.Atom "<other>"
-    in
-    let meta =
-      match i with
-      | Inline.Text (_, m)
-      | Inline.Break (_, m)
-      | Inline.Emphasis (_, m)
-      | Inline.Strong_emphasis (_, m)
-      | Inline.Code_span (_, m)
-      | Inline.Link (_, m)
-      | Inline.Image (_, m)
-      | Inline.Inlines (_, m) -> m
-      | _ -> Meta.none
-    in
-    match Meta.find meta_key meta with
-    | None -> body
-    | Some attr ->
-      Sexp.List
-        [ body
-        ; Sexp.List [ Atom "meta"; Sexp.List [ Atom "inline_attribute"; Attribute.sexp_of_t attr ] ]
-        ]
-  ;;
+  let sexp_of_ = Common.make_sexp_of ~metas:[ sexp_of_meta ] ()
 
   let pp_inline (i : Inline.t) : unit =
-    print_endline (Sexp.to_string_hum ~indent:2 (sexp_of_inline i))
+    print_endline (Sexp.to_string_hum ~indent:2 (sexp_of_.inline i))
   ;;
 end
 

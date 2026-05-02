@@ -82,7 +82,7 @@ let inline_commonmark_renderer : Cmarkit_renderer.inline =
 let meta_key : unit Meta.key = Meta.key ()
 
 let sexp_of_inline : Common.inline_sexp =
-  fun _recurse i ->
+  fun _recurse ~with_meta:_ i ->
   match i with
   | Ext_wikilink (wl, _) -> Some (Sexp.List [ Atom "Wikilink"; sexp_of_t wl ])
   | _ -> None
