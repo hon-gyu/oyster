@@ -4,10 +4,17 @@
     block attributes ({!Cb_attribute}) and Djot-style block/inline
     attributes ({!Djot_attribute}).
 
-    The parser implemented here is the simple space-separated form (as in
-    Pandoc's reference syntax). It does not yet handle quoted values with
-    embedded whitespace, [%comment%] sequences, or backslash escapes —
-    those will be added when the Djot inline-attribute pass needs them.
+    Recognised item forms inside [{...}] (without the braces):
+    - [#foo] — identifier (stored with the leading [#])
+    - [.foo] — class (stored with the leading [.])
+    - [key=value] — bare value; runs until the next whitespace
+    - [key="value"] — quoted value; may contain whitespace and supports
+      backslash escapes (a backslash followed by any character is
+      replaced by that character verbatim)
+
+    Items are separated by whitespace (spaces, tabs, newlines). Djot's
+    [%comment%] syntax is not supported and will be reported as an
+    invalid attribute.
 *)
 open Core
 
@@ -34,6 +41,62 @@ let merge (a : t) (b : t) : t =
   }
 ;;
 
+(** Tokenise the contents of a [{...}] specifier into whitespace-separated
+    items. A double-quoted run is treated as a single token, with backslash
+    escapes decoded inside it ([\\c] -> [c]); the surrounding quotes are
+    preserved on the returned token so callers can tell quoted from bare. *)
+let tokenize (s : string) : (string list, string) result =
+  let len = String.length s in
+  let tokens = ref [] in
+  let buf = Buffer.create 16 in
+  let in_token = ref false in
+  let flush () =
+    if !in_token
+    then (
+      tokens := Buffer.contents buf :: !tokens;
+      Buffer.clear buf;
+      in_token := false)
+  in
+  let i = ref 0 in
+  let err = ref None in
+  while !i < len && Option.is_none !err do
+    let c = s.[!i] in
+    match c with
+    | ' ' | '\t' | '\n' | '\r' ->
+      flush ();
+      incr i
+    | '"' ->
+      in_token := true;
+      Buffer.add_char buf '"';
+      incr i;
+      let closed = ref false in
+      while (not !closed) && !i < len && Option.is_none !err do
+        match s.[!i] with
+        | '"' ->
+          Buffer.add_char buf '"';
+          incr i;
+          closed := true
+        | '\\' when !i + 1 < len ->
+          Buffer.add_char buf s.[!i + 1];
+          i := !i + 2
+        | ch ->
+          Buffer.add_char buf ch;
+          incr i
+      done;
+      if not !closed then err := Some "Unterminated quoted value"
+    | _ ->
+      in_token := true;
+      Buffer.add_char buf c;
+      incr i
+  done;
+  flush ();
+  match !err with
+  | Some msg -> Error msg
+  | None -> Ok (List.rev !tokens)
+;;
+
+(** Strip the surrounding double quotes from a token produced by
+    {!tokenize}. Bare tokens are returned unchanged. *)
 let strip_paired_double_quotes (s : string) : string =
   if
     String.length s >= 2
@@ -50,39 +113,39 @@ let strip_paired_double_quotes (s : string) : string =
     - [.foo] — class
     - [key=value] or [key="value"] — key/value pair
 
-    Returns [Error] if there are multiple ids or an unrecognised item.
+    Returns [Error] if a quoted value is unterminated, there are multiple
+    ids, or an item is unrecognised.
 *)
 let of_string_or_error (s : string) : (t, Error.t) result =
   let err_msg = ref None in
-  let (items : string list) =
-    String.split_on_chars ~on:[ ' '; '\t'; '\n' ] s
-    |> List.filter ~f:(fun s -> not (String.is_empty s))
-  in
-  let ids = List.filter items ~f:(fun s -> String.is_prefix s ~prefix:"#") in
-  if List.length ids > 1
-  then (
-    let msg = sprintf "Too many ids: %s" (String.concat ~sep:" " ids) in
-    err_msg := Some msg);
-  let id = List.hd ids in
-  let classes = List.filter items ~f:(fun s -> String.is_prefix s ~prefix:".") in
-  let (kv_candidates : string list) =
-    List.filter items ~f:(fun s ->
-      (not (String.is_prefix s ~prefix:"#")) && not (String.is_prefix s ~prefix:"."))
-  in
-  let invalid_attrs = ref [] in
-  let (kvs : (string * string) list) =
-    List.filter_map kv_candidates ~f:(fun kv ->
-      match String.lsplit2 ~on:'=' kv with
-      | Some (key, value) -> Some (key, strip_paired_double_quotes value)
-      | None ->
-        invalid_attrs := kv :: !invalid_attrs;
-        None)
-  in
-  if not (List.is_empty !invalid_attrs)
-  then err_msg := Some ("Invalid attributes: " ^ String.concat ~sep:", " !invalid_attrs);
-  match !err_msg with
-  | Some msg -> Error (Error.of_string msg)
-  | None -> Ok { id; classes; kvs }
+  match tokenize s with
+  | Error msg -> Error (Error.of_string msg)
+  | Ok items ->
+    let ids = List.filter items ~f:(fun s -> String.is_prefix s ~prefix:"#") in
+    if List.length ids > 1
+    then (
+      let msg = sprintf "Too many ids: %s" (String.concat ~sep:" " ids) in
+      err_msg := Some msg);
+    let id = List.hd ids in
+    let classes = List.filter items ~f:(fun s -> String.is_prefix s ~prefix:".") in
+    let (kv_candidates : string list) =
+      List.filter items ~f:(fun s ->
+        (not (String.is_prefix s ~prefix:"#")) && not (String.is_prefix s ~prefix:"."))
+    in
+    let invalid_attrs = ref [] in
+    let (kvs : (string * string) list) =
+      List.filter_map kv_candidates ~f:(fun kv ->
+        match String.lsplit2 ~on:'=' kv with
+        | Some (key, value) -> Some (key, strip_paired_double_quotes value)
+        | None ->
+          invalid_attrs := kv :: !invalid_attrs;
+          None)
+    in
+    if not (List.is_empty !invalid_attrs)
+    then err_msg := Some ("Invalid attributes: " ^ String.concat ~sep:", " !invalid_attrs);
+    (match !err_msg with
+     | Some msg -> Error (Error.of_string msg)
+     | None -> Ok { id; classes; kvs })
 ;;
 
 let of_string_exn (s : string) : t =
@@ -118,15 +181,29 @@ let%test_module "parse" =
     ;;
 
     let%expect_test "newline-separated (multi-line attrs)" =
-      (* Newlines are accepted as separators, but quoted values containing
-         whitespace are not yet handled — they get split. *)
       parse "#foo\n.bar .baz key=val";
       [%expect {| (Ok ((id (#foo)) (classes (.bar .baz)) (kvs ((key val))))) |}]
     ;;
 
-    let%expect_test "quoted value with spaces (current limitation)" =
+    let%expect_test "quoted value with spaces" =
       parse {|key="my value"|};
-      [%expect {| (Error "Invalid attributes: value\"") |}]
+      [%expect {| (Ok ((id ()) (classes ()) (kvs ((key "my value"))))) |}]
+    ;;
+
+    let%expect_test "quoted value with backslash escapes" =
+      parse {|key="a \"quoted\" \\ word"|};
+      [%expect {| (Ok ((id ()) (classes ()) (kvs ((key "a \"quoted\" \\ word"))))) |}]
+    ;;
+
+    let%expect_test "unterminated quoted value" =
+      parse {|key="oops|};
+      [%expect {| (Error "Unterminated quoted value") |}]
+    ;;
+
+    let%expect_test "quoted value mixed with other items" =
+      parse {|#myid .cls key="hello world" k2=bare|};
+      [%expect
+        {| (Ok ((id (#myid)) (classes (.cls)) (kvs ((key "hello world") (k2 bare))))) |}]
     ;;
   end)
 ;;
