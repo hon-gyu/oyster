@@ -518,14 +518,20 @@ code2
   end)
 ;;
 
-let%test_module "Block attribute & Struct" =
+let%test_module "Block attribute" =
   (module struct
     open Common.For_test
     open For_test
     open Block_attribute.For_test
 
     let%expect_test "attaches to div" =
-      let doc = of_string "{#foo}\n::: warning\nbody\n:::" in
+      let doc =
+        of_string
+          {|{#foo}
+::: warning
+body
+:::|}
+      in
       pp_doc doc;
       [%expect
         {|
@@ -535,26 +541,36 @@ let%test_module "Block attribute & Struct" =
         |}]
     ;;
 
-    let%expect_test "attaches to keyed block inside div" =
-      (* Struct keys "key: - bar" inside the div BEFORE block_attribute runs,
-         so the {#foo} attribute can attach directly to the Ext_keyed_block. *)
+    let%expect_test "attaches to keyed block" =
+      (* CR TDD: the expectation is incorrect *)
       let doc =
         of_string
-          {|
-::: outer
-{#foo}
+          {|{#foo}
 key:
-- bar
-:::|}
+- bar|}
+      in
+      pp_doc doc;
+      [%expect
+        {|
+        (Blocks (Attribute_lines ((id (#foo)) (classes ()) (kvs ())))
+          ((Paragraph (Text key:))
+            (meta (block_attribute ((id (#foo)) (classes ()) (kvs ())))))
+          (List (Paragraph (Text bar))))
+        |}]
+    ;;
+
+    let%expect_test "attaches to keyed list" =
+      let doc =
+        of_string
+          {|{#foo}
+- key:
+  - bar|}
       in
       pp_doc doc;
       [%expect {|
-        (Blocks Blank_line
-          (Div ((class_name (outer)) (colons 3))
-            (Blocks (Attribute_lines ((id (#foo)) (classes ()) (kvs ())))
-              ((Keyed_block (Text key) (List (Paragraph (Text bar))))
-                (meta (block_attribute ((id (#foo)) (classes ()) (kvs ()))))))))
+        (Blocks (Attribute_lines ((id (#foo)) (classes ()) (kvs ())))
+          ((List (Keyed_list_item (Text key) (List (Paragraph (Text bar)))))
+            (meta (block_attribute ((id (#foo)) (classes ()) (kvs ()))))))
         |}]
-    ;;
   end)
 ;;
