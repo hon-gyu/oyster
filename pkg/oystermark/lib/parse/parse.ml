@@ -25,6 +25,7 @@ module Wikilink = Wikilink
 module Cb_attribute = Cb_attribute
 module Attribute = Attribute
 module Block_attribute = Block_attribute
+module Inline_attribute = Inline_attribute
 module Textloc_conv = Textloc_conv
 module Struct = Struct
 
@@ -38,7 +39,7 @@ type block_id =
 let mk_mapper () : Cmarkit.Mapper.t =
   Cmarkit.Mapper.make
     ~inline_ext_default:(fun _m i -> Some i)
-    ~inline:(compose_all_inline_maps [ Wikilink.inline_map ])
+    ~inline:(compose_all_inline_maps [ Wikilink.inline_map; Inline_attribute.inline_map ])
     ~block:
       (compose_all_block_maps
          [ Heading_slug.mk_block_map ()
@@ -120,6 +121,7 @@ let sexp_of_ =
       ; Callout.sexp_of_meta
       ; Cb_attribute.sexp_of_meta
       ; Block_attribute.sexp_of_meta
+      ; Inline_attribute.sexp_of_meta
       ]
     ()
 ;;
@@ -575,3 +577,16 @@ key:
         |}]
   end)
 ;;
+
+let%test_module "Block attribute" =
+  (module struct
+    open Common.For_test
+    open For_test
+
+    let%expect_test _ =
+      let doc = of_string "foo" in
+      pp_doc doc;
+      [%expect {| (Paragraph (Text foo)) |}];
+  ;;
+    end
+  )
