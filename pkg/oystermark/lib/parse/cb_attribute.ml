@@ -11,7 +11,7 @@ open Core
 open Common
 open Cmarkit
 
-type t =
+type t = Attribute.t =
   { id : string option
   ; classes : string list
   ; kvs : (string * string) list
@@ -25,7 +25,7 @@ type code_block_info =
   }
 [@@deriving sexp_of]
 
-let empty = { id = None; classes = []; kvs = [] }
+let empty = Attribute.empty
 let meta_key : code_block_info Cmarkit.Meta.key = Cmarkit.Meta.key ()
 
 let sexp_of_meta : Common.meta_sexp =
@@ -34,55 +34,8 @@ let sexp_of_meta : Common.meta_sexp =
   |> Option.map ~f:(fun a -> Sexp.List [ Atom "attribute"; sexp_of_code_block_info a ])
 ;;
 
-let strip_paired_double_quotes (s : string) : string =
-  if
-    String.length s >= 2
-    && String.is_prefix s ~prefix:"\""
-    && String.is_suffix s ~suffix:"\""
-  then String.sub s ~pos:1 ~len:(String.length s - 2)
-  else s
-;;
-
-let of_string_or_error (s : string) : (t, Error.t) result =
-  let err_msg = ref None in
-  let (items : string list) =
-    String.split ~on:' ' s |> List.filter ~f:(fun s -> not (String.is_empty s))
-  in
-  (* id *)
-  let ids = List.filter items ~f:(fun s -> String.is_prefix s ~prefix:"#") in
-  if List.length ids > 1
-  then (
-    let msg = sprintf "Too many ids: %s" (String.concat ~sep:" " ids) in
-    err_msg := Some msg);
-  let id = List.hd ids in
-  (* class *)
-  let classes = List.filter items ~f:(fun s -> String.is_prefix s ~prefix:".") in
-  (* kv *)
-  let (kv_candidates : string list) =
-    List.filter items ~f:(fun s ->
-      (not (String.is_prefix s ~prefix:"#")) && not (String.is_prefix s ~prefix:"."))
-  in
-  let invalid_attrs = ref [] in
-  let (kvs : (string * string) list) =
-    List.filter_map kv_candidates ~f:(fun kv ->
-      match String.lsplit2 ~on:'=' kv with
-      | Some (key, value) -> Some (key, strip_paired_double_quotes value)
-      | None ->
-        invalid_attrs := kv :: !invalid_attrs;
-        None)
-  in
-  if not (List.is_empty !invalid_attrs)
-  then err_msg := Some ("Invalid attributes: " ^ String.concat ~sep:", " !invalid_attrs);
-  match !err_msg with
-  | Some msg -> Error (Error.of_string msg)
-  | None -> Ok { id; classes; kvs }
-;;
-
-let of_string_exn (s : string) : t =
-  match of_string_or_error s with
-  | Ok t -> t
-  | Error e -> raise (Error.to_exn e)
-;;
+let of_string_or_error = Attribute.of_string_or_error
+let of_string_exn = Attribute.of_string_exn
 
 (** Attach a {!code_block_info} to the meta of any fenced code block that has a lang.
 
@@ -186,34 +139,6 @@ II
     ]
   ;;
 end
-
-let%test_module "parse attribute" =
-  (module struct
-    let parse (s : string) : unit =
-      let info = of_string_or_error s in
-      print_s @@ Or_error.sexp_of_t sexp_of_t info
-    ;;
-
-    let%expect_test "good" =
-      parse {|#myid .class_a .class_b key1=val1 key2="val2"|};
-      [%expect
-        {|
-        (Ok
-         ((id (#myid)) (classes (.class_a .class_b)) (kvs ((key1 val1) (key2 val2)))))
-        |}]
-    ;;
-
-    let%expect_test "invalid attribute: multiple ids" =
-      parse {|#myid #myid2 .class_a .class_b key1=val1 key2="val2"|};
-      [%expect {| (Error "Too many ids: #myid #myid2") |}]
-    ;;
-
-    let%expect_test "invalid attribute: invalid syntax" =
-      parse {|#myid .class_a .class_b key1=val1 key2="val2" hi|};
-      [%expect {| (Error "Invalid attributes: hi") |}]
-    ;;
-  end)
-;;
 
 let%test_module "Doc" =
   (module struct
