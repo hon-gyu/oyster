@@ -232,9 +232,8 @@ let split_attr_prefix (block : Block.t) : Block.t list =
 (* Rewriting
    ========= *)
 
-(** Stamp [attr] into [block]'s metadata. Block_quote, Paragraph,
-    Heading, Code_block, List, Blocks, Thematic_break, Html_block all
-    carry their own [Meta.t] — find the right constructor and rewrap. *)
+(** Stamp [attr] into [block]'s metadata. Handles all standard Cmarkit
+    block constructors and the oystermark extension blocks. *)
 let attach_attr (attr : Attribute.t) (block : Block.t) : Block.t =
   let add meta = Meta.add meta_key attr meta in
   match block with
@@ -246,6 +245,9 @@ let attach_attr (attr : Attribute.t) (block : Block.t) : Block.t =
   | Block.Blocks (bs, m) -> Block.Blocks (bs, add m)
   | Block.Thematic_break (tb, m) -> Block.Thematic_break (tb, add m)
   | Block.Html_block (lines, m) -> Block.Html_block (lines, add m)
+  | Div.Ext_div (x, m) -> Div.Ext_div (x, add m)
+  | Struct.Ext_keyed_block (x, m) -> Struct.Ext_keyed_block (x, add m)
+  | Struct.Ext_keyed_list_item (x, m) -> Struct.Ext_keyed_list_item (x, add m)
   | other -> other
 ;;
 
