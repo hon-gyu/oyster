@@ -69,8 +69,11 @@ let of_string
   let cmarkit_doc = Doc.of_string ~strict ~layout ~locs:true body in
   let body_doc = Mapper.map_doc (mk_mapper ()) cmarkit_doc in
   let body_doc = Div.rewrite_doc body_doc in
-  let body_doc = if enable_struct then Struct.rewrite_doc body_doc else body_doc in
+  (* Block_attribute runs before Struct so that a fused paragraph like
+     [{#foo}\nkey:] is split into [Paragraph "{#foo}"] and
+     [Paragraph "key:"] before Struct's keying decomposition runs. *)
   let body_doc = Block_attribute.rewrite_doc body_doc in
+  let body_doc = if enable_struct then Struct.rewrite_doc body_doc else body_doc in
   match yaml_opt, Doc.block body_doc with
   | None, _ -> body_doc
   | Some yaml, Block.Blocks (blocks, meta) ->
@@ -542,7 +545,6 @@ body
     ;;
 
     let%expect_test "attaches to keyed block" =
-      (* CR TDD: the expectation is incorrect *)
       let doc =
         of_string
           {|{#foo}
@@ -553,9 +555,8 @@ key:
       [%expect
         {|
         (Blocks (Attribute_lines ((id (#foo)) (classes ()) (kvs ())))
-          ((Paragraph (Text key:))
-            (meta (block_attribute ((id (#foo)) (classes ()) (kvs ())))))
-          (List (Paragraph (Text bar))))
+          ((Keyed_block (Text key) (List (Paragraph (Text bar))))
+            (meta (block_attribute ((id (#foo)) (classes ()) (kvs ()))))))
         |}]
     ;;
 

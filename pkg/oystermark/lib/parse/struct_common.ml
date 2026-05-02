@@ -388,6 +388,20 @@ let build_nested_keyed
 let mk_keyed_block t b = Ext_keyed_block ((t, b), Meta.none)
 let mk_keyed_item t b = Ext_keyed_list_item ((t, b), Meta.none)
 
+(** Replace the meta of the outermost keyed-block / keyed-list-item
+    constructor.  Used to forward a transformed paragraph's meta (which
+    may carry e.g. a {!Block_attribute.meta_key}) onto the keyed node
+    that supplants it. *)
+let set_outer_meta (meta : Meta.t) (block : Block.t) : Block.t =
+  if phys_equal meta Meta.none
+  then block
+  else (
+    match block with
+    | Ext_keyed_block ((t, b), _) -> Ext_keyed_block ((t, b), meta)
+    | Ext_keyed_list_item ((t, b), _) -> Ext_keyed_list_item ((t, b), meta)
+    | _ -> block)
+;;
+
 (** Mutable config.  Set by [rewrite_doc] before each run. *)
 module Config = struct
   let paragraph_inline_value = ref true
@@ -437,22 +451,22 @@ end = struct
   let rec rewrite_block_list (blocks : Block.t list) : Block.t list =
     match blocks with
     | [] -> []
-    | (Block.Paragraph (p, _) as block) :: rest ->
+    | (Block.Paragraph (p, p_meta) as block) :: rest ->
       (match Colon.decompose (Block.Paragraph.inline p) with
        | None -> rewrite_within_block block :: rewrite_block_list rest
        | Some (Colon.Chain_trailing_colon labels) ->
-         absorb_paragraph_trailing ~original:block ~labels rest
+         absorb_paragraph_trailing ~original:block ~original_meta:p_meta ~labels rest
        | Some (Colon.Chain_with_value (labels, value)) ->
          if !Config.paragraph_inline_value
          then (
            let body = value_paragraph value in
            let keyed = build_nested_keyed ~make_node:mk_keyed_block labels body in
-           keyed :: rewrite_block_list rest)
+           set_outer_meta p_meta keyed :: rewrite_block_list rest)
          else rewrite_within_block block :: rewrite_block_list rest)
     | Block.List (l, list_meta) :: rest -> handle_list l list_meta rest
     | block :: rest -> rewrite_within_block block :: rewrite_block_list rest
 
-  and absorb_paragraph_trailing ~original ~labels rest =
+  and absorb_paragraph_trailing ~original ~original_meta ~labels rest =
     let children, after = span_non_blank rest in
     match children with
     | [] -> original :: rewrite_block_list rest
@@ -460,7 +474,7 @@ end = struct
       let children = rewrite_block_list children in
       let body = wrap_blocks children in
       let keyed = build_nested_keyed ~make_node:mk_keyed_block labels body in
-      keyed :: rewrite_block_list after
+      set_outer_meta original_meta keyed :: rewrite_block_list after
 
   and handle_list l list_meta rest =
     let items = Block.List'.items l in
@@ -580,12 +594,12 @@ end = struct
       (match handle_list l list_meta [] with
        | [ single ] -> single
        | multiple -> Block.Blocks (multiple, Meta.none))
-    | Block.Paragraph (p, _) as block ->
+    | Block.Paragraph (p, p_meta) as block ->
       (match Colon.decompose (Block.Paragraph.inline p) with
        | Some (Colon.Chain_with_value (labels, value)) when !Config.paragraph_inline_value
          ->
          let body = value_paragraph value in
-         build_nested_keyed ~make_node:mk_keyed_block labels body
+         set_outer_meta p_meta (build_nested_keyed ~make_node:mk_keyed_block labels body)
        | _ -> block)
     | Div.Ext_div ((div, body), meta) ->
       Div.Ext_div ((div, rewrite_within_block body), meta)
