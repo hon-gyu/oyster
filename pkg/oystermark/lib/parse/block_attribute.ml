@@ -40,22 +40,19 @@ let meta_key : Attribute.t Cmarkit.Meta.key = Cmarkit.Meta.key ()
 (** A literal run of [{...}] source lines. Produced by the rewrite for
     every attribute paragraph it encounters, whether or not the run
     successfully attaches to a following block. *)
-type Cmarkit.Block.t += Ext_attribute_lines of Attribute.t list
+type Cmarkit.Block.t += Ext_attribute_lines of Attribute.t list node
 
 let sexp_of_meta : Common.meta_sexp =
   fun meta ->
   Cmarkit.Meta.find meta_key meta
-  |> Option.map ~f:(fun a ->
-    Sexp.List [ Atom "block_attribute"; Attribute.sexp_of_t a ])
+  |> Option.map ~f:(fun a -> Sexp.List [ Atom "block_attribute"; Attribute.sexp_of_t a ])
 ;;
 
 let sexp_of_block : block_sexp =
   fun ~recurse_inline:_ ~recurse_block:_ ~with_meta:_ b ->
   match b with
-  | Ext_attribute_lines specs ->
-    Some
-      (Sexp.List
-         (Atom "Attribute_lines" :: List.map specs ~f:Attribute.sexp_of_t))
+  | Ext_attribute_lines (specs, _) ->
+    Some (Sexp.List (Atom "Attribute_lines" :: List.map specs ~f:Attribute.sexp_of_t))
   | _ -> None
 ;;
 
@@ -63,7 +60,7 @@ let block_commonmark_renderer : Cmarkit_renderer.block =
   let open Cmarkit_renderer in
   fun (c : context) (b : Block.t) ->
     match b with
-    | Ext_attribute_lines specs ->
+    | Ext_attribute_lines (specs, _) ->
       List.iter specs ~f:(fun spec ->
         Context.string c "{";
         Context.string c (Attribute.to_string spec);
@@ -267,7 +264,7 @@ let rec rewrite_block_list (blocks : Block.t list) : Block.t list =
     (* Orphan: emit the run as Ext_attribute_lines, no attaching. *)
     match List.rev pending with
     | [] -> []
-    | specs -> [ Ext_attribute_lines specs ]
+    | specs -> [ Ext_attribute_lines (specs, Meta.none) ]
   in
   let rec go pending = function
     | [] -> flush_orphan pending
@@ -283,7 +280,9 @@ let rec rewrite_block_list (blocks : Block.t list) : Block.t list =
            | [] -> block' :: go [] rest
            | specs ->
              let merged = List.reduce_exn specs ~f:Attribute.merge in
-             Ext_attribute_lines specs :: attach_attr merged block' :: go [] rest))
+             Ext_attribute_lines (specs, Meta.none)
+             :: attach_attr merged block'
+             :: go [] rest))
   in
   go [] blocks
 
@@ -304,11 +303,9 @@ and rewrite_within_block (block : Block.t) : Block.t =
         in
         item', item_meta)
     in
-    let l' =
-      Block.List'.make ~tight:(Block.List'.tight l) (Block.List'.type' l) items
-    in
+    let l' = Block.List'.make ~tight:(Block.List'.tight l) (Block.List'.type' l) items in
     Block.List (l', meta)
-  | Div.Ext_div (div, body) -> Div.Ext_div (div, rewrite_within_block body)
+  | Div.Ext_div ((div, body), meta) -> Div.Ext_div ((div, rewrite_within_block body), meta)
   | _ -> block
 ;;
 
@@ -386,9 +383,7 @@ let%test_module "Djot block attributes" =
     ;;
 
     let%expect_test "stacked attributes merge" =
-      let doc =
-        doc_of_string "{#water}\n{.important .large}\nDon't forget!"
-      in
+      let doc = doc_of_string "{#water}\n{.important .large}\nDon't forget!" in
       [%test_result: int] (For_test.count_with_attr doc) ~expect:1;
       pp_doc doc;
       [%expect

@@ -9,7 +9,7 @@ let count_keyed (doc : Cmarkit.Doc.t) : int =
   let folder =
     Cmarkit.Folder.make
       ~block:(fun f acc -> function
-         | Ext_keyed_block (label, b) | Ext_keyed_list_item (label, b) ->
+         | Ext_keyed_block ((label, b), _) | Ext_keyed_list_item ((label, b), _) ->
            Cmarkit.Folder.ret (1 + Cmarkit.Folder.fold_block f acc b)
          | _ -> Cmarkit.Folder.default)
       ()
@@ -36,7 +36,7 @@ let pp_doc_debug doc =
 let block_ext_fold : (Block.t, 'a) Folder.fold =
   fun f acc b ->
   match b with
-  | Ext_keyed_block (_, body) | Ext_keyed_list_item (_, body) ->
+  | Ext_keyed_block ((_, body), _) | Ext_keyed_list_item ((_, body), _) ->
     Folder.fold_block f acc body
   | _ -> acc
 ;;
@@ -50,8 +50,8 @@ let keyed_bodies_non_empty (doc : Doc.t) : bool =
       ~block_ext_default:block_ext_fold
       ~block:(fun _f acc b ->
         match b with
-        | Ext_keyed_block (_, Block.Blocks ([], _))
-        | Ext_keyed_list_item (_, Block.Blocks ([], _)) -> Folder.ret false
+        | Ext_keyed_block ((_, Block.Blocks ([], _)), _)
+        | Ext_keyed_list_item ((_, Block.Blocks ([], _)), _) -> Folder.ret false
         | _ -> if acc then Folder.default else Folder.ret false)
       ()
   in

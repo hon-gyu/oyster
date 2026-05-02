@@ -249,10 +249,10 @@ let%test_module "Div and Struct" =
       let folder =
         Cmarkit.Folder.make
           ~block:(fun f acc -> function
-             | Div.Ext_div (_div, block) ->
+             | Div.Ext_div ((_div, block), _) ->
                Cmarkit.Folder.ret (1 + Cmarkit.Folder.fold_block f acc block)
-             | Struct.Ext_keyed_block (_label, block)
-             | Struct.Ext_keyed_list_item (_label, block) ->
+             | Struct.Ext_keyed_block ((_label, block), _)
+             | Struct.Ext_keyed_list_item ((_label, block), _) ->
                Cmarkit.Folder.ret (Cmarkit.Folder.fold_block f acc block)
              | _ -> Cmarkit.Folder.default)
           ()
@@ -264,10 +264,10 @@ let%test_module "Div and Struct" =
       let folder =
         Cmarkit.Folder.make
           ~block:(fun f acc -> function
-             | Div.Ext_div (_div, block) ->
+             | Div.Ext_div ((_div, block), _) ->
                Cmarkit.Folder.ret (Cmarkit.Folder.fold_block f acc block)
-             | Struct.Ext_keyed_block (_label, block)
-             | Struct.Ext_keyed_list_item (_label, block) ->
+             | Struct.Ext_keyed_block ((_label, block), _)
+             | Struct.Ext_keyed_list_item ((_label, block), _) ->
                Cmarkit.Folder.ret (1 + Cmarkit.Folder.fold_block f acc block)
              | _ -> Cmarkit.Folder.default)
           ()
@@ -514,6 +514,47 @@ code2
           (commonmark_of_doc_idempotent
              ~doc_of_string:of_string
              ~commonmark_of_doc:full_commonmark_of_doc)
+    ;;
+  end)
+;;
+
+let%test_module "Block attribute & Struct" =
+  (module struct
+    open Common.For_test
+    open For_test
+    open Block_attribute.For_test
+
+    let%expect_test "attaches to div" =
+      let doc = of_string "{#foo}\n::: warning\nbody\n:::" in
+      pp_doc doc;
+      [%expect
+        {|
+        (Blocks (Attribute_lines ((id (#foo)) (classes ()) (kvs ())))
+          ((Div ((class_name (warning)) (colons 3)) (Paragraph (Text body)))
+            (meta (block_attribute ((id (#foo)) (classes ()) (kvs ()))))))
+        |}]
+    ;;
+
+    let%expect_test "attaches to keyed block inside div" =
+      (* Struct keys "key: - bar" inside the div BEFORE block_attribute runs,
+         so the {#foo} attribute can attach directly to the Ext_keyed_block. *)
+      let doc =
+        of_string
+          {|
+::: outer
+{#foo}
+key:
+- bar
+:::|}
+      in
+      pp_doc doc;
+      [%expect {|
+        (Blocks Blank_line
+          (Div ((class_name (outer)) (colons 3))
+            (Blocks (Attribute_lines ((id (#foo)) (classes ()) (kvs ())))
+              ((Keyed_block (Text key) (List (Paragraph (Text bar))))
+                (meta (block_attribute ((id (#foo)) (classes ()) (kvs ()))))))))
+        |}]
     ;;
   end)
 ;;

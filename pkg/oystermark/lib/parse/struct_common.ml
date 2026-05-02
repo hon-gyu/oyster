@@ -2,20 +2,23 @@ open Core
 open Cmarkit
 
 type t = { label : Inline.t }
-type Block.t += Ext_keyed_list_item of t * Block.t | Ext_keyed_block of t * Block.t
+
+type Block.t +=
+  | Ext_keyed_list_item of (t * Block.t) node
+  | Ext_keyed_block of (t * Block.t) node
 
 let debug_block_renderer : Cmarkit_renderer.block =
   let open Cmarkit_renderer in
   fun (c : context) (b : Block.t) ->
     match b with
-    | Ext_keyed_block ({ label }, body) ->
+    | Ext_keyed_block (({ label }, body), meta) ->
       Context.string c "K(";
       Context.inline c label;
       Context.string c ", ";
       Context.block c body;
       Context.string c ")";
       true
-    | Ext_keyed_list_item ({ label }, body) ->
+    | Ext_keyed_list_item (({ label }, body), _) ->
       Context.string c "K(";
       Context.inline c label;
       Context.string c ", ";
@@ -44,12 +47,12 @@ let block_commonmark_renderer : Cmarkit_renderer.block =
   let open Cmarkit_renderer in
   fun (c : context) (b : Block.t) ->
     match b with
-    | Ext_keyed_block ({ label }, body) ->
+    | Ext_keyed_block (({ label }, body), _) ->
       Context.inline c label;
       Context.string c ":\n";
       Context.block c body;
       true
-    | Ext_keyed_list_item ({ label }, body) ->
+    | Ext_keyed_list_item (({ label }, body), _) ->
       ensure_newline c;
       Context.string c "- ";
       Context.inline c label;
@@ -65,7 +68,7 @@ let block_commonmark_renderer : Cmarkit_renderer.block =
       (match List.rev items with
        | (last_item, _) :: rev_prefix ->
          (match Block.List_item.block last_item with
-          | Ext_keyed_list_item _ ->
+          | Ext_keyed_list_item (_, _) ->
             if not (List.is_empty rev_prefix)
             then
               Context.block
@@ -84,12 +87,18 @@ let block_commonmark_renderer : Cmarkit_renderer.block =
 ;;
 
 let sexp_of_block : Common.block_sexp =
-  fun ~recurse_inline ~recurse_block ~with_meta:_ b ->
+  fun ~recurse_inline ~recurse_block ~with_meta b ->
   match b with
-  | Ext_keyed_list_item ({ label }, body) ->
-    Some (Sexp.List [ Atom "Keyed_list_item"; recurse_inline label; recurse_block body ])
-  | Ext_keyed_block ({ label }, body) ->
-    Some (Sexp.List [ Atom "Keyed_block"; recurse_inline label; recurse_block body ])
+  | Ext_keyed_list_item (({ label }, body), meta) ->
+    Some
+      (with_meta
+         meta
+         (Sexp.List [ Atom "Keyed_list_item"; recurse_inline label; recurse_block body ]))
+  | Ext_keyed_block (({ label }, body), meta) ->
+    Some
+      (with_meta
+         meta
+         (Sexp.List [ Atom "Keyed_block"; recurse_inline label; recurse_block body ]))
   | _ -> None
 ;;
 
@@ -376,8 +385,8 @@ let build_nested_keyed
     List.fold outers ~init:(mk innermost body) ~f:(fun acc lbl -> mk lbl acc)
 ;;
 
-let mk_keyed_block t b = Ext_keyed_block (t, b)
-let mk_keyed_item t b = Ext_keyed_list_item (t, b)
+let mk_keyed_block t b = Ext_keyed_block ((t, b), Meta.none)
+let mk_keyed_item t b = Ext_keyed_list_item ((t, b), Meta.none)
 
 (** Mutable config.  Set by [rewrite_doc] before each run. *)
 module Config = struct
@@ -578,9 +587,12 @@ end = struct
          let body = value_paragraph value in
          build_nested_keyed ~make_node:mk_keyed_block labels body
        | _ -> block)
-    | Div.Ext_div (div, body) -> Div.Ext_div (div, rewrite_within_block body)
-    | Ext_keyed_list_item (t, body) -> Ext_keyed_list_item (t, rewrite_within_block body)
-    | Ext_keyed_block (t, body) -> Ext_keyed_block (t, rewrite_within_block body)
+    | Div.Ext_div ((div, body), meta) ->
+      Div.Ext_div ((div, rewrite_within_block body), meta)
+    | Ext_keyed_list_item ((t, body), meta) ->
+      Ext_keyed_list_item ((t, rewrite_within_block body), meta)
+    | Ext_keyed_block ((t, body), meta) ->
+      Ext_keyed_block ((t, rewrite_within_block body), meta)
     | _ -> block
   ;;
 end

@@ -200,7 +200,7 @@ type visual =
 
 let rec block_to_visuals (b : Block.t) : visual list =
   match b with
-  | Ext_keyed_block ({ label }, body) | Ext_keyed_list_item ({ label }, body) ->
+  | Ext_keyed_block (({ label }, body), _) | Ext_keyed_list_item (({ label }, body), _) ->
     keyed_to_visual (inline_to_text label) body
   | Block.List (l, _) ->
     List.concat_map (Block.List'.items l) ~f:(fun (item, _) ->

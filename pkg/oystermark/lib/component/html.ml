@@ -269,9 +269,7 @@ let attribute_html_attrs ?(key_prefix = "") (a : Attribute.t) : string =
   Option.iter a.id ~f:(fun id -> emit "id" (strip_id_marker id));
   if not (List.is_empty a.classes)
   then (
-    let classes =
-      String.concat ~sep:" " (List.map a.classes ~f:strip_class_marker)
-    in
+    let classes = String.concat ~sep:" " (List.map a.classes ~f:strip_class_marker) in
     emit "class" classes);
   List.iter a.kvs ~f:(fun (k, v) -> emit k v);
   Buffer.contents buf
@@ -457,7 +455,7 @@ let block ~(struct_style : struct_style ref) (c : Cmarkit_renderer.context)
     let inner = Parse.Frontmatter.to_html (Some y) in
     C.string c (sprintf "<div class=\"frontmatter\">%s</div>\n" inner);
     true
-  | Parse.Div.Ext_div (div, body) ->
+  | Parse.Div.Ext_div ((div, body), _) ->
     (match div.class_name with
      | Some cls -> C.string c (sprintf "<div class=\"%s\">\n" cls)
      | None -> C.string c "<div>\n");
@@ -471,10 +469,10 @@ let block ~(struct_style : struct_style ref) (c : Cmarkit_renderer.context)
        struct_style := prev);
     C.string c "</div>\n";
     true
-  | Parse.Struct.Ext_keyed_block ({ label }, body) ->
+  | Parse.Struct.Ext_keyed_block (({ label }, body), _) ->
     render_struct ~style:!struct_style `Paragraph c label body;
     true
-  | Parse.Struct.Ext_keyed_list_item ({ label }, body) ->
+  | Parse.Struct.Ext_keyed_list_item (({ label }, body), _) ->
     render_struct ~style:!struct_style `List_item c label body;
     true
   | Block.Blocks (blocks, meta) ->
@@ -532,8 +530,7 @@ let%expect_test "block attribute on paragraph" =
   let open For_test in
   let doc = Parse.of_string "{#water .important key=\"my val\"}\nDon't forget!" in
   pp_doc `Plain doc;
-  [%expect
-    {| <p id="water" class="important" key="my val">Don't forget!</p> |}]
+  [%expect {| <p id="water" class="important" key="my val">Don't forget!</p> |}]
 ;;
 
 let%expect_test "block attribute on heading combines with slug; attr id wins" =
