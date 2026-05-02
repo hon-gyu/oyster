@@ -23,6 +23,8 @@ module Frontmatter = Frontmatter
 module Heading_slug = Heading_slug
 module Wikilink = Wikilink
 module Cb_attribute = Cb_attribute
+module Attribute = Attribute
+module Block_attribute = Block_attribute
 module Textloc_conv = Textloc_conv
 module Struct = Struct
 
@@ -68,6 +70,7 @@ let of_string
   let body_doc = Mapper.map_doc (mk_mapper ()) cmarkit_doc in
   let body_doc = Div.rewrite_doc body_doc in
   let body_doc = if enable_struct then Struct.rewrite_doc body_doc else body_doc in
+  let body_doc = Block_attribute.rewrite_doc body_doc in
   match yaml_opt, Doc.block body_doc with
   | None, _ -> body_doc
   | Some yaml, Block.Blocks (blocks, meta) ->
@@ -107,6 +110,7 @@ let sexp_of_ =
       ; Block_id.sexp_of_meta
       ; Callout.sexp_of_meta
       ; Cb_attribute.sexp_of_meta
+      ; Block_attribute.sexp_of_meta
       ]
     ()
 ;;
