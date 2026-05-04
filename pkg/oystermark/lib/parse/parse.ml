@@ -22,7 +22,10 @@ module Div = Div
 module Frontmatter = Frontmatter
 module Heading_slug = Heading_slug
 module Wikilink = Wikilink
+module Cb_attribute = Cb_attribute
 module Attribute = Attribute
+module Block_attribute = Block_attribute
+module Inline_attribute = Inline_attribute
 module Textloc_conv = Textloc_conv
 module Struct = Struct
 
@@ -36,12 +39,12 @@ type block_id =
 let mk_mapper () : Cmarkit.Mapper.t =
   Cmarkit.Mapper.make
     ~inline_ext_default:(fun _m i -> Some i)
-    ~inline:(compose_all_inline_maps [ Wikilink.inline_map ])
+    ~inline:(compose_all_inline_maps [ Wikilink.inline_map; Inline_attribute.inline_map ])
     ~block:
       (compose_all_block_maps
          [ Heading_slug.mk_block_map ()
          ; Callout.block_map
-         ; Attribute.block_map
+         ; Cb_attribute.block_map
          ; Block_id.block_map
          ])
     ()
@@ -67,6 +70,10 @@ let of_string
   let cmarkit_doc = Doc.of_string ~strict ~layout ~locs:true body in
   let body_doc = Mapper.map_doc (mk_mapper ()) cmarkit_doc in
   let body_doc = Div.rewrite_doc body_doc in
+  (* Block_attribute runs before Struct so that a fused paragraph like
+     [{#foo}\nkey:] is split into [Paragraph "{#foo}"] and
+     [Paragraph "key:"] before Struct's keying decomposition runs. *)
+  let body_doc = Block_attribute.rewrite_doc body_doc in
   let body_doc = if enable_struct then Struct.rewrite_doc body_doc else body_doc in
   match yaml_opt, Doc.block body_doc with
   | None, _ -> body_doc
@@ -86,6 +93,7 @@ let commonmark_of_doc (doc : Cmarkit.Doc.t) : string =
       ; Cmarkit_renderer.make ~block:Frontmatter.block_commonmark_renderer ()
       ; Cmarkit_renderer.make ~block:Div.block_commonmark_renderer ()
       ; Cmarkit_renderer.make ~block:Struct.block_commonmark_renderer ()
+      ; Cmarkit_renderer.make ~block:Block_attribute.block_commonmark_renderer ()
       ]
   in
   Cmarkit_renderer.doc_to_string r doc
@@ -101,12 +109,19 @@ let commonmark_of_doc (doc : Cmarkit.Doc.t) : string =
 let sexp_of_ =
   Common.make_sexp_of
     ~inlines:[ Wikilink.sexp_of_inline ]
-    ~blocks:[ Frontmatter.sexp_of_block; Div.sexp_of_block; Struct.sexp_of_block ]
+    ~blocks:
+      [ Frontmatter.sexp_of_block
+      ; Div.sexp_of_block
+      ; Struct.sexp_of_block
+      ; Block_attribute.sexp_of_block
+      ]
     ~metas:
       [ Heading_slug.sexp_of_meta
       ; Block_id.sexp_of_meta
       ; Callout.sexp_of_meta
-      ; Attribute.sexp_of_meta
+      ; Cb_attribute.sexp_of_meta
+      ; Block_attribute.sexp_of_meta
+      ; Inline_attribute.sexp_of_meta
       ]
     ()
 ;;
@@ -239,10 +254,10 @@ let%test_module "Div and Struct" =
       let folder =
         Cmarkit.Folder.make
           ~block:(fun f acc -> function
-             | Div.Ext_div (_div, block) ->
+             | Div.Ext_div ((_div, block), _) ->
                Cmarkit.Folder.ret (1 + Cmarkit.Folder.fold_block f acc block)
-             | Struct.Ext_keyed_block (_label, block)
-             | Struct.Ext_keyed_list_item (_label, block) ->
+             | Struct.Ext_keyed_block ((_label, block), _)
+             | Struct.Ext_keyed_list_item ((_label, block), _) ->
                Cmarkit.Folder.ret (Cmarkit.Folder.fold_block f acc block)
              | _ -> Cmarkit.Folder.default)
           ()
@@ -254,10 +269,10 @@ let%test_module "Div and Struct" =
       let folder =
         Cmarkit.Folder.make
           ~block:(fun f acc -> function
-             | Div.Ext_div (_div, block) ->
+             | Div.Ext_div ((_div, block), _) ->
                Cmarkit.Folder.ret (Cmarkit.Folder.fold_block f acc block)
-             | Struct.Ext_keyed_block (_label, block)
-             | Struct.Ext_keyed_list_item (_label, block) ->
+             | Struct.Ext_keyed_block ((_label, block), _)
+             | Struct.Ext_keyed_list_item ((_label, block), _) ->
                Cmarkit.Folder.ret (1 + Cmarkit.Folder.fold_block f acc block)
              | _ -> Cmarkit.Folder.default)
           ()
@@ -507,3 +522,71 @@ code2
     ;;
   end)
 ;;
+
+let%test_module "Block attribute" =
+  (module struct
+    open Common.For_test
+    open For_test
+    open Block_attribute.For_test
+
+    let%expect_test "attaches to div" =
+      let doc =
+        of_string
+          {|{#foo}
+::: warning
+body
+:::|}
+      in
+      pp_doc doc;
+      [%expect
+        {|
+        (Blocks (Attribute_lines ((id (#foo)) (classes ()) (kvs ())))
+          ((Div ((class_name (warning)) (colons 3)) (Paragraph (Text body)))
+            (meta (block_attribute ((id (#foo)) (classes ()) (kvs ()))))))
+        |}]
+    ;;
+
+    let%expect_test "attaches to keyed block" =
+      let doc =
+        of_string
+          {|{#foo}
+key:
+- bar|}
+      in
+      pp_doc doc;
+      [%expect
+        {|
+        (Blocks (Attribute_lines ((id (#foo)) (classes ()) (kvs ())))
+          ((Keyed_block (Text key) (List (Paragraph (Text bar))))
+            (meta (block_attribute ((id (#foo)) (classes ()) (kvs ()))))))
+        |}]
+    ;;
+
+    let%expect_test "attaches to keyed list" =
+      let doc =
+        of_string
+          {|{#foo}
+- key:
+  - bar|}
+      in
+      pp_doc doc;
+      [%expect {|
+        (Blocks (Attribute_lines ((id (#foo)) (classes ()) (kvs ())))
+          ((List (Keyed_list_item (Text key) (List (Paragraph (Text bar)))))
+            (meta (block_attribute ((id (#foo)) (classes ()) (kvs ()))))))
+        |}]
+  end)
+;;
+
+let%test_module "Block attribute" =
+  (module struct
+    open Common.For_test
+    open For_test
+
+    let%expect_test _ =
+      let doc = of_string "foo" in
+      pp_doc doc;
+      [%expect {| (Paragraph (Text foo)) |}];
+  ;;
+    end
+  )

@@ -42,8 +42,8 @@ let collect_links (doc : Cmarkit.Doc.t) : located_link list =
         | _ -> acc)
       ~block_ext_default:(fun f acc b ->
         match b with
-        | Oystermark.Parse.Struct.Ext_keyed_list_item ({ label }, inner)
-        | Oystermark.Parse.Struct.Ext_keyed_block ({ label }, inner) ->
+        | Oystermark.Parse.Struct.Ext_keyed_list_item (({ label }, inner), _)
+        | Oystermark.Parse.Struct.Ext_keyed_block (({ label }, inner), _) ->
           let acc = Cmarkit.Folder.fold_inline f acc label in
           Cmarkit.Folder.fold_block f acc inner
         | _ -> acc)

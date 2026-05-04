@@ -22,7 +22,7 @@ let hash_fn_of_lang (lang : string) : exec_ctx -> string =
     same integer ID assigned by {!extract_code_blocks}), an output block is
     inserted according to [loc_map].
 
-    @param loc_map receives the Pandoc {!Attribute.t} of the source cell (if any),
+    @param loc_map receives the Pandoc {!Cb_attribute.t} of the source cell (if any),
     allowing callers to drive the append/replace decision from cell attributes
     (e.g. [.replace] class → Replace):
     - [`Append] (default): keep the source cell and append the output block
@@ -38,7 +38,7 @@ let hash_fn_of_lang (lang : string) : exec_ctx -> string =
 
     Cells with no matching entry in [outputs] are left untouched. *)
 let merge_outputs
-      ?(loc_map : Attribute.t option -> [ `Append | `Replace | `Silent ] =
+      ?(loc_map : Cb_attribute.t option -> [ `Append | `Replace | `Silent ] =
         fun _ -> `Append)
       (outputs : output list)
       (doc : Cmarkit.Doc.t)
@@ -63,7 +63,7 @@ let merge_outputs
        | None -> Cmarkit.Mapper.default
        | Some res ->
          let attr =
-           Cmarkit.Meta.find Attribute.meta_key meta
+           Cmarkit.Meta.find Cb_attribute.meta_key meta
            |> Option.bind ~f:(fun ci -> ci.attribute)
          in
          let info_str, content =
@@ -173,8 +173,8 @@ let run_bash_session ?(extra_env : string list = []) (cells : cell list)
     @param attr_filter see {!filter_group_cells}
     @param attr_session_map see {!filter_group_cells} *)
 let bash_executor
-      ?(attr_filter : Attribute.t option -> bool = fun _ -> true)
-      ?(attr_session_map : Attribute.t option -> string = session_id_of_attr)
+      ?(attr_filter : Cb_attribute.t option -> bool = fun _ -> true)
+      ?(attr_session_map : Cb_attribute.t option -> string = session_id_of_attr)
   : executor
   =
   fun ctx ->

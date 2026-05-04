@@ -9,7 +9,7 @@ let count_keyed (doc : Cmarkit.Doc.t) : int =
   let folder =
     Cmarkit.Folder.make
       ~block:(fun f acc -> function
-         | Ext_keyed_block (label, b) | Ext_keyed_list_item (label, b) ->
+         | Ext_keyed_block ((label, b), _) | Ext_keyed_list_item ((label, b), _) ->
            Cmarkit.Folder.ret (1 + Cmarkit.Folder.fold_block f acc b)
          | _ -> Cmarkit.Folder.default)
       ()
@@ -36,7 +36,7 @@ let pp_doc_debug doc =
 let block_ext_fold : (Block.t, 'a) Folder.fold =
   fun f acc b ->
   match b with
-  | Ext_keyed_block (_, body) | Ext_keyed_list_item (_, body) ->
+  | Ext_keyed_block ((_, body), _) | Ext_keyed_list_item ((_, body), _) ->
     Folder.fold_block f acc body
   | _ -> acc
 ;;
@@ -50,8 +50,8 @@ let keyed_bodies_non_empty (doc : Doc.t) : bool =
       ~block_ext_default:block_ext_fold
       ~block:(fun _f acc b ->
         match b with
-        | Ext_keyed_block (_, Block.Blocks ([], _))
-        | Ext_keyed_list_item (_, Block.Blocks ([], _)) -> Folder.ret false
+        | Ext_keyed_block ((_, Block.Blocks ([], _)), _)
+        | Ext_keyed_list_item ((_, Block.Blocks ([], _)), _) -> Folder.ret false
         | _ -> if acc then Folder.default else Folder.ret false)
       ()
   in
@@ -354,6 +354,48 @@ bar
 ```|}
 ;;
 
+(** absorbed code fence does not interrupt the list — [baz] is a
+    continuation sibling of [foo] and [bar:] *)
+let list_continuation_across_absorbed_block =
+  mk_example
+    "list_continuation_across_absorbed_block"
+    {|- foo
+- bar:
+```py
+cb
+```
+- baz|}
+;;
+
+(** continuation cascades: the spliced-in last item itself absorbs
+    a code fence, and the next same-type list continues again *)
+let list_continuation_cascades =
+  mk_example
+    "list_continuation_cascades"
+    {|- a
+- b:
+```
+cb1
+```
+- c:
+```
+cb2
+```
+- d|}
+;;
+
+(** an ordered list does not continue an unordered one across
+    absorbed content *)
+let list_continuation_type_mismatch =
+  mk_example
+    "list_continuation_type_mismatch"
+    {|- a:
+```
+cb
+```
+1. b|}
+;;
+
 (* Empty label *)
 let empty_label_in_list_item =
   mk_example
@@ -427,6 +469,9 @@ let examples =
   ; last_item_absorbs_following_text
   ; last_item_absorbs_following_text_2
   ; keyed_list_item_with_contiguous_blocks
+  ; list_continuation_across_absorbed_block
+  ; list_continuation_cascades
+  ; list_continuation_type_mismatch
   ; empty_label_in_list_item
   ; empty_label_nested_under_paragraph_key
   ; empty_label_with_trailing_colon_and_body (* General non-examples *)
@@ -945,7 +990,87 @@ let%test_module _ =
         (Blocks (List (Keyed_list_item (Text foo) (Code_block no-info bar))))
         ```
 
-        Example 32: empty_label_in_list_item
+        Example 32: list_continuation_across_absorbed_block
+        ----------
+        ```md {#original}
+        - foo
+        - bar:
+        ```py
+        cb
+        ```
+        - baz
+        ```
+        ```debug-view
+        List[foo, K(bar,
+        ```py
+        cb
+        ```List[
+        baz])]
+        ```
+        ```sexp
+        (Blocks
+          (List (Paragraph (Text foo))
+            (Keyed_list_item (Text bar)
+              (Blocks (Code_block py cb) (List (Paragraph (Text baz)))))))
+        ```
+
+        Example 33: list_continuation_cascades
+        ----------
+        ```md {#original}
+        - a
+        - b:
+        ```
+        cb1
+        ```
+        - c:
+        ```
+        cb2
+        ```
+        - d
+        ```
+        ```debug-view
+        List[a, K(b,
+        ```
+        cb1
+        ```List[K(c,
+        ```
+        cb2
+        ```List[
+        d])])]
+        ```
+        ```sexp
+        (Blocks
+          (List (Paragraph (Text a))
+            (Keyed_list_item (Text b)
+              (Blocks (Code_block no-info cb1)
+                (List
+                  (Keyed_list_item (Text c)
+                    (Blocks (Code_block no-info cb2) (List (Paragraph (Text d))))))))))
+        ```
+
+        Example 34: list_continuation_type_mismatch
+        ----------
+        ```md {#original}
+        - a:
+        ```
+        cb
+        ```
+        1. b
+        ```
+        ```debug-view
+        List[K(a, ```
+        cb
+        ```List[
+        b])]
+        ```
+        ```sexp
+        (Blocks
+          (List
+            (Keyed_list_item (Text a)
+              (Blocks (Code_block no-info cb) (List (Paragraph (Text b)))))))
+        ```
+
+        Example 35: empty_label_in_list_item
         ----------
         ```md {#original}
         - : a
@@ -960,7 +1085,7 @@ let%test_module _ =
           (Keyed_list_item (Text B) (Paragraph (Text b))))
         ```
 
-        Example 33: empty_label_nested_under_paragraph_key
+        Example 36: empty_label_nested_under_paragraph_key
         ----------
         ```md {#original}
         A:
@@ -978,7 +1103,7 @@ let%test_module _ =
               (Keyed_list_item (Text B) (Paragraph (Text b))))))
         ```
 
-        Example 34: empty_label_with_trailing_colon_and_body
+        Example 37: empty_label_with_trailing_colon_and_body
         ----------
         ```md {#original}
         - :
@@ -991,7 +1116,7 @@ let%test_module _ =
         (List (Keyed_list_item (Text "") (List (Paragraph (Text nested)))))
         ```
 
-        Example 35: non_example_no_colon
+        Example 38: non_example_no_colon
         ----------
         ```md {#original}
         - foo
@@ -1005,7 +1130,7 @@ let%test_module _ =
         (List (Paragraph (Text foo)) (Paragraph (Text bar)))
         ```
 
-        Example 36: non_example_colon_in_code_span
+        Example 39: non_example_colon_in_code_span
         ----------
         ```md {#original}
         text with `code:`

@@ -40,7 +40,8 @@ let compose_all_inline_maps (ms : Inline.t Mapper.mapper list) =
     Both core and extension converters share this type; composition is
     just list order with [None] as the fallthrough signal, analogous to
     [Cmarkit.Mapper]'s [`Default]. *)
-type inline_sexp = (Inline.t -> Sexp.t) -> Inline.t -> Sexp.t option
+type inline_sexp =
+  (Inline.t -> Sexp.t) -> with_meta:(Meta.t -> Sexp.t -> Sexp.t) -> Inline.t -> Sexp.t option
 
 (** A sexp-converter for blocks. Receives both [recurse_inline] and
     [recurse_block]. [with_meta] wraps a block sexp with its metadata
@@ -65,42 +66,42 @@ type sexp_of =
 (** Core inline converter. Always returns [Some] — unknown constructors
     emit [<unknown-inline>]. Placed last in the composed chain. *)
 let sexp_of_inline_core : inline_sexp =
-  fun recurse i ->
-  let s =
+  fun recurse ~with_meta i ->
+  let meta, body =
     match i with
-    | Inline.Text (s, _) -> Sexp.List [ Atom "Text"; Atom s ]
-    | Inline.Autolink (a, _) ->
+    | Inline.Text (s, m) -> m, Sexp.List [ Atom "Text"; Atom s ]
+    | Inline.Autolink (a, m) ->
       let link = fst (Inline.Autolink.link a) in
-      Sexp.List [ Atom "Autolink"; Atom link ]
-    | Inline.Break (b, _) ->
+      m, Sexp.List [ Atom "Autolink"; Atom link ]
+    | Inline.Break (b, m) ->
       let type_s =
         match Inline.Break.type' b with
         | `Hard -> "hard"
         | `Soft -> "soft"
       in
-      Sexp.List [ Atom "Break"; Atom type_s ]
-    | Inline.Code_span (cs, _) ->
-      Sexp.List [ Atom "Code_span"; Atom (Inline.Code_span.code cs) ]
-    | Inline.Emphasis (e, _) ->
-      Sexp.List [ Atom "Emphasis"; recurse (Inline.Emphasis.inline e) ]
-    | Inline.Strong_emphasis (e, _) ->
-      Sexp.List [ Atom "Strong_emphasis"; recurse (Inline.Emphasis.inline e) ]
-    | Inline.Link (l, _) -> Sexp.List [ Atom "Link"; recurse (Inline.Link.text l) ]
-    | Inline.Image (l, _) -> Sexp.List [ Atom "Image"; recurse (Inline.Link.text l) ]
-    | Inline.Raw_html (html, _) ->
+      m, Sexp.List [ Atom "Break"; Atom type_s ]
+    | Inline.Code_span (cs, m) ->
+      m, Sexp.List [ Atom "Code_span"; Atom (Inline.Code_span.code cs) ]
+    | Inline.Emphasis (e, m) ->
+      m, Sexp.List [ Atom "Emphasis"; recurse (Inline.Emphasis.inline e) ]
+    | Inline.Strong_emphasis (e, m) ->
+      m, Sexp.List [ Atom "Strong_emphasis"; recurse (Inline.Emphasis.inline e) ]
+    | Inline.Link (l, m) -> m, Sexp.List [ Atom "Link"; recurse (Inline.Link.text l) ]
+    | Inline.Image (l, m) -> m, Sexp.List [ Atom "Image"; recurse (Inline.Link.text l) ]
+    | Inline.Raw_html (html, m) ->
       let s =
         List.map html ~f:(fun bl -> Block_line.tight_to_string bl)
         |> String.concat ~sep:""
       in
-      Sexp.List [ Atom "Raw_html"; Atom s ]
-    | Inline.Inlines (is, _) -> Sexp.List (Atom "Inlines" :: List.map is ~f:recurse)
-    | Inline.Ext_strikethrough (s, _) ->
-      Sexp.List [ Atom "Strikethrough"; recurse (Inline.Strikethrough.inline s) ]
-    | Inline.Ext_math_span (m, _) ->
-      Sexp.List [ Atom "Math_span"; Atom (Inline.Math_span.tex m) ]
-    | _ -> Sexp.Atom "<unknown-inline>"
+      m, Sexp.List [ Atom "Raw_html"; Atom s ]
+    | Inline.Inlines (is, m) -> m, Sexp.List (Atom "Inlines" :: List.map is ~f:recurse)
+    | Inline.Ext_strikethrough (s, m) ->
+      m, Sexp.List [ Atom "Strikethrough"; recurse (Inline.Strikethrough.inline s) ]
+    | Inline.Ext_math_span (ms, m) ->
+      m, Sexp.List [ Atom "Math_span"; Atom (Inline.Math_span.tex ms) ]
+    | _ -> Meta.none, Sexp.Atom "<unknown-inline>"
   in
-  Some s
+  Some (with_meta meta body)
 ;;
 
 (** Core block converter. Always returns [Some]. Placed last in the chain. *)
@@ -173,7 +174,7 @@ let make_sexp_of
     let rec try_ = function
       | [] -> Sexp.Atom "<unknown-inline>"
       | f :: rest ->
-        (match f sexp_of_inline i with
+        (match f sexp_of_inline ~with_meta i with
          | Some s -> s
          | None -> try_ rest)
     in

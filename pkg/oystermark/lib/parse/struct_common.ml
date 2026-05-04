@@ -2,20 +2,23 @@ open Core
 open Cmarkit
 
 type t = { label : Inline.t }
-type Block.t += Ext_keyed_list_item of t * Block.t | Ext_keyed_block of t * Block.t
+
+type Block.t +=
+  | Ext_keyed_list_item of (t * Block.t) node
+  | Ext_keyed_block of (t * Block.t) node
 
 let debug_block_renderer : Cmarkit_renderer.block =
   let open Cmarkit_renderer in
   fun (c : context) (b : Block.t) ->
     match b with
-    | Ext_keyed_block ({ label }, body) ->
+    | Ext_keyed_block (({ label }, body), meta) ->
       Context.string c "K(";
       Context.inline c label;
       Context.string c ", ";
       Context.block c body;
       Context.string c ")";
       true
-    | Ext_keyed_list_item ({ label }, body) ->
+    | Ext_keyed_list_item (({ label }, body), _) ->
       Context.string c "K(";
       Context.inline c label;
       Context.string c ", ";
@@ -44,12 +47,12 @@ let block_commonmark_renderer : Cmarkit_renderer.block =
   let open Cmarkit_renderer in
   fun (c : context) (b : Block.t) ->
     match b with
-    | Ext_keyed_block ({ label }, body) ->
+    | Ext_keyed_block (({ label }, body), _) ->
       Context.inline c label;
       Context.string c ":\n";
       Context.block c body;
       true
-    | Ext_keyed_list_item ({ label }, body) ->
+    | Ext_keyed_list_item (({ label }, body), _) ->
       ensure_newline c;
       Context.string c "- ";
       Context.inline c label;
@@ -65,7 +68,7 @@ let block_commonmark_renderer : Cmarkit_renderer.block =
       (match List.rev items with
        | (last_item, _) :: rev_prefix ->
          (match Block.List_item.block last_item with
-          | Ext_keyed_list_item _ ->
+          | Ext_keyed_list_item (_, _) ->
             if not (List.is_empty rev_prefix)
             then
               Context.block
@@ -84,12 +87,18 @@ let block_commonmark_renderer : Cmarkit_renderer.block =
 ;;
 
 let sexp_of_block : Common.block_sexp =
-  fun ~recurse_inline ~recurse_block ~with_meta:_ b ->
+  fun ~recurse_inline ~recurse_block ~with_meta b ->
   match b with
-  | Ext_keyed_list_item ({ label }, body) ->
-    Some (Sexp.List [ Atom "Keyed_list_item"; recurse_inline label; recurse_block body ])
-  | Ext_keyed_block ({ label }, body) ->
-    Some (Sexp.List [ Atom "Keyed_block"; recurse_inline label; recurse_block body ])
+  | Ext_keyed_list_item (({ label }, body), meta) ->
+    Some
+      (with_meta
+         meta
+         (Sexp.List [ Atom "Keyed_list_item"; recurse_inline label; recurse_block body ]))
+  | Ext_keyed_block (({ label }, body), meta) ->
+    Some
+      (with_meta
+         meta
+         (Sexp.List [ Atom "Keyed_block"; recurse_inline label; recurse_block body ]))
   | _ -> None
 ;;
 
@@ -376,8 +385,22 @@ let build_nested_keyed
     List.fold outers ~init:(mk innermost body) ~f:(fun acc lbl -> mk lbl acc)
 ;;
 
-let mk_keyed_block t b = Ext_keyed_block (t, b)
-let mk_keyed_item t b = Ext_keyed_list_item (t, b)
+let mk_keyed_block t b = Ext_keyed_block ((t, b), Meta.none)
+let mk_keyed_item t b = Ext_keyed_list_item ((t, b), Meta.none)
+
+(** Replace the meta of the outermost keyed-block / keyed-list-item
+    constructor.  Used to forward a transformed paragraph's meta (which
+    may carry e.g. a {!Block_attribute.meta_key}) onto the keyed node
+    that supplants it. *)
+let set_outer_meta (meta : Meta.t) (block : Block.t) : Block.t =
+  if phys_equal meta Meta.none
+  then block
+  else (
+    match block with
+    | Ext_keyed_block ((t, b), _) -> Ext_keyed_block ((t, b), meta)
+    | Ext_keyed_list_item ((t, b), _) -> Ext_keyed_list_item ((t, b), meta)
+    | _ -> block)
+;;
 
 (** Mutable config.  Set by [rewrite_doc] before each run. *)
 module Config = struct
@@ -428,22 +451,22 @@ end = struct
   let rec rewrite_block_list (blocks : Block.t list) : Block.t list =
     match blocks with
     | [] -> []
-    | (Block.Paragraph (p, _) as block) :: rest ->
+    | (Block.Paragraph (p, p_meta) as block) :: rest ->
       (match Colon.decompose (Block.Paragraph.inline p) with
        | None -> rewrite_within_block block :: rewrite_block_list rest
        | Some (Colon.Chain_trailing_colon labels) ->
-         absorb_paragraph_trailing ~original:block ~labels rest
+         absorb_paragraph_trailing ~original:block ~original_meta:p_meta ~labels rest
        | Some (Colon.Chain_with_value (labels, value)) ->
          if !Config.paragraph_inline_value
          then (
            let body = value_paragraph value in
            let keyed = build_nested_keyed ~make_node:mk_keyed_block labels body in
-           keyed :: rewrite_block_list rest)
+           set_outer_meta p_meta keyed :: rewrite_block_list rest)
          else rewrite_within_block block :: rewrite_block_list rest)
     | Block.List (l, list_meta) :: rest -> handle_list l list_meta rest
     | block :: rest -> rewrite_within_block block :: rewrite_block_list rest
 
-  and absorb_paragraph_trailing ~original ~labels rest =
+  and absorb_paragraph_trailing ~original ~original_meta ~labels rest =
     let children, after = span_non_blank rest in
     match children with
     | [] -> original :: rewrite_block_list rest
@@ -451,36 +474,53 @@ end = struct
       let children = rewrite_block_list children in
       let body = wrap_blocks children in
       let keyed = build_nested_keyed ~make_node:mk_keyed_block labels body in
-      keyed :: rewrite_block_list after
+      set_outer_meta original_meta keyed :: rewrite_block_list after
 
   and handle_list l list_meta rest =
     let items = Block.List'.items l in
-    let items, rest = rewrite_list_items l items rest in
+    let rec loop items rest =
+      let items, rest, absorbed = rewrite_list_items l items rest in
+      if absorbed
+      then (
+        match rest with
+        | Block.List (l', _) :: rest'
+          when Poly.equal (Block.List'.type' l) (Block.List'.type' l') ->
+          let more_items, rest' = loop (Block.List'.items l') rest' in
+          items @ more_items, rest'
+        | _ -> items, rest)
+      else items, rest
+    in
+    let items, rest = loop items rest in
     make_list l list_meta items :: rewrite_block_list rest
 
   and rewrite_list_items
         (l : Block.List'.t)
         (items : Block.List_item.t node list)
         (following : Block.t list)
-    : Block.List_item.t node list * Block.t list
+    : Block.List_item.t node list * Block.t list * bool
     =
     match items with
-    | [] -> [], following
+    | [] -> [], following, false
     | [ (item, meta) ] ->
-      let item', following = rewrite_last_item item following in
-      [ item', meta ], following
+      let item', following, absorbed = rewrite_last_item item following in
+      [ item', meta ], following, absorbed
     | (item, meta) :: rest_items ->
       (match try_tag_non_last_item l item rest_items with
-       | `Absorbed_rest new_block -> [ rebuild_item item new_block, meta ], following
+       | `Absorbed_rest new_block ->
+         [ rebuild_item item new_block, meta ], following, false
        | `Tagged new_block ->
-         let rest_items, following = rewrite_list_items l rest_items following in
-         (rebuild_item item new_block, meta) :: rest_items, following
+         let rest_items, following, absorbed =
+           rewrite_list_items l rest_items following
+         in
+         (rebuild_item item new_block, meta) :: rest_items, following, absorbed
        | `Untouched ->
          let block = Block.List_item.block item in
          let block' = rewrite_within_block block in
          let item = if phys_equal block block' then item else rebuild_item item block' in
-         let rest_items, following = rewrite_list_items l rest_items following in
-         (item, meta) :: rest_items, following)
+         let rest_items, following, absorbed =
+           rewrite_list_items l rest_items following
+         in
+         (item, meta) :: rest_items, following, absorbed)
 
   and try_tag_non_last_item
         (l : Block.List'.t)
@@ -505,12 +545,12 @@ end = struct
          else (
            (* Bare trailing-colon middle item absorbs remaining siblings
               as a nested list of the same type. *)
-           let absorbed_items, _ = rewrite_list_items l rest_items [] in
+           let absorbed_items, _, _ = rewrite_list_items l rest_items [] in
            let nested_list = make_list l Meta.none absorbed_items in
            `Absorbed_rest (build_nested_keyed ~make_node:mk_keyed_item labels nested_list)))
 
   and rewrite_last_item (item : Block.List_item.t) (following : Block.t list)
-    : Block.List_item.t * Block.t list
+    : Block.List_item.t * Block.t list * bool
     =
     let recurse_item () =
       let block = Block.List_item.block item in
@@ -518,31 +558,31 @@ end = struct
       if phys_equal block block' then item else rebuild_item item block'
     in
     match list_item_paragraph item with
-    | None -> recurse_item (), following
+    | None -> recurse_item (), following, false
     | Some (p, sub_blocks) ->
       (match Colon.decompose (Block.Paragraph.inline p) with
-       | None -> recurse_item (), following
+       | None -> recurse_item (), following, false
        | Some (Colon.Chain_with_value (labels, value)) ->
          let sub_blocks = rewrite_block_list sub_blocks in
          let body = wrap_blocks (value_paragraph value :: sub_blocks) in
          let new_block = build_nested_keyed ~make_node:mk_keyed_item labels body in
-         rebuild_item item new_block, following
+         rebuild_item item new_block, following, false
        | Some (Colon.Chain_trailing_colon labels) ->
          if not (List.is_empty sub_blocks)
          then (
            let sub_blocks = rewrite_block_list sub_blocks in
            let body = wrap_blocks sub_blocks in
            let new_block = build_nested_keyed ~make_node:mk_keyed_item labels body in
-           rebuild_item item new_block, following)
+           rebuild_item item new_block, following, false)
          else (
            let absorbed, remaining = span_non_blank following in
            if List.is_empty absorbed
-           then item, following
+           then item, following, false
            else (
              let absorbed = rewrite_block_list absorbed in
              let body = wrap_blocks absorbed in
              let new_block = build_nested_keyed ~make_node:mk_keyed_item labels body in
-             rebuild_item item new_block, remaining)))
+             rebuild_item item new_block, remaining, true)))
 
   and rewrite_within_block (block : Block.t) : Block.t =
     match block with
@@ -554,16 +594,19 @@ end = struct
       (match handle_list l list_meta [] with
        | [ single ] -> single
        | multiple -> Block.Blocks (multiple, Meta.none))
-    | Block.Paragraph (p, _) as block ->
+    | Block.Paragraph (p, p_meta) as block ->
       (match Colon.decompose (Block.Paragraph.inline p) with
        | Some (Colon.Chain_with_value (labels, value)) when !Config.paragraph_inline_value
          ->
          let body = value_paragraph value in
-         build_nested_keyed ~make_node:mk_keyed_block labels body
+         set_outer_meta p_meta (build_nested_keyed ~make_node:mk_keyed_block labels body)
        | _ -> block)
-    | Div.Ext_div (div, body) -> Div.Ext_div (div, rewrite_within_block body)
-    | Ext_keyed_list_item (t, body) -> Ext_keyed_list_item (t, rewrite_within_block body)
-    | Ext_keyed_block (t, body) -> Ext_keyed_block (t, rewrite_within_block body)
+    | Div.Ext_div ((div, body), meta) ->
+      Div.Ext_div ((div, rewrite_within_block body), meta)
+    | Ext_keyed_list_item ((t, body), meta) ->
+      Ext_keyed_list_item ((t, rewrite_within_block body), meta)
+    | Ext_keyed_block ((t, body), meta) ->
+      Ext_keyed_block ((t, rewrite_within_block body), meta)
     | _ -> block
   ;;
 end

@@ -42,13 +42,13 @@ type t =
   }
 [@@deriving sexp]
 
-type Cmarkit.Block.t += Ext_div of t * Cmarkit.Block.t
+type Cmarkit.Block.t += Ext_div of (t * Cmarkit.Block.t) node
 
 let block_commonmark_renderer : Cmarkit_renderer.block =
   let open Cmarkit_renderer in
   fun (c : context) (b : Block.t) ->
     match b with
-    | Ext_div (div, body) ->
+    | Ext_div ((div, body), _) ->
       let fence = String.make div.colons ':' in
       let class_suffix =
         match div.class_name with
@@ -67,10 +67,10 @@ let block_commonmark_renderer : Cmarkit_renderer.block =
 ;;
 
 let sexp_of_block : block_sexp =
-  fun ~recurse_inline:_ ~recurse_block ~with_meta:_ b ->
+  fun ~recurse_inline:_ ~recurse_block ~with_meta b ->
   match b with
-  | Ext_div (div, body) ->
-    Some (Sexp.List [ Atom "Div"; sexp_of_t div; recurse_block body ])
+  | Ext_div ((div, body), meta) ->
+    Some (with_meta meta (Sexp.List [ Atom "Div"; sexp_of_t div; recurse_block body ]))
   | _ -> None
 ;;
 
@@ -296,7 +296,8 @@ let rec rewrite_block_list (blocks : Cmarkit.Block.t list) : Cmarkit.Block.t lis
          | [ single ] -> single
          | multiple -> Cmarkit.Block.Blocks (multiple, Cmarkit.Meta.none)
        in
-       Ext_div ({ class_name; colons }, body) :: rewrite_block_list remaining
+       Ext_div (({ class_name; colons }, body), Cmarkit.Meta.none)
+       :: rewrite_block_list remaining
      | None -> rewrite_within_block block :: rewrite_block_list rest)
 
 (** Collect blocks until a closing fence matching [open_colons] is found.
@@ -356,7 +357,7 @@ module For_test = struct
     let folder =
       Cmarkit.Folder.make
         ~block:(fun f acc -> function
-           | Ext_div (_div, body) ->
+           | Ext_div ((_div, body), _) ->
              Cmarkit.Folder.ret (1 + Cmarkit.Folder.fold_block f acc body)
            | _ -> Cmarkit.Folder.default)
         ()

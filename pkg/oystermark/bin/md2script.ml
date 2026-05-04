@@ -7,7 +7,7 @@
     Frontmatter [oyster.pyproject] maps to PEP 723 inline script metadata. *)
 
 open Core
-module Attribute = Parse.Attribute
+module Cb_attribute = Parse.Cb_attribute
 module Frontmatter = Parse.Frontmatter
 
 (* Helpers
@@ -22,7 +22,7 @@ let is_python_lang (lang : string) : bool =
 let python_code_block_content (b : Cmarkit.Block.t) : string option =
   match b with
   | Cmarkit.Block.Code_block (cb, meta) ->
-    let cb_info = Cmarkit.Meta.find Attribute.meta_key meta in
+    let cb_info = Cmarkit.Meta.find Cb_attribute.meta_key meta in
     (match cb_info with
      | Some { lang; _ } when is_python_lang lang ->
        let content =
@@ -330,8 +330,8 @@ let decode (script : string) : Cmarkit.Doc.t =
       let meta =
         Cmarkit.Meta.none
         |> Cmarkit.Meta.add
-             Attribute.meta_key
-             { Attribute.lang = "python"; attribute = None }
+             Cb_attribute.meta_key
+             { Cb_attribute.lang = "python"; attribute = None }
       in
       blocks := Cmarkit.Block.Code_block (cb, meta) :: !blocks);
   let all_blocks = List.rev !blocks in

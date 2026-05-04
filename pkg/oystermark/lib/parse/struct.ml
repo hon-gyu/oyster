@@ -115,7 +115,14 @@
        inline-value rewrite on paragraphs is gated by the
        [paragraph_inline_value] parameter of {!rewrite_doc}.}
     {- {b Nesting.}  Keyed nodes nest: a keyed paragraph can contain
-       a list whose items are themselves keyed.}}
+       a list whose items are themselves keyed.}
+    {- {b List continuation across absorbed blocks.}  When the last
+       item of a list absorbs following content via rule 3, and the
+       block immediately after the absorbed content is another list
+       of the same type ({!Cmarkit.Block.List'.type'} equal), its
+       items are spliced back in as continuation siblings of the
+       original list.  Recurses: the spliced-in last item may itself
+       absorb and trigger another continuation.}}
 
     {1 Parsing}
 

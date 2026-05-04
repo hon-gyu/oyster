@@ -1,7 +1,7 @@
 (** Python executor backed by ephemeral [uv] environments and Jupyter [nbconvert]. *)
 
 open Core
-module Attribute = Parse.Attribute
+module Cb_attribute = Parse.Cb_attribute
 open Common
 
 (** Config key for uv-specific frontmatter in oyster config *)
@@ -61,9 +61,9 @@ let is_python (lang : string) : bool =
     @param attr_hash_key extract a string from the optional attribute to be used for hashing.
     *)
 let hash_fn
-      ?(attr_filter : Attribute.t option -> bool = fun _ -> true)
-      ?(attr_hash_key : Attribute.t option -> string =
-        fun attr_opt -> [%sexp_of: Attribute.t option] attr_opt |> Sexp.to_string)
+      ?(attr_filter : Cb_attribute.t option -> bool = fun _ -> true)
+      ?(attr_hash_key : Cb_attribute.t option -> string =
+        fun attr_opt -> [%sexp_of: Cb_attribute.t option] attr_opt |> Sexp.to_string)
   : exec_ctx -> string
   =
   Cache.make_hash_fn
@@ -99,8 +99,8 @@ let hash_fn
     @param attr_session_map see {!filter_group_cells}
     *)
 let executor
-      ?(attr_filter : Attribute.t option -> bool = fun _ -> true)
-      ?(attr_session_map : Attribute.t option -> string = session_id_of_attr)
+      ?(attr_filter : Cb_attribute.t option -> bool = fun _ -> true)
+      ?(attr_session_map : Cb_attribute.t option -> string = session_id_of_attr)
   : executor
   =
   fun ctx ->
