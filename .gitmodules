@@ -4,3 +4,6 @@
 [submodule "vendor/obsidian-api"]
 	path = vendor/obsidian-api
 	url = git@github.com:obsidianmd/obsidian-api.git
+[submodule "vendor/omarkit"]
+	path = vendor/omarkit
+	url = git@github.com:hon-gyu/cmarkit.git
