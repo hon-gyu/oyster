@@ -48,6 +48,10 @@ let block_commonmark_renderer : Cmarkit_renderer.block =
   fun (c : context) (b : Block.t) ->
     match b with
     | Ext_keyed_block (({ label }, body), _) ->
+      (* Ensure the label starts on its own line: an enclosing block attribute
+         ([Ext_attributes]) emits its [{...}] spec just before us with no
+         trailing newline, which would otherwise glue onto the label. *)
+      ensure_newline c;
       Context.inline c label;
       Context.string c ":\n";
       Context.block c body;
@@ -389,9 +393,14 @@ let mk_keyed_block t b = Ext_keyed_block ((t, b), Meta.none)
 let mk_keyed_item t b = Ext_keyed_list_item ((t, b), Meta.none)
 
 (** Replace the meta of the outermost keyed-block / keyed-list-item
-    constructor.  Used to forward a transformed paragraph's meta (which
-    may carry e.g. a {!Block_attribute.meta_key}) onto the keyed node
-    that supplants it. *)
+    constructor.  Used to forward a transformed paragraph's meta (which may
+    carry e.g. a {!Cmarkit.Block.Block_id.t}) onto the keyed node that
+    supplants it.
+
+    Block attributes are {e not} carried this way: the fork represents them as
+    a {!Cmarkit.Block.Ext_attributes} wrapper around the target, which the
+    sibling rewrite re-wraps around the produced keyed node (see
+    [rewrite_block_list]). *)
 let set_outer_meta (meta : Meta.t) (block : Block.t) : Block.t =
   if phys_equal meta Meta.none
   then block
@@ -464,16 +473,45 @@ end = struct
            set_outer_meta p_meta keyed :: rewrite_block_list rest)
          else rewrite_within_block block :: rewrite_block_list rest)
     | Block.List (l, list_meta) :: rest -> handle_list l list_meta rest
+    | Block.Ext_attributes (a, attr_meta) :: rest ->
+      (* A block attribute wraps its target. Look through the wrapper for a
+         keyable paragraph; if keying happens, re-wrap the resulting keyed
+         node so the attribute still applies. *)
+      let specs = Block.Attributes.specs a in
+      let rewrap (b : Block.t) : Block.t =
+        Block.Ext_attributes (Block.Attributes.make ~specs b, attr_meta)
+      in
+      (match Block.Attributes.block a with
+       | Block.Paragraph (p, _) as inner ->
+         (match Colon.decompose (Block.Paragraph.inline p) with
+          | None -> rewrap (rewrite_within_block inner) :: rewrite_block_list rest
+          | Some (Colon.Chain_trailing_colon labels) ->
+            (match absorb_trailing_core ~labels rest with
+             | None -> rewrap inner :: rewrite_block_list rest
+             | Some (keyed, after) -> rewrap keyed :: rewrite_block_list after)
+          | Some (Colon.Chain_with_value (labels, value)) ->
+            if !Config.paragraph_inline_value
+            then (
+              let body = value_paragraph value in
+              let keyed = build_nested_keyed ~make_node:mk_keyed_block labels body in
+              rewrap keyed :: rewrite_block_list rest)
+            else rewrap (rewrite_within_block inner) :: rewrite_block_list rest)
+       | inner -> rewrap (rewrite_within_block inner) :: rewrite_block_list rest)
     | block :: rest -> rewrite_within_block block :: rewrite_block_list rest
 
-  and absorb_paragraph_trailing ~original ~original_meta ~labels rest =
+  and absorb_trailing_core ~labels rest : (Block.t * Block.t list) option =
     let children, after = span_non_blank rest in
     match children with
-    | [] -> original :: rewrite_block_list rest
+    | [] -> None
     | _ :: _ ->
       let children = rewrite_block_list children in
       let body = wrap_blocks children in
-      let keyed = build_nested_keyed ~make_node:mk_keyed_block labels body in
+      Some (build_nested_keyed ~make_node:mk_keyed_block labels body, after)
+
+  and absorb_paragraph_trailing ~original ~original_meta ~labels rest =
+    match absorb_trailing_core ~labels rest with
+    | None -> original :: rewrite_block_list rest
+    | Some (keyed, after) ->
       set_outer_meta original_meta keyed :: rewrite_block_list after
 
   and handle_list l list_meta rest =
@@ -604,6 +642,11 @@ end = struct
     | Block.Ext_div (d, meta) ->
       Block.Ext_div
         (Common.div_with_body d (rewrite_within_block (Block.Div.block d)), meta)
+    | Block.Ext_attributes (a, meta) ->
+      let specs = Block.Attributes.specs a in
+      Block.Ext_attributes
+        ( Block.Attributes.make ~specs (rewrite_within_block (Block.Attributes.block a))
+        , meta )
     | Ext_keyed_list_item ((t, body), meta) ->
       Ext_keyed_list_item ((t, rewrite_within_block body), meta)
     | Ext_keyed_block ((t, body), meta) ->

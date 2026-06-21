@@ -20,9 +20,6 @@ module Common = Common
 module Frontmatter = Frontmatter
 module Heading_slug = Heading_slug
 module Cb_attribute = Cb_attribute
-module Oy_attribute = Oy_attribute
-module Block_attribute = Block_attribute
-module Inline_attribute = Inline_attribute
 module Textloc_conv = Textloc_conv
 module Struct = Struct
 
@@ -36,7 +33,6 @@ type block_id =
 let mk_mapper () : Cmarkit.Mapper.t =
   Cmarkit.Mapper.make
     ~inline_ext_default:(fun _m i -> Some i)
-    ~inline:(compose_all_inline_maps [ Inline_attribute.inline_map ])
     ~block:
       (compose_all_block_maps
          [ Heading_slug.mk_block_map ()
@@ -70,14 +66,16 @@ let of_string
       ~block_id:true
       ~div:true
       ~wikilink:true
+      ~djot_inline_attributes:true
+      ~djot_block_attributes:true
       ~callout:(Block.Callout.Config.make ())
       body
   in
   let body_doc = Mapper.map_doc (mk_mapper ()) cmarkit_doc in
-  (* Block_attribute runs before Struct so that a fused paragraph like
-     [{#foo}\nkey:] is split into [Paragraph "{#foo}"] and
-     [Paragraph "key:"] before Struct's keying decomposition runs. *)
-  let body_doc = Block_attribute.rewrite_doc body_doc in
+  (* Block/inline attributes are now parsed natively by the fork (as
+     [Block.Ext_attributes] / [Inline.Ext_attributes] wrappers), so an
+     attribute line preceding a keyable paragraph is already a separate
+     block before Struct runs; Struct re-wraps the keyed node. *)
   let body_doc = if enable_struct then Struct.rewrite_doc body_doc else body_doc in
   match yaml_opt, Doc.block body_doc with
   | None, _ -> body_doc
@@ -95,7 +93,6 @@ let commonmark_of_doc (doc : Cmarkit.Doc.t) : string =
       ~init:(Cmarkit_commonmark.renderer ())
       [ Cmarkit_renderer.make ~block:Frontmatter.block_commonmark_renderer ()
       ; Cmarkit_renderer.make ~block:Struct.block_commonmark_renderer ()
-      ; Cmarkit_renderer.make ~block:Block_attribute.block_commonmark_renderer ()
       ]
   in
   Cmarkit_renderer.doc_to_string r doc
@@ -146,6 +143,41 @@ let block_id_sexp_of_meta : Common.meta_sexp =
     Sexp.List [ Atom "block-id"; Atom (Cmarkit.Block.Block_id.id bid) ])
 ;;
 
+(* Inline/block attributes are now parsed natively by the fork
+   ({!Cmarkit.Inline.Ext_attributes} / {!Cmarkit.Block.Ext_attributes}): a
+   wrapper node carrying the merged {!Cmarkit.Attribute.t} and the target. *)
+let inline_attributes_sexp_of_inline : Common.inline_sexp =
+  fun recurse ~with_meta i ->
+  match i with
+  | Cmarkit.Inline.Ext_attributes (a, m) ->
+    let attrs = Cmarkit.Inline.Attributes.attributes a in
+    Some
+      (with_meta
+         m
+         (Sexp.List
+            [ Atom "Attributes"
+            ; Atom (Cmarkit.Attribute.to_string attrs)
+            ; recurse (Cmarkit.Inline.Attributes.inline a)
+            ]))
+  | _ -> None
+;;
+
+let block_attributes_sexp_of_block : Common.block_sexp =
+  fun ~recurse_inline:_ ~recurse_block ~with_meta b ->
+  match b with
+  | Cmarkit.Block.Ext_attributes (a, m) ->
+    let attrs = Cmarkit.Block.Attributes.attributes a in
+    Some
+      (with_meta
+         m
+         (Sexp.List
+            [ Atom "Attributes"
+            ; Atom (Cmarkit.Attribute.to_string attrs)
+            ; recurse_block (Cmarkit.Block.Attributes.block a)
+            ]))
+  | _ -> None
+;;
+
 (* Callout is now parsed natively by the fork ({!Cmarkit.Block.Callout}); the
    metadata carries only kind and fold (the title lives in the block-quote
    body). *)
@@ -170,20 +202,18 @@ let callout_sexp_of_meta : Common.meta_sexp =
 
 let sexp_of_ =
   Common.make_sexp_of
-    ~inlines:[ wikilink_sexp_of_inline ]
+    ~inlines:[ wikilink_sexp_of_inline; inline_attributes_sexp_of_inline ]
     ~blocks:
       [ Frontmatter.sexp_of_block
       ; div_sexp_of_block
       ; Struct.sexp_of_block
-      ; Block_attribute.sexp_of_block
+      ; block_attributes_sexp_of_block
       ]
     ~metas:
       [ Heading_slug.sexp_of_meta
       ; block_id_sexp_of_meta
       ; callout_sexp_of_meta
       ; Cb_attribute.sexp_of_meta
-      ; Block_attribute.sexp_of_meta
-      ; Inline_attribute.sexp_of_meta
       ]
     ()
 ;;
@@ -683,9 +713,7 @@ code2
 
 let%test_module "Block attribute" =
   (module struct
-    open Common.For_test
     open For_test
-    open Block_attribute.For_test
 
     let%expect_test "attaches to div" =
       let doc =
@@ -697,11 +725,7 @@ body
       in
       pp_doc doc;
       [%expect
-        {|
-        (Blocks (Attribute_lines ((id (#foo)) (classes ()) (kvs ())))
-          ((Div (class warning) (Paragraph (Text body)))
-            (meta (block_attribute ((id (#foo)) (classes ()) (kvs ()))))))
-        |}]
+        {| (Attributes #foo (Div (class warning) (Paragraph (Text body)))) |}]
     ;;
 
     let%expect_test "attaches to keyed block" =
@@ -714,9 +738,8 @@ key:
       pp_doc doc;
       [%expect
         {|
-        (Blocks (Attribute_lines ((id (#foo)) (classes ()) (kvs ())))
-          ((Keyed_block (Text key) (List (Paragraph (Text bar))))
-            (meta (block_attribute ((id (#foo)) (classes ()) (kvs ()))))))
+        (Blocks
+          (Attributes #foo (Keyed_block (Text key) (List (Paragraph (Text bar))))))
         |}]
     ;;
 
@@ -728,23 +751,35 @@ key:
   - bar|}
       in
       pp_doc doc;
-      [%expect {|
-        (Blocks (Attribute_lines ((id (#foo)) (classes ()) (kvs ())))
-          ((List (Keyed_list_item (Text key) (List (Paragraph (Text bar)))))
-            (meta (block_attribute ((id (#foo)) (classes ()) (kvs ()))))))
+      [%expect
+        {|
+        (Attributes #foo
+          (List (Keyed_list_item (Text key) (List (Paragraph (Text bar))))))
         |}]
-  end)
-;;
+    ;;
 
-let%test_module "Block attribute" =
-  (module struct
-    open Common.For_test
-    open For_test
-
-    let%expect_test _ =
+    let%expect_test "no attribute" =
       let doc = of_string "foo" in
       pp_doc doc;
-      [%expect {| (Paragraph (Text foo)) |}];
-  ;;
-    end
-  )
+      [%expect {| (Paragraph (Text foo)) |}]
+    ;;
+
+    (* The fork's commonmark renderer re-emits [{...}] specifiers from the
+       wrapper, so block/inline attributes (and an attribute wrapping a keyed
+       node) round-trip through [commonmark_of_doc] idempotently. *)
+    let%test_unit "commonmark roundtrip is idempotent" =
+      List.iter
+        [ "{#foo .bar}\nkey:\n- bar"
+        ; "_em_{#x .y}"
+        ; "{source=\"Iliad\"}\n> Sing, muse"
+        ; "word{lang=fr}{.blue}"
+        ; "{#water .important key=\"my val\"}\nDon't forget!"
+        ; "{#custom .big}\n# Hello world"
+        ]
+        ~f:
+          (Common.For_test.commonmark_of_doc_idempotent
+             ~doc_of_string:of_string
+             ~commonmark_of_doc)
+    ;;
+  end)
+;;

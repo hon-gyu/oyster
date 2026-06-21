@@ -8,11 +8,8 @@ open Cmarkit
 module C = Cmarkit_renderer.Context
 module Resolve = Vault.Resolve
 module Embed = Vault.Embed
-module Oy_attribute = Parse.Oy_attribute
-module Block_attribute = Parse.Block_attribute
 module Cb_attribute = Parse.Cb_attribute
 module Heading_slug = Parse.Heading_slug
-module Inline_attribute = Parse.Inline_attribute
 module H = Tyxml.Html
 
 let elt_to_string (e : 'a H.elt) : string = Format.asprintf "%a" (H.pp_elt ()) e
@@ -55,7 +52,7 @@ let is_unresolved (meta : Meta.t) : bool =
   | _ -> false
 ;;
 
-(* Oy_attribute-to-HTML helpers
+(* Attribute-to-HTML helpers
 ---------------------------- *)
 
 let buffer_add_attr_value (buf : Buffer.t) (s : string) : unit =
@@ -68,14 +65,19 @@ let buffer_add_attr_value (buf : Buffer.t) (s : string) : unit =
     | _ -> Buffer.add_char buf c)
 ;;
 
-let strip_id_marker s = String.chop_prefix_if_exists s ~prefix:"#"
-let strip_class_marker s = String.chop_prefix_if_exists s ~prefix:"."
-
-(** Render an [Oy_attribute.t] as a leading-space-prefixed sequence of HTML
+(** Render id/classes/key-values as a leading-space-prefixed sequence of HTML
     attributes: [` id="x" class="a b" key="value"`]. With [~key_prefix],
-    every attribute name (including [id] and [class]) is prefixed —
-    used for the data-* path on code blocks. *)
-let attribute_html_attrs ?(key_prefix = "") (a : Oy_attribute.t) : string =
+    every attribute name (including [id] and [class]) is prefixed — used for
+    the data-* path on code blocks. Identifiers and classes are expected to be
+    marker-free (no [#] / [.]), as produced by {!Cmarkit.Attribute}. *)
+let emit_html_attrs
+      ?(key_prefix = "")
+      ~(id : string option)
+      ~(classes : string list)
+      ~(kvs : (string * string) list)
+      ()
+  : string
+  =
   let buf = Buffer.create 32 in
   let emit (k : string) (v : string) =
     Buffer.add_char buf ' ';
@@ -85,25 +87,27 @@ let attribute_html_attrs ?(key_prefix = "") (a : Oy_attribute.t) : string =
     buffer_add_attr_value buf v;
     Buffer.add_char buf '"'
   in
-  Option.iter a.id ~f:(fun id -> emit "id" (strip_id_marker id));
-  if not (List.is_empty a.classes)
-  then (
-    let classes = String.concat ~sep:" " (List.map a.classes ~f:strip_class_marker) in
-    emit "class" classes);
-  List.iter a.kvs ~f:(fun (k, v) -> emit k v);
+  Option.iter id ~f:(fun id -> emit "id" id);
+  if not (List.is_empty classes)
+  then emit "class" (String.concat ~sep:" " classes);
+  List.iter kvs ~f:(fun (k, v) -> emit k v);
   Buffer.contents buf
 ;;
 
-let inline_attr_html (meta : Meta.t) : string =
-  match Meta.find Inline_attribute.meta_key meta with
-  | None -> ""
-  | Some a -> attribute_html_attrs a
+(** HTML attributes for a fork {!Cmarkit.Attribute.t} (Djot block/inline
+    attribute). *)
+let cmarkit_attr_html ?key_prefix (a : Attribute.t) : string =
+  emit_html_attrs
+    ?key_prefix
+    ~id:(Attribute.id a)
+    ~classes:(Attribute.classes a)
+    ~kvs:(Attribute.key_values a)
+    ()
 ;;
 
-let block_attr_html (meta : Meta.t) : string =
-  match Meta.find Block_attribute.meta_key meta with
-  | None -> ""
-  | Some a -> attribute_html_attrs a
+(** HTML attributes for a Pandoc code-block {!Cb_attribute.t}. *)
+let cb_attr_html ?key_prefix (a : Cb_attribute.t) : string =
+  emit_html_attrs ?key_prefix ~id:a.id ~classes:a.classes ~kvs:a.kvs ()
 ;;
 
 (* Default display text for a wikilink when no explicit display is given. *)
@@ -197,7 +201,13 @@ let render_wikilink (c : Cmarkit_renderer.context) (w : Cmarkit.Inline.Wikilink.
 ;;
 
 (* Render a standard link, overriding href if a resolved target is present. *)
-let render_link (c : Cmarkit_renderer.context) (l : Inline.Link.t) (meta : Meta.t) : bool =
+let render_link
+      ?(attr : Attribute.t option)
+      (c : Cmarkit_renderer.context)
+      (l : Inline.Link.t)
+      (meta : Meta.t)
+  : bool
+  =
   match Meta.find Resolve.resolved_key meta with
   | Some target ->
     let href = target_to_href target in
@@ -210,17 +220,11 @@ let render_link (c : Cmarkit_renderer.context) (l : Inline.Link.t) (meta : Meta.
     buffer_add_attr_value href_buf href;
     let href_esc = Buffer.contents href_buf in
     let attrs_str =
-      let inline_attr = Meta.find Inline_attribute.meta_key meta in
-      let merged =
-        if is_unresolved meta
-        then (
-          let base = Option.value inline_attr ~default:Oy_attribute.empty in
-          Some { base with classes = base.classes @ [ ".unresolved" ] })
-        else inline_attr
-      in
-      match merged with
-      | None -> ""
-      | Some a -> attribute_html_attrs a
+      let id = Option.bind attr ~f:Attribute.id in
+      let classes = Option.value_map attr ~default:[] ~f:Attribute.classes in
+      let kvs = Option.value_map attr ~default:[] ~f:Attribute.key_values in
+      let classes = if is_unresolved meta then classes @ [ "unresolved" ] else classes in
+      emit_html_attrs ~id ~classes ~kvs ()
     in
     C.string c (sprintf "<a href=\"%s\"%s>%s</a>" href_esc attrs_str inner_html);
     true
@@ -228,7 +232,12 @@ let render_link (c : Cmarkit_renderer.context) (l : Inline.Link.t) (meta : Meta.
 ;;
 
 (* Render an image with resolved target. *)
-let render_image (c : Cmarkit_renderer.context) (l : Inline.Link.t) (meta : Meta.t) : bool
+let render_image
+      ?(attr : Attribute.t option)
+      (c : Cmarkit_renderer.context)
+      (l : Inline.Link.t)
+      (meta : Meta.t)
+  : bool
   =
   match Meta.find Resolve.resolved_key meta with
   | Some target ->
@@ -255,7 +264,7 @@ let render_image (c : Cmarkit_renderer.context) (l : Inline.Link.t) (meta : Meta
     let alt_buf = Buffer.create 32 in
     buffer_add_attr_value alt_buf alt;
     let alt_esc = Buffer.contents alt_buf in
-    let extra_attrs = inline_attr_html meta in
+    let extra_attrs = Option.value_map attr ~default:"" ~f:cmarkit_attr_html in
     C.string c
       (sprintf
          "<a href=\"%s\"><img src=\"%s\" alt=\"%s\"%s%s/></a>"
@@ -268,67 +277,62 @@ let render_image (c : Cmarkit_renderer.context) (l : Inline.Link.t) (meta : Meta
   | None -> false
 ;;
 
-let inline (c : Cmarkit_renderer.context) : Inline.t -> bool = function
+(** Render an inline, optionally carrying a Djot [attr] from an enclosing
+    {!Cmarkit.Inline.Ext_attributes} wrapper. Returns [false] (defer to the
+    default renderer) for inlines that need no oystermark-specific handling. *)
+let render_inline ?(attr : Attribute.t option) (c : Cmarkit_renderer.context)
+  : Inline.t -> bool
+  =
+  let with_attr ~tag render =
+    match attr with
+    | None -> false
+    | Some a ->
+      C.string c (sprintf "<%s%s>" tag (cmarkit_attr_html a));
+      render ();
+      C.string c (sprintf "</%s>" tag);
+      true
+  in
+  function
   | Cmarkit.Inline.Ext_wikilink (w, meta) ->
     render_wikilink c w meta;
     true
-  | Inline.Link (l, meta) -> render_link c l meta
-  | Inline.Image (l, meta) -> render_image c l meta
-  | Inline.Text (s, meta) ->
-    (match inline_attr_html meta with
-     | "" -> false
-     | attrs ->
-       C.string c (sprintf "<span%s>" attrs);
-       Cmarkit_html.html_escaped_string c s;
-       C.string c "</span>";
-       true)
-  | Inline.Emphasis (e, meta) ->
-    (match inline_attr_html meta with
-     | "" -> false
-     | attrs ->
-       C.string c (sprintf "<em%s>" attrs);
-       C.inline c (Inline.Emphasis.inline e);
-       C.string c "</em>";
-       true)
-  | Inline.Strong_emphasis (e, meta) ->
-    (match inline_attr_html meta with
-     | "" -> false
-     | attrs ->
-       C.string c (sprintf "<strong%s>" attrs);
-       C.inline c (Inline.Emphasis.inline e);
-       C.string c "</strong>";
-       true)
-  | Inline.Code_span (cs, meta) ->
-    (match inline_attr_html meta with
-     | "" -> false
-     | attrs ->
-       C.string c (sprintf "<code%s>" attrs);
-       Cmarkit_html.html_escaped_string c (Inline.Code_span.code cs);
-       C.string c "</code>";
-       true)
-  | Inline.Autolink (a, meta) ->
-    (match inline_attr_html meta with
-     | "" -> false
-     | attrs ->
+  | Inline.Link (l, meta) -> render_link ?attr c l meta
+  | Inline.Image (l, meta) -> render_image ?attr c l meta
+  | Inline.Text (s, _) ->
+    with_attr ~tag:"span" (fun () -> Cmarkit_html.html_escaped_string c s)
+  | Inline.Emphasis (e, _) ->
+    with_attr ~tag:"em" (fun () -> C.inline c (Inline.Emphasis.inline e))
+  | Inline.Strong_emphasis (e, _) ->
+    with_attr ~tag:"strong" (fun () -> C.inline c (Inline.Emphasis.inline e))
+  | Inline.Code_span (cs, _) ->
+    with_attr ~tag:"code" (fun () ->
+      Cmarkit_html.html_escaped_string c (Inline.Code_span.code cs))
+  | Inline.Autolink (a, _) ->
+    (match attr with
+     | None -> false
+     | Some attr ->
        let link, _ = Inline.Autolink.link a in
        let is_email = Inline.Autolink.is_email a in
        let href = if is_email then "mailto:" ^ link else link in
        let href_buf = Buffer.create 64 in
        buffer_add_attr_value href_buf href;
        let href_esc = Buffer.contents href_buf in
-       C.string c (sprintf "<a href=\"%s\"%s>" href_esc attrs);
+       C.string c (sprintf "<a href=\"%s\"%s>" href_esc (cmarkit_attr_html attr));
        Cmarkit_html.html_escaped_string c link;
        C.string c "</a>";
        true)
-  | Inline.Ext_strikethrough (s, meta) ->
-    (match inline_attr_html meta with
-     | "" -> false
-     | attrs ->
-       C.string c (sprintf "<del%s>" attrs);
-       C.inline c (Inline.Strikethrough.inline s);
-       C.string c "</del>";
-       true)
+  | Inline.Ext_strikethrough (s, _) ->
+    with_attr ~tag:"del" (fun () -> C.inline c (Inline.Strikethrough.inline s))
   | _ -> false
+;;
+
+let inline (c : Cmarkit_renderer.context) : Inline.t -> bool = function
+  | Inline.Ext_attributes (a, _) ->
+    render_inline
+      ~attr:(Inline.Attributes.attributes a)
+      c
+      (Inline.Attributes.inline a)
+  | i -> render_inline c i
 ;;
 
 let render_callout
@@ -453,40 +457,38 @@ let render_struct
   C.string c "</div>\n</div>\n"
 ;;
 
-(* [struct_style] is threaded as a ref so that [Ext_div] can push a
-   local override for the duration of its body and restore it afterwards.
-   Rendering is depth-first and synchronous, so a single ref is safe. *)
-let block ~(struct_style : struct_style ref) (c : Cmarkit_renderer.context)
+(** Render a block, optionally carrying a Djot [attr] from an enclosing
+    {!Cmarkit.Block.Ext_attributes} wrapper. Returns [false] (defer) for
+    blocks that need no oystermark-specific handling and no attribute. *)
+let render_block
+      ~(struct_style : struct_style ref)
+      ?(attr : Attribute.t option)
+      (c : Cmarkit_renderer.context)
   : Block.t -> bool
-  = function
-  | Block_attribute.Ext_attribute_lines _ ->
-    (* The literal [{...}] source lines are kept in the AST for
-       round-trip and structural fidelity, but contribute no HTML —
-       the resolved spec is on the next block's meta. *)
-    true
+  =
+  let attr_id = Option.bind attr ~f:Attribute.id in
+  let attr_non_id_html =
+    match attr with
+    | None -> ""
+    | Some a ->
+      emit_html_attrs ~id:None ~classes:(Attribute.classes a) ~kvs:(Attribute.key_values a) ()
+  in
+  function
   | Block.Heading (h, meta) ->
     let slug = Meta.find Heading_slug.meta_key meta in
-    let attr = Meta.find Block_attribute.meta_key meta in
     (match slug, attr with
      | None, None -> false
      | _, _ ->
        let level = Block.Heading.level h in
-       (* Block_attribute id wins over slug if both present (djot says
+       (* The attribute id wins over the auto slug if both present (djot says
           last id wins; the user-written attribute is more specific). *)
        let id_attr =
-         match attr with
-         | Some { id = Some id; _ } -> sprintf " id=\"%s\"" (strip_id_marker id)
-         | _ ->
-           (match slug with
-            | Some s -> sprintf " id=\"%s\"" s
-            | None -> "")
+         match attr_id, slug with
+         | Some id, _ -> sprintf " id=\"%s\"" id
+         | None, Some s -> sprintf " id=\"%s\"" s
+         | None, None -> ""
        in
-       let other_attrs =
-         match attr with
-         | None -> ""
-         | Some a -> attribute_html_attrs { a with id = None }
-       in
-       C.string c (sprintf "<h%d%s%s>" level id_attr other_attrs);
+       C.string c (sprintf "<h%d%s%s>" level id_attr attr_non_id_html);
        C.inline c (Block.Heading.inline h);
        C.string c (sprintf "</h%d>\n" level);
        true)
@@ -496,34 +498,25 @@ let block ~(struct_style : struct_style ref) (c : Cmarkit_renderer.context)
        render_callout c bq callout;
        true
      | None ->
-       (match Meta.find Block_attribute.meta_key meta with
+       (match attr with
         | None -> false
         | Some a ->
-          C.string c (sprintf "<blockquote%s>\n" (attribute_html_attrs a));
+          C.string c (sprintf "<blockquote%s>\n" (cmarkit_attr_html a));
           C.block c (Block.Block_quote.block bq);
           C.string c "</blockquote>\n";
           true))
   | Block.Paragraph (p, meta) ->
     let block_id = Block.Block_id.find meta in
-    let attr = Meta.find Block_attribute.meta_key meta in
     (match block_id, attr with
      | None, None -> false
      | _, _ ->
        let id_attr =
-         match attr with
-         | Some { id = Some id; _ } -> sprintf " id=\"%s\"" (strip_id_marker id)
-         | _ ->
-           (match block_id with
-            | Some (b : Block.Block_id.t) ->
-              sprintf " id=\"^%s\"" (Block.Block_id.id b)
-            | None -> "")
+         match attr_id, block_id with
+         | Some id, _ -> sprintf " id=\"%s\"" id
+         | None, Some (b : Block.Block_id.t) -> sprintf " id=\"^%s\"" (Block.Block_id.id b)
+         | None, None -> ""
        in
-       let other_attrs =
-         match attr with
-         | None -> ""
-         | Some a -> attribute_html_attrs { a with id = None }
-       in
-       C.string c (sprintf "<p%s%s>" id_attr other_attrs);
+       C.string c (sprintf "<p%s%s>" id_attr attr_non_id_html);
        C.inline c (Block.Paragraph.inline p);
        C.string c "</p>\n";
        true)
@@ -534,7 +527,7 @@ let block ~(struct_style : struct_style ref) (c : Cmarkit_renderer.context)
     (match Meta.find Cb_attribute.meta_key meta with
      | None | Some { attribute = None; _ } -> false
      | Some { lang; attribute = Some attr } ->
-       let data_attrs = attribute_html_attrs ~key_prefix:"data-attr-" attr in
+       let data_attrs = cb_attr_html ~key_prefix:"data-attr-" attr in
        C.string c "<pre><code class=\"language-";
        C.string c lang;
        C.string c "\"";
@@ -580,6 +573,30 @@ let block ~(struct_style : struct_style ref) (c : Cmarkit_renderer.context)
        C.string c "</div>\n";
        true)
   | _ -> false
+;;
+
+(* [struct_style] is threaded as a ref so that [Ext_div] can push a
+   local override for the duration of its body and restore it afterwards.
+   Rendering is depth-first and synchronous, so a single ref is safe. *)
+let block ~(struct_style : struct_style ref) (c : Cmarkit_renderer.context)
+  : Block.t -> bool
+  = function
+  | Block.Ext_attributes (a, _) ->
+    let attr = Block.Attributes.attributes a in
+    (match Block.Attributes.block a with
+     (* Orphan attribute (e.g. [{#x}] before a blank line): no target, no HTML. *)
+     | Block.Blocks ([], _) -> true
+     | inner ->
+       if render_block ~struct_style ~attr c inner
+       then true
+       else (
+         (* Generic fallback for a target with no dedicated rendering: wrap in
+            a [<div>] carrying the attributes, matching the fork default. *)
+         C.string c (sprintf "<div%s>\n" (cmarkit_attr_html attr));
+         C.block c inner;
+         C.string c "</div>\n";
+         true))
+  | b -> render_block ~struct_style c b
 ;;
 
 let renderer
@@ -660,7 +677,7 @@ let%expect_test "code block pandoc attribute renders as data-attr-*" =
     |}]
 ;;
 
-let%expect_test "Ext_attribute_lines emits no HTML" =
+let%expect_test "orphan block attribute emits no HTML" =
   let open For_test in
   (* Orphan attribute paragraph (followed by blank line, no target) *)
   let doc = Parse.of_string "{#orphan}\n\nA paragraph." in

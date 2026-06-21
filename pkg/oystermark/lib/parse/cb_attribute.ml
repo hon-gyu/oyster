@@ -1,17 +1,25 @@
 (** {1 Pandoc code block attribute parsing}
 
     - Implements {!page-"pandoc-attribute"}
-    - Oy_attribute will be attached to the metadata code block if it can be parsed out.
+    - A {!t} will be attached to the metadata code block if it can be parsed out.
     - Only codeblock's metadata will be changed.
 
-    Note: we didn't really consider the number of spaces between cmark info string (lang) and attribute.
+    The brace body is parsed with the fork's {!Cmarkit.Attribute} parser, so the
+    accepted syntax matches Djot/inline-block attributes. Identifiers and classes
+    are stored {e without} their [#] / [.] markers (matching {!Cmarkit.Attribute}).
+
+    Note: we didn't really consider the number of spaces between cmark info string
+    (lang) and attribute.
 *)
 open Core
 
 open Common
 open Cmarkit
 
-type t = Oy_attribute.t =
+(** A code-block attribute spec. Kept as a self-contained, [sexp]-able record
+    (rather than the abstract {!Cmarkit.Attribute.t}) because the code executor
+    serializes it for cache keys. *)
+type t =
   { id : string option
   ; classes : string list
   ; kvs : (string * string) list
@@ -25,17 +33,25 @@ type code_block_info =
   }
 [@@deriving sexp_of]
 
-let empty = Oy_attribute.empty
+let empty = { id = None; classes = []; kvs = [] }
 let meta_key : code_block_info Cmarkit.Meta.key = Cmarkit.Meta.key ()
+
+let of_oymarkit (a : Cmarkit.Attribute.t) : t =
+  { id = Cmarkit.Attribute.id a
+  ; classes = Cmarkit.Attribute.classes a
+  ; kvs = Cmarkit.Attribute.key_values a
+  }
+;;
+
+(** Parse the contents of a [{...}] specifier (without the braces). Returns
+    [None] when the body is not a well-formed attribute spec. *)
+let of_string (s : string) : t option = Option.map (Cmarkit.Attribute.of_string s) ~f:of_oymarkit
 
 let sexp_of_meta : Common.meta_sexp =
   fun meta ->
   Cmarkit.Meta.find meta_key meta
   |> Option.map ~f:(fun a -> Sexp.List [ Atom "attribute"; sexp_of_code_block_info a ])
 ;;
-
-let of_string_or_error = Oy_attribute.of_string_or_error
-let of_string_exn = Oy_attribute.of_string_exn
 
 (** Attach a {!code_block_info} to the meta of any fenced code block that has a lang.
 
@@ -74,9 +90,7 @@ let block_map : Block.t Mapper.mapper =
              when String.is_prefix attr_str ~prefix:"{"
                   && String.is_suffix attr_str ~suffix:"}" ->
              let inner = String.sub attr_str ~pos:1 ~len:(String.length attr_str - 2) in
-             (match of_string_or_error inner with
-              | Ok attr -> Some attr
-              | Error _ -> None)
+             of_string inner
            | _ -> None
          in
          let new_meta = cb_meta |> Meta.add meta_key { lang; attribute } in
@@ -106,14 +120,14 @@ II
 ```|}
   ;;
 
-  let example_with_attribute =
-    {|```python {#myid .class_a .class_b key1=val1 key2="val2"}
+  let example_multiple_ids_override =
+    {|```python {#myid #myid2 .class_a .class_b key1=val1 key2="val2"}
 II
 ```|}
   ;;
 
-  let non_example_invalid_multiple_ids =
-    {|```python {#myid #myid2 .class_a .class_b key1=val1 key2="val2"}
+  let example_with_attribute =
+    {|```python {#myid .class_a .class_b key1=val1 key2="val2"}
 II
 ```|}
   ;;
@@ -133,7 +147,7 @@ II
   let examples =
     [ example_no_attribute
     ; example_with_attribute
-    ; non_example_invalid_multiple_ids
+    ; example_multiple_ids_override
     ; non_example_invalid_item
     ; non_example_no_info_string
     ]
@@ -167,20 +181,27 @@ let%test_module "Doc" =
             (attribute
               ((lang python)
                 (attribute
-                  (((id (#myid)) (classes (.class_a .class_b))
+                  (((id (myid)) (classes (class_a class_b))
                      (kvs ((key1 val1) (key2 val2))))))))))
         |}]
     ;;
 
+    (* The fork's attribute parser keeps the last id when several are given
+       (Djot semantics), so multiple ids parse rather than being rejected. *)
     let%expect_test _ =
-      let doc = doc_of_string non_example_invalid_multiple_ids in
-      [%test_result: int] (count_attr doc) ~expect:0;
+      let doc = doc_of_string example_multiple_ids_override in
+      [%test_result: int] (count_attr doc) ~expect:1;
       pp_doc doc;
       [%expect
         {|
         ((Code_block
            "python {#myid #myid2 .class_a .class_b key1=val1 key2=\"val2\"}" II)
-          (meta (attribute ((lang python) (attribute ())))))
+          (meta
+            (attribute
+              ((lang python)
+                (attribute
+                  (((id (myid2)) (classes (class_a class_b))
+                     (kvs ((key1 val1) (key2 val2))))))))))
         |}]
     ;;
 
