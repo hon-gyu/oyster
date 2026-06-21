@@ -8,7 +8,7 @@
   pipeline
   vault_graph
   component
-  cmarkit
+  oymarkit
   core
   trace_collect)
  (inline_tests)

@@ -2,9 +2,9 @@
 
     Implements the Djot inline attribute syntax. A [{...}] specifier
     immediately following an inline element (with no intervening
-    whitespace) attaches the parsed {!Attribute.t} to that element's
+    whitespace) attaches the parsed {!Oy_attribute.t} to that element's
     metadata. The same internal syntax as block attributes (see
-    {!Attribute}) is used.
+    {!Oy_attribute}) is used.
 
     {1 Attachment targets}
 
@@ -26,7 +26,7 @@
     {1 Stacking}
 
     Consecutive [{...}{...}] runs all bind to the same target and are
-    merged via {!Attribute.merge}.
+    merged via {!Oy_attribute.merge}.
 
     {1 Multi-line specs}
 
@@ -53,13 +53,13 @@ open Common
 
 (** Attached to the target inline (Text/Emphasis/Code_span/...) when
     one or more [{...}] specifiers immediately follow it. Stacked
-    specifiers are merged via {!Attribute.merge}. *)
-let meta_key : Attribute.t Meta.key = Meta.key ()
+    specifiers are merged via {!Oy_attribute.merge}. *)
+let meta_key : Oy_attribute.t Meta.key = Meta.key ()
 
 let sexp_of_meta : meta_sexp =
   fun meta ->
   Meta.find meta_key meta
-  |> Option.map ~f:(fun a -> Sexp.List [ Atom "inline_attribute"; Attribute.sexp_of_t a ])
+  |> Option.map ~f:(fun a -> Sexp.List [ Atom "inline_attribute"; Oy_attribute.sexp_of_t a ])
 ;;
 
 (* Brace scanning
@@ -71,7 +71,7 @@ let sexp_of_meta : meta_sexp =
    backslash-escape accounting on AST text content — every literal [{]
    and [}] in the AST is a candidate brace. The one exception is
    double-quoted runs inside a spec: [key="...}..."] suppresses [}] as
-   a closer, matching {!Attribute.tokenize}. *)
+   a closer, matching {!Oy_attribute.tokenize}. *)
 
 (** Locate a [}] in [s] at or after [from] that is not inside a
     [".."] quoted run. Returns [None] if not found. *)
@@ -91,7 +91,7 @@ let find_close_brace (s : string) ~(from : int) : int option =
 
 (** Result of a scan that started at [{] in some [Text] node. *)
 type scan =
-  { spec : Attribute.t
+  { spec : Oy_attribute.t
   ; end_idx : int (** index of the [Text] containing the closing [}] *)
   ; end_pos : int (** one past the [}] in that [Text]'s content *)
   }
@@ -144,7 +144,7 @@ let try_scan_brace (children : Inline.t array) ~(start_idx : int) ~(pos : int)
      | None -> None
      | Some (end_idx, end_pos) ->
        let inside = Buffer.contents buf in
-       (match Attribute.of_string_or_error inside with
+       (match Oy_attribute.of_string_or_error inside with
         | Error _ -> None
         | Ok spec -> Some { spec; end_idx; end_pos }))
 ;;
@@ -171,12 +171,12 @@ let is_structured_target : Inline.t -> bool = function
 
 (** Stamp [attr] onto [block]'s meta, merging with any existing inline
     attribute already attached. *)
-let attach_attr (attr : Attribute.t) (i : Inline.t) : Inline.t =
+let attach_attr (attr : Oy_attribute.t) (i : Inline.t) : Inline.t =
   let add meta =
     let merged =
       match Meta.find meta_key meta with
       | None -> attr
-      | Some prev -> Attribute.merge prev attr
+      | Some prev -> Oy_attribute.merge prev attr
     in
     Meta.add meta_key merged meta
   in

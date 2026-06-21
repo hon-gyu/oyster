@@ -21,7 +21,7 @@
  (modules md2script)
  (libraries
   parse
-  cmarkit
+  oymarkit
   core
   core_unix
   core_unix.command_unix

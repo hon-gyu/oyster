@@ -8,7 +8,7 @@
   component
   vault_graph
   config
-  cmarkit
+  oymarkit
   core
   core_unix
   ocamlgraph

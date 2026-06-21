@@ -31,6 +31,18 @@ let compose_all_inline_maps (ms : Inline.t Mapper.mapper list) =
   List.fold_right ms ~init:(fun m i -> Mapper.default) ~f:compose_inline_map
 ;;
 
+(** Reconstruct a fork {!Cmarkit.Block.Div.t} with a new [body], preserving its
+    indent/fences/class so commonmark roundtrip is unaffected. Used by passes
+    that recurse into a div's body (e.g. Struct, block attributes). *)
+let div_with_body (d : Block.Div.t) (body : Block.t) : Block.Div.t =
+  Block.Div.make
+    ~indent:(Block.Div.indent d)
+    ~opening_fence:(Block.Div.opening_fence d)
+    ?class':(Block.Div.class' d)
+    ~closing_fence:(Block.Div.closing_fence d)
+    body
+;;
+
 (* {1 Sexp conversion scaffolding} *)
 
 (** A sexp-converter for inlines. Returns [None] to fall through to the

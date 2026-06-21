@@ -67,13 +67,13 @@ let extract_block_ids (doc : Cmarkit.Doc.t) : block_entry list =
              its previous sibling inline.
              We should get it.
              *)
-          (match Cmarkit.Meta.find Block_id.meta_key meta with
-           | Some (bid : Block_id.t) ->
+          (match Cmarkit.Block.Block_id.find meta with
+           | Some (bid : Cmarkit.Block.Block_id.t) ->
              let loc =
                let tl = Cmarkit.Meta.textloc meta in
                if Cmarkit.Textloc.is_none tl then None else Some tl
              in
-             Cmarkit.Folder.ret (acc @ [ { id = bid.id; loc } ])
+             Cmarkit.Folder.ret (acc @ [ { id = Cmarkit.Block.Block_id.id bid; loc } ])
            | None -> Cmarkit.Folder.default)
         | _ -> Cmarkit.Folder.default)
       ~inline_ext_default:(fun _f acc _i -> acc)
@@ -143,15 +143,8 @@ Second paragraph without block id
 Third paragraph ^block-2
 |}
   in
-  let doc = Cmarkit.Doc.of_string ~strict:false md in
-  (* Need to tag block_id mapper first *)
-  let mapper =
-    Cmarkit.Mapper.make
-      ~inline_ext_default:(fun _m i -> Some i)
-      ~block:Block_id.block_map
-      ()
-  in
-  let doc = Cmarkit.Mapper.map_doc mapper doc in
+  (* Block IDs are parsed natively by the fork via the [~block_id] knob. *)
+  let doc = Cmarkit.Doc.of_string ~strict:false ~block_id:true md in
   let block_ids = extract_block_ids doc in
   List.iter block_ids ~f:(fun (b : block_entry) -> Printf.printf "%s\n" b.id);
   [%expect

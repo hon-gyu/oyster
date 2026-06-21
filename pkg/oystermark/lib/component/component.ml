@@ -358,7 +358,7 @@ module Backlink = struct
           then acc
           else (
             match i with
-            | Parse.Wikilink.Ext_wikilink (_, meta) ->
+            | Parse.Oy_wikilink.Ext_wikilink (_, meta) ->
               (match Cmarkit.Meta.find Vault.Resolve.resolved_key meta with
                | Some resolved ->
                  (match path_of_resolved resolved with
@@ -394,7 +394,7 @@ module Backlink = struct
           then acc
           else (
             match i with
-            | Parse.Wikilink.Ext_wikilink (_, meta) ->
+            | Parse.Oy_wikilink.Ext_wikilink (_, meta) ->
               (match Cmarkit.Meta.find Vault.Resolve.resolved_key meta with
                | Some resolved ->
                  (match path_of_resolved resolved with

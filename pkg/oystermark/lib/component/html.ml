@@ -8,10 +8,8 @@ open Cmarkit
 module C = Cmarkit_renderer.Context
 module Resolve = Vault.Resolve
 module Embed = Vault.Embed
-module Block_id = Parse.Block_id
-module Callout = Parse.Callout
-module Wikilink = Parse.Wikilink
-module Attribute = Parse.Attribute
+module Oy_wikilink = Parse.Oy_wikilink
+module Oy_attribute = Parse.Oy_attribute
 module Block_attribute = Parse.Block_attribute
 module Cb_attribute = Parse.Cb_attribute
 module Heading_slug = Parse.Heading_slug
@@ -58,7 +56,7 @@ let is_unresolved (meta : Meta.t) : bool =
   | _ -> false
 ;;
 
-(* Attribute-to-HTML helpers
+(* Oy_attribute-to-HTML helpers
 ---------------------------- *)
 
 let buffer_add_attr_value (buf : Buffer.t) (s : string) : unit =
@@ -74,11 +72,11 @@ let buffer_add_attr_value (buf : Buffer.t) (s : string) : unit =
 let strip_id_marker s = String.chop_prefix_if_exists s ~prefix:"#"
 let strip_class_marker s = String.chop_prefix_if_exists s ~prefix:"."
 
-(** Render an [Attribute.t] as a leading-space-prefixed sequence of HTML
+(** Render an [Oy_attribute.t] as a leading-space-prefixed sequence of HTML
     attributes: [` id="x" class="a b" key="value"`]. With [~key_prefix],
     every attribute name (including [id] and [class]) is prefixed —
     used for the data-* path on code blocks. *)
-let attribute_html_attrs ?(key_prefix = "") (a : Attribute.t) : string =
+let attribute_html_attrs ?(key_prefix = "") (a : Oy_attribute.t) : string =
   let buf = Buffer.create 32 in
   let emit (k : string) (v : string) =
     Buffer.add_char buf ' ';
@@ -110,13 +108,13 @@ let block_attr_html (meta : Meta.t) : string =
 ;;
 
 (* Default display text for a wikilink when no explicit display is given. *)
-let wikilink_default_display (w : Wikilink.t) : string =
+let wikilink_default_display (w : Oy_wikilink.t) : string =
   match w.target, w.fragment with
   | Some t, None -> t
-  | Some t, Some (Wikilink.Heading hs) -> t ^ "#" ^ String.concat ~sep:"#" hs
-  | Some t, Some (Wikilink.Block_ref b) -> t ^ "#^" ^ b
-  | None, Some (Wikilink.Heading hs) -> String.concat ~sep:"#" hs
-  | None, Some (Wikilink.Block_ref b) -> "^" ^ b
+  | Some t, Some (Oy_wikilink.Heading hs) -> t ^ "#" ^ String.concat ~sep:"#" hs
+  | Some t, Some (Oy_wikilink.Block_ref b) -> t ^ "#^" ^ b
+  | None, Some (Oy_wikilink.Heading hs) -> String.concat ~sep:"#" hs
+  | None, Some (Oy_wikilink.Block_ref b) -> "^" ^ b
   | None, None -> ""
 ;;
 
@@ -147,7 +145,7 @@ let parse_image_dims (s : string) : (int * int option) option =
 ;;
 
 (* Render a wikilink as HTML. Handles embed=true for media content. *)
-let render_wikilink (c : Cmarkit_renderer.context) (w : Wikilink.t) (meta : Meta.t) : unit
+let render_wikilink (c : Cmarkit_renderer.context) (w : Oy_wikilink.t) (meta : Meta.t) : unit
   =
   let href_of_meta (meta : Meta.t) =
     match Meta.find Resolve.resolved_key meta with
@@ -215,7 +213,7 @@ let render_link (c : Cmarkit_renderer.context) (l : Inline.Link.t) (meta : Meta.
       let merged =
         if is_unresolved meta
         then (
-          let base = Option.value inline_attr ~default:Attribute.empty in
+          let base = Option.value inline_attr ~default:Oy_attribute.empty in
           Some { base with classes = base.classes @ [ ".unresolved" ] })
         else inline_attr
       in
@@ -270,7 +268,7 @@ let render_image (c : Cmarkit_renderer.context) (l : Inline.Link.t) (meta : Meta
 ;;
 
 let inline (c : Cmarkit_renderer.context) : Inline.t -> bool = function
-  | Wikilink.Ext_wikilink (w, meta) ->
+  | Oy_wikilink.Ext_wikilink (w, meta) ->
     render_wikilink c w meta;
     true
   | Inline.Link (l, meta) -> render_link c l meta
@@ -335,30 +333,41 @@ let inline (c : Cmarkit_renderer.context) : Inline.t -> bool = function
 let render_callout
       (c : Cmarkit_renderer.context)
       (bq : Block.Block_quote.t)
-      (callout : Callout.t)
+      (callout : Block.Callout.t)
   : unit
   =
-  let body = Block.Block_quote.block bq in
-  match callout.fold with
+  let inner = Block.Block_quote.block bq in
+  let body = Block.Callout.strip_header inner in
+  let kind = Block.Callout.kind callout in
+  let render_title () =
+    match Block.Callout.title callout inner with
+    | Some title -> C.inline c title
+    | None -> C.string c (String.capitalize kind)
+  in
+  match Block.Callout.fold callout with
   | None ->
-    C.string c (sprintf "<div class=\"callout\" data-callout=\"%s\">\n" callout.kind);
-    C.string c (sprintf "<div class=\"callout-title\">%s</div>\n" callout.title);
+    C.string c (sprintf "<div class=\"callout\" data-callout=\"%s\">\n" kind);
+    C.string c "<div class=\"callout-title\">";
+    render_title ();
+    C.string c "</div>\n";
     C.string c "<div class=\"callout-content\">\n";
     C.block c body;
     C.string c "</div>\n</div>\n"
   | Some fold ->
     let open_attr =
       match fold with
-      | Callout.Foldable_open -> " open"
-      | Callout.Foldable_closed -> ""
+      | Block.Callout.Foldable_open -> " open"
+      | Block.Callout.Foldable_closed -> ""
     in
     C.string
       c
       (sprintf
          "<details class=\"callout\" data-callout=\"%s\"%s>\n"
-         callout.kind
+         kind
          open_attr);
-    C.string c (sprintf "<summary class=\"callout-title\">%s</summary>\n" callout.title);
+    C.string c "<summary class=\"callout-title\">";
+    render_title ();
+    C.string c "</summary>\n";
     C.string c "<div class=\"callout-content\">\n";
     C.block c body;
     C.string c "</div>\n</details>\n"
@@ -481,7 +490,7 @@ let block ~(struct_style : struct_style ref) (c : Cmarkit_renderer.context)
        C.string c (sprintf "</h%d>\n" level);
        true)
   | Block.Block_quote (bq, meta) ->
-    (match Meta.find Callout.meta_key meta with
+    (match Block.Callout.find meta with
      | Some callout ->
        render_callout c bq callout;
        true
@@ -494,7 +503,7 @@ let block ~(struct_style : struct_style ref) (c : Cmarkit_renderer.context)
           C.string c "</blockquote>\n";
           true))
   | Block.Paragraph (p, meta) ->
-    let block_id = Meta.find Block_id.meta_key meta in
+    let block_id = Block.Block_id.find meta in
     let attr = Meta.find Block_attribute.meta_key meta in
     (match block_id, attr with
      | None, None -> false
@@ -504,7 +513,8 @@ let block ~(struct_style : struct_style ref) (c : Cmarkit_renderer.context)
          | Some { id = Some id; _ } -> sprintf " id=\"%s\"" (strip_id_marker id)
          | _ ->
            (match block_id with
-            | Some (b : Block_id.t) -> sprintf " id=\"^%s\"" b.id
+            | Some (b : Block.Block_id.t) ->
+              sprintf " id=\"^%s\"" (Block.Block_id.id b)
             | None -> "")
        in
        let other_attrs =
@@ -538,11 +548,13 @@ let block ~(struct_style : struct_style ref) (c : Cmarkit_renderer.context)
     let inner = Parse.Frontmatter.to_html (Some y) in
     C.string c (sprintf "<div class=\"frontmatter\">%s</div>\n" inner);
     true
-  | Parse.Div.Ext_div ((div, body), _) ->
-    (match div.class_name with
+  | Block.Ext_div (d, _) ->
+    let class_name = Option.map (Block.Div.class' d) ~f:fst in
+    let body = Block.Div.block d in
+    (match class_name with
      | Some cls -> C.string c (sprintf "<div class=\"%s\">\n" cls)
      | None -> C.string c "<div>\n");
-    let override = Option.bind div.class_name ~f:struct_style_of_class in
+    let override = Option.bind class_name ~f:struct_style_of_class in
     (match override with
      | None -> C.block c body
      | Some s ->
@@ -780,8 +792,22 @@ let%test_module "don't throw" =
       let examples : string list =
         List.concat
           [ List.map ~f:(fun ex -> ex.content) Parse.Struct.For_test.examples
-          ; List.map ~f:(fun (_, content, _) -> content) Parse.Div.For_test.examples
-          ; Parse.Callout.For_test.examples
+          ; (* div smoke-test inputs (divs are now parsed natively by the fork) *)
+            [ "::: warning\nbody\n:::"
+            ; ":::: outer\n::: inner\ncontent\n:::\n::::"
+            ; "::: warning\nunclosed content"
+            ; "- foo:\n::: warning\ncontent\n:::\n- bar"
+            ]
+          ; (* callout smoke-test inputs (callout is now parsed natively by the fork) *)
+            [ "> [!info] Here's a callout title"
+            ; "> [!tip]"
+            ; "> [!faq]- Are callouts foldable?"
+            ; "> [!note]+ Expanded"
+            ; "> [!WARNING] Watch out"
+            ; "> not a callout"
+            ; "> [!] empty kind"
+            ; "> [!tip]\n> Body content here"
+            ]
           ; Parse.Cb_attribute.For_test.examples
           ]
       in

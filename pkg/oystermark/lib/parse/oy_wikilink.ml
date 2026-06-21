@@ -84,8 +84,17 @@ let meta_key : unit Meta.key = Meta.key ()
 let sexp_of_inline : Common.inline_sexp =
   fun _recurse ~with_meta:_ i ->
   match i with
-  | Ext_wikilink (wl, _) -> Some (Sexp.List [ Atom "Wikilink"; sexp_of_t wl ])
+  | Ext_wikilink (wl, _) -> Some (Sexp.List [ Atom "Oy_wikilink"; sexp_of_t wl ])
   | _ -> None
+;;
+
+(* A valid block id starts with an ASCII alphanumeric and otherwise contains
+   only ASCII alphanumerics or hyphens. (Mirrors the fork's
+   {!Cmarkit.Block.Block_id} acceptance rule.) *)
+let is_valid_block_id (s : string) : bool =
+  String.length s > 0
+  && String.for_all s ~f:(fun c -> Char.is_alphanum c || Char.equal c '-')
+  && Char.is_alphanum (String.get s 0)
 ;;
 
 (** Parse a fragment string (the part after '#') into a fragment value. *)
@@ -95,7 +104,7 @@ let parse_fragment (frag_str : string) : fragment option =
   else if String.is_prefix frag_str ~prefix:"^"
   then (
     let candidate = String.drop_prefix frag_str 1 in
-    if Block_id.is_valid_block_id candidate
+    if is_valid_block_id candidate
     then Some (Block_ref candidate)
     else (
       (* Treat as heading with literal ^ *)
@@ -231,7 +240,7 @@ let inline_map : Inline.t Mapper.mapper =
                 String.sub text ~pos:content_start ~len:(close_pos - content_start)
               in
               let wikilink = make ~embed content in
-              (* Wikilink span: from start_pos (incl. '!' for embeds) to close_pos+1 (incl. ']]'). *)
+              (* Oy_wikilink span: from start_pos (incl. '!' for embeds) to close_pos+1 (incl. ']]'). *)
               let wl_span = close_pos + 2 - start_pos in
               let wl_meta = Meta.tag meta_key (sub_meta ~off:start_pos ~n:wl_span) in
               (* Emit any literal text between the previous position and this wikilink. *)

@@ -41,15 +41,15 @@ let resolved_key : target Cmarkit.Meta.key = Cmarkit.Meta.key ()
 (** Make a wikilink from an already resolved target. *)
 let make_wikilink
       ~(target : string option)
-      ~(fragment : Parse.Wikilink.fragment option)
+      ~(fragment : Parse.Oy_wikilink.fragment option)
       ~(display : string option)
       ~(embed : bool)
       ~(resolved_target : target)
   : Cmarkit.Inline.t
   =
-  let wl = Parse.Wikilink.{ target; fragment; display; embed } in
+  let wl = Parse.Oy_wikilink.{ target; fragment; display; embed } in
   let meta = Cmarkit.Meta.add resolved_key resolved_target Cmarkit.Meta.none in
-  Parse.Wikilink.Ext_wikilink (wl, meta)
+  Parse.Oy_wikilink.Ext_wikilink (wl, meta)
 ;;
 
 (** Check if needle components form a (ordered) subsequence of haystack components. *)
@@ -196,11 +196,11 @@ let resolution_cmarkit_mapper ~(index : Index.t) ~(curr_file : string) : Cmarkit
     ~block_ext_default:(fun _m b -> Some b)
     ~inline_ext_default:(fun _m i ->
       match i with
-      | Parse.Wikilink.Ext_wikilink (w, meta) ->
+      | Parse.Oy_wikilink.Ext_wikilink (w, meta) ->
         let link_ref = Link_ref.of_wikilink w in
         let target = resolve link_ref curr_file index in
         let meta' = Cmarkit.Meta.add resolved_key target meta in
-        Some (Parse.Wikilink.Ext_wikilink (w, meta'))
+        Some (Parse.Oy_wikilink.Ext_wikilink (w, meta'))
       | other -> Some other)
     ~inline:(fun _m i ->
       match i with

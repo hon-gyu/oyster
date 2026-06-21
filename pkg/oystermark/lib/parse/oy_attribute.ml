@@ -176,7 +176,7 @@ let serialize_value (v : string) : string =
     Buffer.contents buf)
 ;;
 
-(** Serialize an [Attribute.t] back to brace-content syntax (without
+(** Serialize an [Oy_attribute.t] back to brace-content syntax (without
     surrounding [{}]). Order: id, classes, kvs — matching how most
     rendered output reads. *)
 let to_string (t : t) : string =

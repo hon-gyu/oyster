@@ -601,8 +601,9 @@ end = struct
          let body = value_paragraph value in
          set_outer_meta p_meta (build_nested_keyed ~make_node:mk_keyed_block labels body)
        | _ -> block)
-    | Div.Ext_div ((div, body), meta) ->
-      Div.Ext_div ((div, rewrite_within_block body), meta)
+    | Block.Ext_div (d, meta) ->
+      Block.Ext_div
+        (Common.div_with_body d (rewrite_within_block (Block.Div.block d)), meta)
     | Ext_keyed_list_item ((t, body), meta) ->
       Ext_keyed_list_item ((t, rewrite_within_block body), meta)
     | Ext_keyed_block ((t, body), meta) ->

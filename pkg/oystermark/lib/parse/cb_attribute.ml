@@ -1,7 +1,7 @@
 (** {1 Pandoc code block attribute parsing}
 
     - Implements {!page-"pandoc-attribute"}
-    - Attribute will be attached to the metadata code block if it can be parsed out.
+    - Oy_attribute will be attached to the metadata code block if it can be parsed out.
     - Only codeblock's metadata will be changed.
 
     Note: we didn't really consider the number of spaces between cmark info string (lang) and attribute.
@@ -11,7 +11,7 @@ open Core
 open Common
 open Cmarkit
 
-type t = Attribute.t =
+type t = Oy_attribute.t =
   { id : string option
   ; classes : string list
   ; kvs : (string * string) list
@@ -25,7 +25,7 @@ type code_block_info =
   }
 [@@deriving sexp_of]
 
-let empty = Attribute.empty
+let empty = Oy_attribute.empty
 let meta_key : code_block_info Cmarkit.Meta.key = Cmarkit.Meta.key ()
 
 let sexp_of_meta : Common.meta_sexp =
@@ -34,8 +34,8 @@ let sexp_of_meta : Common.meta_sexp =
   |> Option.map ~f:(fun a -> Sexp.List [ Atom "attribute"; sexp_of_code_block_info a ])
 ;;
 
-let of_string_or_error = Attribute.of_string_or_error
-let of_string_exn = Attribute.of_string_exn
+let of_string_or_error = Oy_attribute.of_string_or_error
+let of_string_exn = Oy_attribute.of_string_exn
 
 (** Attach a {!code_block_info} to the meta of any fenced code block that has a lang.
 

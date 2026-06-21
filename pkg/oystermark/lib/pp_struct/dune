@@ -2,7 +2,7 @@
  (name pp_struct)
  (public_name oystermark.pp_struct)
  (modules pp_struct)
- (libraries cmarkit core parse)
+ (libraries oymarkit core parse)
  (inline_tests)
  (preprocess
   (pps ppx_jane ppx_string ppx_quick_test)))
@@ -10,7 +10,7 @@
 (executable
  (name t1)
  (modules t1)
- (libraries cmarkit core parse component oystermark))
+ (libraries oymarkit core parse component oystermark))
 
 (rule
  (with-stdout-to

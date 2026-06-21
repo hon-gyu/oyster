@@ -3,7 +3,7 @@
     Implements the Djot block attribute syntax. A line of the form
     [{...}] immediately preceding a block-level element attaches the
     attribute spec to that block's metadata. Repeated specifiers stack
-    via {!Attribute.merge}.
+    via {!Oy_attribute.merge}.
 
     {1 Strategy}
 
@@ -17,7 +17,7 @@
     metadata via {!meta_key}.
 
     The rewrite recurses into block containers ([Blocks], [Block_quote],
-    list items, and {!Div.Ext_div}) so attributes work inside them.
+    list items, and {!Cmarkit.Block.Ext_div}) so attributes work inside them.
 
     {1 AST}
 
@@ -35,24 +35,24 @@ open Common
 
 (** Attached to the target block (Heading/Paragraph/Code_block/...) when
     one or more preceding {!Ext_attribute_lines} blocks merge into it. *)
-let meta_key : Attribute.t Cmarkit.Meta.key = Cmarkit.Meta.key ()
+let meta_key : Oy_attribute.t Cmarkit.Meta.key = Cmarkit.Meta.key ()
 
 (** A literal run of [{...}] source lines. Produced by the rewrite for
     every attribute paragraph it encounters, whether or not the run
     successfully attaches to a following block. *)
-type Cmarkit.Block.t += Ext_attribute_lines of Attribute.t list node
+type Cmarkit.Block.t += Ext_attribute_lines of Oy_attribute.t list node
 
 let sexp_of_meta : Common.meta_sexp =
   fun meta ->
   Cmarkit.Meta.find meta_key meta
-  |> Option.map ~f:(fun a -> Sexp.List [ Atom "block_attribute"; Attribute.sexp_of_t a ])
+  |> Option.map ~f:(fun a -> Sexp.List [ Atom "block_attribute"; Oy_attribute.sexp_of_t a ])
 ;;
 
 let sexp_of_block : block_sexp =
   fun ~recurse_inline:_ ~recurse_block:_ ~with_meta:_ b ->
   match b with
   | Ext_attribute_lines (specs, _) ->
-    Some (Sexp.List (Atom "Attribute_lines" :: List.map specs ~f:Attribute.sexp_of_t))
+    Some (Sexp.List (Atom "Attribute_lines" :: List.map specs ~f:Oy_attribute.sexp_of_t))
   | _ -> None
 ;;
 
@@ -63,7 +63,7 @@ let block_commonmark_renderer : Cmarkit_renderer.block =
     | Ext_attribute_lines (specs, _) ->
       List.iter specs ~f:(fun spec ->
         Context.string c "{";
-        Context.string c (Attribute.to_string spec);
+        Context.string c (Oy_attribute.to_string spec);
         Context.string c "}\n");
       true
     | _ -> false
@@ -91,7 +91,7 @@ let rec inline_text (i : Inline.t) : string option =
 (** Parse a flattened paragraph into a list of attribute specs. Returns
     [None] if the string is not exactly a (whitespace-separated) sequence
     of [{...}] groups, or if any group is malformed. *)
-let parse_attr_paragraph (text : string) : Attribute.t list option =
+let parse_attr_paragraph (text : string) : Oy_attribute.t list option =
   let s = String.strip text in
   if String.is_empty s
   then None
@@ -111,7 +111,7 @@ let parse_attr_paragraph (text : string) : Attribute.t list option =
         | None -> None
         | Some j ->
           let inner = String.sub s ~pos:(i + 1) ~len:(j - i - 1) in
-          (match Attribute.of_string_or_error inner with
+          (match Oy_attribute.of_string_or_error inner with
            | Ok a -> scan (a :: acc) (j + 1)
            | Error _ -> None))
     in
@@ -120,7 +120,7 @@ let parse_attr_paragraph (text : string) : Attribute.t list option =
 
 (** If [block] is a paragraph that consists entirely of attribute
     specifiers, return the merged spec. *)
-let attr_paragraph_spec (block : Block.t) : Attribute.t option =
+let attr_paragraph_spec (block : Block.t) : Oy_attribute.t option =
   match block with
   | Block.Paragraph (p, _) ->
     (match inline_text (Block.Paragraph.inline p) with
@@ -128,7 +128,7 @@ let attr_paragraph_spec (block : Block.t) : Attribute.t option =
      | Some s ->
        (match parse_attr_paragraph s with
         | None | Some [] -> None
-        | Some specs -> Some (List.reduce_exn specs ~f:Attribute.merge)))
+        | Some specs -> Some (List.reduce_exn specs ~f:Oy_attribute.merge)))
   | _ -> None
 ;;
 
@@ -234,7 +234,7 @@ let split_attr_prefix (block : Block.t) : Block.t list =
 
 (** Stamp [attr] into [block]'s metadata. Handles all standard Cmarkit
     block constructors and the oystermark extension blocks. *)
-let attach_attr (attr : Attribute.t) (block : Block.t) : Block.t =
+let attach_attr (attr : Oy_attribute.t) (block : Block.t) : Block.t =
   let add meta = Meta.add meta_key attr meta in
   match block with
   | Block.Paragraph (p, m) -> Block.Paragraph (p, add m)
@@ -245,7 +245,7 @@ let attach_attr (attr : Attribute.t) (block : Block.t) : Block.t =
   | Block.Blocks (bs, m) -> Block.Blocks (bs, add m)
   | Block.Thematic_break (tb, m) -> Block.Thematic_break (tb, add m)
   | Block.Html_block (lines, m) -> Block.Html_block (lines, add m)
-  | Div.Ext_div (x, m) -> Div.Ext_div (x, add m)
+  | Block.Ext_div (d, m) -> Block.Ext_div (d, add m)
   | Struct.Ext_keyed_block (x, m) -> Struct.Ext_keyed_block (x, add m)
   | Struct.Ext_keyed_list_item (x, m) -> Struct.Ext_keyed_list_item (x, add m)
   | other -> other
@@ -281,7 +281,7 @@ let rec rewrite_block_list (blocks : Block.t list) : Block.t list =
            match List.rev pending with
            | [] -> block' :: go [] rest
            | specs ->
-             let merged = List.reduce_exn specs ~f:Attribute.merge in
+             let merged = List.reduce_exn specs ~f:Oy_attribute.merge in
              Ext_attribute_lines (specs, Meta.none)
              :: attach_attr merged block'
              :: go [] rest))
@@ -307,7 +307,8 @@ and rewrite_within_block (block : Block.t) : Block.t =
     in
     let l' = Block.List'.make ~tight:(Block.List'.tight l) (Block.List'.type' l) items in
     Block.List (l', meta)
-  | Div.Ext_div ((div, body), meta) -> Div.Ext_div ((div, rewrite_within_block body), meta)
+  | Block.Ext_div (d, meta) ->
+    Block.Ext_div (div_with_body d (rewrite_within_block (Block.Div.block d)), meta)
   | _ -> block
 ;;
 

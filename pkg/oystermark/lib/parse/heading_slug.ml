@@ -41,8 +41,8 @@ let inline_to_plain_text (inline : Cmarkit.Inline.t) : string =
     Cmarkit.Inline.to_plain_text
       ~ext:(fun ~break_on_soft inline ->
         match inline with
-        | Wikilink.Ext_wikilink (wl, _meta) ->
-          let text = Wikilink.to_plain_text wl in
+        | Oy_wikilink.Ext_wikilink (wl, _meta) ->
+          let text = Oy_wikilink.to_plain_text wl in
           Cmarkit.Inline.Text (text, Cmarkit.Meta.none)
         | other -> other)
       ~break_on_soft:false

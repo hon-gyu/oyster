@@ -3,7 +3,7 @@
 open! Core
 open Oystermark
 module Link_ref = Vault.Link_ref
-module Wikilink = Parse.Wikilink
+module Oy_wikilink = Parse.Oy_wikilink
 
 (* Extract all Link_ref.t values from a parsed document, in order. *)
 let extract_link_refs (doc : Cmarkit.Doc.t) : Link_ref.t list =
@@ -19,7 +19,7 @@ let extract_link_refs (doc : Cmarkit.Doc.t) : Link_ref.t list =
         | _ -> Cmarkit.Folder.default)
       ~inline_ext_default:(fun _f acc i ->
         match i with
-        | Wikilink.Ext_wikilink (w, _meta) ->
+        | Oy_wikilink.Ext_wikilink (w, _meta) ->
           let lr = Link_ref.of_wikilink w in
           acc @ [ lr ]
         | _ -> acc)
