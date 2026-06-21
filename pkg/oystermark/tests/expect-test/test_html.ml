@@ -79,7 +79,7 @@ let%expect_test "wikilink: deep path" =
   [%expect {| <p><a href="/dir/deep/">deep</a></p> |}]
 ;;
 
-(* Oy_wikilink embeds
+(* Cmarkit.Inline.Wikilink embeds
    ==================================================================== *)
 
 let%expect_test "wikilink: embed image" =

@@ -37,7 +37,7 @@ val resolved_key : target Cmarkit.Meta.key
 (** Make a wikilink from an already resolved target. *)
 val make_wikilink
   :  target:string option
-  -> fragment:Parse.Oy_wikilink.fragment option
+  -> fragment:Cmarkit.Inline.Wikilink.fragment option
   -> display:string option
   -> embed:bool
   -> resolved_target:target

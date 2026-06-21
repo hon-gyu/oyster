@@ -171,7 +171,7 @@ let collect_edges_from_doc (src_path : string) (doc : Cmarkit.Doc.t)
         | _ -> Cmarkit.Folder.default)
       ~inline_ext_default:(fun _f acc i ->
         match i with
-        | Parse.Oy_wikilink.Ext_wikilink (_, meta) -> extract_edge acc meta ~resolve_target:i
+        | Cmarkit.Inline.Ext_wikilink (_, meta) -> extract_edge acc meta ~resolve_target:i
         | _ -> acc)
       ~block_ext_default:(fun _f acc _b -> acc)
       ()

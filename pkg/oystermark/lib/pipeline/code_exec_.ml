@@ -25,7 +25,7 @@ let transclude_code_files : t =
   let extract_file_target (i : Cmarkit.Inline.t) : string option =
     let meta =
       match i with
-      | Parse.Oy_wikilink.Ext_wikilink (w, m) when w.embed -> Some m
+      | Cmarkit.Inline.Ext_wikilink (w, m) when Cmarkit.Inline.Wikilink.embed w -> Some m
       | Cmarkit.Inline.Image (_, m) -> Some m
       | _ -> None
     in

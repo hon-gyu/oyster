@@ -43,6 +43,55 @@ let div_with_body (d : Block.Div.t) (body : Block.t) : Block.Div.t =
     body
 ;;
 
+(** Build the raw content string (the part between [ [[ ]] ], without brackets)
+    of a wikilink from its fields, mirroring {!Cmarkit.Inline.Wikilink}'s
+    surface syntax. *)
+let wikilink_content_of_fields
+      ~(target : string option)
+      ~(fragment : Inline.Wikilink.fragment option)
+      ~(display : string option)
+  : string
+  =
+  let b = Buffer.create 16 in
+  Option.iter target ~f:(Buffer.add_string b);
+  (match fragment with
+   | None -> ()
+   | Some (Inline.Wikilink.Heading hs) ->
+     Buffer.add_char b '#';
+     Buffer.add_string b (String.concat ~sep:"#" hs)
+   | Some (Inline.Wikilink.Block_ref id) -> Buffer.add_string b ("#^" ^ id));
+  Option.iter display ~f:(fun d -> Buffer.add_string b ("|" ^ d));
+  Buffer.contents b
+;;
+
+(** Construct a fork {!Cmarkit.Inline.Wikilink.t} from individual fields (the
+    abstract type has no record constructor). *)
+let wikilink_of_fields ~target ~fragment ~display ~embed : Inline.Wikilink.t =
+  Inline.Wikilink.make ~embed (wikilink_content_of_fields ~target ~fragment ~display)
+;;
+
+(** Sexp of a fork wikilink, mirroring the old record's derived sexp shape. *)
+let sexp_of_wikilink (wl : Inline.Wikilink.t) : Sexp.t =
+  let opt = function
+    | None -> Sexp.List []
+    | Some s -> Sexp.List [ Sexp.Atom s ]
+  in
+  let frag =
+    match Inline.Wikilink.fragment wl with
+    | None -> Sexp.List []
+    | Some (Inline.Wikilink.Heading hs) ->
+      Sexp.List [ Sexp.List (Atom "Heading" :: [ Sexp.List (List.map hs ~f:(fun s -> Sexp.Atom s)) ]) ]
+    | Some (Inline.Wikilink.Block_ref id) ->
+      Sexp.List [ Sexp.List [ Atom "Block_ref"; Atom id ] ]
+  in
+  Sexp.List
+    [ Sexp.List [ Atom "target"; opt (Inline.Wikilink.target wl) ]
+    ; Sexp.List [ Atom "fragment"; frag ]
+    ; Sexp.List [ Atom "display"; opt (Inline.Wikilink.display wl) ]
+    ; Sexp.List [ Atom "embed"; Sexp.Atom (Bool.to_string (Inline.Wikilink.embed wl)) ]
+    ]
+;;
+
 (* {1 Sexp conversion scaffolding} *)
 
 (** A sexp-converter for inlines. Returns [None] to fall through to the

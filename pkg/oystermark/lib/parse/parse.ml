@@ -16,9 +16,9 @@ Each module provides a single-pass mapper that might
 
 open Core
 open Common
+module Common = Common
 module Frontmatter = Frontmatter
 module Heading_slug = Heading_slug
-module Oy_wikilink = Oy_wikilink
 module Cb_attribute = Cb_attribute
 module Oy_attribute = Oy_attribute
 module Block_attribute = Block_attribute
@@ -36,7 +36,7 @@ type block_id =
 let mk_mapper () : Cmarkit.Mapper.t =
   Cmarkit.Mapper.make
     ~inline_ext_default:(fun _m i -> Some i)
-    ~inline:(compose_all_inline_maps [ Oy_wikilink.inline_map; Inline_attribute.inline_map ])
+    ~inline:(compose_all_inline_maps [ Inline_attribute.inline_map ])
     ~block:
       (compose_all_block_maps
          [ Heading_slug.mk_block_map ()
@@ -69,6 +69,7 @@ let of_string
       ~locs:true
       ~block_id:true
       ~div:true
+      ~wikilink:true
       ~callout:(Block.Callout.Config.make ())
       body
   in
@@ -92,8 +93,7 @@ let commonmark_of_doc (doc : Cmarkit.Doc.t) : string =
     List.fold
       ~f:Cmarkit_renderer.compose
       ~init:(Cmarkit_commonmark.renderer ())
-      [ Cmarkit_renderer.make ~inline:Oy_wikilink.inline_commonmark_renderer ()
-      ; Cmarkit_renderer.make ~block:Frontmatter.block_commonmark_renderer ()
+      [ Cmarkit_renderer.make ~block:Frontmatter.block_commonmark_renderer ()
       ; Cmarkit_renderer.make ~block:Struct.block_commonmark_renderer ()
       ; Cmarkit_renderer.make ~block:Block_attribute.block_commonmark_renderer ()
       ]
@@ -107,6 +107,16 @@ let commonmark_of_doc (doc : Cmarkit.Doc.t) : string =
    provides a converter of type {!Common.inline_sexp} / {!Common.block_sexp}
    / {!Common.meta_sexp}. Here we compose them, placing the core converters
    last so extensions win on their constructors. *)
+
+(* Wikilinks are now parsed natively by the fork ({!Cmarkit.Inline.Wikilink})
+   via the [~wikilink] knob. *)
+let wikilink_sexp_of_inline : Common.inline_sexp =
+  fun _recurse ~with_meta:_ i ->
+  match i with
+  | Cmarkit.Inline.Ext_wikilink (wl, _) ->
+    Some (Sexp.List [ Atom "Wikilink"; Common.sexp_of_wikilink wl ])
+  | _ -> None
+;;
 
 (* Divs are now parsed natively by the fork ({!Cmarkit.Block.Div}) via the
    [~div] knob. *)
@@ -160,7 +170,7 @@ let callout_sexp_of_meta : Common.meta_sexp =
 
 let sexp_of_ =
   Common.make_sexp_of
-    ~inlines:[ Oy_wikilink.sexp_of_inline ]
+    ~inlines:[ wikilink_sexp_of_inline ]
     ~blocks:
       [ Frontmatter.sexp_of_block
       ; div_sexp_of_block

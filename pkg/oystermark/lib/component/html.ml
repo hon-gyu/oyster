@@ -8,7 +8,6 @@ open Cmarkit
 module C = Cmarkit_renderer.Context
 module Resolve = Vault.Resolve
 module Embed = Vault.Embed
-module Oy_wikilink = Parse.Oy_wikilink
 module Oy_attribute = Parse.Oy_attribute
 module Block_attribute = Parse.Block_attribute
 module Cb_attribute = Parse.Cb_attribute
@@ -108,13 +107,13 @@ let block_attr_html (meta : Meta.t) : string =
 ;;
 
 (* Default display text for a wikilink when no explicit display is given. *)
-let wikilink_default_display (w : Oy_wikilink.t) : string =
-  match w.target, w.fragment with
+let wikilink_default_display (w : Cmarkit.Inline.Wikilink.t) : string =
+  match Cmarkit.Inline.Wikilink.target w, Cmarkit.Inline.Wikilink.fragment w with
   | Some t, None -> t
-  | Some t, Some (Oy_wikilink.Heading hs) -> t ^ "#" ^ String.concat ~sep:"#" hs
-  | Some t, Some (Oy_wikilink.Block_ref b) -> t ^ "#^" ^ b
-  | None, Some (Oy_wikilink.Heading hs) -> String.concat ~sep:"#" hs
-  | None, Some (Oy_wikilink.Block_ref b) -> "^" ^ b
+  | Some t, Some (Cmarkit.Inline.Wikilink.Heading hs) -> t ^ "#" ^ String.concat ~sep:"#" hs
+  | Some t, Some (Cmarkit.Inline.Wikilink.Block_ref b) -> t ^ "#^" ^ b
+  | None, Some (Cmarkit.Inline.Wikilink.Heading hs) -> String.concat ~sep:"#" hs
+  | None, Some (Cmarkit.Inline.Wikilink.Block_ref b) -> "^" ^ b
   | None, None -> ""
 ;;
 
@@ -145,7 +144,7 @@ let parse_image_dims (s : string) : (int * int option) option =
 ;;
 
 (* Render a wikilink as HTML. Handles embed=true for media content. *)
-let render_wikilink (c : Cmarkit_renderer.context) (w : Oy_wikilink.t) (meta : Meta.t) : unit
+let render_wikilink (c : Cmarkit_renderer.context) (w : Cmarkit.Inline.Wikilink.t) (meta : Meta.t) : unit
   =
   let href_of_meta (meta : Meta.t) =
     match Meta.find Resolve.resolved_key meta with
@@ -153,8 +152,10 @@ let render_wikilink (c : Cmarkit_renderer.context) (w : Oy_wikilink.t) (meta : M
     | None -> "#"
   in
   let href = href_of_meta meta in
-  let display = Option.value w.display ~default:(wikilink_default_display w) in
-  if w.embed
+  let display =
+    Option.value (Cmarkit.Inline.Wikilink.display w) ~default:(wikilink_default_display w)
+  in
+  if Cmarkit.Inline.Wikilink.embed w
   then (
     let s =
       match media_type_of_href href with
@@ -268,7 +269,7 @@ let render_image (c : Cmarkit_renderer.context) (l : Inline.Link.t) (meta : Meta
 ;;
 
 let inline (c : Cmarkit_renderer.context) : Inline.t -> bool = function
-  | Oy_wikilink.Ext_wikilink (w, meta) ->
+  | Cmarkit.Inline.Ext_wikilink (w, meta) ->
     render_wikilink c w meta;
     true
   | Inline.Link (l, meta) -> render_link c l meta
