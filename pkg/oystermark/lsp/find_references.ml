@@ -210,7 +210,7 @@ let collect_from_doc
         | _ -> Cmarkit.Folder.default)
       ~inline_ext_default:(fun _f acc i ->
         match i with
-        | Oystermark.Parse.Wikilink.Ext_wikilink (_, meta) -> check_meta acc meta
+        | Cmarkit.Inline.Ext_wikilink (_, meta) -> check_meta acc meta
         | _ -> acc)
       ~block_ext_default:(fun _f acc _b -> acc)
       ()

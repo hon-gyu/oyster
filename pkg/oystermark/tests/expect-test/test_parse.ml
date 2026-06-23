@@ -1,7 +1,5 @@
 open! Core
 open Oystermark
-module Wikilink = Parse.Wikilink
-module Block_id = Parse.Block_id
 
 (* Pretty-printing helpers
 -------------------- *)
@@ -24,10 +22,10 @@ let rec pp_inline = function
       "Inlines(@%s)[%s]"
       (pp_textloc m)
       (List.map is ~f:pp_inline |> String.concat ~sep:", ")
-  | Wikilink.Ext_wikilink (w, m) ->
+  | Cmarkit.Inline.Ext_wikilink (w, m) ->
     Printf.sprintf
       "Wikilink(%s @%s)"
-      (Wikilink.sexp_of_t w |> Sexp.to_string_hum)
+      (Parse.Common.sexp_of_wikilink w |> Sexp.to_string_hum)
       (pp_textloc m)
   | _ -> "?"
 ;;
@@ -61,12 +59,12 @@ let%expect_test "parse_content" =
     [ Ascii_table.Column.create "name" (fun (n, _, _) -> n)
     ; Ascii_table.Column.create "input" (fun (_, i, _) -> i)
     ; Ascii_table.Column.create "result" (fun (_, _, w) ->
-        Wikilink.sexp_of_t w |> Sexp.to_string_hum)
+        Parse.Common.sexp_of_wikilink w |> Sexp.to_string_hum)
     ]
   in
   let rows =
     List.map wikilink_cases ~f:(fun (name, input) ->
-      let w = Wikilink.make ~embed:false input in
+      let w = Cmarkit.Inline.Wikilink.make ~embed:false input in
       name, input, w)
   in
   print_string (Ascii_table.to_string_noattr cols rows ~limit_width_to:150);
@@ -85,7 +83,7 @@ let%expect_test "parse_content" =
     │ block ref            │ Note#^blockid    │ ((target (Note)) (fragment ((Block_ref blockid))) (display ()) (embed false)) │
     │ block ref hyphen     │ Note#^block-id   │ ((target (Note)) (fragment ((Block_ref block-id))) (display ())               │
     │                      │                  │  (embed false))                                                               │
-    │ invalid block_id _   │ Note#^block_id   │ ((target (Note)) (fragment ((Heading (^block_id)))) (display ())              │
+    │ invalid block_id _   │ Note#^block_id   │ ((target (Note)) (fragment ((Block_ref block_id))) (display ())               │
     │                      │                  │  (embed false))                                                               │
     │ block ref current    │ #^blockid        │ ((target ()) (fragment ((Block_ref blockid))) (display ()) (embed false))     │
     │ heading + display    │ #H1#H2|text      │ ((target ()) (fragment ((Heading (H1 H2)))) (display (text)) (embed false))   │
@@ -111,21 +109,20 @@ let parse_cases =
   ]
 ;;
 
-(** Build a [Text] node with a textloc starting at byte [base] spanning [input]. *)
-let text_node ~base input =
-  let len = String.length input in
-  let loc =
-    Cmarkit.Textloc.v
-      ~file:Cmarkit.Textloc.file_none
-      ~first_byte:base
-      ~last_byte:(base + len - 1)
-      ~first_line:Cmarkit.Textloc.line_pos_first
-      ~last_line:Cmarkit.Textloc.line_pos_first
+(* Parse a single-line input via the fork's native [~wikilink] parsing and
+   pretty-print the resulting paragraph inline. *)
+let parse_wikilinks (input : string) : string =
+  let doc = Cmarkit.Doc.of_string ~wikilink:true ~locs:true input in
+  let rec first_paragraph (b : Cmarkit.Block.t) : Cmarkit.Inline.t option =
+    match b with
+    | Cmarkit.Block.Paragraph (p, _) -> Some (Cmarkit.Block.Paragraph.inline p)
+    | Cmarkit.Block.Blocks (bs, _) -> List.find_map bs ~f:first_paragraph
+    | _ -> None
   in
-  Cmarkit.Inline.Text (input, Cmarkit.Meta.make ~textloc:loc ())
+  match first_paragraph (Cmarkit.Doc.block doc) with
+  | Some inline -> pp_inline inline
+  | None -> "<empty>"
 ;;
-
-let dummy_mapper = Cmarkit.Mapper.make ~inline_ext_default:(fun _m i -> Some i) ()
 
 let%expect_test "parse" =
   let cols =
@@ -135,15 +132,7 @@ let%expect_test "parse" =
     ]
   in
   let rows =
-    List.map parse_cases ~f:(fun (name, input) ->
-      let node = text_node ~base:0 input in
-      let result =
-        match Wikilink.inline_map dummy_mapper node with
-        | `Default -> "Default"
-        | `Map None -> "Deleted"
-        | `Map (Some inline) -> pp_inline inline
-      in
-      name, input, result)
+    List.map parse_cases ~f:(fun (name, input) -> name, input, parse_wikilinks input)
   in
   print_string (Ascii_table.to_string_noattr cols rows ~limit_width_to:150);
   [%expect
@@ -151,15 +140,14 @@ let%expect_test "parse" =
     ┌──────────────┬──────────────────────────────┬──────────────────────────────────────────────────────────────────────────────────────────┐
     │ name         │ input                        │ nodes                                                                                    │
     ├──────────────┼──────────────────────────────┼──────────────────────────────────────────────────────────────────────────────────────────┤
-    │ no wikilinks │ hello world                  │ Default                                                                                  │
+    │ no wikilinks │ hello world                  │ Text(hello world @0..10)                                                                 │
     │ single       │ before [[Note]] after        │ Inlines(@0..20)[Text(before  @0..6), Wikilink(((target (Note)) (fragment ()) (display () │
     │              │                              │ ) (embed false)) @7..14), Text( after @15..20)]                                          │
     │ multiple     │ [[A]] and [[B]]              │ Inlines(@0..14)[Wikilink(((target (A)) (fragment ()) (display ()) (embed false)) @0..4), │
     │              │                              │  Text( and  @5..9), Wikilink(((target (B)) (fragment ()) (display ()) (embed false)) @10 │
     │              │                              │ ..14)]                                                                                   │
-    │ embed        │ ![[image.png]]               │ Inlines(@0..13)[Wikilink(((target (image.png)) (fragment ()) (display ()) (embed true))  │
-    │              │                              │ @0..13)]                                                                                 │
-    │ unclosed     │ [[unclosed                   │ Inlines(@0..9)[Text([[unclosed @0..9)]                                                   │
+    │ embed        │ ![[image.png]]               │ Wikilink(((target (image.png)) (fragment ()) (display ()) (embed true)) @0..13)          │
+    │ unclosed     │ [[unclosed                   │ Text([[unclosed @0..9)                                                                   │
     │ adjacent     │ [[A]][[B]]                   │ Inlines(@0..9)[Wikilink(((target (A)) (fragment ()) (display ()) (embed false)) @0..4),  │
     │              │                              │ Wikilink(((target (B)) (fragment ()) (display ()) (embed false)) @5..9)]                 │
     │ with display │ see [[Note|click here]] done │ Inlines(@0..27)[Text(see  @0..3), Wikilink(((target (Note)) (fragment ()) (display ("cli │
@@ -182,32 +170,46 @@ let block_id_cases =
   ]
 ;;
 
+(* Block IDs are parsed natively by the fork via the [~block_id] knob; report
+   the id found on the (first) paragraph's metadata. *)
+let find_block_id (md : string) : string option =
+  let doc = Cmarkit.Doc.of_string ~block_id:true md in
+  let folder =
+    Cmarkit.Folder.make
+      ~block:(fun _f acc -> function
+        | Cmarkit.Block.Paragraph (_p, meta) ->
+          (match Cmarkit.Block.Block_id.find meta with
+           | Some bid -> Cmarkit.Folder.ret (Some (Cmarkit.Block.Block_id.id bid))
+           | None -> Cmarkit.Folder.default)
+        | _ -> Cmarkit.Folder.default)
+      ()
+  in
+  Cmarkit.Folder.fold_doc folder None doc
+;;
+
 let%expect_test "block_id" =
   let cols =
     [ Ascii_table.Column.create "name" (fun (n, _, _) -> n)
     ; Ascii_table.Column.create "input" (fun (_, i, _) -> i)
-    ; Ascii_table.Column.create "result" (fun (_, _, r) ->
-        Option.value_map r ~default:"-" ~f:(fun bid ->
-          Block_id.sexp_of_t bid |> Sexp.to_string_hum))
+    ; Ascii_table.Column.create "result" (fun (_, _, r) -> Option.value r ~default:"-")
     ]
   in
   let rows =
-    List.map block_id_cases ~f:(fun (name, input) -> name, input, Block_id.make_opt input)
+    List.map block_id_cases ~f:(fun (name, input) -> name, input, find_block_id input)
   in
   print_string (Ascii_table.to_string_noattr cols rows);
-  [%expect
-    {|
-    ┌───────────────────┬────────────────────┬──────────────────────────────┐
-    │ name              │ input              │ result                       │
-    ├───────────────────┼────────────────────┼──────────────────────────────┤
-    │ basic             │ Some text ^blockid │ ((id blockid) (byte_pos 10)) │
-    │ with hyphen       │ Text ^block-id     │ ((id block-id) (byte_pos 5)) │
-    │ no block id       │ Just text          │ -                            │
-    │ invalid _         │ Text ^block_id     │ -                            │
-    │ at start          │ ^blockid           │ ((id blockid) (byte_pos 0))  │
-    │ trailing space    │ Text ^blockid      │ ((id blockid) (byte_pos 5))  │
-    │ no space before ^ │ Text^blockid       │ ((id blockid) (byte_pos 4))  │
-    │ multiple ^        │ a ^x ^final1       │ ((id final1) (byte_pos 5))   │
-    └───────────────────┴────────────────────┴──────────────────────────────┘
+  [%expect {|
+    ┌───────────────────┬────────────────────┬──────────┐
+    │ name              │ input              │ result   │
+    ├───────────────────┼────────────────────┼──────────┤
+    │ basic             │ Some text ^blockid │ blockid  │
+    │ with hyphen       │ Text ^block-id     │ block-id │
+    │ no block id       │ Just text          │ -        │
+    │ invalid _         │ Text ^block_id     │ -        │
+    │ at start          │ ^blockid           │ blockid  │
+    │ trailing space    │ Text ^blockid      │ blockid  │
+    │ no space before ^ │ Text^blockid       │ blockid  │
+    │ multiple ^        │ a ^x ^final1       │ final1   │
+    └───────────────────┴────────────────────┴──────────┘
     |}]
 ;;

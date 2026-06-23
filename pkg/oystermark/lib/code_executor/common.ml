@@ -160,7 +160,7 @@ bar
   [%expect
     {|
     (((id 0) (lang (python)) (attr ()) (content "print(\"Hello\")"))
-     ((id 1) (lang (bash)) (attr (((id ()) (classes (.foo)) (kvs ((baz zzz))))))
+     ((id 1) (lang (bash)) (attr (((id ()) (classes (foo)) (kvs ((baz zzz))))))
       (content bar)))
     |}]
 ;;

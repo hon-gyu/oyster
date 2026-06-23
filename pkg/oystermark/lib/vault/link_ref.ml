@@ -21,14 +21,14 @@ let is_external (s : string) : bool =
   || String.is_prefix s ~prefix:"ftp://"
 ;;
 
-let of_wikilink (w : Wikilink.t) : t =
+let of_wikilink (w : Cmarkit.Inline.Wikilink.t) : t =
   let fragment =
-    match w.fragment with
+    match Cmarkit.Inline.Wikilink.fragment w with
     | None -> None
-    | Some (Wikilink.Heading hs) -> Some (Heading hs)
-    | Some (Wikilink.Block_ref s) -> Some (Block_ref s)
+    | Some (Cmarkit.Inline.Wikilink.Heading hs) -> Some (Heading hs)
+    | Some (Cmarkit.Inline.Wikilink.Block_ref s) -> Some (Block_ref s)
   in
-  { target = w.target; fragment }
+  { target = Cmarkit.Inline.Wikilink.target w; fragment }
 ;;
 
 let percent_decode (s : string) : string =
@@ -60,7 +60,7 @@ let of_cmark_dest (dest : string) : t option =
   if is_external decoded
   then None
   else (
-    let wikilink = Wikilink.make ~embed:false decoded in
+    let wikilink = Cmarkit.Inline.Wikilink.make ~embed:false decoded in
     Some (of_wikilink wikilink))
 ;;
 

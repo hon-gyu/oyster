@@ -79,7 +79,7 @@ let%expect_test "wikilink: deep path" =
   [%expect {| <p><a href="/dir/deep/">deep</a></p> |}]
 ;;
 
-(* Wikilink embeds
+(* Cmarkit.Inline.Wikilink embeds
    ==================================================================== *)
 
 let%expect_test "wikilink: embed image" =
@@ -253,7 +253,7 @@ let%expect_test "callout: not a callout" =
     |}]
 ;;
 
-(* Div
+(* Oy_div
    ==================================================================== *)
 
 let%expect_test "div: basic with class" =

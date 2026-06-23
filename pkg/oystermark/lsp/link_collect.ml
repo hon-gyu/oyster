@@ -36,7 +36,7 @@ let collect_links (doc : Cmarkit.Doc.t) : located_link list =
     Cmarkit.Folder.make
       ~inline_ext_default:(fun _f acc i ->
         match i with
-        | Oystermark.Parse.Wikilink.Ext_wikilink (wl, meta) ->
+        | Cmarkit.Inline.Ext_wikilink (wl, meta) ->
           let link_ref = Oystermark.Vault.Link_ref.of_wikilink wl in
           try_add_link acc link_ref (Cmarkit.Meta.textloc meta)
         | _ -> acc)

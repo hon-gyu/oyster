@@ -24,7 +24,7 @@
   ocaml
   (dune
    (>= 3.21))
-  cmarkit
+  oymarkit
   core
   yaml
   yojson
@@ -43,7 +43,7 @@
   (dune
    (>= 3.21))
   oystermark-core
-  cmarkit
+  oymarkit
   core
   core_unix
   tyxml

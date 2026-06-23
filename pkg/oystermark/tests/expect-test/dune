@@ -1,6 +1,6 @@
 (library
  (name test_oystermark_expect)
- (libraries oystermark cmarkit core textutils.ascii_table)
+ (libraries oystermark oymarkit core textutils.ascii_table)
  (inline_tests
   (deps
    (source_tree ../data)))

@@ -11,9 +11,9 @@ doc: "https://url/to/documentation"
 bug-reports: "https://github.com/username/reponame/issues"
 depends: [
   "ocaml"
-  "dune" {>= "3.22" & >= "3.21"}
+  "dune" {>= "3.22"}
   "oystermark-core"
-  "cmarkit"
+  "oymarkit"
   "core"
   "core_unix"
   "tyxml"

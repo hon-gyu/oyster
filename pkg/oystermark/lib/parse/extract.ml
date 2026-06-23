@@ -50,20 +50,21 @@ let get_heading_section (blocks : Cmarkit.Block.t list) (heading_id : string)
   | Some (heading, level, rest) -> heading :: collect level [] rest
 ;;
 
-(** Extract the block that {!Block_id.t} points to.
+(** Extract the block that {!Cmarkit.Block.Block_id.t} points to.
 
     Two cases:
-    - {b Inline}: the [^id] appears at the end of a paragraph with other content
-      ([byte_pos > 0]). The paragraph itself is the target.
-    - {b Standalone}: the [^id] is the entire paragraph ([byte_pos = 0]).
+    - {b Inline}: the [^id] appears at the end of a paragraph with other content.
+      The paragraph itself is the target.
+    - {b Standalone}: the [^id] is the entire paragraph.
       It references the previous non-blank block. *)
 let get_block_by_caret_id (blocks : Cmarkit.Block.t list) (id : string)
   : Cmarkit.Block.t option
   =
   let open Cmarkit in
   let has_matching_id (meta : Meta.t) : bool =
-    match Meta.find Block_id.meta_key meta with
-    | Some (block_id : Block_id.t) -> String.equal block_id.id id
+    match Block.Block_id.find meta with
+    | Some (block_id : Block.Block_id.t) ->
+      String.equal (Block.Block_id.id block_id) id
     | None -> false
   in
   (* A standalone [^id] paragraph is one whose entire inline content is just
