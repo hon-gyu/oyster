@@ -143,7 +143,6 @@ Second paragraph without block id
 Third paragraph ^block-2
 |}
   in
-  (* Block IDs are parsed natively by the fork via the [~block_id] knob. *)
   let doc = Cmarkit.Doc.of_string ~strict:false ~block_id:true md in
   let block_ids = extract_block_ids doc in
   List.iter block_ids ~f:(fun (b : block_entry) -> Printf.printf "%s\n" b.id);
