@@ -36,83 +36,83 @@ Attention:
 
 let%expect_test _ =
   let doc = example |> doc_of_string in
-  doc |> pp_doc_debug;
+  doc |> Format.printf "%a%!" pp_doc_debug;
   [%expect
     {|
-    K(Architecture, List[K(,
-    encoder–decoder. each half is a stack of six identical layers. self-attention and position-wise feed-forward replace recurrent and convolutional layers), K(encoder, List[K(self-attention,
-    multi-head, every position attends to every other input position), K(feed-forward,
-    position-wise MLP, applied independently at each step), K(residual + norm,
-    a residual connection wraps each sub-layer, followed by layer normalization)]), K(decoder, List[K(masked self-attention sub-layer, List[
+    K(Architecture:, List[K(: ,
+    encoder–decoder. each half is a stack of six identical layers. self-attention and position-wise feed-forward replace recurrent and convolutional layers), K(encoder:, List[K(self-attention: ,
+    multi-head, every position attends to every other input position), K(feed-forward: ,
+    position-wise MLP, applied independently at each step), K(residual + norm: ,
+    a residual connection wraps each sub-layer, followed by layer normalization)]), K(decoder:, List[K(masked self-attention sub-layer:, List[
     like the encoder's, but autoregressive,
-    position `i` can only attend to positions `≤ i`]), K(cross-attention,
-    multi-head attention over the encoder output.), K(feed-forward sub-layer,
-    same as on the encoder side), K(residual + norm, List[
+    position `i` can only attend to positions `≤ i`]), K(cross-attention: ,
+    multi-head attention over the encoder output.), K(feed-forward sub-layer: ,
+    same as on the encoder side), K(residual + norm:, List[
     as in the encoder])])])
-    K(Attention, List[K(scaled dot-product, List[K(definition,
-    `softmax(QKᵀ / √dₖ) V`), K(`√dₖ`, List[
-    dot products grow like `√dₖ` as the key dimension grows. dividing keeps the softmax out of its saturation regime, so gradients don't vanish])]), K(multi-head, List[K(procedure, List[
+    K(Attention:, List[K(scaled dot-product:, List[K(definition: ,
+    `softmax(QKᵀ / √dₖ) V`), K(`√dₖ`:, List[
+    dot products grow like `√dₖ` as the key dimension grows. dividing keeps the softmax out of its saturation regime, so gradients don't vanish])]), K(multi-head:, List[K(procedure:, List[
     run `h = 8` attention functions in parallel over learned linear projections of `Q`, `K`, `V`.,
-    concatenate the heads and project.]), K(why multiple heads, List[
+    concatenate the heads and project.]), K(why multiple heads:, List[
     each head can attend to a different representation subspace. a single softmax over averaged features cannot recover this.])])])
     |}];
-  doc |> pp_doc_sexp;
+  doc |> Format.printf "%a%!" pp_doc_sexp;
   [%expect
     {|
     (Blocks Blank_line
-      (Keyed_block (Text Architecture)
+      (Keyed (Text Architecture:)
         (List
-          (Keyed_list_item (Text "")
+          (Keyed (Text ": ")
             (Paragraph
               (Text
                 "encoder\226\128\147decoder. each half is a stack of six identical layers. self-attention and position-wise feed-forward replace recurrent and convolutional layers")))
-          (Keyed_list_item (Text encoder)
+          (Keyed (Text encoder:)
             (List
-              (Keyed_list_item (Text self-attention)
+              (Keyed (Text "self-attention: ")
                 (Paragraph
                   (Text
                     "multi-head, every position attends to every other input position")))
-              (Keyed_list_item (Text feed-forward)
+              (Keyed (Text "feed-forward: ")
                 (Paragraph
                   (Text "position-wise MLP, applied independently at each step")))
-              (Keyed_list_item (Text "residual + norm")
+              (Keyed (Text "residual + norm: ")
                 (Paragraph
                   (Text
                     "a residual connection wraps each sub-layer, followed by layer normalization")))))
-          (Keyed_list_item (Text decoder)
+          (Keyed (Text decoder:)
             (List
-              (Keyed_list_item (Text "masked self-attention sub-layer")
+              (Keyed (Text "masked self-attention sub-layer:")
                 (List (Paragraph (Text "like the encoder's, but autoregressive"))
                   (Paragraph
                     (Inlines (Text "position ") (Code_span i)
                       (Text " can only attend to positions ")
                       (Code_span "\226\137\164 i")))))
-              (Keyed_list_item (Text cross-attention)
+              (Keyed (Text "cross-attention: ")
                 (Paragraph
                   (Text "multi-head attention over the encoder output.")))
-              (Keyed_list_item (Text "feed-forward sub-layer")
+              (Keyed (Text "feed-forward sub-layer: ")
                 (Paragraph (Text "same as on the encoder side")))
-              (Keyed_list_item (Text "residual + norm")
+              (Keyed (Text "residual + norm:")
                 (List (Paragraph (Text "as in the encoder"))))))))
       Blank_line
-      (Keyed_block (Text Attention)
+      (Keyed (Text Attention:)
         (List
-          (Keyed_list_item (Text "scaled dot-product")
+          (Keyed (Text "scaled dot-product:")
             (List
-              (Keyed_list_item (Text definition)
+              (Keyed (Text "definition: ")
                 (Paragraph
                   (Code_span
                     "softmax(QK\225\181\128 / \226\136\154d\226\130\150) V")))
-              (Keyed_list_item (Code_span "\226\136\154d\226\130\150")
+              (Keyed (Inlines (Code_span "\226\136\154d\226\130\150") (Text :))
                 (List
                   (Paragraph
                     (Inlines (Text "dot products grow like ")
                       (Code_span "\226\136\154d\226\130\150")
                       (Text
                         " as the key dimension grows. dividing keeps the softmax out of its saturation regime, so gradients don't vanish")))))))
-          (Keyed_list_item (Text multi-head)
+          (Keyed (Text multi-head:)
             (List
-              (Keyed_list_item (Text procedure)
+              (Keyed (Text procedure:)
                 (List
                   (Paragraph
                     (Inlines (Text "run ") (Code_span "h = 8")
@@ -121,7 +121,7 @@ let%expect_test _ =
                       (Code_span Q) (Text ", ") (Code_span K) (Text ", ")
                       (Code_span V) (Text .)))
                   (Paragraph (Text "concatenate the heads and project."))))
-              (Keyed_list_item (Text "why multiple heads")
+              (Keyed (Text "why multiple heads:")
                 (List
                   (Paragraph
                     (Text
@@ -200,8 +200,8 @@ type visual =
 
 let rec block_to_visuals (b : Block.t) : visual list =
   match b with
-  | Ext_keyed_block (({ label }, body), _) | Ext_keyed_list_item (({ label }, body), _) ->
-    keyed_to_visual (inline_to_text label) body
+  | Block.Ext_keyed ((label, body), _) ->
+    keyed_to_visual (inline_to_text (Struct.label_key label)) body
   | Block.List (l, _) ->
     List.concat_map (Block.List'.items l) ~f:(fun (item, _) ->
       block_to_visuals (Block.List_item.block item))
@@ -291,19 +291,19 @@ let rec render (v : visual) : string list =
     [ top ] @ content @ [ bot ]
 ;;
 
-let pp_doc_graph (doc : Doc.t) : unit =
+let pp_doc_graph (ppf : Format.formatter) (doc : Doc.t) : unit =
   let visuals = block_to_visuals (Doc.block doc) in
   let all_lines =
     List.concat_mapi visuals ~f:(fun i v ->
       let lines = render v in
       if i > 0 then "" :: lines else lines)
   in
-  List.iter all_lines ~f:print_endline
+  List.iter all_lines ~f:(fun l -> Format.fprintf ppf "%s@\n" l)
 ;;
 
 let%expect_test "graph" =
   let doc = example |> doc_of_string in
-  doc |> pp_doc_graph;
+  doc |> Format.printf "%a%!" pp_doc_graph;
   [%expect
     {|
     ╭─ Architecture ───────────────────────────────────────────────────╮

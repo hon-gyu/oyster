@@ -2,14 +2,47 @@
 
 open Core
 open Cmarkit
-open Struct_common
 open Common.For_test
+
+let rewrite_doc = Cmarkit.Struct.rewrite_doc
+
+let sexp_of_block : Common.block_sexp =
+  fun ~recurse_inline ~recurse_block ~with_meta b ->
+  match b with
+  | Block.Ext_keyed ((label, body), meta) ->
+    Some
+      (with_meta
+         meta
+         (Sexp.List [ Atom "Keyed"; recurse_inline label; recurse_block body ]))
+  | _ -> None
+;;
+
+let debug_block_renderer : Cmarkit_renderer.block =
+  let open Cmarkit_renderer in
+  fun (c : context) (b : Block.t) ->
+    match b with
+    | Block.Ext_keyed ((label, body), _) ->
+      Context.string c "K(";
+      Context.inline c label;
+      Context.string c ", ";
+      Context.block c body;
+      Context.string c ")";
+      true
+    | Block.List (l, _) ->
+      Context.string c "List[";
+      List.iteri (Block.List'.items l) ~f:(fun i (item, _) ->
+        if i > 0 then Context.string c ", ";
+        Context.block c (Block.List_item.block item));
+      Context.string c "]";
+      true
+    | _ -> false
+;;
 
 let count_keyed (doc : Cmarkit.Doc.t) : int =
   let folder =
     Cmarkit.Folder.make
       ~block:(fun f acc -> function
-         | Ext_keyed_block ((label, b), _) | Ext_keyed_list_item ((label, b), _) ->
+         | Block.Ext_keyed ((_, b), _) ->
            Cmarkit.Folder.ret (1 + Cmarkit.Folder.fold_block f acc b)
          | _ -> Cmarkit.Folder.default)
       ()
@@ -18,97 +51,21 @@ let count_keyed (doc : Cmarkit.Doc.t) : int =
 ;;
 
 let doc_of_string ?paragraph_inline_value s =
-  let doc = Doc.of_string s in
+  (* The Struct pass keys on colon segments the inline parser attaches to a
+     paragraph's meta, which only happens in extension mode ([strict:false]). *)
+  let doc = Doc.of_string ~strict:false s in
   rewrite_doc ?paragraph_inline_value doc
 ;;
 
-let pp_doc_sexp doc = mk_pp_doc ~blocks:[ sexp_of_block ] () doc
+let pp_doc_sexp ppf doc = mk_pp_doc ~blocks:[ sexp_of_block ] () ppf doc
 
-let pp_doc_debug doc =
+let pp_doc_debug ppf doc =
   let r =
     Cmarkit_renderer.compose
       (Cmarkit_commonmark.renderer ())
       (Cmarkit_renderer.make ~block:debug_block_renderer ())
   in
-  Cmarkit_renderer.doc_to_string r doc |> print_endline
-;;
-
-let block_ext_fold : (Block.t, 'a) Folder.fold =
-  fun f acc b ->
-  match b with
-  | Ext_keyed_block ((_, body), _) | Ext_keyed_list_item ((_, body), _) ->
-    Folder.fold_block f acc body
-  | _ -> acc
-;;
-
-(** {1 Predicates} *)
-
-(** Every keyed node's body is non-empty. *)
-let keyed_bodies_non_empty (doc : Doc.t) : bool =
-  let folder =
-    Folder.make
-      ~block_ext_default:block_ext_fold
-      ~block:(fun _f acc b ->
-        match b with
-        | Ext_keyed_block ((_, Block.Blocks ([], _)), _)
-        | Ext_keyed_list_item ((_, Block.Blocks ([], _)), _) -> Folder.ret false
-        | _ -> if acc then Folder.default else Folder.ret false)
-      ()
-  in
-  Folder.fold_doc folder true doc
-;;
-
-(** Does this inline have a trailing colon that would absorb
-      following content?  Inline-value decompositions don't trigger
-      absorption and return [false]. *)
-let is_trailing_colon_absorbable (inline : Inline.t) : bool =
-  match Colon.decompose inline with
-  | Some (Colon.Chain_trailing_colon _) -> true
-  | _ -> false
-;;
-
-(** Does the last item of a list have a bare trailing colon with
-      valid labels? *)
-let list_last_item_is_bare_keyed (l : Block.List'.t) : bool =
-  match List.last (Block.List'.items l) with
-  | None -> false
-  | Some (item, _) ->
-    (match Block.List_item.block item with
-     | Block.Paragraph (p, _) -> is_trailing_colon_absorbable (Block.Paragraph.inline p)
-     | _ -> false)
-;;
-
-(** No keyable paragraph or keyable-last-item list is immediately
-      followed by a non-blank block.  Violation means the rewriter
-      missed an absorption. *)
-let keying_is_maximal (doc : Doc.t) : bool =
-  let ok = ref true in
-  let check_siblings bs =
-    let arr = Array.of_list bs in
-    let len = Array.length arr in
-    for i = 0 to len - 1 do
-      let absorbable =
-        match arr.(i) with
-        | Block.Paragraph (p, _) ->
-          is_trailing_colon_absorbable (Block.Paragraph.inline p)
-        | Block.List (l, _) -> list_last_item_is_bare_keyed l
-        | _ -> false
-      in
-      if absorbable && i + 1 < len && not (is_blank_line arr.(i + 1)) then ok := false
-    done
-  in
-  let folder =
-    Folder.make
-      ~block_ext_default:block_ext_fold
-      ~block:(fun _f acc b ->
-        (match b with
-         | Block.Blocks (bs, _) -> check_siblings bs
-         | _ -> ());
-        if acc then Folder.default else Folder.ret false)
-      ()
-  in
-  ignore (Folder.fold_doc folder true doc : bool);
-  !ok
+  Cmarkit_renderer.doc_to_string r doc |> Format.fprintf ppf "%s@\n"
 ;;
 
 (** {1 Examples} *)
@@ -122,10 +79,10 @@ let mk_example name content : example = { name; content }
 let expect_example ?paragraph_inline_value s =
   s |> printf "```md {#original}\n%s\n```\n";
   print_endline "```debug-view";
-  s |> doc_of_string ?paragraph_inline_value |> pp_doc_debug;
+  s |> doc_of_string ?paragraph_inline_value |> Format.printf "%a%!" pp_doc_debug;
   print_endline "```";
   print_endline "```sexp";
-  s |> doc_of_string |> pp_doc_sexp;
+  s |> doc_of_string |> Format.printf "%a%!" pp_doc_sexp;
   print_endline "```"
 ;;
 
@@ -480,36 +437,6 @@ let examples =
   ]
 ;;
 
-(** {2 Generator} *)
-
-let line_vocabulary =
-  [| "- foo:"
-   ; "- foo\\: bar:"
-   ; "- foo: bar:"
-   ; "- bar"
-   ; "  - nested"
-   ; "foo:"
-   ; "plain paragraph"
-   ; ""
-   ; "```"
-   ; "code line"
-   ; "> quoted"
-  |]
-;;
-
-let gen_markdown : string Core.Quickcheck.Generator.t =
-  let open Core.Quickcheck.Generator in
-  let open Core.Quickcheck.Generator.Let_syntax in
-  let%bind n = Core.Int.gen_incl 1 8 in
-  let%map lines =
-    list_with_length
-      n
-      (Core.Int.gen_incl 0 (Array.length line_vocabulary - 1)
-       >>| fun i -> line_vocabulary.(i))
-  in
-  String.concat ~sep:"\n" lines
-;;
-
 let%test_module _ =
   (module struct
     let%expect_test _ =
@@ -527,10 +454,10 @@ let%test_module _ =
         - foo: bar
         ```
         ```debug-view
-        List[K(foo, bar)]
+        List[K(foo: , bar)]
         ```
         ```sexp
-        (List (Keyed_list_item (Text foo) (Paragraph (Text bar))))
+        (List (Keyed (Text "foo: ") (Paragraph (Text bar))))
         ```
 
         Example 2: keyed_list_item_with_indented_content
@@ -541,13 +468,12 @@ let%test_module _ =
           - baz
         ```
         ```debug-view
-        List[K(foo, List[bar,
+        List[K(foo:, List[bar,
         baz])]
         ```
         ```sexp
         (List
-          (Keyed_list_item (Text foo)
-            (List (Paragraph (Text bar)) (Paragraph (Text baz)))))
+          (Keyed (Text foo:) (List (Paragraph (Text bar)) (Paragraph (Text baz)))))
         ```
 
         Example 3: three_levels
@@ -558,14 +484,14 @@ let%test_module _ =
         - C: c
         ```
         ```debug-view
-        K(A, List[K(B, b), K(C,
+        K(A:, List[K(B: , b), K(C: ,
         c)])
         ```
         ```sexp
         (Blocks
-          (Keyed_block (Text A)
-            (List (Keyed_list_item (Text B) (Paragraph (Text b)))
-              (Keyed_list_item (Text C) (Paragraph (Text c))))))
+          (Keyed (Text A:)
+            (List (Keyed (Text "B: ") (Paragraph (Text b)))
+              (Keyed (Text "C: ") (Paragraph (Text c))))))
         ```
 
         Example 4: four_levels
@@ -576,15 +502,14 @@ let%test_module _ =
         - C: c
         ```
         ```debug-view
-        K(A, List[K(B, K(b, List[K(C, c)]))])
+        K(A:, List[K(B: , K(b:, List[K(C: , c)]))])
         ```
         ```sexp
         (Blocks
-          (Keyed_block (Text A)
+          (Keyed (Text A:)
             (List
-              (Keyed_list_item (Text B)
-                (Keyed_list_item (Text b)
-                  (List (Keyed_list_item (Text C) (Paragraph (Text c)))))))))
+              (Keyed (Text "B: ")
+                (Keyed (Text b:) (List (Keyed (Text "C: ") (Paragraph (Text c)))))))))
         ```
 
         Example 5: no_body_no_following
@@ -605,11 +530,10 @@ let%test_module _ =
         - a: b: c
         ```
         ```debug-view
-        List[K(a, K(b, c))]
+        List[K(a: , K(b: , c))]
         ```
         ```sexp
-        (List
-          (Keyed_list_item (Text a) (Keyed_list_item (Text b) (Paragraph (Text c)))))
+        (List (Keyed (Text "a: ") (Keyed (Text "b: ") (Paragraph (Text c)))))
         ```
 
         Example 7: colon_chain_inline_keying
@@ -619,12 +543,11 @@ let%test_module _ =
           - baz
         ```
         ```debug-view
-        List[K(foo, K(bar, List[baz]))]
+        List[K(foo: , K(bar:, List[baz]))]
         ```
         ```sexp
         (List
-          (Keyed_list_item (Text foo)
-            (Keyed_list_item (Text bar) (List (Paragraph (Text baz))))))
+          (Keyed (Text "foo: ") (Keyed (Text bar:) (List (Paragraph (Text baz))))))
         ```
 
         Example 8: three_label_chain
@@ -634,13 +557,12 @@ let%test_module _ =
           - baz
         ```
         ```debug-view
-        List[K(a, K(b, K(c, List[baz])))]
+        List[K(a: , K(b: , K(c:, List[baz])))]
         ```
         ```sexp
         (List
-          (Keyed_list_item (Text a)
-            (Keyed_list_item (Text b)
-              (Keyed_list_item (Text c) (List (Paragraph (Text baz)))))))
+          (Keyed (Text "a: ")
+            (Keyed (Text "b: ") (Keyed (Text c:) (List (Paragraph (Text baz)))))))
         ```
 
         Example 9: two_independent_siblings
@@ -650,13 +572,12 @@ let%test_module _ =
         - x: y
         ```
         ```debug-view
-        List[K(a, K(b, c)), K(x,
+        List[K(a: , K(b: , c)), K(x: ,
         y)]
         ```
         ```sexp
-        (List
-          (Keyed_list_item (Text a) (Keyed_list_item (Text b) (Paragraph (Text c))))
-          (Keyed_list_item (Text x) (Paragraph (Text y))))
+        (List (Keyed (Text "a: ") (Keyed (Text "b: ") (Paragraph (Text c))))
+          (Keyed (Text "x: ") (Paragraph (Text y))))
         ```
 
         Example 10: paragraph_inline_value
@@ -665,10 +586,10 @@ let%test_module _ =
         foo: bar
         ```
         ```debug-view
-        K(foo, bar)
+        K(foo: , bar)
         ```
         ```sexp
-        (Keyed_block (Text foo) (Paragraph (Text bar)))
+        (Keyed (Text "foo: ") (Paragraph (Text bar)))
         ```
 
         Example 11: keyed_paragraph
@@ -681,15 +602,14 @@ let%test_module _ =
         bee
         ```
         ```debug-view
-        K(foo, List[bar,
+        K(foo:, List[bar,
         baz])
 
         bee
         ```
         ```sexp
         (Blocks
-          (Keyed_block (Text foo)
-            (List (Paragraph (Text bar)) (Paragraph (Text baz))))
+          (Keyed (Text foo:) (List (Paragraph (Text bar)) (Paragraph (Text baz))))
           Blank_line (Paragraph (Text bee)))
         ```
 
@@ -702,13 +622,13 @@ let%test_module _ =
         some text
         ```
         ```debug-view
-        K(foo, List[bar,
+        K(foo:, List[bar,
         baz
         some text])
         ```
         ```sexp
         (Blocks
-          (Keyed_block (Text foo)
+          (Keyed (Text foo:)
             (List (Paragraph (Text bar))
               (Paragraph (Inlines (Text baz) (Break soft) (Text "some text"))))))
         ```
@@ -720,12 +640,11 @@ let%test_module _ =
         - baz
         ```
         ```debug-view
-        K(foo, K(bar, List[baz]))
+        K(foo: , K(bar:, List[baz]))
         ```
         ```sexp
         (Blocks
-          (Keyed_block (Text foo)
-            (Keyed_block (Text bar) (List (Paragraph (Text baz))))))
+          (Keyed (Text "foo: ") (Keyed (Text bar:) (List (Paragraph (Text baz))))))
         ```
 
         Example 14: nesting
@@ -737,13 +656,13 @@ let%test_module _ =
         - qux
         ```
         ```debug-view
-        K(foo, List[K(bar, List[baz]),
+        K(foo:, List[K(bar:, List[baz]),
         qux])
         ```
         ```sexp
         (Blocks
-          (Keyed_block (Text foo)
-            (List (Keyed_list_item (Text bar) (List (Paragraph (Text baz))))
+          (Keyed (Text foo:)
+            (List (Keyed (Text bar:) (List (Paragraph (Text baz))))
               (Paragraph (Text qux)))))
         ```
 
@@ -753,11 +672,11 @@ let%test_module _ =
         - foo: bar *baz* qux
         ```
         ```debug-view
-        List[K(foo, bar *baz* qux)]
+        List[K(foo: , bar *baz* qux)]
         ```
         ```sexp
         (List
-          (Keyed_list_item (Text foo)
+          (Keyed (Text "foo: ")
             (Paragraph (Inlines (Text "bar ") (Emphasis (Text baz)) (Text " qux")))))
         ```
 
@@ -767,10 +686,10 @@ let%test_module _ =
         - foo: `code: thing`
         ```
         ```debug-view
-        List[K(foo, `code: thing`)]
+        List[K(foo: , `code: thing`)]
         ```
         ```sexp
-        (List (Keyed_list_item (Text foo) (Paragraph (Code_span "code: thing"))))
+        (List (Keyed (Text "foo: ") (Paragraph (Code_span "code: thing"))))
         ```
 
         Example 17: non_example_trailing_space
@@ -805,10 +724,10 @@ let%test_module _ =
         - http://x.com: click here
         ```
         ```debug-view
-        List[K(http://x.com, click here)]
+        List[K(http://x.com: , click here)]
         ```
         ```sexp
-        (List (Keyed_list_item (Text http://x.com) (Paragraph (Text "click here"))))
+        (List (Keyed (Text "http://x.com: ") (Paragraph (Text "click here"))))
         ```
 
         Example 20: escaped_colon
@@ -833,12 +752,12 @@ let%test_module _ =
           - baz
         ```
         ```debug-view
-        List[K(*foo*, List[bar,
+        List[K(*foo*:, List[bar,
         baz])]
         ```
         ```sexp
         (List
-          (Keyed_list_item (Emphasis (Text foo))
+          (Keyed (Inlines (Emphasis (Text foo)) (Text :))
             (List (Paragraph (Text bar)) (Paragraph (Text baz)))))
         ```
 
@@ -848,10 +767,11 @@ let%test_module _ =
         - *foo*: bar
         ```
         ```debug-view
-        List[K(*foo*, bar)]
+        List[K(*foo*: , bar)]
         ```
         ```sexp
-        (List (Keyed_list_item (Emphasis (Text foo)) (Paragraph (Text bar))))
+        (List
+          (Keyed (Inlines (Emphasis (Text foo)) (Text ": ")) (Paragraph (Text bar))))
         ```
 
         Example 23: emphasis_chain
@@ -861,12 +781,12 @@ let%test_module _ =
           - baz
         ```
         ```debug-view
-        List[K(*foo*, K(bar, List[baz]))]
+        List[K(*foo*: , K(bar:, List[baz]))]
         ```
         ```sexp
         (List
-          (Keyed_list_item (Emphasis (Text foo))
-            (Keyed_list_item (Text bar) (List (Paragraph (Text baz))))))
+          (Keyed (Inlines (Emphasis (Text foo)) (Text ": "))
+            (Keyed (Text bar:) (List (Paragraph (Text baz))))))
         ```
 
         Example 24: non_example_mixed_inline
@@ -903,10 +823,12 @@ let%test_module _ =
         - <http://foo.bar.baz>: bat
         ```
         ```debug-view
-        List[K(<http://foo.bar.baz>, bat)]
+        List[K(<http://foo.bar.baz>: , bat)]
         ```
         ```sexp
-        (List (Keyed_list_item (Autolink http://foo.bar.baz) (Paragraph (Text bat))))
+        (List
+          (Keyed (Inlines (Autolink http://foo.bar.baz) (Text ": "))
+            (Paragraph (Text bat))))
         ```
 
         Example 27: free_form_value
@@ -915,11 +837,11 @@ let%test_module _ =
         - foo: *bar* x
         ```
         ```debug-view
-        List[K(foo, *bar* x)]
+        List[K(foo: , *bar* x)]
         ```
         ```sexp
         (List
-          (Keyed_list_item (Text foo)
+          (Keyed (Text "foo: ")
             (Paragraph (Inlines (Emphasis (Text bar)) (Text " x")))))
         ```
 
@@ -964,12 +886,12 @@ let%test_module _ =
         text
         ```
         ```debug-view
-        List[K(a, x),
+        List[K(a: , x),
         b:
         text]
         ```
         ```sexp
-        (List (Keyed_list_item (Text a) (Paragraph (Text x)))
+        (List (Keyed (Text "a: ") (Paragraph (Text x)))
           (Paragraph (Inlines (Text b:) (Break soft) (Text text))))
         ```
 
@@ -982,12 +904,12 @@ let%test_module _ =
         ```
         ```
         ```debug-view
-        List[K(foo, ```
+        List[K(foo:, ```
         bar
         ```)]
         ```
         ```sexp
-        (Blocks (List (Keyed_list_item (Text foo) (Code_block no-info bar))))
+        (Blocks (List (Keyed (Text foo:) (Code_block no-info bar))))
         ```
 
         Example 32: list_continuation_across_absorbed_block
@@ -1001,7 +923,7 @@ let%test_module _ =
         - baz
         ```
         ```debug-view
-        List[foo, K(bar,
+        List[foo, K(bar:,
         ```py
         cb
         ```List[
@@ -1010,7 +932,7 @@ let%test_module _ =
         ```sexp
         (Blocks
           (List (Paragraph (Text foo))
-            (Keyed_list_item (Text bar)
+            (Keyed (Text bar:)
               (Blocks (Code_block py cb) (List (Paragraph (Text baz)))))))
         ```
 
@@ -1029,10 +951,10 @@ let%test_module _ =
         - d
         ```
         ```debug-view
-        List[a, K(b,
+        List[a, K(b:,
         ```
         cb1
-        ```List[K(c,
+        ```List[K(c:,
         ```
         cb2
         ```List[
@@ -1041,10 +963,10 @@ let%test_module _ =
         ```sexp
         (Blocks
           (List (Paragraph (Text a))
-            (Keyed_list_item (Text b)
+            (Keyed (Text b:)
               (Blocks (Code_block no-info cb1)
                 (List
-                  (Keyed_list_item (Text c)
+                  (Keyed (Text c:)
                     (Blocks (Code_block no-info cb2) (List (Paragraph (Text d))))))))))
         ```
 
@@ -1058,7 +980,7 @@ let%test_module _ =
         1. b
         ```
         ```debug-view
-        List[K(a, ```
+        List[K(a:, ```
         cb
         ```List[
         b])]
@@ -1066,7 +988,7 @@ let%test_module _ =
         ```sexp
         (Blocks
           (List
-            (Keyed_list_item (Text a)
+            (Keyed (Text a:)
               (Blocks (Code_block no-info cb) (List (Paragraph (Text b)))))))
         ```
 
@@ -1077,12 +999,12 @@ let%test_module _ =
         - B: b
         ```
         ```debug-view
-        List[K(, a), K(B,
+        List[K(: , a), K(B: ,
         b)]
         ```
         ```sexp
-        (List (Keyed_list_item (Text "") (Paragraph (Text a)))
-          (Keyed_list_item (Text B) (Paragraph (Text b))))
+        (List (Keyed (Text ": ") (Paragraph (Text a)))
+          (Keyed (Text "B: ") (Paragraph (Text b))))
         ```
 
         Example 36: empty_label_nested_under_paragraph_key
@@ -1093,14 +1015,14 @@ let%test_module _ =
         - B: b
         ```
         ```debug-view
-        K(A, List[K(, a), K(B,
+        K(A:, List[K(: , a), K(B: ,
         b)])
         ```
         ```sexp
         (Blocks
-          (Keyed_block (Text A)
-            (List (Keyed_list_item (Text "") (Paragraph (Text a)))
-              (Keyed_list_item (Text B) (Paragraph (Text b))))))
+          (Keyed (Text A:)
+            (List (Keyed (Text ": ") (Paragraph (Text a)))
+              (Keyed (Text "B: ") (Paragraph (Text b))))))
         ```
 
         Example 37: empty_label_with_trailing_colon_and_body
@@ -1110,10 +1032,10 @@ let%test_module _ =
           - nested
         ```
         ```debug-view
-        List[K(, List[nested])]
+        List[K(:, List[nested])]
         ```
         ```sexp
-        (List (Keyed_list_item (Text "") (List (Paragraph (Text nested)))))
+        (List (Keyed (Text :) (List (Paragraph (Text nested)))))
         ```
 
         Example 38: non_example_no_colon
@@ -1161,18 +1083,18 @@ let%test_module "paragraph_inline_value" =
         foo: bar
         ```
         ```debug-view
-        K(foo, bar)
+        K(foo: , bar)
         ```
         ```sexp
-        (Keyed_block (Text foo) (Paragraph (Text bar)))
+        (Keyed (Text "foo: ") (Paragraph (Text bar)))
         ```
         |}]
     ;;
 
     let%expect_test "with chain" =
       (* Paragraph chain without trailing-colon absorption. *)
-      {|a: b: c|} |> doc_of_string |> pp_doc_sexp;
-      [%expect {| (Keyed_block (Text a) (Keyed_block (Text b) (Paragraph (Text c)))) |}]
+      {|a: b: c|} |> doc_of_string |> Format.printf "%a%!" pp_doc_sexp;
+      [%expect {| (Keyed (Text "a: ") (Keyed (Text "b: ") (Paragraph (Text c)))) |}]
     ;;
 
     let%expect_test "disabled" =
@@ -1188,7 +1110,7 @@ let%test_module "paragraph_inline_value" =
         foo: bar
         ```
         ```sexp
-        (Keyed_block (Text foo) (Paragraph (Text bar)))
+        (Keyed (Text "foo: ") (Paragraph (Text bar)))
         ```
         |}]
     ;;
@@ -1206,10 +1128,10 @@ let%test_module "paragraph_inline_value" =
         - bar
         ```
         ```debug-view
-        K(foo, List[bar])
+        K(foo:, List[bar])
         ```
         ```sexp
-        (Blocks (Keyed_block (Text foo) (List (Paragraph (Text bar)))))
+        (Blocks (Keyed (Text foo:) (List (Paragraph (Text bar)))))
         ```
         |}]
     ;;

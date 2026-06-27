@@ -130,7 +130,7 @@ let of_doc (doc : Cmarkit.Doc.t) : Yaml.value option =
 ;;
 
 module For_test = struct
-  let pp_yaml (v : t option) : string =
+  let to_string (v : t option) : string =
     match v with
     | None -> "<none>"
     | Some v -> Yaml.to_string_exn v
@@ -138,7 +138,7 @@ module For_test = struct
 
   let%expect_test "no frontmatter" =
     let yaml, body = of_string "# Hello\n\nSome text" in
-    Printf.printf "yaml: %s\nbody: %s\n" (pp_yaml yaml) body;
+    Printf.printf "yaml: %s\nbody: %s\n" (to_string yaml) body;
     [%expect
       {|
     yaml: <none>
@@ -152,7 +152,7 @@ module For_test = struct
     let yaml, body =
       of_string "---\ntitle: Hello\ntags: [a, b]\n---\n# Hello\n\nSome text"
     in
-    Printf.printf "yaml: %sbody: %s\n" (pp_yaml yaml) body;
+    Printf.printf "yaml: %sbody: %s\n" (to_string yaml) body;
     [%expect
       {|
     yaml: title: Hello
@@ -167,7 +167,7 @@ module For_test = struct
 
   let%expect_test "unclosed frontmatter" =
     let yaml, body = of_string "---\ntitle: Hello\nno closing" in
-    Printf.printf "yaml: %s\nbody: %s\n" (pp_yaml yaml) body;
+    Printf.printf "yaml: %s\nbody: %s\n" (to_string yaml) body;
     [%expect
       {|
     yaml: <none>
@@ -179,7 +179,7 @@ module For_test = struct
 
   let%expect_test "empty frontmatter" =
     let yaml, body = of_string "---\n---\n# Body" in
-    Printf.printf "yaml: %sbody: %s\n" (pp_yaml yaml) body;
+    Printf.printf "yaml: %sbody: %s\n" (to_string yaml) body;
     [%expect
       {|
     yaml:

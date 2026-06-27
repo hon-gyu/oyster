@@ -72,10 +72,6 @@ let of_string
       body
   in
   let body_doc = Mapper.map_doc (mk_mapper ()) cmarkit_doc in
-  (* Block/inline attributes are now parsed natively by the fork (as
-     [Block.Ext_attributes] / [Inline.Ext_attributes] wrappers), so an
-     attribute line preceding a keyable paragraph is already a separate
-     block before Struct runs; Struct re-wraps the keyed node. *)
   let body_doc = if enable_struct then Struct.rewrite_doc body_doc else body_doc in
   match yaml_opt, Doc.block body_doc with
   | None, _ -> body_doc
@@ -91,9 +87,7 @@ let commonmark_of_doc (doc : Cmarkit.Doc.t) : string =
     List.fold
       ~f:Cmarkit_renderer.compose
       ~init:(Cmarkit_commonmark.renderer ())
-      [ Cmarkit_renderer.make ~block:Frontmatter.block_commonmark_renderer ()
-      ; Cmarkit_renderer.make ~block:Struct.block_commonmark_renderer ()
-      ]
+      [ Cmarkit_renderer.make ~block:Frontmatter.block_commonmark_renderer () ]
   in
   Cmarkit_renderer.doc_to_string r doc
 ;;
@@ -105,8 +99,8 @@ let commonmark_of_doc (doc : Cmarkit.Doc.t) : string =
    / {!Common.meta_sexp}. Here we compose them, placing the core converters
    last so extensions win on their constructors. *)
 
-(* Wikilinks are now parsed natively by the fork ({!Cmarkit.Inline.Wikilink})
-   via the [~wikilink] knob. *)
+(* Wikilinks are represented by {!Cmarkit.Inline.Wikilink} when the [~wikilink]
+   parser knob is enabled. *)
 let wikilink_sexp_of_inline : Common.inline_sexp =
   fun _recurse ~with_meta:_ i ->
   match i with
@@ -115,8 +109,8 @@ let wikilink_sexp_of_inline : Common.inline_sexp =
   | _ -> None
 ;;
 
-(* Divs are now parsed natively by the fork ({!Cmarkit.Block.Div}) via the
-   [~div] knob. *)
+(* Div fences are represented by {!Cmarkit.Block.Div} when the [~div] parser
+   knob is enabled. *)
 let div_sexp_of_block : Common.block_sexp =
   fun ~recurse_inline:_ ~recurse_block ~with_meta b ->
   match b with
@@ -134,8 +128,8 @@ let div_sexp_of_block : Common.block_sexp =
   | _ -> None
 ;;
 
-(* Block IDs are now parsed natively by the fork ({!Cmarkit.Block.Block_id}),
-   attached to paragraph metadata via the [~block_id] knob. *)
+(* Block IDs are attached to paragraph metadata as {!Cmarkit.Block.Block_id}
+   values when the [~block_id] parser knob is enabled. *)
 let block_id_sexp_of_meta : Common.meta_sexp =
   fun meta ->
   Cmarkit.Block.Block_id.find meta
@@ -143,9 +137,8 @@ let block_id_sexp_of_meta : Common.meta_sexp =
     Sexp.List [ Atom "block-id"; Atom (Cmarkit.Block.Block_id.id bid) ])
 ;;
 
-(* Inline/block attributes are now parsed natively by the fork
-   ({!Cmarkit.Inline.Ext_attributes} / {!Cmarkit.Block.Ext_attributes}): a
-   wrapper node carrying the merged {!Cmarkit.Attribute.t} and the target. *)
+(* Inline/block attributes are wrapper nodes carrying the merged
+   {!Cmarkit.Attribute.t} and the target. *)
 let inline_attributes_sexp_of_inline : Common.inline_sexp =
   fun recurse ~with_meta i ->
   match i with
@@ -178,9 +171,8 @@ let block_attributes_sexp_of_block : Common.block_sexp =
   | _ -> None
 ;;
 
-(* Callout is now parsed natively by the fork ({!Cmarkit.Block.Callout}); the
-   metadata carries only kind and fold (the title lives in the block-quote
-   body). *)
+(* Callout metadata carries only kind and fold; the title lives in the
+   block-quote body. *)
 let callout_sexp_of_meta : Common.meta_sexp =
   fun meta ->
   Cmarkit.Block.Callout.find meta
@@ -231,9 +223,9 @@ module For_test = struct
     Cmarkit.Doc.block doc
   ;;
 
-  let pp_doc (doc : Cmarkit.Doc.t) : unit =
+  let pp_doc (ppf : Format.formatter) (doc : Cmarkit.Doc.t) : unit =
     let block = Cmarkit.Doc.block doc in
-    block |> sexp_of_block |> Sexp.to_string_hum ~indent:2 |> print_endline
+    block |> sexp_of_block |> Sexp.to_string_hum ~indent:2 |> Format.fprintf ppf "%s@\n"
   ;;
 end
 
@@ -246,21 +238,23 @@ let%test_module "Extract" =
     open For_test
     open Extract.For_test
 
-    let pp_section (blocks : Cmarkit.Block.t list) : unit =
-      print_endline
+    let pp_section (ppf : Format.formatter) (blocks : Cmarkit.Block.t list) : unit =
+      Format.fprintf
+        ppf
+        "%s@\n"
         (commonmark_of_doc
            (Cmarkit.Doc.make (Cmarkit.Block.Blocks (blocks, Cmarkit.Meta.none))))
     ;;
 
-    let pp_block_opt (block : Cmarkit.Block.t option) : unit =
+    let pp_block_opt (ppf : Format.formatter) (block : Cmarkit.Block.t option) : unit =
       match block with
-      | None -> print_endline "<none>"
-      | Some b -> print_endline (commonmark_of_doc (Cmarkit.Doc.make b))
+      | None -> Format.fprintf ppf "<none>@\n"
+      | Some b -> Format.fprintf ppf "%s@\n" (commonmark_of_doc (Cmarkit.Doc.make b))
     ;;
 
     let%expect_test "get_heading_section: heading-1" =
       let block = make_block example_headings in
-      pp_section (Extract.get_heading_section [ block ] "heading-1");
+      Format.printf "%a%!" pp_section (Extract.get_heading_section [ block ] "heading-1");
       [%expect
         {|
     # Heading 1
@@ -274,7 +268,7 @@ let%test_module "Extract" =
 
     let%expect_test "get_heading_section: heading-8" =
       let block = make_block example_headings in
-      pp_section (Extract.get_heading_section [ block ] "heading-8");
+      Format.printf "%a%!" pp_section (Extract.get_heading_section [ block ] "heading-8");
       [%expect
         {|
     ## Heading 8
@@ -284,25 +278,25 @@ let%test_module "Extract" =
 
     let%expect_test "get_block_by_caret_id: inline" =
       let doc = of_string example_inline_caret_id in
-      pp_block_opt (Extract.get_block_by_caret_id [ Cmarkit.Doc.block doc ] "abc123");
+      Format.printf "%a%!" pp_block_opt (Extract.get_block_by_caret_id [ Cmarkit.Doc.block doc ] "abc123");
       [%expect {| Second paragraph text ^abc123 |}]
     ;;
 
     let%expect_test "get_block_by_caret_id: standalone blockquote" =
       let doc = of_string example_blockquote_caret_id in
-      pp_block_opt (Extract.get_block_by_caret_id [ Cmarkit.Doc.block doc ] "bq001");
+      Format.printf "%a%!" pp_block_opt (Extract.get_block_by_caret_id [ Cmarkit.Doc.block doc ] "bq001");
       [%expect {| > A blockquote here. |}]
     ;;
 
     let%expect_test "get_block_by_caret_id: not found" =
       let doc = of_string example_not_found in
-      pp_block_opt (Extract.get_block_by_caret_id [ Cmarkit.Doc.block doc ] "nope");
+      Format.printf "%a%!" pp_block_opt (Extract.get_block_by_caret_id [ Cmarkit.Doc.block doc ] "nope");
       [%expect {| <none> |}]
     ;;
 
     let%expect_test "get_block_by_caret_id: standalone list" =
       let doc = of_string example_list_caret_id in
-      pp_block_opt (Extract.get_block_by_caret_id [ Cmarkit.Doc.block doc ] "lst001");
+      Format.printf "%a%!" pp_block_opt (Extract.get_block_by_caret_id [ Cmarkit.Doc.block doc ] "lst001");
       [%expect
         {|
     - Item one
@@ -312,9 +306,9 @@ let%test_module "Extract" =
 
     let%expect_test "get_block_by_caret_id: nested list" =
       let doc = of_string example_nested_list_caret_id in
-      pp_block_opt (Extract.get_block_by_caret_id [ Cmarkit.Doc.block doc ] "firstline");
+      Format.printf "%a%!" pp_block_opt (Extract.get_block_by_caret_id [ Cmarkit.Doc.block doc ] "firstline");
       [%expect {| a nested list ^firstline |}];
-      pp_block_opt (Extract.get_block_by_caret_id [ Cmarkit.Doc.block doc ] "inneritem");
+      Format.printf "%a%!" pp_block_opt (Extract.get_block_by_caret_id [ Cmarkit.Doc.block doc ] "inneritem");
       [%expect
         {|
     item
@@ -341,10 +335,6 @@ let%test_module "Oy_div and Struct" =
     open Common.For_test
     open For_test
 
-    (* Div example fixtures (relocated from the deleted [Oy_div.For_test];
-       divs are now parsed natively by the fork). The third tuple element is
-       the legacy expected div count, kept only so existing call sites compile;
-       the actual counts are printed into the expect output below. *)
     let example_basic =
       ( "basic"
       , {|::: warning
@@ -433,8 +423,7 @@ content
              | Cmarkit.Block.Ext_div (d, _) ->
                Cmarkit.Folder.ret
                  (1 + Cmarkit.Folder.fold_block f acc (Cmarkit.Block.Div.block d))
-             | Struct.Ext_keyed_block ((_label, block), _)
-             | Struct.Ext_keyed_list_item ((_label, block), _) ->
+             | Cmarkit.Block.Ext_keyed ((_label, block), _) ->
                Cmarkit.Folder.ret (Cmarkit.Folder.fold_block f acc block)
              | _ -> Cmarkit.Folder.default)
           ()
@@ -449,8 +438,7 @@ content
              | Cmarkit.Block.Ext_div (d, _) ->
                Cmarkit.Folder.ret
                  (Cmarkit.Folder.fold_block f acc (Cmarkit.Block.Div.block d))
-             | Struct.Ext_keyed_block ((_label, block), _)
-             | Struct.Ext_keyed_list_item ((_label, block), _) ->
+             | Cmarkit.Block.Ext_keyed ((_label, block), _) ->
                Cmarkit.Folder.ret (1 + Cmarkit.Folder.fold_block f acc block)
              | _ -> Cmarkit.Folder.default)
           ()
@@ -458,21 +446,17 @@ content
       Cmarkit.Folder.fold_doc folder 0 doc
     ;;
 
-    let pp_src src =
-      print_endline "```md {#original}";
-      print_endline src;
-      print_endline "```"
-    ;;
+    let pp_src ppf src = Format.fprintf ppf "```md {#original}@\n%s@\n```@\n" src
 
-    (* [n_div]/[n_keyed] are ignored: the actual fork counts are printed so the
-       expect output reflects the fork's native div parsing. *)
+    (* [n_div]/[n_keyed] are ignored: the actual counts are printed so the expect
+       output reflects the parser configuration. *)
     let test ?(n_div : int = 0) ?(n_keyed : int = 0) (_name, src, _expected_n_div) =
       ignore (n_div : int);
       ignore (n_keyed : int);
-      pp_src src;
+      Format.printf "%a%!" pp_src src;
       let doc = of_string src in
       print_endline "```sexp";
-      pp_doc doc;
+      Format.printf "%a%!" pp_doc doc;
       print_endline "```";
       Printf.printf "n_div=%d n_keyed=%d\n" (count_div doc) (count_keyed doc)
     ;;
@@ -614,7 +598,7 @@ content
         ```
         ```sexp
         (Blocks
-          (Keyed_block (Text ::)
+          (Keyed (Text "::: ")
             (Paragraph (Inlines (Text "warning extra") (Break soft) (Text content))))
           (Div (class) (Blocks)))
         ```
@@ -688,7 +672,7 @@ code2
         ```sexp
         (Blocks
           (List (Paragraph (Text foo))
-            (Keyed_list_item (Text bar)
+            (Keyed (Text bar:)
               (Div (class two-example)
                 (Blocks
                   ((Code_block py code1)
@@ -723,7 +707,7 @@ let%test_module "Block attribute" =
 body
 :::|}
       in
-      pp_doc doc;
+      Format.printf "%a%!" pp_doc doc;
       [%expect
         {| (Attributes #foo (Div (class warning) (Paragraph (Text body)))) |}]
     ;;
@@ -735,12 +719,9 @@ body
 key:
 - bar|}
       in
-      pp_doc doc;
+      Format.printf "%a%!" pp_doc doc;
       [%expect
-        {|
-        (Blocks
-          (Attributes #foo (Keyed_block (Text key) (List (Paragraph (Text bar))))))
-        |}]
+        {| (Blocks (Attributes #foo (Keyed (Text key:) (List (Paragraph (Text bar)))))) |}]
     ;;
 
     let%expect_test "attaches to keyed list" =
@@ -750,23 +731,41 @@ key:
 - key:
   - bar|}
       in
-      pp_doc doc;
+      Format.printf "%a%!" pp_doc doc;
       [%expect
-        {|
-        (Attributes #foo
-          (List (Keyed_list_item (Text key) (List (Paragraph (Text bar))))))
-        |}]
+        {| (Attributes #foo (List (Keyed (Text key:) (List (Paragraph (Text bar)))))) |}]
     ;;
 
     let%expect_test "no attribute" =
       let doc = of_string "foo" in
-      pp_doc doc;
+      Format.printf "%a%!" pp_doc doc;
       [%expect {| (Paragraph (Text foo)) |}]
     ;;
 
-    (* The fork's commonmark renderer re-emits [{...}] specifiers from the
-       wrapper, so block/inline attributes (and an attribute wrapping a keyed
-       node) round-trip through [commonmark_of_doc] idempotently. *)
+    (* A djot inline attribute inside a keyable paragraph rides on the inline it
+       follows (the fork's [keyed_last_pass] attaches it like the normal inline
+       pass). It is content-invisible: keying is unaffected on the value side,
+       and the key itself may carry one. *)
+    let%expect_test "inline attribute on keyed value" =
+      let doc = of_string "key: value{.x}" in
+      Format.printf "%a%!" pp_doc doc;
+      [%expect
+        {| (Keyed (Text "key: ") (Paragraph (Attributes .x (Text value)))) |}]
+    ;;
+
+    let%expect_test "inline attribute on keyed key" =
+      let doc = of_string "key{.x}: value" in
+      Format.printf "%a%!" pp_doc doc;
+      [%expect
+        {|
+        (Keyed (Inlines (Attributes .x (Text key)) (Text ": "))
+          (Paragraph (Text value)))
+        |}]
+    ;;
+
+    (* The CommonMark renderer re-emits [{...}] specifiers from the wrapper, so
+       block/inline attributes (and an attribute wrapping a keyed node) round-trip
+       through [commonmark_of_doc] idempotently. *)
     let%test_unit "commonmark roundtrip is idempotent" =
       List.iter
         [ "{#foo .bar}\nkey:\n- bar"
@@ -775,6 +774,10 @@ key:
         ; "word{lang=fr}{.blue}"
         ; "{#water .important key=\"my val\"}\nDon't forget!"
         ; "{#custom .big}\n# Hello world"
+        ; (* inline attribute inside a keyable paragraph: value-side and key-side *)
+          "key: value{.x}"
+        ; "key{.x}: value"
+        ; "a: b{.x}: c"
         ]
         ~f:
           (Common.For_test.commonmark_of_doc_idempotent

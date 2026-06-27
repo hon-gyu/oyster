@@ -457,6 +457,87 @@ let render_struct
   C.string c "</div>\n</div>\n"
 ;;
 
+(* List-item body rendering for non-keyed items inside a mixed keyed list.
+   [Cmarkit_html] does not expose its list-item helper, and once oystermark
+   handles a list for semantic keyed markup it must emit every [<li>] itself.
+   Nested blocks still go through [C.block], so nested keyed lists compose. *)
+let rec item_block ~(tight : bool) c : Block.t -> unit = function
+  | Block.Blank_line _ -> ()
+  | Block.Ext_keyed _ as b -> item_block ~tight c (Struct.unkey b)
+  | Block.Paragraph (p, _) when tight -> C.inline c (Block.Paragraph.inline p)
+  | Block.Blocks (bs, _) ->
+    let rec loop add_nl = function
+      | Block.Blank_line _ :: bs -> loop add_nl bs
+      | Block.Paragraph (p, _) :: bs when tight ->
+        C.inline c (Block.Paragraph.inline p);
+        loop true bs
+      | b :: bs ->
+        if add_nl then C.byte c '\n';
+        C.block c b;
+        loop false bs
+      | [] -> ()
+    in
+    loop true bs
+  | b ->
+    C.byte c '\n';
+    C.block c b
+;;
+
+let list_has_keyed (l : Block.List'.t) : bool =
+  List.exists (Block.List'.items l) ~f:(fun (item, _) ->
+    match Block.List_item.block item with
+    | Block.Ext_keyed _ -> true
+    | _ -> false)
+;;
+
+let keyed_list_item ~(style : struct_style) ~(tight : bool) c (item, _) =
+  let render_body () =
+    match Block.List_item.block item with
+    | Block.Ext_keyed ((label, body), _) ->
+      C.byte c '\n';
+      render_struct ~style `List_item c (Struct.label_key label) body
+    | b -> item_block ~tight c b
+  in
+  C.string c "<li>";
+  match Block.List_item.ext_task_marker item with
+  | None ->
+    render_body ();
+    C.string c "</li>\n"
+  | Some (mark, _) ->
+    let close =
+      match Block.List_item.task_status_of_task_marker mark with
+      | `Unchecked ->
+        C.string c "<div class=\"task\"><input type=\"checkbox\" disabled><div>";
+        "</div></div></li>\n"
+      | `Checked | `Other _ ->
+        C.string
+          c
+          "<div class=\"task\"><input type=\"checkbox\" disabled checked><div>";
+        "</div></div></li>\n"
+      | `Cancelled ->
+        C.string c "<div class=\"task\"><input type=\"checkbox\" disabled><del>";
+        "</del></div></li>\n"
+    in
+    render_body ();
+    C.string c close
+;;
+
+(* Render a list that contains keyed items. Plain lists are left to
+   [Cmarkit_html.renderer], but a mixed keyed list needs positional control so a
+   keyed list item can become semantic HTML inside its own [<li>]. *)
+let render_keyed_list ~(style : struct_style) c (l : Block.List'.t) =
+  let tight = Block.List'.tight l in
+  let opening, closing =
+    match Block.List'.type' l with
+    | `Unordered _ -> "<ul>\n", "</ul>\n"
+    | `Ordered (start, _) ->
+      (if start = 1 then "<ol>\n" else sprintf "<ol start=\"%d\">\n" start), "</ol>\n"
+  in
+  C.string c opening;
+  List.iter (Block.List'.items l) ~f:(keyed_list_item ~style ~tight c);
+  C.string c closing
+;;
+
 (** Render a block, optionally carrying a Djot [attr] from an enclosing
     {!Cmarkit.Block.Ext_attributes} wrapper. Returns [false] (defer) for
     blocks that need no oystermark-specific handling and no attribute. *)
@@ -558,11 +639,14 @@ let render_block
        struct_style := prev);
     C.string c "</div>\n";
     true
-  | Parse.Struct.Ext_keyed_block (({ label }, body), _) ->
-    render_struct ~style:!struct_style `Paragraph c label body;
+  | Cmarkit.Block.Ext_keyed ((label, body), _) ->
+    (* A keyed node reached here is a {e free} block (a top-level keyed node, or
+       the body of another keyed node). A keyed node that is a list item's block
+       is handled positionally by [render_keyed_list], not here. *)
+    render_struct ~style:!struct_style `Paragraph c (Struct.label_key label) body;
     true
-  | Parse.Struct.Ext_keyed_list_item (({ label }, body), _) ->
-    render_struct ~style:!struct_style `List_item c label body;
+  | Block.List (l, _) when list_has_keyed l ->
+    render_keyed_list ~style:!struct_style c l;
     true
   | Block.Blocks (blocks, meta) ->
     (match Meta.find Embed.embed_meta_key meta with
@@ -636,27 +720,29 @@ module For_test = struct
       doc
   ;;
 
-  let pp_doc struct_style doc = html_of_doc struct_style doc |> print_string
+  let pp_doc struct_style ppf doc =
+    html_of_doc struct_style doc |> Format.pp_print_string ppf
+  ;;
 end
 
 let%expect_test "block attribute on paragraph" =
   let open For_test in
   let doc = Parse.of_string "{#water .important key=\"my val\"}\nDon't forget!" in
-  pp_doc `Plain doc;
+  Format.printf "%a%!" (pp_doc `Plain) doc;
   [%expect {| <p id="water" class="important" key="my val">Don't forget!</p> |}]
 ;;
 
 let%expect_test "block attribute on heading combines with slug; attr id wins" =
   let open For_test in
   let doc = Parse.of_string "{#custom .big}\n# Hello world" in
-  pp_doc `Plain doc;
+  Format.printf "%a%!" (pp_doc `Plain) doc;
   [%expect {| <h1 id="custom" class="big">Hello world</h1> |}]
 ;;
 
 let%expect_test "block attribute on blockquote" =
   let open For_test in
   let doc = Parse.of_string "{source=\"Iliad\"}\n> Sing, muse" in
-  pp_doc `Plain doc;
+  Format.printf "%a%!" (pp_doc `Plain) doc;
   [%expect
     {|
     <blockquote source="Iliad">
@@ -669,7 +755,7 @@ let%expect_test "code block pandoc attribute renders as data-attr-*" =
   let open For_test in
   let src = "```python {#snippet .runnable timeout=30}\nprint('hi')\n```" in
   let doc = Parse.of_string src in
-  pp_doc `Plain doc;
+  Format.printf "%a%!" (pp_doc `Plain) doc;
   [%expect
     {|
     <pre><code class="language-python" data-attr-id="snippet" data-attr-class="runnable" data-attr-timeout="30">print('hi')
@@ -681,7 +767,7 @@ let%expect_test "orphan block attribute emits no HTML" =
   let open For_test in
   (* Orphan attribute paragraph (followed by blank line, no target) *)
   let doc = Parse.of_string "{#orphan}\n\nA paragraph." in
-  pp_doc `Plain doc;
+  Format.printf "%a%!" (pp_doc `Plain) doc;
   [%expect {| <p>A paragraph.</p> |}]
 ;;
 
@@ -705,7 +791,7 @@ Single:
 |}
   in
   let doc = Parse.of_string src in
-  pp_doc `Plain doc;
+  Format.printf "%a%!" (pp_doc `Plain) doc;
   [%expect
     {|
     <div class="keyed" data-label-kind="paragraph" data-style="plain" data-body="list"><span class="keyed-label">Architecture</span>
@@ -810,13 +896,13 @@ let%test_module "don't throw" =
       let examples : string list =
         List.concat
           [ List.map ~f:(fun ex -> ex.content) Parse.Struct.For_test.examples
-          ; (* div smoke-test inputs (divs are now parsed natively by the fork) *)
+          ; (* div smoke-test inputs *)
             [ "::: warning\nbody\n:::"
             ; ":::: outer\n::: inner\ncontent\n:::\n::::"
             ; "::: warning\nunclosed content"
             ; "- foo:\n::: warning\ncontent\n:::\n- bar"
             ]
-          ; (* callout smoke-test inputs (callout is now parsed natively by the fork) *)
+          ; (* callout smoke-test inputs *)
             [ "> [!info] Here's a callout title"
             ; "> [!tip]"
             ; "> [!faq]- Are callouts foldable?"

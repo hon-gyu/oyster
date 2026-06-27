@@ -4,30 +4,36 @@ open Oystermark
 (* Pretty-printing helpers
 -------------------- *)
 
-let pp_textloc (meta : Cmarkit.Meta.t) =
+let pp_textloc ppf (meta : Cmarkit.Meta.t) =
   let loc = Cmarkit.Meta.textloc meta in
   if Cmarkit.Textloc.is_none loc
-  then "none"
+  then Format.pp_print_string ppf "none"
   else
-    Printf.sprintf
+    Format.fprintf
+      ppf
       "%d..%d"
       (Cmarkit.Textloc.first_byte loc)
       (Cmarkit.Textloc.last_byte loc)
 ;;
 
-let rec pp_inline = function
-  | Cmarkit.Inline.Text (s, m) -> Printf.sprintf "Text(%s @%s)" s (pp_textloc m)
+let rec pp_inline ppf = function
+  | Cmarkit.Inline.Text (s, m) -> Format.fprintf ppf "Text(%s @%a)" s pp_textloc m
   | Cmarkit.Inline.Inlines (is, m) ->
-    Printf.sprintf
-      "Inlines(@%s)[%s]"
-      (pp_textloc m)
-      (List.map is ~f:pp_inline |> String.concat ~sep:", ")
+    Format.fprintf
+      ppf
+      "Inlines(@%a)[%a]"
+      pp_textloc
+      m
+      (Format.pp_print_list ~pp_sep:(fun ppf () -> Format.fprintf ppf ", ") pp_inline)
+      is
   | Cmarkit.Inline.Ext_wikilink (w, m) ->
-    Printf.sprintf
-      "Wikilink(%s @%s)"
+    Format.fprintf
+      ppf
+      "Wikilink(%s @%a)"
       (Parse.Common.sexp_of_wikilink w |> Sexp.to_string_hum)
-      (pp_textloc m)
-  | _ -> "?"
+      pp_textloc
+      m
+  | _ -> Format.pp_print_string ppf "?"
 ;;
 
 (* Expect tests
@@ -120,7 +126,7 @@ let parse_wikilinks (input : string) : string =
     | _ -> None
   in
   match first_paragraph (Cmarkit.Doc.block doc) with
-  | Some inline -> pp_inline inline
+  | Some inline -> Format.asprintf "%a" pp_inline inline
   | None -> "<empty>"
 ;;
 
