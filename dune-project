@@ -23,7 +23,7 @@
  (depends
   ocaml
   (dune
-   (>= 3.21))
+   (>= 3.22))
   oymarkit
   core
   yaml
@@ -41,7 +41,7 @@
  (depends
   ocaml
   (dune
-   (>= 3.21))
+   (>= 3.22))
   oystermark-core
   oymarkit
   core
@@ -74,7 +74,7 @@
   (depends
   ocaml
   (dune
-    (>= 3.21))
+    (>= 3.22))
   core
   opentelemetry
   trace
