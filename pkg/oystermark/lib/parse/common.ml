@@ -295,9 +295,9 @@ module For_test = struct
     doc'
   ;;
 
-  let mk_pp_doc ?inlines ?blocks ?metas () doc =
+  let mk_pp_doc ?inlines ?blocks ?metas () ppf doc =
     (make_sexp_of ?inlines ?blocks ?metas ()).doc doc
     |> Sexp.to_string_hum ~indent:2
-    |> print_endline
+    |> Format.fprintf ppf "%s@\n"
   ;;
 end

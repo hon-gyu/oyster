@@ -720,27 +720,29 @@ module For_test = struct
       doc
   ;;
 
-  let pp_doc struct_style doc = html_of_doc struct_style doc |> print_string
+  let pp_doc struct_style ppf doc =
+    html_of_doc struct_style doc |> Format.pp_print_string ppf
+  ;;
 end
 
 let%expect_test "block attribute on paragraph" =
   let open For_test in
   let doc = Parse.of_string "{#water .important key=\"my val\"}\nDon't forget!" in
-  pp_doc `Plain doc;
+  Format.printf "%a%!" (pp_doc `Plain) doc;
   [%expect {| <p id="water" class="important" key="my val">Don't forget!</p> |}]
 ;;
 
 let%expect_test "block attribute on heading combines with slug; attr id wins" =
   let open For_test in
   let doc = Parse.of_string "{#custom .big}\n# Hello world" in
-  pp_doc `Plain doc;
+  Format.printf "%a%!" (pp_doc `Plain) doc;
   [%expect {| <h1 id="custom" class="big">Hello world</h1> |}]
 ;;
 
 let%expect_test "block attribute on blockquote" =
   let open For_test in
   let doc = Parse.of_string "{source=\"Iliad\"}\n> Sing, muse" in
-  pp_doc `Plain doc;
+  Format.printf "%a%!" (pp_doc `Plain) doc;
   [%expect
     {|
     <blockquote source="Iliad">
@@ -753,7 +755,7 @@ let%expect_test "code block pandoc attribute renders as data-attr-*" =
   let open For_test in
   let src = "```python {#snippet .runnable timeout=30}\nprint('hi')\n```" in
   let doc = Parse.of_string src in
-  pp_doc `Plain doc;
+  Format.printf "%a%!" (pp_doc `Plain) doc;
   [%expect
     {|
     <pre><code class="language-python" data-attr-id="snippet" data-attr-class="runnable" data-attr-timeout="30">print('hi')
@@ -765,7 +767,7 @@ let%expect_test "orphan block attribute emits no HTML" =
   let open For_test in
   (* Orphan attribute paragraph (followed by blank line, no target) *)
   let doc = Parse.of_string "{#orphan}\n\nA paragraph." in
-  pp_doc `Plain doc;
+  Format.printf "%a%!" (pp_doc `Plain) doc;
   [%expect {| <p>A paragraph.</p> |}]
 ;;
 
@@ -789,7 +791,7 @@ Single:
 |}
   in
   let doc = Parse.of_string src in
-  pp_doc `Plain doc;
+  Format.printf "%a%!" (pp_doc `Plain) doc;
   [%expect
     {|
     <div class="keyed" data-label-kind="paragraph" data-style="plain" data-body="list"><span class="keyed-label">Architecture</span>

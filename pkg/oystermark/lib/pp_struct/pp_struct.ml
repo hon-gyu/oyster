@@ -36,7 +36,7 @@ Attention:
 
 let%expect_test _ =
   let doc = example |> doc_of_string in
-  doc |> pp_doc_debug;
+  doc |> Format.printf "%a%!" pp_doc_debug;
   [%expect
     {|
     K(Architecture:, List[K(: ,
@@ -56,7 +56,7 @@ let%expect_test _ =
     concatenate the heads and project.]), K(why multiple heads:, List[
     each head can attend to a different representation subspace. a single softmax over averaged features cannot recover this.])])])
     |}];
-  doc |> pp_doc_sexp;
+  doc |> Format.printf "%a%!" pp_doc_sexp;
   [%expect
     {|
     (Blocks Blank_line
@@ -291,19 +291,19 @@ let rec render (v : visual) : string list =
     [ top ] @ content @ [ bot ]
 ;;
 
-let pp_doc_graph (doc : Doc.t) : unit =
+let pp_doc_graph (ppf : Format.formatter) (doc : Doc.t) : unit =
   let visuals = block_to_visuals (Doc.block doc) in
   let all_lines =
     List.concat_mapi visuals ~f:(fun i v ->
       let lines = render v in
       if i > 0 then "" :: lines else lines)
   in
-  List.iter all_lines ~f:print_endline
+  List.iter all_lines ~f:(fun l -> Format.fprintf ppf "%s@\n" l)
 ;;
 
 let%expect_test "graph" =
   let doc = example |> doc_of_string in
-  doc |> pp_doc_graph;
+  doc |> Format.printf "%a%!" pp_doc_graph;
   [%expect
     {|
     ╭─ Architecture ───────────────────────────────────────────────────╮

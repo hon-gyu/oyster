@@ -160,12 +160,12 @@ let%test_module "Doc" =
     open For_test
 
     let doc_of_string s = mk_doc_of_string ~block:block_map () s
-    let pp_doc doc = mk_pp_doc ~metas:[ sexp_of_meta ] () doc
+    let pp_doc ppf doc = mk_pp_doc ~metas:[ sexp_of_meta ] () ppf doc
 
     let%expect_test _ =
       let doc = doc_of_string example_no_attribute in
       [%test_result: int] (count_attr doc) ~expect:0;
-      pp_doc doc;
+      Format.printf "%a%!" pp_doc doc;
       [%expect
         {| ((Code_block python II) (meta (attribute ((lang python) (attribute ()))))) |}]
     ;;
@@ -173,7 +173,7 @@ let%test_module "Doc" =
     let%expect_test _ =
       let doc = doc_of_string example_with_attribute in
       [%test_result: int] (count_attr doc) ~expect:1;
-      pp_doc doc;
+      Format.printf "%a%!" pp_doc doc;
       [%expect
         {|
         ((Code_block "python {#myid .class_a .class_b key1=val1 key2=\"val2\"}" II)
@@ -191,7 +191,7 @@ let%test_module "Doc" =
     let%expect_test _ =
       let doc = doc_of_string example_multiple_ids_override in
       [%test_result: int] (count_attr doc) ~expect:1;
-      pp_doc doc;
+      Format.printf "%a%!" pp_doc doc;
       [%expect
         {|
         ((Code_block
@@ -208,7 +208,7 @@ let%test_module "Doc" =
     let%expect_test _ =
       let doc = doc_of_string non_example_invalid_item in
       [%test_result: int] (count_attr doc) ~expect:0;
-      pp_doc doc;
+      Format.printf "%a%!" pp_doc doc;
       [%expect
         {|
         ((Code_block "python {#myid .class_a .class_b hi}" II)
@@ -219,7 +219,7 @@ let%test_module "Doc" =
     let%expect_test _ =
       let doc = doc_of_string non_example_no_info_string in
       [%test_result: int] (count_attr doc) ~expect:0;
-      pp_doc doc;
+      Format.printf "%a%!" pp_doc doc;
       [%expect {| (Code_block "{#myid .class_a .class_b}" II) |}]
     ;;
 

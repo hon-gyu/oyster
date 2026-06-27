@@ -57,15 +57,15 @@ let doc_of_string ?paragraph_inline_value s =
   rewrite_doc ?paragraph_inline_value doc
 ;;
 
-let pp_doc_sexp doc = mk_pp_doc ~blocks:[ sexp_of_block ] () doc
+let pp_doc_sexp ppf doc = mk_pp_doc ~blocks:[ sexp_of_block ] () ppf doc
 
-let pp_doc_debug doc =
+let pp_doc_debug ppf doc =
   let r =
     Cmarkit_renderer.compose
       (Cmarkit_commonmark.renderer ())
       (Cmarkit_renderer.make ~block:debug_block_renderer ())
   in
-  Cmarkit_renderer.doc_to_string r doc |> print_endline
+  Cmarkit_renderer.doc_to_string r doc |> Format.fprintf ppf "%s@\n"
 ;;
 
 (** {1 Examples} *)
@@ -79,10 +79,10 @@ let mk_example name content : example = { name; content }
 let expect_example ?paragraph_inline_value s =
   s |> printf "```md {#original}\n%s\n```\n";
   print_endline "```debug-view";
-  s |> doc_of_string ?paragraph_inline_value |> pp_doc_debug;
+  s |> doc_of_string ?paragraph_inline_value |> Format.printf "%a%!" pp_doc_debug;
   print_endline "```";
   print_endline "```sexp";
-  s |> doc_of_string |> pp_doc_sexp;
+  s |> doc_of_string |> Format.printf "%a%!" pp_doc_sexp;
   print_endline "```"
 ;;
 
@@ -1093,7 +1093,7 @@ let%test_module "paragraph_inline_value" =
 
     let%expect_test "with chain" =
       (* Paragraph chain without trailing-colon absorption. *)
-      {|a: b: c|} |> doc_of_string |> pp_doc_sexp;
+      {|a: b: c|} |> doc_of_string |> Format.printf "%a%!" pp_doc_sexp;
       [%expect {| (Keyed (Text "a: ") (Keyed (Text "b: ") (Paragraph (Text c)))) |}]
     ;;
 

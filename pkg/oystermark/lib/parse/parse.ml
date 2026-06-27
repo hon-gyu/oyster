@@ -223,9 +223,9 @@ module For_test = struct
     Cmarkit.Doc.block doc
   ;;
 
-  let pp_doc (doc : Cmarkit.Doc.t) : unit =
+  let pp_doc (ppf : Format.formatter) (doc : Cmarkit.Doc.t) : unit =
     let block = Cmarkit.Doc.block doc in
-    block |> sexp_of_block |> Sexp.to_string_hum ~indent:2 |> print_endline
+    block |> sexp_of_block |> Sexp.to_string_hum ~indent:2 |> Format.fprintf ppf "%s@\n"
   ;;
 end
 
@@ -238,21 +238,23 @@ let%test_module "Extract" =
     open For_test
     open Extract.For_test
 
-    let pp_section (blocks : Cmarkit.Block.t list) : unit =
-      print_endline
+    let pp_section (ppf : Format.formatter) (blocks : Cmarkit.Block.t list) : unit =
+      Format.fprintf
+        ppf
+        "%s@\n"
         (commonmark_of_doc
            (Cmarkit.Doc.make (Cmarkit.Block.Blocks (blocks, Cmarkit.Meta.none))))
     ;;
 
-    let pp_block_opt (block : Cmarkit.Block.t option) : unit =
+    let pp_block_opt (ppf : Format.formatter) (block : Cmarkit.Block.t option) : unit =
       match block with
-      | None -> print_endline "<none>"
-      | Some b -> print_endline (commonmark_of_doc (Cmarkit.Doc.make b))
+      | None -> Format.fprintf ppf "<none>@\n"
+      | Some b -> Format.fprintf ppf "%s@\n" (commonmark_of_doc (Cmarkit.Doc.make b))
     ;;
 
     let%expect_test "get_heading_section: heading-1" =
       let block = make_block example_headings in
-      pp_section (Extract.get_heading_section [ block ] "heading-1");
+      Format.printf "%a%!" pp_section (Extract.get_heading_section [ block ] "heading-1");
       [%expect
         {|
     # Heading 1
@@ -266,7 +268,7 @@ let%test_module "Extract" =
 
     let%expect_test "get_heading_section: heading-8" =
       let block = make_block example_headings in
-      pp_section (Extract.get_heading_section [ block ] "heading-8");
+      Format.printf "%a%!" pp_section (Extract.get_heading_section [ block ] "heading-8");
       [%expect
         {|
     ## Heading 8
@@ -276,25 +278,25 @@ let%test_module "Extract" =
 
     let%expect_test "get_block_by_caret_id: inline" =
       let doc = of_string example_inline_caret_id in
-      pp_block_opt (Extract.get_block_by_caret_id [ Cmarkit.Doc.block doc ] "abc123");
+      Format.printf "%a%!" pp_block_opt (Extract.get_block_by_caret_id [ Cmarkit.Doc.block doc ] "abc123");
       [%expect {| Second paragraph text ^abc123 |}]
     ;;
 
     let%expect_test "get_block_by_caret_id: standalone blockquote" =
       let doc = of_string example_blockquote_caret_id in
-      pp_block_opt (Extract.get_block_by_caret_id [ Cmarkit.Doc.block doc ] "bq001");
+      Format.printf "%a%!" pp_block_opt (Extract.get_block_by_caret_id [ Cmarkit.Doc.block doc ] "bq001");
       [%expect {| > A blockquote here. |}]
     ;;
 
     let%expect_test "get_block_by_caret_id: not found" =
       let doc = of_string example_not_found in
-      pp_block_opt (Extract.get_block_by_caret_id [ Cmarkit.Doc.block doc ] "nope");
+      Format.printf "%a%!" pp_block_opt (Extract.get_block_by_caret_id [ Cmarkit.Doc.block doc ] "nope");
       [%expect {| <none> |}]
     ;;
 
     let%expect_test "get_block_by_caret_id: standalone list" =
       let doc = of_string example_list_caret_id in
-      pp_block_opt (Extract.get_block_by_caret_id [ Cmarkit.Doc.block doc ] "lst001");
+      Format.printf "%a%!" pp_block_opt (Extract.get_block_by_caret_id [ Cmarkit.Doc.block doc ] "lst001");
       [%expect
         {|
     - Item one
@@ -304,9 +306,9 @@ let%test_module "Extract" =
 
     let%expect_test "get_block_by_caret_id: nested list" =
       let doc = of_string example_nested_list_caret_id in
-      pp_block_opt (Extract.get_block_by_caret_id [ Cmarkit.Doc.block doc ] "firstline");
+      Format.printf "%a%!" pp_block_opt (Extract.get_block_by_caret_id [ Cmarkit.Doc.block doc ] "firstline");
       [%expect {| a nested list ^firstline |}];
-      pp_block_opt (Extract.get_block_by_caret_id [ Cmarkit.Doc.block doc ] "inneritem");
+      Format.printf "%a%!" pp_block_opt (Extract.get_block_by_caret_id [ Cmarkit.Doc.block doc ] "inneritem");
       [%expect
         {|
     item
@@ -444,21 +446,17 @@ content
       Cmarkit.Folder.fold_doc folder 0 doc
     ;;
 
-    let pp_src src =
-      print_endline "```md {#original}";
-      print_endline src;
-      print_endline "```"
-    ;;
+    let pp_src ppf src = Format.fprintf ppf "```md {#original}@\n%s@\n```@\n" src
 
     (* [n_div]/[n_keyed] are ignored: the actual counts are printed so the expect
        output reflects the parser configuration. *)
     let test ?(n_div : int = 0) ?(n_keyed : int = 0) (_name, src, _expected_n_div) =
       ignore (n_div : int);
       ignore (n_keyed : int);
-      pp_src src;
+      Format.printf "%a%!" pp_src src;
       let doc = of_string src in
       print_endline "```sexp";
-      pp_doc doc;
+      Format.printf "%a%!" pp_doc doc;
       print_endline "```";
       Printf.printf "n_div=%d n_keyed=%d\n" (count_div doc) (count_keyed doc)
     ;;
@@ -709,7 +707,7 @@ let%test_module "Block attribute" =
 body
 :::|}
       in
-      pp_doc doc;
+      Format.printf "%a%!" pp_doc doc;
       [%expect
         {| (Attributes #foo (Div (class warning) (Paragraph (Text body)))) |}]
     ;;
@@ -721,7 +719,7 @@ body
 key:
 - bar|}
       in
-      pp_doc doc;
+      Format.printf "%a%!" pp_doc doc;
       [%expect
         {| (Blocks (Attributes #foo (Keyed (Text key:) (List (Paragraph (Text bar)))))) |}]
     ;;
@@ -733,14 +731,14 @@ key:
 - key:
   - bar|}
       in
-      pp_doc doc;
+      Format.printf "%a%!" pp_doc doc;
       [%expect
         {| (Attributes #foo (List (Keyed (Text key:) (List (Paragraph (Text bar)))))) |}]
     ;;
 
     let%expect_test "no attribute" =
       let doc = of_string "foo" in
-      pp_doc doc;
+      Format.printf "%a%!" pp_doc doc;
       [%expect {| (Paragraph (Text foo)) |}]
     ;;
 
@@ -750,14 +748,14 @@ key:
        and the key itself may carry one. *)
     let%expect_test "inline attribute on keyed value" =
       let doc = of_string "key: value{.x}" in
-      pp_doc doc;
+      Format.printf "%a%!" pp_doc doc;
       [%expect
         {| (Keyed (Text "key: ") (Paragraph (Attributes .x (Text value)))) |}]
     ;;
 
     let%expect_test "inline attribute on keyed key" =
       let doc = of_string "key{.x}: value" in
-      pp_doc doc;
+      Format.printf "%a%!" pp_doc doc;
       [%expect
         {|
         (Keyed (Inlines (Attributes .x (Text key)) (Text ": "))
