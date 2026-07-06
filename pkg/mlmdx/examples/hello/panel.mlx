@@ -1,0 +1,5 @@
+let make ~title ~children () =
+  <section class_="panel">
+    <h2>(JSX.string title)</h2>
+    (children)
+  </section>

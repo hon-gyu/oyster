@@ -1,0 +1,25 @@
+let panel_title = "Panel"
+
+# {JSX.int (2 + 2)}
+
+Some **bold** prose and an inline value: {JSX.int (6 * 7)}.
+
+A component inline: <Greeting name="inline" count={1 + 1} /> — and standalone:
+
+<Greeting name="World" count={3 * 7} />
+
+Host JSX inline: <b class="loud">rendered **bold**</b>.
+
+<div className="box">
+
+## Host block
+
+Markdown **inside** a host block.
+
+</div>
+
+<Panel title={panel_title}>
+
+Panel **children** with {JSX.string "expr"}.
+
+</Panel>
