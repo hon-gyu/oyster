@@ -1,0 +1,8 @@
+(* A typed component authored in .mlx, used from hello.mlmdx as
+   <Greeting name="World" count={...} />. Props are type-checked at the call
+   site in the .mlmdx. *)
+let make ~name ~count () =
+  <span class_="greeting">
+    (JSX.string ("Hello, " ^ name ^ "! x"))
+    (JSX.int count)
+  </span>
