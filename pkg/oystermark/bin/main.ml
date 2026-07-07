@@ -46,12 +46,10 @@ let file_cmd : Command.t =
          List.Assoc.find vault.docs ~equal:String.equal rel_path
          |> Option.value_exn ~message:(sprintf "File %s not found in vault" rel_path)
        in
-       if Option.is_none output_dir
-       then
-         Out_channel.write_all
-           (Filename.concat (Option.value_exn output_dir) "index.html")
-           ~data:(Html.of_doc ~backend_blocks:true ~safe:false doc)
-       else print_string (Html.of_doc ~backend_blocks:true ~safe:false doc))
+       let html = Html.of_doc ~backend_blocks:true ~safe:false doc in
+       match output_dir with
+       | Some dir -> Out_channel.write_all (Filename.concat dir "index.html") ~data:html
+       | None -> print_string html)
 ;;
 
 (** Render vault and write output files + copy assets. Returns unit. *)
