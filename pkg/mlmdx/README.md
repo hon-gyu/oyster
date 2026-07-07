@@ -20,7 +20,8 @@ program, compiled and rendered.)
   │                     and block JSX, storing raw source + Textloc)
   ▼
 Cmarkit.Doc.t
-  │  mlmdx-pp  ── structural nodes ────▶ plain JSX.node / string / list
+  │  mlmdx-pp  ── structural nodes ────▶ components table (components.h1 …;
+  │                                        default = plain JSX.node)
   │            ── {expr} / prop values ─▶ compiler-libs Parse.expression
   │                                        on a position-primed lexbuf
   │            ── host JSX / fragments ─▶ JSX.node / JSX.list
@@ -61,6 +62,9 @@ product, same underlying Markdown parser.
   (from both `mlx-pp` on `.mlx` and `mlmdx-pp` on `.mlmdx`) into
   `JSX.node`/component-`make` calls; `JSX.render` produces the HTML string. This
   is the whole SSG runtime — inert HTML, no client JS in the toolchain.
+- **`mlmdx` (runtime, `runtime/`)** — exposes `Mlmdx.Components`, the overridable
+  components table that generated `.mlmdx` modules route markdown-structural
+  elements through. Every generated `.mlmdx` module depends on it.
 - **`merlin-extend`** — `ocamlmerlin-mlmdx`, a reader wrapping the same codegen,
   gives `.mlmdx` files hovers and jumps; dispatch is per-extension via dune.
 
@@ -69,11 +73,20 @@ product, same underlying Markdown parser.
 The full `.mlmdx` → HTML chain is working end-to-end:
 
 - **`lib/codegen.ml`** (`mlmdx_codegen`): `Doc.t → Parsetree.structure` exposing
-  `let make () = <element>`. Structural nodes → plain `JSX.node`/`string`/`list`;
-  `{expr}` and JSX prop expressions → `Parse.expression` on a position-primed
-  lexbuf; host JSX → `JSX.node`, fragments → `JSX.list`, component JSX →
-  `Component.make`. Covered by inline expect tests (`ppx_expect`) that pin the
-  generated parsetree.
+  `let make ?components () = <element>`. Structural nodes → the components table
+  (`components.h1 ~children:[…]`); `{expr}` and JSX prop expressions →
+  `Parse.expression` on a position-primed lexbuf; host JSX → `JSX.node`,
+  fragments → `JSX.list`, component JSX → `Component.make`. Covered by inline
+  expect tests (`ppx_expect`) that pin the generated parsetree.
+- **Components table** (the overridable `_components` map — what makes this *MDX*,
+  not markdown-to-HTML): every markdown-structural element routes through the
+  `?components` parameter of `make` (`# Hi` → `components.h1 ~children:[…]`), so a
+  consumer can restyle or swap any element page-wide via a record-`with`. The
+  default table renders vanilla elements, so a page rendered without a custom
+  table is byte-for-byte identical to plain markdown-to-HTML — the table is
+  always present, its default is the identity. Literal JSX and `<Component/>`
+  calls in the page do *not* route through it (author intent, like raw JSX in
+  MDX). Type `Mlmdx.Components.t` lives in the `runtime/` library.
 - **Strict prelude**: top-of-file `open`/`let`/`module` blocks are parsed as OCaml
   structure items before the generated `make`; the first Markdown block switches
   permanently to Markdown.
@@ -92,14 +105,9 @@ against the `.mlmdx` file at the exact byte of the offending code, quoting the
 ```
 dune exec pkg/mlmdx/examples/hello/render.exe
 # <h1>4</h1><p>Some <strong>bold</strong> prose and an inline value: 42.</p>...
+# <h1 class="title">4</h1>...   (second line: same page with an overridden h1)
 ```
 
 ### Not yet done
 
-- **The components table** — the overridable `_components` map (`# Hi` becomes
-  `<_components.h1>`, not a hardcoded `<h1>`), so a consumer can restyle all
-  headings or swap a component page-wide. This is what makes mlmdx *MDX*, not
-  markdown-to-HTML; structural nodes currently lower to hardcoded elements.
-
-Explicitly out of v1 scope: JSX inside embedded `{expr}`; client interactivity /
-hydration; a `.mlmdx` formatter; integration with the oystermark vault.
+JSX inside embedded `{expr}`; client interactivity / hydration; a `.mlmdx` formatter

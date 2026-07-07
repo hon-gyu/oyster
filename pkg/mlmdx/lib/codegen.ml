@@ -40,6 +40,19 @@ let jsx name args =
   Ast_helper.Exp.apply (jsx_id name) (List.map (fun a -> (Asttypes.Nolabel, a)) args)
 
 let node ?(attrs = []) tag ~children = jsx "node" [ estring tag; elist attrs; elist children ]
+
+(* Markdown-structural elements route through the overridable components table
+   (the [components] parameter of the generated [make]) rather than a hardcoded
+   [JSX.node], e.g. [# Hi] becomes [components.h1 ~children:[...]]. The default
+   table renders vanilla elements, so an un-themed page is unchanged. Literal
+   JSX and component calls in the page keep using {!node}/{!component_call}. *)
+let components_lident name = Longident.Ldot (Longident.Ldot (Lident "Mlmdx", "Components"), name)
+
+let md_elt tag ~children =
+  Ast_helper.Exp.apply
+    (Ast_helper.Exp.field (Ast_helper.Exp.ident (lident "components")) (lident tag))
+    [ Asttypes.Labelled "children", elist children ]
+
 let jstring s = jsx "string" [ estring s ]
 let jlist es = jsx "list" [ elist es ]
 let jnull = jsx_id "null"
@@ -246,14 +259,18 @@ let component_call tag attrs ?children () =
 let rec inline ~origin ~file (i : Inline.t) : Parsetree.expression =
   match i with
   | Inline.Text (s, _) -> jstring s
-  | Inline.Emphasis (e, _) -> node "em" ~children:[ inline ~origin ~file (Inline.Emphasis.inline e) ]
+  | Inline.Emphasis (e, _) -> md_elt "em" ~children:[ inline ~origin ~file (Inline.Emphasis.inline e) ]
   | Inline.Strong_emphasis (e, _) ->
-    node "strong" ~children:[ inline ~origin ~file (Inline.Emphasis.inline e) ]
-  | Inline.Code_span (cs, _) -> node "code" ~children:[ jstring (Inline.Code_span.code cs) ]
+    md_elt "strong" ~children:[ inline ~origin ~file (Inline.Emphasis.inline e) ]
+  | Inline.Code_span (cs, _) -> md_elt "code" ~children:[ jstring (Inline.Code_span.code cs) ]
   | Inline.Inlines (is, _) -> jlist (List.map (inline ~origin ~file) is)
   | Inline.Break (_, _) -> jstring " "
   | Inline.Ext_jsx_expr (j, m) -> embedded_expr ~origin ~file ~meta:m (Inline.Jsx_expr.expr j)
   | Inline.Ext_jsx_element (e, m) -> jsx_inline_element ~origin ~file ~meta:m e
+  (* TODO: unhandled inline constructs (links, images, autolinks, raw inline
+     HTML) silently drop to [jnull]. Broaden coverage (links/images first, which
+     add the first prop-bearing [components] fields), and make this catch-all
+     loud rather than silent for anything still unsupported. *)
   | _ -> jnull
 
 and jsx_inline_element ~origin ~file ~meta e =
@@ -273,12 +290,16 @@ and block ~origin ~file (b : Block.t) : Parsetree.expression =
   match b with
   | Block.Heading (h, _) ->
     let tag = Printf.sprintf "h%d" (Block.Heading.level h) in
-    node tag ~children:[ inline ~origin ~file (Block.Heading.inline h) ]
-  | Block.Paragraph (p, _) -> node "p" ~children:[ inline ~origin ~file (Block.Paragraph.inline p) ]
+    md_elt tag ~children:[ inline ~origin ~file (Block.Heading.inline h) ]
+  | Block.Paragraph (p, _) -> md_elt "p" ~children:[ inline ~origin ~file (Block.Paragraph.inline p) ]
   | Block.Blocks (bs, _) -> jlist (List.map (block ~origin ~file) bs)
   | Block.Block_quote (bq, _) ->
-    node "blockquote" ~children:[ block ~origin ~file (Block.Block_quote.block bq) ]
+    md_elt "blockquote" ~children:[ block ~origin ~file (Block.Block_quote.block bq) ]
   | Block.Ext_jsx_block (j, _) -> jsx_block ~origin ~file j
+  (* TODO: unhandled block constructs (lists, fenced/indented code, thematic
+     breaks, HTML blocks) silently drop to [jnull]. Broaden coverage (lists
+     first, reusing the block recursion; fenced code carries a language for
+     later highlighting), and make this catch-all loud for the rest. *)
   | _ -> jnull
 
 and jsx_block ~origin ~file j =
@@ -292,12 +313,31 @@ and jsx_block ~origin ~file j =
 
 let structure ~origin ~file (doc : Doc.t) : Parsetree.structure =
   let body = block ~origin ~file (Doc.block doc) in
-  let param : Parsetree.function_param =
+  (* ?(components : Mlmdx.Components.t = Mlmdx.Components.default): the annotation
+     lets the [components.h1] field accesses in [body] disambiguate without an
+     [open], and the default makes the table a no-op unless a caller overrides. *)
+  let components_param : Parsetree.function_param =
+    let pat =
+      Ast_helper.Pat.constraint_
+        (Ast_helper.Pat.var (mknoloc "components"))
+        (Ast_helper.Typ.constr (mknoloc (components_lident "t")) [])
+    in
+    { pparam_loc = Location.none
+    ; pparam_desc =
+        Pparam_val
+          ( Asttypes.Optional "components"
+          , Some (Ast_helper.Exp.ident (mknoloc (components_lident "default")))
+          , pat )
+    }
+  in
+  let unit_param : Parsetree.function_param =
     { pparam_loc = Location.none
     ; pparam_desc = Pparam_val (Asttypes.Nolabel, None, Ast_helper.Pat.construct (lident "()") None)
     }
   in
-  let make = Ast_helper.Exp.function_ [ param ] None (Pfunction_body body) in
+  let make =
+    Ast_helper.Exp.function_ [ components_param; unit_param ] None (Pfunction_body body)
+  in
   [ Ast_helper.Str.value Asttypes.Nonrecursive
       [ Ast_helper.Vb.mk (Ast_helper.Pat.var (mknoloc "make")) make ]
   ]
@@ -379,7 +419,10 @@ let of_string ~file s : Parsetree.structure =
 
 let%expect_test "codegen: heading with embedded expr" =
   print_string (Pprintast.string_of_structure (of_string ~file:"t.mlmdx" "# {JSX.int (2 + 2)}"));
-  [%expect {| let make () = JSX.node "h1" [] [JSX.int (2 + 2)] |}]
+  [%expect {|
+    let make ?components:((components : Mlmdx.Components.t)=
+      Mlmdx.Components.default) () = components.h1 ~children:[JSX.int (2 + 2)]
+    |}]
 
 let%expect_test "codegen: paragraph with prose, bold, and embedded expr" =
   print_string
@@ -387,14 +430,15 @@ let%expect_test "codegen: paragraph with prose, bold, and embedded expr" =
        (of_string ~file:"t.mlmdx" "Some **bold** and {JSX.string name}."));
   [%expect
     {|
-    let make () =
-      JSX.node "p" []
-        [JSX.list
-           [JSX.string "Some ";
-           JSX.node "strong" [] [JSX.string "bold"];
-           JSX.string " and ";
-           JSX.string name;
-           JSX.string "."]]
+    let make ?components:((components : Mlmdx.Components.t)=
+      Mlmdx.Components.default) () =
+      components.p
+        ~children:[JSX.list
+                     [JSX.string "Some ";
+                     components.strong ~children:[JSX.string "bold"];
+                     JSX.string " and ";
+                     JSX.string name;
+                     JSX.string "."]]
     |}]
 
 let%expect_test "codegen: self-closing component with attributes" =
@@ -403,8 +447,10 @@ let%expect_test "codegen: self-closing component with attributes" =
        (of_string ~file:"t.mlmdx" {|<Greeting name="World" count={1 + 2} loud />|}));
   [%expect
     {|
-    let make () =
-      JSX.node "p" [] [Greeting.make ~name:"World" ~count:(1 + 2) ~loud:true ()]
+    let make ?components:((components : Mlmdx.Components.t)=
+      Mlmdx.Components.default) () =
+      components.p
+        ~children:[Greeting.make ~name:"World" ~count:(1 + 2) ~loud:true ()]
     |}]
 
 let%expect_test "codegen: host inline JSX" =
@@ -413,12 +459,13 @@ let%expect_test "codegen: host inline JSX" =
        (of_string ~file:"t.mlmdx" {|a <b class="x">bold</b> c|}));
   [%expect
     {|
-    let make () =
-      JSX.node "p" []
-        [JSX.list
-           [JSX.string "a ";
-           JSX.node "b" [("class", (`String "x"))] [JSX.string "bold"];
-           JSX.string " c"]]
+    let make ?components:((components : Mlmdx.Components.t)=
+      Mlmdx.Components.default) () =
+      components.p
+        ~children:[JSX.list
+                     [JSX.string "a ";
+                     JSX.node "b" [("class", (`String "x"))] [JSX.string "bold"];
+                     JSX.string " c"]]
     |}]
 
 let%expect_test "codegen: component inline JSX children" =
@@ -427,12 +474,14 @@ let%expect_test "codegen: component inline JSX children" =
        (of_string ~file:"t.mlmdx" {|<Callout kind="warn">Read **this**</Callout>|}));
   [%expect
     {|
-    let make () =
-      JSX.node "p" []
-        [Callout.make ~kind:"warn"
-           ~children:(JSX.list
-                        [JSX.string "Read ";
-                        JSX.node "strong" [] [JSX.string "this"]]) ()]
+    let make ?components:((components : Mlmdx.Components.t)=
+      Mlmdx.Components.default) () =
+      components.p
+        ~children:[Callout.make ~kind:"warn"
+                     ~children:(JSX.list
+                                  [JSX.string "Read ";
+                                  components.strong ~children:[JSX.string "this"]])
+                     ()]
     |}]
 
 let%expect_test "codegen: block host and fragment JSX" =
@@ -451,13 +500,16 @@ text
 </>|}));
   [%expect
     {|
-    let make () =
+    let make ?components:((components : Mlmdx.Components.t)=
+      Mlmdx.Components.default) () =
       JSX.list
         [JSX.node "div" [("class", (`String "box"))]
-           [JSX.list [JSX.null; JSX.node "h1" [] [JSX.string "Title"]; JSX.null]];
+           [JSX.list
+              [JSX.null; components.h1 ~children:[JSX.string "Title"]; JSX.null]];
         JSX.null;
         JSX.list
-          [JSX.list [JSX.null; JSX.node "p" [] [JSX.string "text"]; JSX.null]]]
+          [JSX.list
+             [JSX.null; components.p ~children:[JSX.string "text"]; JSX.null]]]
     |}]
 
 let%expect_test "codegen: top-of-file OCaml prelude" =
@@ -478,14 +530,16 @@ Body
     {|
     open Components
     let title = "Prelude"
-    let make () =
+    let make ?components:((components : Mlmdx.Components.t)=
+      Mlmdx.Components.default) () =
       JSX.list
-        [JSX.node "h1" [] [JSX.string title];
+        [components.h1 ~children:[JSX.string title];
         JSX.null;
         Panel.make ~title
           ~children:(JSX.list
-                       [JSX.null; JSX.node "p" [] [JSX.string "Body"]; JSX.null])
-          ()]
+                       [JSX.null;
+                       components.p ~children:[JSX.string "Body"];
+                       JSX.null]) ()]
     |}]
 
 let%expect_test "codegen: prelude stops at first markdown block" =
@@ -496,11 +550,12 @@ let%expect_test "codegen: prelude stops at first markdown block" =
 let x = 1|}));
   [%expect
     {|
-    let make () =
+    let make ?components:((components : Mlmdx.Components.t)=
+      Mlmdx.Components.default) () =
       JSX.list
-        [JSX.node "h1" [] [JSX.string "Title"];
+        [components.h1 ~children:[JSX.string "Title"];
         JSX.null;
-        JSX.node "p" [] [JSX.string "let x = 1"]]
+        components.p ~children:[JSX.string "let x = 1"]]
     |}]
 
 let%expect_test "codegen: split_initial_prelude" =

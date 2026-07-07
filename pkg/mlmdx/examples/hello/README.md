@@ -16,8 +16,12 @@ at build time.
   page type-checks the prop at the call site; passing a string would be a compile
   error pointing at the exact byte.
 - `panel.mlx` — a container component taking `~children`.
-- `render.ml` — plain OCaml driving the page: `JSX.render (Hello.make ())`.
-- `render.t` — a cram test pinning the rendered HTML (the end-to-end regression
+- `render.ml` — plain OCaml driving the page. Renders it twice: once with the
+  default components table (`JSX.render (Hello.make ())`) and once with an
+  overridden `h1` (`~components:{ Mlmdx.Components.default with h1 = … }`), to show
+  that markdown headings route through the overridable table while literal JSX and
+  `<Component/>` calls do not.
+- `render.t` — a cram test pinning both rendered lines (the end-to-end regression
   check).
 
 ## Run
@@ -28,6 +32,7 @@ dune exec pkg/mlmdx/examples/hello/render.exe
 
 ```
 <h1>4</h1><p>Some <strong>bold</strong> prose and an inline value: 42.</p>...
+<h1 class="title">4</h1>...   (same page, h1 overridden via the components table)
 ```
 
 ## The chain

@@ -1,0 +1,7 @@
+; The mlmdx runtime: the overridable components table that generated .mlmdx
+; modules route markdown-structural elements through. Its default renderers are
+; vanilla HTML elements, so an un-themed page renders identically to plain
+; markdown-to-HTML. Wrapped, so generated code references Mlmdx.Components.
+(library
+ (name mlmdx)
+ (libraries html_of_jsx))
