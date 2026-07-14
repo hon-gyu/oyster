@@ -530,8 +530,20 @@ let render_keyed_list ~(style : struct_style) c (l : Block.List'.t) =
   let opening, closing =
     match Block.List'.type' l with
     | `Unordered _ -> "<ul>\n", "</ul>\n"
-    | `Ordered (start, _) ->
+    | `Ordered (start, _) | `Ext_ordered (`Decimal, _, start) ->
       (if start = 1 then "<ol>\n" else sprintf "<ol start=\"%d\">\n" start), "</ol>\n"
+    | `Ext_ordered (style, _, start) ->
+      let type' =
+        match style with
+        | `Alpha_lower -> "a"
+        | `Alpha_upper -> "A"
+        | `Roman_lower -> "i"
+        | `Roman_upper -> "I"
+        | `Decimal -> assert false
+      in
+      (if start = 1
+       then sprintf "<ol type=\"%s\">\n" type'
+       else sprintf "<ol type=\"%s\" start=\"%d\">\n" type' start), "</ol>\n"
   in
   C.string c opening;
   List.iter (Block.List'.items l) ~f:(keyed_list_item ~style ~tight c);

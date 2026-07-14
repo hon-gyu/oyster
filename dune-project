@@ -92,6 +92,20 @@
   ("add topics" "to describe" your project)))
 
 (package
+  (name spec)
+  (allow_empty)
+  (synopsis "")
+  (description "")
+  (depends
+  ocaml
+  (dune
+    (>= 3.22))
+  core
+  ppx_jane
+  opentelemetry
+))
+
+(package
   (name trace-collect)
   (synopsis "A short synopsis")
   (description "A longer description")
