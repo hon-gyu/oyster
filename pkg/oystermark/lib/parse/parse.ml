@@ -315,6 +315,35 @@ let%test_module "Extract" =
     ^inneritem
     |}]
     ;;
+
+    (* get_block_by_attr_id. See {!page-"feature-attribute-anchors"}. *)
+
+    let%expect_test "get_block_by_attr_id: inline attribute → containing paragraph" =
+      let doc = of_string "# H\n\nThe [key term]{#kt} is here.\n" in
+      Format.printf
+        "%a%!"
+        pp_block_opt
+        (Extract.get_block_by_attr_id [ Cmarkit.Doc.block doc ] "kt");
+      [%expect {| The key term{#kt} is here. |}]
+    ;;
+
+    let%expect_test "get_block_by_attr_id: block attribute → wrapped block" =
+      let doc = of_string "# H\n\n{#aside}\n> An aside block.\n" in
+      Format.printf
+        "%a%!"
+        pp_block_opt
+        (Extract.get_block_by_attr_id [ Cmarkit.Doc.block doc ] "aside");
+      [%expect {| > An aside block. |}]
+    ;;
+
+    let%expect_test "get_block_by_attr_id: not found" =
+      let doc = of_string "# H\n\nPlain paragraph.\n" in
+      Format.printf
+        "%a%!"
+        pp_block_opt
+        (Extract.get_block_by_attr_id [ Cmarkit.Doc.block doc ] "missing");
+      [%expect {| <none> |}]
+    ;;
   end)
 ;;
 

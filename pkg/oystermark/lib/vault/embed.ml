@@ -298,15 +298,8 @@ and expand_doc
       embed_note ~embed_depth ~max_depth ~depth_fallback ~fragment docs_tbl path extract
     in
     match Cmarkit.Meta.find Resolve.resolved_key meta with
-    (* Non-embeddable: no target, unresolved, or non-markdown file. Attribute
-       anchors ([{#id}]) are navigable (see {!page-"feature-attribute-anchors"})
-       but not yet embeddable — extracting the attributed block/span is future
-       work; treat them as non-embeddable for now. *)
-    | None
-    | Some Resolve.Unresolved
-    | Some (Resolve.File _)
-    | Some (Resolve.Attr _)
-    | Some (Resolve.Curr_attr _) -> None
+    (* Non-embeddable: no target, unresolved, or non-markdown file. *)
+    | None | Some Resolve.Unresolved | Some (Resolve.File _) -> None
     (* Self-references: extract from current doc *)
     | Some Resolve.Curr_file -> embed_self ~fragment:None (fun blocks -> blocks)
     | Some (Resolve.Curr_heading { heading; slug; _ }) ->
@@ -315,6 +308,11 @@ and expand_doc
     | Some (Resolve.Curr_block { block_id }) ->
       embed_self ~fragment:(Some (Cmarkit.Inline.Wikilink.Block_ref block_id)) (fun blocks ->
         Option.to_list (Parse.Extract.get_block_by_caret_id blocks block_id))
+    | Some (Resolve.Curr_attr { id; _ }) ->
+      (* Attribute anchors have no [Wikilink.fragment] variant, so the embed
+         metadata records no fragment. See {!page-"feature-attribute-anchors"}. *)
+      embed_self ~fragment:None (fun blocks ->
+        Option.to_list (Parse.Extract.get_block_by_attr_id blocks id))
     (* Cross-file references: look up in vault and recursively expand *)
     | Some (Resolve.Note { path }) -> embed ~fragment:None path (fun blocks -> blocks)
     | Some (Resolve.Heading { path; heading; slug; _ }) ->
@@ -323,6 +321,9 @@ and expand_doc
     | Some (Resolve.Block { path; block_id }) ->
       embed ~fragment:(Some (Cmarkit.Inline.Wikilink.Block_ref block_id)) path (fun blocks ->
         Option.to_list (Parse.Extract.get_block_by_caret_id blocks block_id))
+    | Some (Resolve.Attr { path; id; _ }) ->
+      embed ~fragment:None path (fun blocks ->
+        Option.to_list (Parse.Extract.get_block_by_attr_id blocks id))
   in
   (* The mapper acts on Paragraph blocks, checking for embed wikilinks and
      image links pointing to notes. *)
