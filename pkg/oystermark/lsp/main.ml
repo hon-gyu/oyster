@@ -210,6 +210,7 @@ class oystermark_server ~sw =
         let rel_path = self#rel_path_of_uri uri in
         (match
            Lsp_lib.Go_to_definition.go_to_definition
+             ~read_file:self#read_file
              ~index:v.index
              ~rel_path
              ~content:doc_st.content

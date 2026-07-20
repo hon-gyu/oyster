@@ -104,18 +104,43 @@ let position_of_byte_offset ?(encoding = Utf16) (content : string) (offset : int
 ;;
 
 (** Convert a [Cmarkit.Textloc.t] to a 0-based [(line, character)] position for
-    its first byte.  [character] is a byte offset within the line (correct for
-    ASCII; see {!page-"feature-utf16-positions"}).  No content is needed:
-    [Cmarkit.Textloc]'s [line_pos] already carries the byte position of the
-    start of the line.  A [none] location maps to [(0, 0)].
-    See {!page-"feature-go-to-definition".target_position}. *)
-let position_of_textloc (tl : Cmarkit.Textloc.t) : int * int =
+    its first byte.  [line] comes from the [Textloc] directly.
+
+    [character] depends on [content], which must be the {e same string the
+    location refers to} (i.e. the frontmatter-stripped body the parser saw):
+    - given, it is a code-unit offset within the line in [encoding] (default
+      {!Utf16}), decoded from that line's bytes;
+    - omitted, it degrades to a byte offset within the line (correct for
+      ASCII), needing no content — [Cmarkit.Textloc.line_pos] carries the
+      line's start byte.
+
+    A [none] location maps to [(0, 0)].  See
+    {!page-"feature-utf16-positions"} and
+    {!page-"feature-go-to-definition".target_position}. *)
+let position_of_textloc ?content ?(encoding = Utf16) (tl : Cmarkit.Textloc.t)
+  : int * int
+  =
   if Cmarkit.Textloc.is_none tl
   then 0, 0
   else (
     let line_num, line_start = Cmarkit.Textloc.first_line tl in
     let first_byte = Cmarkit.Textloc.first_byte tl in
-    line_num - 1, first_byte - line_start)
+    let character =
+      match content with
+      | Some c
+        when line_start >= 0 && line_start <= first_byte && first_byte <= String.length c
+        ->
+        let pos = ref line_start in
+        let units = ref 0 in
+        while !pos < first_byte do
+          let dec = Stdlib.String.get_utf_8_uchar c !pos in
+          units := !units + units_of_uchar encoding (Stdlib.Uchar.utf_decode_uchar dec);
+          pos := !pos + Stdlib.Uchar.utf_decode_length dec
+        done;
+        !units
+      | _ -> first_byte - line_start
+    in
+    line_num - 1, character)
 ;;
 
 (** {1 Parsing} *)
@@ -227,6 +252,37 @@ let%test_module "position_of_textloc" =
 
     let%test "none location maps to origin" =
       [%equal: int * int] (position_of_textloc Cmarkit.Textloc.none) (0, 0)
+    ;;
+
+    (* With content, the column is UTF-16: two CJK chars (3 bytes each, 1 unit)
+       precede the inline anchor, so its byte column (6) becomes UTF-16 column 2. *)
+    let pos_of_inline_attr_with_content (content : string) : int * int =
+      let doc = Oystermark.Parse.of_string ~locs:true content in
+      let found = ref None in
+      let folder =
+        Cmarkit.Folder.make
+          ~inline:(fun _f acc i ->
+            match i with
+            | Cmarkit.Inline.Ext_attributes (a, meta) ->
+              (match Cmarkit.Attribute.id (Cmarkit.Inline.Attributes.attributes a) with
+               | Some _ ->
+                 found := Some (Cmarkit.Meta.textloc meta);
+                 Cmarkit.Folder.ret acc
+               | None -> Cmarkit.Folder.default)
+            | _ -> Cmarkit.Folder.default)
+          ~inline_ext_default:(fun _f acc _i -> acc)
+          ~block_ext_default:(fun _f acc _b -> acc)
+          ()
+      in
+      let (_ : unit) = Cmarkit.Folder.fold_doc folder () doc in
+      position_of_textloc ~content (Option.value_exn !found)
+    ;;
+
+    let%expect_test "content gives UTF-16 column" =
+      (* line 2: "日本[key]{#k} ..." — anchor at byte 6, UTF-16 column 2 *)
+      let line, character = pos_of_inline_attr_with_content "# H\n\n日本[key]{#k}.\n" in
+      Printf.printf "%d,%d\n" line character;
+      [%expect {| 2,2 |}]
     ;;
   end)
 ;;

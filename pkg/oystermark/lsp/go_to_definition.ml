@@ -9,12 +9,20 @@ open Core
 
     See {!page-"feature-go-to-definition".resolution}. *)
 
+(** The frontmatter-stripped body of [content] — the string a document's
+    [Cmarkit.Textloc]s are relative to (see {!Oystermark.Parse.of_string}). *)
+let body_of (content : string) : string =
+  snd (Oystermark.Parse.Frontmatter.of_string content)
+;;
+
 (** Extract a 0-based [(line, character)] position from an optional
-    [Cmarkit.Textloc.t].  Returns [(0, 0)] if [None].
+    [Cmarkit.Textloc.t].  When [content] (the target's frontmatter-stripped
+    body) is given, [character] is a UTF-16 column; otherwise a byte column.
+    Returns [(0, 0)] if [None].
     See {!page-"feature-go-to-definition".target_position}. *)
-let position_of_textloc (tl : Cmarkit.Textloc.t option) : int * int =
+let position_of_textloc ?content (tl : Cmarkit.Textloc.t option) : int * int =
   match tl with
-  | Some tl -> Lsp_util.position_of_textloc tl
+  | Some tl -> Lsp_util.position_of_textloc ?content tl
   | None -> 0, 0
 ;;
 
@@ -34,11 +42,13 @@ type definition_result =
 
 (** Given file [content] at [rel_path] in a vault with [index], find the
     definition target at cursor position [(line, character)].
-    [read_file] is called to read the target file content for heading/block
-    lookup; it receives a relative path and should return [Some content] or
-    [None]. *)
+    [read_file] reads a target file's content by relative path (returning
+    [Some content] or [None]); it is used to compute a UTF-16 target column
+    for cross-file targets.  Defaults to always returning [None], in which
+    case cross-file columns degrade to byte offsets. *)
 let go_to_definition
       ?(config : Lsp_config.t = Lsp_config.default)
+      ?(read_file : string -> string option = fun _ -> None)
       ~(index : Oystermark.Vault.Index.t)
       ~(rel_path : string)
       ~(content : string)
@@ -75,9 +85,17 @@ let go_to_definition
       | Unresolved -> "unresolved"
     in
     Trace_core.add_data_to_span _sp [ "resolution", `String resolution_tag ];
-    let at ~path loc =
-      let line, character = position_of_textloc loc in
+    (* Cross-file: read the target's body so its column is UTF-16-encoded;
+       degrade to a byte column if the file can't be read. *)
+    let cross ~path loc =
+      let content = Option.map (read_file path) ~f:body_of in
+      let line, character = position_of_textloc ?content loc in
       Some { path; line; character }
+    in
+    (* Self-file: the current buffer's body is the target's content. *)
+    let self loc =
+      let line, character = position_of_textloc ~content:(body_of content) loc in
+      Some { path = rel_path; line; character }
     in
     (match target with
      | Oystermark.Vault.Resolve.Note { path } | File { path } ->
@@ -85,17 +103,17 @@ let go_to_definition
        (match config.gtd_unresolved_fragment, link_ref.fragment with
         | Strict, Some _ -> None
         | _ -> Some { path; line = 0; character = 0 })
-     | Heading { path; loc; _ } -> at ~path loc
-     | Block { path; loc; _ } -> at ~path loc
-     | Attr { path; loc; _ } -> at ~path loc
+     | Heading { path; loc; _ } -> cross ~path loc
+     | Block { path; loc; _ } -> cross ~path loc
+     | Attr { path; loc; _ } -> cross ~path loc
      | Curr_file ->
        (* Self-reference but fragment (if any) wasn't resolved. *)
        (match config.gtd_unresolved_fragment, link_ref.fragment with
         | Strict, Some _ -> None
         | _ -> Some { path = rel_path; line = 0; character = 0 })
-     | Curr_heading { loc; _ } -> at ~path:rel_path loc
-     | Curr_block { loc; _ } -> at ~path:rel_path loc
-     | Curr_attr { loc; _ } -> at ~path:rel_path loc
+     | Curr_heading { loc; _ } -> self loc
+     | Curr_block { loc; _ } -> self loc
+     | Curr_attr { loc; _ } -> self loc
      | Unresolved -> None)
 ;;
 
@@ -131,13 +149,20 @@ let%test_module "go_to_definition" =
       ; ( "note-g.md"
         , "# Eta\n\nSee [[note-f#key-term]].\n\nSelf [[#local]].\n\n{#local}\n> Aside.\n" )
       ; "note-h.md", "# Theta\n\nééé[[note-a]]\n"
+      ; "note-i.md", "# Iota\n\n日本 [key]{#jp} tail.\n"
+      ; "note-j.md", "# Kappa\n\nSee [[note-i#jp]].\n"
+      ; "note-k.md", "---\ntitle: K\n---\n# Kap\n\nThe [x]{#fm} here.\n"
+      ; "note-l.md", "# Lambda\n\nSee [[note-k#fm]].\n"
       ]
     ;;
 
     let index = make_index files
+    let read_file rp = List.Assoc.find files ~equal:String.equal rp
 
     let show ~rel_path ~content ~line ~character =
-      let def_res_opt = go_to_definition ~index ~rel_path ~content ~line ~character () in
+      let def_res_opt =
+        go_to_definition ~read_file ~index ~rel_path ~content ~line ~character ()
+      in
       print_s [%sexp (def_res_opt : definition_result option)]
     ;;
 
@@ -173,6 +198,25 @@ let%test_module "go_to_definition" =
       let content = List.Assoc.find_exn files ~equal:String.equal "note-g.md" in
       show ~rel_path:"note-g.md" ~content ~line:4 ~character:9;
       [%expect {| (((path note-g.md) (line 7) (character 0))) |}]
+    ;;
+
+    (* The target column is UTF-16: in note-i, two CJK chars (3 bytes each) and
+       a space precede the inline anchor, so its byte column (7) resolves to
+       UTF-16 column 3 — read from the target file via [read_file].
+       See {!page-"feature-utf16-positions"}. *)
+    let%expect_test "cross-file target column is UTF-16" =
+      let content = List.Assoc.find_exn files ~equal:String.equal "note-j.md" in
+      show ~rel_path:"note-j.md" ~content ~line:2 ~character:8;
+      [%expect {| (((path note-i.md) (line 2) (character 3))) |}]
+    ;;
+
+    (* Frontmatter guard: offsets are relative to the frontmatter-stripped body,
+       so [body_of] must strip before decoding. Both line and character are
+       body-relative (the pre-existing frontmatter line offset is unchanged). *)
+    let%expect_test "frontmatter target: column computed on stripped body" =
+      let content = List.Assoc.find_exn files ~equal:String.equal "note-l.md" in
+      show ~rel_path:"note-l.md" ~content ~line:2 ~character:8;
+      [%expect {| (((path note-k.md) (line 2) (character 4))) |}]
     ;;
 
     (* The [character] is a UTF-16 offset: three [é]s (2 bytes each) precede the

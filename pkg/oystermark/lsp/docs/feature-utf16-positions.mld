@@ -85,14 +85,16 @@ All conversion logic lives in [lsp_util.ml], keyed on an [encoding] type
      for offering [utf-8]/[utf-32] later.}
 }
 
-{2 Out of scope (byte column remains)}
+{2 Go-to-definition target column}
 
-{!Lsp_lib.Util.position_of_textloc} — used for the go-to-definition
-{e target} column (see {!page-"feature-go-to-definition".target_position})
-— derives its character from a [Cmarkit.Textloc] without the target
-file's content, so it cannot decode UTF-8 and stays a byte column. Making
-it UTF-16-correct requires go-to-definition to read the target file;
-that is deferred with the same follow-up.
+{!Lsp_lib.Util.position_of_textloc} converts a [Cmarkit.Textloc] to a
+position for the go-to-definition {e target}
+(see {!page-"feature-go-to-definition".target_position}). Given the
+target's (frontmatter-stripped) content it decodes the line's bytes and
+returns a UTF-16 column; without content it degrades to a byte column.
+Go-to-definition supplies the content — the current buffer for self-file
+targets, [read_file] for cross-file targets — so target columns are
+UTF-16-encoded like every other position.
 
 {1 Edge cases}
 

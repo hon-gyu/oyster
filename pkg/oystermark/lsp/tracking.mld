@@ -58,15 +58,17 @@ Subsections are encouraged if needed.
   {!module-Lsp_lib.Find_references.test}, and
   [Oystermark.Vault.Index]'s [extract_attr_ids] expect test.
 - Column precision: go-to-definition returns a [(line, character)]
-  position; inline anchors land mid-line. Derivation:
-  {!Lsp_lib.Util.position_of_textloc}, spec
-  {!page-"feature-go-to-definition".target_position}. The [character] is
-  a byte offset (ASCII-correct) pending {!page-"feature-utf16-positions"}.
+  position; inline anchors land mid-line. The [character] is a UTF-16
+  column decoded from the target file's body (read via [read_file] for
+  cross-file, the buffer for self-file) by
+  {!Lsp_lib.Util.position_of_textloc}. Spec
+  {!page-"feature-go-to-definition".target_position}.
 - Diagnostics: duplicate anchor ids are reported (see the
   {{!page-"feature-diagnostics".duplicate_ids}diagnostics spec}).
 - Section extraction: {!Oystermark.Parse.Extract.get_block_by_attr_id}
   feeds both embed ([![[note#id]]]) and hover, so an attribute anchor
   previews/embeds its containing block instead of the whole file.
-- Follow-ups (not yet done): attribute ids in completion, and UTF-16 for
-  the go-to-definition target column ([position_of_textloc] needs the
-  target file's content).
+- Follow-ups (not yet done): attribute ids in completion (completion is
+  itself unimplemented); and correcting the go-to-definition [line] for
+  targets with frontmatter (currently body-relative, see
+  {{!page-"feature-go-to-definition".target_position}the gtd spec}).
