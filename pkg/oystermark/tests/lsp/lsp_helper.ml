@@ -301,13 +301,14 @@ let parse_definition_result (vault_root : string) (result : Yojson.Safe.t)
     let range = Yojson.Safe.Util.member "range" loc in
     let start = Yojson.Safe.Util.member "start" range in
     let line = Yojson.Safe.Util.(member "line" start |> to_int) in
+    let character = Yojson.Safe.Util.(member "character" start |> to_int) in
     let path =
       let raw = String.chop_prefix_exn uri ~prefix:"file://" in
       match String.chop_prefix raw ~prefix:(vault_root ^ "/") with
       | Some rel -> rel
       | None -> raw
     in
-    Some { Lsp_lib.Go_to_definition.path; line }
+    Some { Lsp_lib.Go_to_definition.path; line; character }
   | other -> failwithf "unexpected definition result: %s" (Yojson.Safe.to_string other) ()
 ;;
 

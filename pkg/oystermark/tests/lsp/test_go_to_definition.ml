@@ -39,7 +39,7 @@ let%expect_test "e2e: wikilink to note" =
   let result = parse_definition_result vault_root response in
   print_s [%sexp (result : Lsp_lib.Go_to_definition.definition_result option)];
   shutdown s;
-  [%expect {| (((path note-a.md) (line 0))) |}]
+  [%expect {| (((path note-a.md) (line 0) (character 0))) |}]
 ;;
 
 let%expect_test "e2e: wikilink to heading" =
@@ -50,7 +50,7 @@ let%expect_test "e2e: wikilink to heading" =
   let result = parse_definition_result vault_root response in
   print_s [%sexp (result : Lsp_lib.Go_to_definition.definition_result option)];
   shutdown s;
-  [%expect {| (((path note-a.md) (line 2))) |}]
+  [%expect {| (((path note-a.md) (line 2) (character 0))) |}]
 ;;
 
 let%expect_test "e2e: wikilink to block id" =
@@ -61,7 +61,22 @@ let%expect_test "e2e: wikilink to block id" =
   let result = parse_definition_result vault_root response in
   print_s [%sexp (result : Lsp_lib.Go_to_definition.definition_result option)];
   shutdown s;
-  [%expect {| (((path note-a.md) (line 4))) |}]
+  [%expect {| (((path note-a.md) (line 4) (character 0))) |}]
+;;
+
+(* End-to-end column precision: an inline attribute anchor [{#key-term}] on
+   [ [key term] ] resolves through the JSON-RPC wire to a mid-line character.
+   See {!page-"feature-attribute-anchors"} and
+   {!page-"feature-go-to-definition".target_position}. *)
+let%expect_test "e2e: wikilink to inline attribute anchor (column-precise)" =
+  let s = start_server ~vault_root in
+  initialize s;
+  did_open s ~rel_path:"anchor-source.md";
+  let response = definition s ~rel_path:"anchor-source.md" ~line:2 ~character:10 in
+  let result = parse_definition_result vault_root response in
+  print_s [%sexp (result : Lsp_lib.Go_to_definition.definition_result option)];
+  shutdown s;
+  [%expect {| (((path anchor-target.md) (line 2) (character 4))) |}]
 ;;
 
 let%expect_test "e2e: markdown link" =
@@ -72,7 +87,7 @@ let%expect_test "e2e: markdown link" =
   let result = parse_definition_result vault_root response in
   print_s [%sexp (result : Lsp_lib.Go_to_definition.definition_result option)];
   shutdown s;
-  [%expect {| (((path note-a.md) (line 0))) |}]
+  [%expect {| (((path note-a.md) (line 0) (character 0))) |}]
 ;;
 
 let%expect_test "e2e: unresolved link" =
@@ -105,7 +120,7 @@ let%expect_test "e2e: cross-directory link" =
   let result = parse_definition_result vault_root response in
   print_s [%sexp (result : Lsp_lib.Go_to_definition.definition_result option)];
   shutdown s;
-  [%expect {| (((path note-a.md) (line 0))) |}]
+  [%expect {| (((path note-a.md) (line 0) (character 0))) |}]
 ;;
 
 (* Trace

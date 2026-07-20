@@ -44,6 +44,21 @@ let position_of_byte_offset (content : string) (offset : int) : int * int =
   !line, offset - !line_start
 ;;
 
+(** Convert a [Cmarkit.Textloc.t] to a 0-based [(line, character)] position for
+    its first byte.  [character] is a byte offset within the line (correct for
+    ASCII; see {!page-"feature-utf16-positions"}).  No content is needed:
+    [Cmarkit.Textloc]'s [line_pos] already carries the byte position of the
+    start of the line.  A [none] location maps to [(0, 0)].
+    See {!page-"feature-go-to-definition".target_position}. *)
+let position_of_textloc (tl : Cmarkit.Textloc.t) : int * int =
+  if Cmarkit.Textloc.is_none tl
+  then 0, 0
+  else (
+    let line_num, line_start = Cmarkit.Textloc.first_line tl in
+    let first_byte = Cmarkit.Textloc.first_byte tl in
+    line_num - 1, first_byte - line_start)
+;;
+
 (** {1 Parsing} *)
 
 (** Parse [content] into a [Cmarkit.Doc.t] with locations enabled. *)
@@ -66,5 +81,45 @@ let%test_module "byte_offset_of_position" =
     let%test "line 1, char 2" = offset "hello\nworld" ~line:1 ~character:2 = 8
     let%test "past end clamps" = offset "hi" ~line:0 ~character:99 = 2
     let%test "line past end" = offset "hi\n" ~line:5 ~character:0 = 3
+  end)
+;;
+
+let%test_module "position_of_textloc" =
+  (module struct
+    (* Build a doc and pull the textloc of the sole inline attribute anchor,
+       exercising the byte-column derivation on real parser output. *)
+    let pos_of_inline_attr (content : string) : int * int =
+      let doc = Oystermark.Parse.of_string ~locs:true content in
+      let found = ref None in
+      let folder =
+        Cmarkit.Folder.make
+          ~inline:(fun _f acc i ->
+            match i with
+            | Cmarkit.Inline.Ext_attributes (a, meta) ->
+              (match Cmarkit.Attribute.id (Cmarkit.Inline.Attributes.attributes a) with
+               | Some _ ->
+                 found := Some (Cmarkit.Meta.textloc meta);
+                 Cmarkit.Folder.ret acc
+               | None -> Cmarkit.Folder.default)
+            | _ -> Cmarkit.Folder.default)
+          ~inline_ext_default:(fun _f acc _i -> acc)
+          ~block_ext_default:(fun _f acc _b -> acc)
+          ()
+      in
+      let (_ : unit) = Cmarkit.Folder.fold_doc folder () doc in
+      position_of_textloc (Option.value_exn !found)
+    ;;
+
+    (* [key]{#k} starts at byte 15 on line 3 (0-based line 2); the line begins
+       at byte 11, so the column is 15 - 11 = 4. *)
+    let%expect_test "inline anchor column" =
+      let line, character = pos_of_inline_attr "# H\n\nThe [key]{#k} span.\n" in
+      Printf.printf "%d,%d\n" line character;
+      [%expect {| 2,4 |}]
+    ;;
+
+    let%test "none location maps to origin" =
+      [%equal: int * int] (position_of_textloc Cmarkit.Textloc.none) (0, 0)
+    ;;
   end)
 ;;

@@ -213,10 +213,10 @@ class oystermark_server ~sw =
              ()
          with
          | None -> None
-         | Some { path; line } ->
+         | Some { path; line; character } ->
            let full = Filename.concat v.vault_root path in
            let uri = DocumentUri.of_path full in
-           let pos = Position.create ~line ~character:0 in
+           let pos = Position.create ~line ~character in
            let range = Range.create ~start:pos ~end_:pos in
            Some (`Location [ Location.create ~uri ~range ]))
 

@@ -130,7 +130,7 @@ feature's own spec is authoritative; the deltas are:
 
 {ul
   {- {b Empty / comment-only attribute} ([{}] or [{% ... %}]): carries no
-     id ({!Cmarkit.Attribute.is_empty}); contributes no anchor.}
+     id ([Cmarkit.Attribute.id] returns [None]); contributes no anchor.}
   {- {b Attribute with classes / key-values but no id}: contributes no
      anchor (only [id] is an anchor).}
   {- {b Explicit heading id vs. slug}: when a heading carries an explicit

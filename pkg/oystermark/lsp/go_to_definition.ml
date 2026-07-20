@@ -9,12 +9,13 @@ open Core
 
     See {!page-"feature-go-to-definition".resolution}. *)
 
-(** Extract a 0-based line number from an optional [Cmarkit.Textloc.t].
-    Returns 0 if [None]. *)
-let line_of_textloc (tl : Cmarkit.Textloc.t option) : int =
+(** Extract a 0-based [(line, character)] position from an optional
+    [Cmarkit.Textloc.t].  Returns [(0, 0)] if [None].
+    See {!page-"feature-go-to-definition".target_position}. *)
+let position_of_textloc (tl : Cmarkit.Textloc.t option) : int * int =
   match tl with
-  | Some tl -> fst (Cmarkit.Textloc.first_line tl) - 1
-  | None -> 0
+  | Some tl -> Lsp_util.position_of_textloc tl
+  | None -> 0, 0
 ;;
 
 (** {2 End-to-end}
@@ -22,10 +23,12 @@ let line_of_textloc (tl : Cmarkit.Textloc.t option) : int =
     See {!page-"feature-go-to-definition".resolution}. *)
 
 (** The result of a go-to-definition request: a relative path and a 0-based
-    line number.  [None] means the link was unresolved or no link was found. *)
+    [(line, character)] position.  [None] means the link was unresolved or no
+    link was found. *)
 type definition_result =
   { path : string
   ; line : int
+  ; character : int
   }
 [@@deriving sexp, equal, compare]
 
@@ -72,23 +75,27 @@ let go_to_definition
       | Unresolved -> "unresolved"
     in
     Trace_core.add_data_to_span _sp [ "resolution", `String resolution_tag ];
+    let at ~path loc =
+      let line, character = position_of_textloc loc in
+      Some { path; line; character }
+    in
     (match target with
      | Oystermark.Vault.Resolve.Note { path } | File { path } ->
        (* File found but fragment (if any) wasn't resolved — resolve fell back to the note. *)
        (match config.gtd_unresolved_fragment, link_ref.fragment with
         | Strict, Some _ -> None
-        | _ -> Some { path; line = 0 })
-     | Heading { path; loc; _ } -> Some { path; line = line_of_textloc loc }
-     | Block { path; loc; _ } -> Some { path; line = line_of_textloc loc }
-     | Attr { path; loc; _ } -> Some { path; line = line_of_textloc loc }
+        | _ -> Some { path; line = 0; character = 0 })
+     | Heading { path; loc; _ } -> at ~path loc
+     | Block { path; loc; _ } -> at ~path loc
+     | Attr { path; loc; _ } -> at ~path loc
      | Curr_file ->
        (* Self-reference but fragment (if any) wasn't resolved. *)
        (match config.gtd_unresolved_fragment, link_ref.fragment with
         | Strict, Some _ -> None
-        | _ -> Some { path = rel_path; line = 0 })
-     | Curr_heading { loc; _ } -> Some { path = rel_path; line = line_of_textloc loc }
-     | Curr_block { loc; _ } -> Some { path = rel_path; line = line_of_textloc loc }
-     | Curr_attr { loc; _ } -> Some { path = rel_path; line = line_of_textloc loc }
+        | _ -> Some { path = rel_path; line = 0; character = 0 })
+     | Curr_heading { loc; _ } -> at ~path:rel_path loc
+     | Curr_block { loc; _ } -> at ~path:rel_path loc
+     | Curr_attr { loc; _ } -> at ~path:rel_path loc
      | Unresolved -> None)
 ;;
 
@@ -136,19 +143,19 @@ let%test_module "go_to_definition" =
     let%expect_test "wikilink to note" =
       let content = List.Assoc.find_exn files ~equal:String.equal "note-b.md" in
       show ~rel_path:"note-b.md" ~content ~line:2 ~character:10;
-      [%expect {| (((path note-a.md) (line 0))) |}]
+      [%expect {| (((path note-a.md) (line 0) (character 0))) |}]
     ;;
 
     let%expect_test "wikilink to heading" =
       let content = List.Assoc.find_exn files ~equal:String.equal "note-c.md" in
       show ~rel_path:"note-c.md" ~content ~line:2 ~character:8;
-      [%expect {| (((path note-a.md) (line 2))) |}]
+      [%expect {| (((path note-a.md) (line 2) (character 0))) |}]
     ;;
 
     let%expect_test "wikilink to block id" =
       let content = List.Assoc.find_exn files ~equal:String.equal "note-c.md" in
       show ~rel_path:"note-c.md" ~content ~line:4 ~character:8;
-      [%expect {| (((path note-a.md) (line 4))) |}]
+      [%expect {| (((path note-a.md) (line 4) (character 0))) |}]
     ;;
 
     (* [[note-f#key-term]] targets an inline attribute anchor [{#key-term}]
@@ -156,7 +163,7 @@ let%test_module "go_to_definition" =
     let%expect_test "wikilink to attribute id (cross-file)" =
       let content = List.Assoc.find_exn files ~equal:String.equal "note-g.md" in
       show ~rel_path:"note-g.md" ~content ~line:2 ~character:8;
-      [%expect {| (((path note-f.md) (line 2))) |}]
+      [%expect {| (((path note-f.md) (line 2) (character 4))) |}]
     ;;
 
     (* [[#local]] targets the block attribute anchor [{#local}] on the
@@ -164,13 +171,13 @@ let%test_module "go_to_definition" =
     let%expect_test "wikilink to attribute id (self-file)" =
       let content = List.Assoc.find_exn files ~equal:String.equal "note-g.md" in
       show ~rel_path:"note-g.md" ~content ~line:4 ~character:9;
-      [%expect {| (((path note-g.md) (line 7))) |}]
+      [%expect {| (((path note-g.md) (line 7) (character 0))) |}]
     ;;
 
     let%expect_test "markdown link to note" =
       let content = List.Assoc.find_exn files ~equal:String.equal "note-d.md" in
       show ~rel_path:"note-d.md" ~content ~line:2 ~character:12;
-      [%expect {| (((path note-a.md) (line 0))) |}]
+      [%expect {| (((path note-a.md) (line 0) (character 0))) |}]
     ;;
 
     let%expect_test "cursor not on link" =
@@ -188,7 +195,7 @@ let%test_module "go_to_definition" =
     let%expect_test "self-reference heading" =
       let content = List.Assoc.find_exn files ~equal:String.equal "note-e.md" in
       show ~rel_path:"note-e.md" ~content ~line:2 ~character:12;
-      [%expect {| (((path note-e.md) (line 0))) |}]
+      [%expect {| (((path note-e.md) (line 0) (character 0))) |}]
     ;;
   end)
 ;;

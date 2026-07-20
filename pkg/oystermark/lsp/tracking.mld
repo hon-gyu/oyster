@@ -51,6 +51,10 @@ Subsections are encouraged if needed.
 - Test: {!module-Lsp_lib.Go_to_definition.test},
   {!module-Lsp_lib.Find_references.test}, and
   [Oystermark.Vault.Index]'s [extract_attr_ids] expect test.
-- Follow-ups (not yet done): column-precise jump to inline anchors
-  (gtd currently line-granular), attribute-anchor embed/hover section
-  extraction, and duplicate-id diagnostics.
+- Column precision: go-to-definition returns a [(line, character)]
+  position; inline anchors land mid-line. Derivation:
+  {!Lsp_lib.Util.position_of_textloc}, spec
+  {!page-"feature-go-to-definition".target_position}. The [character] is
+  a byte offset (ASCII-correct) pending {!page-"feature-utf16-positions"}.
+- Follow-ups (not yet done): attribute-anchor embed/hover section
+  extraction, duplicate-id diagnostics, and attribute ids in completion.
