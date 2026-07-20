@@ -14,10 +14,54 @@ type diagnostic =
   }
 [@@deriving sexp, equal, compare]
 
-(** Compute diagnostics for unresolved links in [content] at [rel_path]
-    within a vault [index].
+(** Collect every anchor id in [doc] with its byte range, across the three
+    anchor kinds (heading slug, caret block id, attribute id).  Occurrences
+    without a location ([Textloc.none]) are dropped.
+    See {!page-"feature-diagnostics".duplicate_ids}. *)
+let collect_anchor_occurrences (doc : Cmarkit.Doc.t) : (string * (int * int)) list =
+  let range_of_loc (loc : Cmarkit.Textloc.t option) : (int * int) option =
+    match loc with
+    | Some tl when not (Cmarkit.Textloc.is_none tl) ->
+      Some (Cmarkit.Textloc.first_byte tl, Cmarkit.Textloc.last_byte tl)
+    | _ -> None
+  in
+  let headings =
+    Oystermark.Vault.Index.extract_headings doc
+    |> List.filter_map ~f:(fun (h : Oystermark.Vault.Index.heading_entry) ->
+      Option.map (range_of_loc h.loc) ~f:(fun r -> h.slug, r))
+  in
+  let blocks =
+    Oystermark.Vault.Index.extract_block_ids doc
+    |> List.filter_map ~f:(fun (b : Oystermark.Vault.Index.block_entry) ->
+      Option.map (range_of_loc b.loc) ~f:(fun r -> b.id, r))
+  in
+  let attrs =
+    Oystermark.Vault.Index.extract_attr_ids doc
+    |> List.filter_map ~f:(fun (a : Oystermark.Vault.Index.attr_entry) ->
+      Option.map (range_of_loc a.loc) ~f:(fun r -> a.id, r))
+  in
+  headings @ blocks @ attrs
+;;
 
-    See {!page-"feature-diagnostics".resolution_check}. *)
+(** Diagnostics for anchor ids that occur more than once in [doc]: every
+    located occurrence of a duplicated id is reported.
+    See {!page-"feature-diagnostics".duplicate_ids}. *)
+let duplicate_id_diagnostics (doc : Cmarkit.Doc.t) : diagnostic list =
+  collect_anchor_occurrences doc
+  |> String.Map.of_alist_multi
+  |> Map.fold ~init:[] ~f:(fun ~key:id ~data:ranges acc ->
+    if List.length ranges > 1
+    then
+      List.fold ranges ~init:acc ~f:(fun acc (first_byte, last_byte) ->
+        { first_byte; last_byte; message = "duplicate anchor id: " ^ id } :: acc)
+    else acc)
+;;
+
+(** Compute diagnostics for unresolved links and duplicate anchor ids in
+    [content] at [rel_path] within a vault [index].
+
+    See {!page-"feature-diagnostics".resolution_check} and
+    {!page-"feature-diagnostics".duplicate_ids}. *)
 let compute
       ?(config : Lsp_config.t = Lsp_config.default)
       ~(index : Oystermark.Vault.Index.t)
@@ -67,8 +111,15 @@ let compute
           })
       else None)
   in
-  Trace_core.add_data_to_span _sp [ "num_diagnostics", `Int (List.length diagnostics) ];
-  diagnostics
+  let all = diagnostics @ duplicate_id_diagnostics doc in
+  let sorted =
+    List.sort all ~compare:(fun a b ->
+      match Int.compare a.first_byte b.first_byte with
+      | 0 -> Int.compare a.last_byte b.last_byte
+      | c -> c)
+  in
+  Trace_core.add_data_to_span _sp [ "num_diagnostics", `Int (List.length sorted) ];
+  sorted
 ;;
 
 (** {1:test Test} *)
@@ -162,6 +213,37 @@ let%test_module "compute" =
       show ~rel_path:"note-b.md" ~content:"see ![[missing.png]] here";
       [%expect
         {| ((first_byte 4) (last_byte 19) (message "unresolved link: missing.png")) |}]
+    ;;
+
+    (* Duplicate anchor ids. See {!page-"feature-diagnostics".duplicate_ids}. *)
+
+    let%expect_test "unique attribute id: no diagnostic" =
+      show ~rel_path:"note-a.md" ~content:"# H\n\nThe [key]{#k} span.\n";
+      [%expect {| |}]
+    ;;
+
+    let%expect_test "duplicate attribute ids: every occurrence flagged" =
+      show ~rel_path:"note-a.md" ~content:"# H\n\nOne [a]{#dup} two [b]{#dup}.\n";
+      [%expect
+        {|
+        ((first_byte 9) (last_byte 17) (message "duplicate anchor id: dup"))
+        ((first_byte 23) (last_byte 31) (message "duplicate anchor id: dup"))
+        |}]
+    ;;
+
+    (* Cross-kind collision: a heading whose slug equals a hand-written attr id. *)
+    let%expect_test "heading slug vs attribute id collision" =
+      show ~rel_path:"note-a.md" ~content:"# Intro\n\nSee [x]{#intro} here.\n";
+      [%expect
+        {|
+        ((first_byte 0) (last_byte 6) (message "duplicate anchor id: intro"))
+        ((first_byte 13) (last_byte 23) (message "duplicate anchor id: intro"))
+        |}]
+    ;;
+
+    let%expect_test "distinct ids: no diagnostic" =
+      show ~rel_path:"note-a.md" ~content:"# H\n\nOne [a]{#x} two [b]{#y}.\n";
+      [%expect {| |}]
     ;;
   end)
 ;;

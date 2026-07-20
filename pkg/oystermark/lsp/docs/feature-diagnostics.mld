@@ -1,7 +1,9 @@
 {0 Diagnostics}
 
-Report unresolved links as diagnostics so the user can distinguish
-resolved from unresolved links without navigating.
+Report two classes of problem as diagnostics: {b unresolved links} (so
+the user can distinguish resolved from unresolved links without
+navigating) and {b duplicate anchor ids} (so ambiguous jump targets are
+visible at their source).
 
 {1 Trigger}
 
@@ -35,18 +37,47 @@ Each link is resolved against the vault index via
      target file.}
 }
 
+{1:duplicate_ids Duplicate anchor ids}
+
+Anchor ids share a single per-file namespace across the three anchor
+kinds — heading slugs, caret block ids, and explicit djot attribute ids
+([{#id}]). See {!page-"feature-attribute-anchors"}. Because djot
+attribute merge is override (not accumulation), an id that occurs more
+than once in a file makes every [#id] reference to it ambiguous.
+
+{ul
+  {- The document's anchors are collected from the freshly-parsed content
+     (not the stale index entry) via
+     {!Oystermark.Vault.Index.extract_headings},
+     {!Oystermark.Vault.Index.extract_block_ids}, and
+     {!Oystermark.Vault.Index.extract_attr_ids}.}
+  {- Anchors are grouped by id string. Any id occurring {e more than
+     once} is a duplicate.}
+  {- {b Every} occurrence of a duplicated id gets its own diagnostic (not
+     just the second and later ones), so all conflicting sites are
+     visible.}
+  {- The reported range is the anchor node's byte range; an occurrence
+     whose location is unknown ([Textloc.none]) is skipped.}
+}
+
+This covers both same-kind duplicates (two [{#foo}]) and cross-kind
+collisions (a heading whose slug equals a hand-written [{#foo}]).
+Heading-vs-heading slug collisions do not arise here because slugs are
+auto-deduped during parsing.
+
 {1 Diagnostic shape}
 
 {t
   | Field        | Value                                               |
   |--------------|-----------------------------------------------------|
-  | range        | byte range of the link (see {!page-"feature-utf16-positions"}) |
+  | range        | byte range of the link or anchor (see {!page-"feature-utf16-positions"}) |
   | severity     | Warning                                             |
   | source       | ["oystermark"]                                      |
-  | message      | human-readable description, e.g. ["unresolved link: note"] |
+  | message      | human-readable description, e.g. ["unresolved link: note"] or ["duplicate anchor id: foo"] |
 }
 
-Resolved links produce no diagnostic.
+Resolved links and unique anchor ids produce no diagnostic. Diagnostics
+are returned sorted by range start for determinism.
 
 {1 Edge cases}
 
@@ -56,4 +87,8 @@ Resolved links produce no diagnostic.
      the current file; unresolved if heading/block not found.}
   {- {b Embed links} ([![[note]]]): treated identically to regular
      wikilinks for diagnostic purposes.}
+  {- {b Unique anchor id}: no diagnostic, even when it is never
+     referenced.}
+  {- {b Duplicate id, some occurrences unlocated}: only the located
+     occurrences are reported.}
 }
