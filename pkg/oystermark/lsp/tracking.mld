@@ -29,8 +29,14 @@ Subsections are encouraged if needed.
 
 {1 utf16-positions}
 - Spec: {!page-"feature-utf16-positions"}
-- Implementation: TODO
-- Test: TODO
+- Implementation: {!Lsp_lib.Util.byte_offset_of_position} and
+  {!Lsp_lib.Util.position_of_byte_offset} take [?encoding] (default
+  [Utf16]); server advertises [positionEncoding = utf-16].
+- Test: {!Lsp_lib.Util}'s "utf-16 position encoding" module, plus a
+  UTF-16 cursor case in {!module-Lsp_lib.Go_to_definition.test}.
+- Not yet done: offering utf-8/utf-32 negotiation, and UTF-16 for the
+  go-to-definition target column ([position_of_textloc], needs the
+  target file's content).
 
 {1 inlay-hints}
 - Spec: {!page-"feature-inlay-hints"}

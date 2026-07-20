@@ -25,7 +25,12 @@ class oystermark_server ~sw =
     method! config_inlay_hints = Some (`Bool true)
 
     method! config_modify_capabilities (c : ServerCapabilities.t) : ServerCapabilities.t =
-      { c with referencesProvider = Some (`Bool true) }
+      (* Advertise UTF-16 position encoding (LSP mandatory baseline); all
+         internal conversions default to it. See {!page-"feature-utf16-positions"}. *)
+      { c with
+        referencesProvider = Some (`Bool true)
+      ; positionEncoding = Some PositionEncodingKind.UTF16
+      }
 
     method! config_sync_opts : TextDocumentSyncOptions.t =
       TextDocumentSyncOptions.create

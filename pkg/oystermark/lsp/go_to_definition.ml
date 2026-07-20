@@ -130,6 +130,7 @@ let%test_module "go_to_definition" =
       ; "note-f.md", "# Zeta\n\nThe [key term]{#key-term} is defined here.\n"
       ; ( "note-g.md"
         , "# Eta\n\nSee [[note-f#key-term]].\n\nSelf [[#local]].\n\n{#local}\n> Aside.\n" )
+      ; "note-h.md", "# Theta\n\nééé[[note-a]]\n"
       ]
     ;;
 
@@ -172,6 +173,16 @@ let%test_module "go_to_definition" =
       let content = List.Assoc.find_exn files ~equal:String.equal "note-g.md" in
       show ~rel_path:"note-g.md" ~content ~line:4 ~character:9;
       [%expect {| (((path note-g.md) (line 7) (character 0))) |}]
+    ;;
+
+    (* The [character] is a UTF-16 offset: three [é]s (2 bytes each) precede the
+       link, so UTF-16 char 3 is the link's first [[[], at byte 6. A byte-based
+       reading would land at byte 3 (inside the [é]s) and find no link.
+       See {!page-"feature-utf16-positions"}. *)
+    let%expect_test "cursor position is UTF-16 encoded" =
+      let content = List.Assoc.find_exn files ~equal:String.equal "note-h.md" in
+      show ~rel_path:"note-h.md" ~content ~line:2 ~character:3;
+      [%expect {| (((path note-a.md) (line 0) (character 0))) |}]
     ;;
 
     let%expect_test "markdown link to note" =
