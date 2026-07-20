@@ -6,9 +6,9 @@ wikilink brackets.
 {1 Activation}
 
 The server advertises [completionProvider] with trigger characters
-[[\[] ].  Completion is requested via [textDocument/completion].
+[[\[] and [#].  Completion is requested via [textDocument/completion].
 
-{1 Trigger context}
+{1:trigger_context Trigger context}
 
 Completion activates when the cursor is inside an incomplete wikilink:
 
@@ -24,7 +24,7 @@ cursor is the {e prefix}.
 
 {1 Completion modes}
 
-{2 Note name completion}
+{2:note_name_completion Note name completion}
 
 When the prefix contains no [#], suggest note names from the vault
 index.
@@ -39,9 +39,13 @@ index.
   {- [kind]: [CompletionItemKind.File].}
 }
 
+The {e shortest unambiguous name} is the file's basename without [.md]
+when that basename is unique in the vault; otherwise the full relative
+path without [.md].
+
 Items are sorted alphabetically by label.
 
-{2 Fragment completion}
+{2:fragment_completion Fragment completion}
 
 When the prefix contains [#], the text before [#] identifies the target
 note (or the current file if empty, as in [ [[#<cursor>]] ]).  The text
@@ -55,14 +59,22 @@ Suggestions come from the target file's AST:
      [kind] is [CompletionItemKind.Reference].
      [insertText] is the slug (e.g. [section-one]).}
   {- {b Block IDs}: one item per block ID.
-     [label] is [^blockid],
+     [label] is [^blockid], [filterText] and [insertText] are the id,
      [kind] is [CompletionItemKind.Reference].}
+  {- {b Attribute IDs}: one item per explicit djot attribute id
+     ([{#id}]); see {!page-"feature-attribute-anchors"}.
+     [label] is [#id], [detail] is ["attribute"], [filterText] and
+     [insertText] are the bare id (inserted after the [#] the user
+     already typed), [kind] is [CompletionItemKind.Reference].}
 }
+
+Headings, block IDs, and attribute IDs share one fragment namespace, so
+all three are offered together.
 
 If the target note cannot be resolved, no fragment suggestions are
 returned.
 
-{1 Completion item shape}
+{1:completion_item_shape Completion item shape}
 
 {t
   | Field      | Note name mode           | Fragment mode            |

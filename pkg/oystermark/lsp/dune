@@ -7,6 +7,7 @@
   lsp_config
   link_collect
   go_to_definition
+  completion
   diagnostics
   hover
   find_references

@@ -24,6 +24,10 @@ class oystermark_server ~sw =
     method! config_hover = Some (`Bool true)
     method! config_inlay_hints = Some (`Bool true)
 
+    method! config_completion : CompletionOptions.t option =
+      (* [[[] opens a wikilink; [#] starts a fragment. See {!page-"feature-completion"}. *)
+      Some (CompletionOptions.create ~triggerCharacters:[ "["; "#" ] ())
+
     method! config_modify_capabilities (c : ServerCapabilities.t) : ServerCapabilities.t =
       (* Advertise UTF-16 position encoding (LSP mandatory baseline); all
          internal conversions default to it. See {!page-"feature-utf16-positions"}. *)
@@ -275,6 +279,45 @@ class oystermark_server ~sw =
              in
              Some locations)
         | _ -> failwith "unhandled request"
+
+    method! on_req_completion
+      ~notify_back:_
+      ~id:_
+      ~(uri : DocumentUri.t)
+      ~(pos : Position.t)
+      ~ctx:_
+      ~workDoneToken:_
+      ~partialResultToken:_
+      (doc_st : doc_state)
+      : [ `CompletionList of CompletionList.t | `List of CompletionItem.t list ] option =
+      match vault with
+      | None -> None
+      | Some v ->
+        let rel_path = self#rel_path_of_uri uri in
+        let items =
+          Lsp_lib.Completion.complete
+            ~index:v.index
+            ~rel_path
+            ~content:doc_st.content
+            ~line:pos.line
+            ~character:pos.character
+            ()
+        in
+        let to_lsp (i : Lsp_lib.Completion.item) : CompletionItem.t =
+          let kind =
+            match i.kind with
+            | Lsp_lib.Completion.File -> CompletionItemKind.File
+            | Lsp_lib.Completion.Reference -> CompletionItemKind.Reference
+          in
+          CompletionItem.create
+            ~label:i.label
+            ?detail:i.detail
+            ?filterText:i.filter_text
+            ?insertText:i.insert_text
+            ~kind
+            ()
+        in
+        Some (`List (List.map items ~f:to_lsp))
 
     method! on_req_inlay_hint
       ~notify_back:_

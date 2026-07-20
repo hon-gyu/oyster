@@ -264,6 +264,35 @@ let references (s : session) ~(rel_path : string) ~(line : int) ~(character : in
   Yojson.Safe.Util.member "result" resp
 ;;
 
+(** Send a textDocument/completion request and return just the result. *)
+let completion (s : session) ~(rel_path : string) ~(line : int) ~(character : int)
+  : Yojson.Safe.t
+  =
+  let id = fresh_id s in
+  let full_path = Filename.concat s.vault_root rel_path in
+  let uri = sprintf "file://%s" full_path in
+  let params =
+    `Assoc
+      [ "textDocument", `Assoc [ "uri", `String uri ]
+      ; "position", `Assoc [ "line", `Int line; "character", `Int character ]
+      ]
+  in
+  send_message s.oc (make_request ~id ~method_:"textDocument/completion" params);
+  let resp = read_response s.ic ~id in
+  Yojson.Safe.Util.member "result" resp
+;;
+
+(** Parse a JSON-RPC completion result into [(label, insertText)] pairs. *)
+let parse_completion_result (result : Yojson.Safe.t) : (string * string) list =
+  match result with
+  | `Null -> []
+  | `List items ->
+    List.map items ~f:(fun item ->
+      let s field = Yojson.Safe.Util.(member field item |> to_string) in
+      s "label", s "insertText")
+  | other -> failwithf "unexpected completion result: %s" (Yojson.Safe.to_string other) ()
+;;
+
 (** Send a textDocument/inlayHint request and return just the result. *)
 let inlay_hint (s : session) ~(rel_path : string) ~(start_line : int) ~(end_line : int)
   : Yojson.Safe.t
