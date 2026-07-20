@@ -40,9 +40,11 @@ let target_to_href : Resolve.target -> string = function
   | Resolve.File { path } -> "/" ^ path
   | Resolve.Heading { path; slug; _ } -> file_url_path path ^ "#" ^ slug
   | Resolve.Block { path; block_id } -> file_url_path path ^ "#^" ^ block_id
+  | Resolve.Attr { path; id; _ } -> file_url_path path ^ "#" ^ id
   | Resolve.Curr_file -> ""
   | Resolve.Curr_heading { slug; _ } -> "#" ^ slug
   | Resolve.Curr_block { block_id } -> "#^" ^ block_id
+  | Resolve.Curr_attr { id; _ } -> "#" ^ id
   | Resolve.Unresolved -> "#"
 ;;
 

@@ -66,8 +66,8 @@ let of_string
       ~block_id:true
       ~div:true
       ~wikilink:true
-      ~djot_inline_attributes:true
-      ~djot_block_attributes:true
+      ~inline_attributes:true
+      ~block_attributes:true
       ~callout:(Block.Callout.Config.make ())
       body
   in

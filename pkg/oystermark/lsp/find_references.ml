@@ -30,6 +30,11 @@ type target =
       { path : string
       ; block_id : string
       }
+  | Path_attr of
+      { path : string
+      ; id : string
+      } (** An explicit djot attribute id ([{#id}]); see
+            {!page-"feature-attribute-anchors"}. *)
 
 (** {2 Target detection}
 
@@ -50,6 +55,21 @@ let block_id_of_line (line_str : string) : string option =
     then Some id
     else None
   | None -> None
+;;
+
+(** Check whether [line_str] is a standalone djot block-attribute line carrying
+    an id, e.g. [ {#aside} ]. Returns [Some id] if so. Inline attributes
+    ([ [text]{#id} ]) are not detected here — cursor-on-inline-anchor is a
+    documented limitation (see {!page-"feature-attribute-anchors"}). *)
+let attr_id_of_line (line_str : string) : string option =
+  let s = String.strip line_str in
+  match String.chop_prefix s ~prefix:"{", String.chop_suffix s ~suffix:"}" with
+  | Some _, Some _ ->
+    let inner = String.sub s ~pos:1 ~len:(String.length s - 2) in
+    (match Oystermark.Parse.Cb_attribute.of_string inner with
+     | Some { id = Some id; _ } -> Some id
+     | _ -> None)
+  | _ -> None
 ;;
 
 (** Determine the reference target from cursor position.
@@ -84,6 +104,7 @@ let detect_target
         | None -> Some (Path_only { path }))
      | Heading { path; slug; _ } -> Some (Path_heading { path; slug })
      | Block { path; block_id } -> Some (Path_block { path; block_id })
+     | Attr { path; id; _ } -> Some (Path_attr { path; id })
      | Curr_file ->
        (match link_ref.fragment with
         | Some (Oystermark.Vault.Link_ref.Heading hs) ->
@@ -95,6 +116,7 @@ let detect_target
         | None -> Some (Path_only { path = rel_path }))
      | Curr_heading { slug; _ } -> Some (Path_heading { path = rel_path; slug })
      | Curr_block { block_id } -> Some (Path_block { path = rel_path; block_id })
+     | Curr_attr { id; _ } -> Some (Path_attr { path = rel_path; id })
      | Unresolved -> None)
   | None ->
     (* Not on a link — check if cursor is on a heading or block ID line. *)
@@ -113,7 +135,10 @@ let detect_target
         | None ->
           (match block_id_of_line line_str with
            | Some block_id -> Some (Path_block { path = rel_path; block_id })
-           | None -> None)))
+           | None ->
+             (match attr_id_of_line line_str with
+              | Some id -> Some (Path_attr { path = rel_path; id })
+              | None -> None))))
 ;;
 
 (** {2 Vault scanning}
@@ -132,9 +157,17 @@ let path_of_resolved ~(source_rel_path : string) (t : Oystermark.Vault.Resolve.t
   | Oystermark.Vault.Resolve.Note { path }
   | File { path }
   | Heading { path; _ }
-  | Block { path; _ } -> Some path
-  | Curr_file | Curr_heading _ | Curr_block _ -> Some source_rel_path
+  | Block { path; _ }
+  | Attr { path; _ } -> Some path
+  | Curr_file | Curr_heading _ | Curr_block _ | Curr_attr _ -> Some source_rel_path
   | Unresolved -> None
+;;
+
+(** Extract the attribute id from a resolved target, if any. *)
+let attr_id_of_resolved (t : Oystermark.Vault.Resolve.target) : string option =
+  match t with
+  | Oystermark.Vault.Resolve.Attr { id; _ } | Curr_attr { id; _ } -> Some id
+  | _ -> None
 ;;
 
 (** Extract the heading slug from a resolved target, if any. *)
@@ -173,6 +206,12 @@ let resolved_matches
     &&
       (match block_id_of_resolved resolved with
       | Some bid -> String.equal bid block_id
+      | None -> false)
+  | Path_attr { path; id }, Some rp ->
+    String.equal path rp
+    &&
+      (match attr_id_of_resolved resolved with
+      | Some rid -> String.equal rid id
       | None -> false)
 ;;
 
@@ -340,6 +379,8 @@ let%test_module "detect_target" =
     let files =
       [ "note-a.md", "# Alpha\n\n## Section One\n\nBody text ^block1\n"
       ; "note-b.md", "# Beta\n\nLink to [[note-a]] here.\n"
+      ; "note-h.md", "# Theta\n\nSome text.\n\n{#aside}\n> An aside block.\n"
+      ; "note-i.md", "# Iota\n\nRef [[note-h#aside]].\n"
       ]
     ;;
 
@@ -351,6 +392,7 @@ let%test_module "detect_target" =
       | Some (Path_only { path }) -> printf "Path_only %s\n" path
       | Some (Path_heading { path; slug }) -> printf "Path_heading %s#%s\n" path slug
       | Some (Path_block { path; block_id }) -> printf "Path_block %s#^%s\n" path block_id
+      | Some (Path_attr { path; id }) -> printf "Path_attr %s#%s\n" path id
     ;;
 
     let%expect_test "cursor on wikilink" =
@@ -371,6 +413,21 @@ let%test_module "detect_target" =
       [%expect {| Path_block note-a.md#^block1 |}]
     ;;
 
+    (* Cursor on a link resolving to an attribute anchor ([{#aside}] in note-h).
+       See {!page-"feature-attribute-anchors"}. *)
+    let%expect_test "cursor on link to attribute id" =
+      let content = List.Assoc.find_exn files ~equal:String.equal "note-i.md" in
+      show ~rel_path:"note-i.md" ~content ~line:2 ~character:8;
+      [%expect {| Path_attr note-h.md#aside |}]
+    ;;
+
+    (* Cursor on a standalone block-attribute line [ {#aside} ]. *)
+    let%expect_test "cursor on attribute anchor line" =
+      let content = List.Assoc.find_exn files ~equal:String.equal "note-h.md" in
+      show ~rel_path:"note-h.md" ~content ~line:4 ~character:2;
+      [%expect {| Path_attr note-h.md#aside |}]
+    ;;
+
     let%expect_test "cursor on plain text" =
       show ~rel_path:"note-a.md" ~content:"plain text" ~line:0 ~character:3;
       [%expect {| <none> |}]
@@ -386,6 +443,8 @@ let%test_module "find_references" =
       ; ( "note-c.md"
         , "# Gamma\n\nSee [[note-a#Section One]].\n\nAlso [[note-a#^block1]].\n" )
       ; "note-d.md", "# Delta\n\nSelf ref [[#Alpha]] in note-a.\n"
+      ; "note-e.md", "# Epsilon\n\nThe [key]{#the-key} span.\n"
+      ; "note-f.md", "# Zeta\n\nOne [[note-e#the-key]] and two [[note-e#the-key]].\n"
       ]
     ;;
 
@@ -418,6 +477,18 @@ let%test_module "find_references" =
       let content = List.Assoc.find_exn files ~equal:String.equal "note-a.md" in
       show ~rel_path:"note-a.md" ~content ~line:4 ~character:5;
       [%expect {| note-c.md [43-60] |}]
+    ;;
+
+    (* From a link targeting an attribute anchor, find all links resolving to
+       the same anchor (note-f has two). See {!page-"feature-attribute-anchors"}. *)
+    let%expect_test "references to attribute id from link" =
+      let content = List.Assoc.find_exn files ~equal:String.equal "note-f.md" in
+      show ~rel_path:"note-f.md" ~content ~line:2 ~character:8;
+      [%expect
+        {|
+        note-f.md [12-29]
+        note-f.md [39-56]
+        |}]
     ;;
 
     let%expect_test "cursor not on anything" =

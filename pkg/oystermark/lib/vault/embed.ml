@@ -298,8 +298,15 @@ and expand_doc
       embed_note ~embed_depth ~max_depth ~depth_fallback ~fragment docs_tbl path extract
     in
     match Cmarkit.Meta.find Resolve.resolved_key meta with
-    (* Non-embeddable: no target, unresolved, or non-markdown file *)
-    | None | Some Resolve.Unresolved | Some (Resolve.File _) -> None
+    (* Non-embeddable: no target, unresolved, or non-markdown file. Attribute
+       anchors ([{#id}]) are navigable (see {!page-"feature-attribute-anchors"})
+       but not yet embeddable — extracting the attributed block/span is future
+       work; treat them as non-embeddable for now. *)
+    | None
+    | Some Resolve.Unresolved
+    | Some (Resolve.File _)
+    | Some (Resolve.Attr _)
+    | Some (Resolve.Curr_attr _) -> None
     (* Self-references: extract from current doc *)
     | Some Resolve.Curr_file -> embed_self ~fragment:None (fun blocks -> blocks)
     | Some (Resolve.Curr_heading { heading; slug; _ }) ->

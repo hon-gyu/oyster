@@ -64,9 +64,11 @@ let go_to_definition
       | File _ -> "file"
       | Heading _ -> "heading"
       | Block _ -> "block"
+      | Attr _ -> "attr"
       | Curr_file -> "curr_file"
       | Curr_heading _ -> "curr_heading"
       | Curr_block _ -> "curr_block"
+      | Curr_attr _ -> "curr_attr"
       | Unresolved -> "unresolved"
     in
     Trace_core.add_data_to_span _sp [ "resolution", `String resolution_tag ];
@@ -78,6 +80,7 @@ let go_to_definition
         | _ -> Some { path; line = 0 })
      | Heading { path; loc; _ } -> Some { path; line = line_of_textloc loc }
      | Block { path; loc; _ } -> Some { path; line = line_of_textloc loc }
+     | Attr { path; loc; _ } -> Some { path; line = line_of_textloc loc }
      | Curr_file ->
        (* Self-reference but fragment (if any) wasn't resolved. *)
        (match config.gtd_unresolved_fragment, link_ref.fragment with
@@ -85,6 +88,7 @@ let go_to_definition
         | _ -> Some { path = rel_path; line = 0 })
      | Curr_heading { loc; _ } -> Some { path = rel_path; line = line_of_textloc loc }
      | Curr_block { loc; _ } -> Some { path = rel_path; line = line_of_textloc loc }
+     | Curr_attr { loc; _ } -> Some { path = rel_path; line = line_of_textloc loc }
      | Unresolved -> None)
 ;;
 
@@ -116,6 +120,9 @@ let%test_module "go_to_definition" =
         , "# Gamma\n\nSee [[note-a#Section One]].\n\nAlso [[note-a#^block1]].\n" )
       ; "note-d.md", "# Delta\n\nMarkdown [link](note-a)\n"
       ; "note-e.md", "# Epsilon\n\nSelf ref [[#Alpha]].\n"
+      ; "note-f.md", "# Zeta\n\nThe [key term]{#key-term} is defined here.\n"
+      ; ( "note-g.md"
+        , "# Eta\n\nSee [[note-f#key-term]].\n\nSelf [[#local]].\n\n{#local}\n> Aside.\n" )
       ]
     ;;
 
@@ -142,6 +149,22 @@ let%test_module "go_to_definition" =
       let content = List.Assoc.find_exn files ~equal:String.equal "note-c.md" in
       show ~rel_path:"note-c.md" ~content ~line:4 ~character:8;
       [%expect {| (((path note-a.md) (line 4))) |}]
+    ;;
+
+    (* [[note-f#key-term]] targets an inline attribute anchor [{#key-term}]
+       on line 2 of note-f. See {!page-"feature-attribute-anchors"}. *)
+    let%expect_test "wikilink to attribute id (cross-file)" =
+      let content = List.Assoc.find_exn files ~equal:String.equal "note-g.md" in
+      show ~rel_path:"note-g.md" ~content ~line:2 ~character:8;
+      [%expect {| (((path note-f.md) (line 2))) |}]
+    ;;
+
+    (* [[#local]] targets the block attribute anchor [{#local}] on the
+       blockquote at line 7 of note-g itself. *)
+    let%expect_test "wikilink to attribute id (self-file)" =
+      let content = List.Assoc.find_exn files ~equal:String.equal "note-g.md" in
+      show ~rel_path:"note-g.md" ~content ~line:4 ~character:9;
+      [%expect {| (((path note-g.md) (line 7))) |}]
     ;;
 
     let%expect_test "markdown link to note" =

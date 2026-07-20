@@ -41,3 +41,16 @@ Subsections are encouraged if needed.
 - Spec: {!page-"feature-index"}
 - Implementation: TODO
 - Test: TODO
+
+{1 attribute-anchors}
+- Spec: {!page-"feature-attribute-anchors"}
+- Core: {!Oystermark.Vault.Index.extract_attr_ids} (collection),
+  {!Oystermark.Vault.Resolve.resolve} ([Attr]/[Curr_attr] cases).
+- Consumers: {!module-Lsp_lib.Go_to_definition} and
+  {!module-Lsp_lib.Find_references} (attribute anchor targets).
+- Test: {!module-Lsp_lib.Go_to_definition.test},
+  {!module-Lsp_lib.Find_references.test}, and
+  [Oystermark.Vault.Index]'s [extract_attr_ids] expect test.
+- Follow-ups (not yet done): column-precise jump to inline anchors
+  (gtd currently line-granular), attribute-anchor embed/hover section
+  extraction, and duplicate-id diagnostics.

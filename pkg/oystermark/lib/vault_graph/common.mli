@@ -22,6 +22,10 @@ type vertex_kind =
       { block_id : string
       ; loc : Cmarkit.Textloc.t option
       } (** Target: a block reference *)
+  | Attr of
+      { id : string
+      ; loc : Cmarkit.Textloc.t option
+      } (** Target: an explicit djot attribute id ([{#id}]) *)
 [@@deriving sexp, compare]
 
 (** A vertex in the link graph. *)

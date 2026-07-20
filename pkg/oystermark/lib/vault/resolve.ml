@@ -22,6 +22,11 @@ type target =
       ; block_id : string
       ; loc : textloc option [@sexp.option]
       }
+  | Attr of
+      { path : string
+      ; id : string
+      ; loc : textloc option [@sexp.option]
+      }
   | Curr_file
   | Curr_heading of
       { heading : string
@@ -31,6 +36,10 @@ type target =
       }
   | Curr_block of
       { block_id : string
+      ; loc : textloc option [@sexp.option]
+      }
+  | Curr_attr of
+      { id : string
       ; loc : textloc option [@sexp.option]
       }
   | Unresolved
@@ -137,6 +146,26 @@ let resolve_headings (headings : Index.heading_entry list) (query : string list)
   search 0 0 0
 ;;
 
+(** Resolve a fragment string against a file's explicit attribute ids
+    ([{#id}]). Exact string comparison; first match in document order wins.
+    See {!page-"feature-attribute-anchors".resolution}. *)
+let resolve_attr (attrs : Index.attr_entry list) (id : string)
+  : Index.attr_entry option
+  =
+  List.find attrs ~f:(fun (a : Index.attr_entry) -> String.equal a.id id)
+;;
+
+(** A heading fragment ([#frag]) that matched no heading may still name an
+    attribute id, but only when it is a single flat component — a multi-level
+    heading query ([#a#b]) can never be an attribute id. *)
+let resolve_attr_of_heading_query (attrs : Index.attr_entry list) (hs : string list)
+  : Index.attr_entry option
+  =
+  match hs with
+  | [ frag ] -> resolve_attr attrs frag
+  | _ -> None
+;;
+
 (** Resolve a link reference against the vault index. *)
 let resolve (link_ref : Link_ref.t) (curr_file : string) (index : Index.t) : target =
   (* TODO(refactor): the matches be re-written to use Let_syntax? *)
@@ -155,14 +184,20 @@ let resolve (link_ref : Link_ref.t) (curr_file : string) (index : Index.t) : tar
            | Some h ->
              Curr_heading
                { heading = h.text; level = h.level; slug = h.slug; loc = h.loc }
-           | None -> Curr_file)
+           | None ->
+             (match resolve_attr_of_heading_query entry.attrs hs with
+              | Some a -> Curr_attr { id = a.id; loc = a.loc }
+              | None -> Curr_file))
         | None -> Curr_file)
      | Some (Link_ref.Block_ref bid) ->
        (match current_entry with
         | Some entry ->
           (match List.find entry.blocks ~f:(fun b -> String.equal b.id bid) with
            | Some b -> Curr_block { block_id = bid; loc = b.loc }
-           | None -> Curr_file)
+           | None ->
+             (match resolve_attr entry.attrs bid with
+              | Some a -> Curr_attr { id = a.id; loc = a.loc }
+              | None -> Curr_file))
         | None -> Curr_file))
   | Some target_str ->
     (match resolve_file index.files target_str with
@@ -183,11 +218,17 @@ let resolve (link_ref : Link_ref.t) (curr_file : string) (index : Index.t) : tar
                ; slug = h.slug
                ; loc = h.loc
                }
-           | None -> file_or_note file.rel_path)
+           | None ->
+             (match resolve_attr_of_heading_query file.attrs hs with
+              | Some a -> Attr { path = file.rel_path; id = a.id; loc = a.loc }
+              | None -> file_or_note file.rel_path))
         | Some (Link_ref.Block_ref bid) ->
           (match List.find file.blocks ~f:(fun b -> String.equal b.id bid) with
            | Some b -> Block { path = file.rel_path; block_id = bid; loc = b.loc }
-           | None -> file_or_note file.rel_path)))
+           | None ->
+             (match resolve_attr file.attrs bid with
+              | Some a -> Attr { path = file.rel_path; id = a.id; loc = a.loc }
+              | None -> file_or_note file.rel_path))))
 ;;
 
 (** Build a [Cmarkit.Mapper.t] that resolves links against the vault index. *)

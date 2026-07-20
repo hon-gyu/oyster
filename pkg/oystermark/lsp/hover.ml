@@ -231,6 +231,13 @@ let hover
              | None -> file_content
            in
            Some (format_hover ~path body))
+      | Attr { path; _ } ->
+        (* Attribute anchors ([{#id}]) resolve for navigation, but extracting the
+           attributed block/span for preview is future work (see
+           {!page-"feature-attribute-anchors"}); fall back to the whole file. *)
+        (match read_file path with
+         | None -> None
+         | Some file_content -> Some (format_hover ~path file_content))
       | Curr_file ->
         let body =
           match link_ref.fragment with
@@ -266,6 +273,9 @@ let hover
           | None -> content
         in
         Some (format_hover ~path:rel_path body)
+      | Curr_attr _ ->
+        (* See [Attr] above: no section extractor yet; show the current file. *)
+        Some (format_hover ~path:rel_path content)
     in
     Option.map result_opt ~f:(fun raw ->
       let text = truncate ~max_chars:config.hover_max_chars raw in

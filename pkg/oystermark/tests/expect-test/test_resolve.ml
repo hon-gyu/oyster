@@ -22,6 +22,7 @@ let test_index : Index.t =
             ; { text = "Another L3"; level = 3; slug = "another-l3"; loc = None }
             ]
         ; blocks = [ { id = "para1"; loc = None }; { id = "block-2"; loc = None } ]
+        ; attrs = []
         }
       ; { rel_path = "Note 2.md"
         ; headings =
@@ -39,29 +40,31 @@ let test_index : Index.t =
               }
             ]
         ; blocks = []
+        ; attrs = []
         }
-      ; { rel_path = "Three laws of motion.md"; headings = []; blocks = [] }
-      ; { rel_path = "().md"; headings = []; blocks = [] }
-      ; { rel_path = "ww.md"; headings = []; blocks = [] }
-      ; { rel_path = "Figure1.jpg"; headings = []; blocks = [] }
-      ; { rel_path = "Figure1.jpg.md"; headings = []; blocks = [] }
-      ; { rel_path = "Figure1.jpg.md.md"; headings = []; blocks = [] }
-      ; { rel_path = "Figure1.md"; headings = []; blocks = [] }
-      ; { rel_path = "Figure1^2.jpg"; headings = []; blocks = [] }
-      ; { rel_path = "image.png"; headings = []; blocks = [] }
-      ; { rel_path = "empty_video.mp4"; headings = []; blocks = [] }
-      ; { rel_path = "unsupported_text_file.txt"; headings = []; blocks = [] }
-      ; { rel_path = "a.joiwduvqneoi"; headings = []; blocks = [] }
-      ; { rel_path = "Something"; headings = []; blocks = [] }
-      ; { rel_path = "Something.md"; headings = []; blocks = [] }
-      ; { rel_path = "Note 1"; headings = []; blocks = [] }
-      ; { rel_path = "indir_same_name.md"; headings = []; blocks = [] }
-      ; { rel_path = "dir/indir_same_name.md"; headings = []; blocks = [] }
-      ; { rel_path = "dir/indir2.md"; headings = []; blocks = [] }
-      ; { rel_path = "dir/inner_dir/note_in_inner_dir.md"; headings = []; blocks = [] }
+      ; { rel_path = "Three laws of motion.md"; headings = []; blocks = []; attrs = [] }
+      ; { rel_path = "().md"; headings = []; blocks = []; attrs = [] }
+      ; { rel_path = "ww.md"; headings = []; blocks = []; attrs = [] }
+      ; { rel_path = "Figure1.jpg"; headings = []; blocks = []; attrs = [] }
+      ; { rel_path = "Figure1.jpg.md"; headings = []; blocks = []; attrs = [] }
+      ; { rel_path = "Figure1.jpg.md.md"; headings = []; blocks = []; attrs = [] }
+      ; { rel_path = "Figure1.md"; headings = []; blocks = []; attrs = [] }
+      ; { rel_path = "Figure1^2.jpg"; headings = []; blocks = []; attrs = [] }
+      ; { rel_path = "image.png"; headings = []; blocks = []; attrs = [] }
+      ; { rel_path = "empty_video.mp4"; headings = []; blocks = []; attrs = [] }
+      ; { rel_path = "unsupported_text_file.txt"; headings = []; blocks = []; attrs = [] }
+      ; { rel_path = "a.joiwduvqneoi"; headings = []; blocks = []; attrs = [] }
+      ; { rel_path = "Something"; headings = []; blocks = []; attrs = [] }
+      ; { rel_path = "Something.md"; headings = []; blocks = []; attrs = [] }
+      ; { rel_path = "Note 1"; headings = []; blocks = []; attrs = [] }
+      ; { rel_path = "indir_same_name.md"; headings = []; blocks = []; attrs = [] }
+      ; { rel_path = "dir/indir_same_name.md"; headings = []; blocks = []; attrs = [] }
+      ; { rel_path = "dir/indir2.md"; headings = []; blocks = []; attrs = [] }
+      ; { rel_path = "dir/inner_dir/note_in_inner_dir.md"; headings = []; blocks = []; attrs = [] }
       ; { rel_path = "dir/inner_dir/deep.md"
         ; headings = []
         ; blocks = [ { id = "deep1"; loc = None } ]
+        ; attrs = []
         }
       ]
   ; dirs = []

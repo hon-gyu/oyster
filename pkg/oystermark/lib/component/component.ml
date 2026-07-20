@@ -330,9 +330,11 @@ module Backlink = struct
     | Vault.Resolve.File { path } -> Some path
     | Vault.Resolve.Heading { path; _ } -> Some path
     | Vault.Resolve.Block { path; _ } -> Some path
+    | Vault.Resolve.Attr { path; _ } -> Some path
     | Vault.Resolve.Curr_file
     | Vault.Resolve.Curr_heading _
     | Vault.Resolve.Curr_block _
+    | Vault.Resolve.Curr_attr _
     | Vault.Resolve.Unresolved -> None
   ;;
 
