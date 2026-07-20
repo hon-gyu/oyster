@@ -9,16 +9,10 @@ open Core
 
     See {!page-"feature-go-to-definition".resolution}. *)
 
-(** The frontmatter-stripped body of [content] — the string a document's
-    [Cmarkit.Textloc]s are relative to (see {!Oystermark.Parse.of_string}). *)
-let body_of (content : string) : string =
-  snd (Oystermark.Parse.Frontmatter.of_string content)
-;;
-
 (** Extract a 0-based [(line, character)] position from an optional
-    [Cmarkit.Textloc.t].  When [content] (the target's frontmatter-stripped
-    body) is given, [character] is a UTF-16 column; otherwise a byte column.
-    Returns [(0, 0)] if [None].
+    [Cmarkit.Textloc.t].  When [content] (the target file's content, whose
+    positions [Textloc]s are relative to) is given, [character] is a UTF-16
+    column; otherwise a byte column.  Returns [(0, 0)] if [None].
     See {!page-"feature-go-to-definition".target_position}. *)
 let position_of_textloc ?content (tl : Cmarkit.Textloc.t option) : int * int =
   match tl with
@@ -85,16 +79,18 @@ let go_to_definition
       | Unresolved -> "unresolved"
     in
     Trace_core.add_data_to_span _sp [ "resolution", `String resolution_tag ];
-    (* Cross-file: read the target's body so its column is UTF-16-encoded;
-       degrade to a byte column if the file can't be read. *)
+    (* Cross-file: read the target so its column is UTF-16-encoded; degrade to a
+       byte column if the file can't be read.  [Textloc]s are full-file-relative
+       (see {!Oystermark.Parse.Frontmatter.blank_frontmatter}), so the raw file
+       content is used directly. *)
     let cross ~path loc =
-      let content = Option.map (read_file path) ~f:body_of in
+      let content = read_file path in
       let line, character = position_of_textloc ?content loc in
       Some { path; line; character }
     in
-    (* Self-file: the current buffer's body is the target's content. *)
+    (* Self-file: the current buffer is the target's content. *)
     let self loc =
-      let line, character = position_of_textloc ~content:(body_of content) loc in
+      let line, character = position_of_textloc ~content loc in
       Some { path = rel_path; line; character }
     in
     (match target with
@@ -210,13 +206,14 @@ let%test_module "go_to_definition" =
       [%expect {| (((path note-i.md) (line 2) (character 3))) |}]
     ;;
 
-    (* Frontmatter guard: offsets are relative to the frontmatter-stripped body,
-       so [body_of] must strip before decoding. Both line and character are
-       body-relative (the pre-existing frontmatter line offset is unchanged). *)
-    let%expect_test "frontmatter target: column computed on stripped body" =
+    (* Frontmatter: positions are full-file-relative because the parser blanks
+       rather than strips the frontmatter. note-k has 3 frontmatter lines, so
+       the anchor (heading body-line 2) is full-file line 5.
+       See {!Oystermark.Parse.Frontmatter.blank_frontmatter}. *)
+    let%expect_test "frontmatter target: full-file line and column" =
       let content = List.Assoc.find_exn files ~equal:String.equal "note-l.md" in
       show ~rel_path:"note-l.md" ~content ~line:2 ~character:8;
-      [%expect {| (((path note-k.md) (line 2) (character 4))) |}]
+      [%expect {| (((path note-k.md) (line 5) (character 4))) |}]
     ;;
 
     (* The [character] is a UTF-16 offset: three [é]s (2 bytes each) precede the

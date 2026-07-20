@@ -57,7 +57,9 @@ let of_string
   =
   let enable_struct = config.ext_struct.enable in
   let open Cmarkit in
-  let yaml_opt, body = Frontmatter.of_string s in
+  (* Blank (not strip) the frontmatter so parsed [Textloc]s stay aligned with
+     the original file's byte/line positions. See {!Frontmatter.blank_frontmatter}. *)
+  let yaml_opt, body = Frontmatter.blank_frontmatter s in
   let cmarkit_doc =
     Doc.of_string
       ~strict
@@ -73,10 +75,19 @@ let of_string
   in
   let body_doc = Mapper.map_doc (mk_mapper ()) cmarkit_doc in
   let body_doc = if enable_struct then Struct.rewrite_doc body_doc else body_doc in
+  (* The frontmatter region was blanked (not stripped) to keep [Textloc]s
+     aligned with the original file, so the parsed body begins with blank lines
+     standing in for those rows. Drop them: leading blank lines carry no content,
+     and keeping them would render as spurious gaps after the frontmatter block.
+     The real blocks keep their (now full-file-relative) locations. *)
+  let rec drop_leading_blanks = function
+    | Cmarkit.Block.Blank_line _ :: rest -> drop_leading_blanks rest
+    | bs -> bs
+  in
   match yaml_opt, Doc.block body_doc with
   | None, _ -> body_doc
   | Some yaml, Block.Blocks (blocks, meta) ->
-    let blocks' = Frontmatter.Frontmatter yaml :: blocks in
+    let blocks' = Frontmatter.Frontmatter yaml :: drop_leading_blanks blocks in
     Doc.make (Block.Blocks (blocks', meta))
   | Some yaml, other ->
     Doc.make (Block.Blocks ([ Frontmatter.Frontmatter yaml; other ], Meta.none))

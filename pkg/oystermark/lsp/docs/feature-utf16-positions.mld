@@ -90,11 +90,11 @@ All conversion logic lives in [lsp_util.ml], keyed on an [encoding] type
 {!Lsp_lib.Util.position_of_textloc} converts a [Cmarkit.Textloc] to a
 position for the go-to-definition {e target}
 (see {!page-"feature-go-to-definition".target_position}). Given the
-target's (frontmatter-stripped) content it decodes the line's bytes and
-returns a UTF-16 column; without content it degrades to a byte column.
-Go-to-definition supplies the content — the current buffer for self-file
-targets, [read_file] for cross-file targets — so target columns are
-UTF-16-encoded like every other position.
+target file's content it decodes the line's bytes and returns a UTF-16
+column; without content it degrades to a byte column. Go-to-definition
+supplies the content — the current buffer for self-file targets,
+[read_file] for cross-file targets — so target columns are UTF-16-encoded
+like every other position.
 
 {1 Edge cases}
 

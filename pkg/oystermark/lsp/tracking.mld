@@ -68,7 +68,10 @@ Subsections are encouraged if needed.
 - Section extraction: {!Oystermark.Parse.Extract.get_block_by_attr_id}
   feeds both embed ([![[note#id]]]) and hover, so an attribute anchor
   previews/embeds its containing block instead of the whole file.
+- Frontmatter positions: {!Oystermark.Parse.Frontmatter.blank_frontmatter}
+  blanks (rather than strips) the frontmatter region before parsing, so
+  every parsed [Textloc] is full-file-relative. This fixes line/byte
+  positions for frontmatter files across all LSP features (gtd,
+  find-references, diagnostics, hover ranges) at once.
 - Follow-ups (not yet done): attribute ids in completion (completion is
-  itself unimplemented); and correcting the go-to-definition [line] for
-  targets with frontmatter (currently body-relative, see
-  {{!page-"feature-go-to-definition".target_position}the gtd spec}).
+  itself unimplemented).

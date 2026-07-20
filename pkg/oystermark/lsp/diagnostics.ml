@@ -209,6 +209,17 @@ let%test_module "compute" =
       [%expect {| |}]
     ;;
 
+    (* Frontmatter: the reported byte range is full-file-relative — the parser
+       blanks rather than strips the frontmatter, so a link after frontmatter is
+       located in the original file, not the stripped body. [[missing]] here
+       starts at byte 21 (after the 20-byte "---\ntitle: T\n---\n" + "See ").
+       See {!Oystermark.Parse.Frontmatter.blank_frontmatter}. *)
+    let%expect_test "link range is full-file-relative under frontmatter" =
+      show ~rel_path:"note-b.md" ~content:"---\ntitle: T\n---\nSee [[missing]].";
+      [%expect
+        {| ((first_byte 21) (last_byte 31) (message "unresolved link: missing")) |}]
+    ;;
+
     let%expect_test "embed wikilink unresolved" =
       show ~rel_path:"note-b.md" ~content:"see ![[missing.png]] here";
       [%expect
