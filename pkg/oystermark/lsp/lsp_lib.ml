@@ -12,4 +12,5 @@ module Completion = Completion
 module Diagnostics = Diagnostics
 module Hover = Hover
 module Find_references = Find_references
+module Rename = Rename
 module Inlay_hints = Inlay_hints

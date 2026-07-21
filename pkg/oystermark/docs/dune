@@ -26,5 +26,21 @@
     (cat index.mld.1of2)
     (cat index.mld.2of2)))))
 
+;; odoc builds one flat page namespace per package. Keep the authored pages in
+;; their feature directories, but collect them beside the package index so one
+;; documentation stanza owns the complete page graph.
+(copy_files ../lsp/*.mld)
+(copy_files ../lsp/docs/*.mld)
+(copy_files note/*.mld)
+(copy_files specification/*.mld)
+
 (documentation
- (package oystermark))
+ (package oystermark)
+ (mld_files
+  index self-describing-note-gen code-exec-cache-design tracking
+  design-260322-lsp design-260322-tracing design-index
+  feature-attribute-anchors feature-codeaction-create-unresolved-link
+  feature-completion feature-diagnostics feature-document-sync
+  feature-find-references feature-go-to-definition feature-hover feature-index
+  feature-inlay-hints feature-rename feature-utf16-positions
+  cmarkit-label-resolution cmarkit-mapper-api pandoc-attribute))

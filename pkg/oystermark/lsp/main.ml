@@ -33,6 +33,7 @@ class oystermark_server ~sw =
          internal conversions default to it. See {!page-"feature-utf16-positions"}. *)
       { c with
         referencesProvider = Some (`Bool true)
+      ; renameProvider = Some (`RenameOptions (RenameOptions.create ~prepareProvider:true ()))
       ; positionEncoding = Some PositionEncodingKind.UTF16
       }
 
@@ -278,6 +279,92 @@ class oystermark_server ~sw =
                  Location.create ~uri:ref_uri ~range)
              in
              Some locations)
+        | Linol.Lsp.Client_request.TextDocumentPrepareRename params ->
+          (match vault with
+           | None -> None
+           | Some v ->
+             let uri = params.textDocument.uri in
+             let rel_path = self#rel_path_of_uri uri in
+             let content = Option.value (self#read_file rel_path) ~default:"" in
+             (match
+                Lsp_lib.Find_references.detect_target
+                  ~index:v.index
+                  ~rel_path
+                  ~content
+                  ~line:params.position.line
+                  ~character:params.position.character
+              with
+              | None -> None
+              | Some _ ->
+                Some (Range.create ~start:params.position ~end_:params.position)))
+        | Linol.Lsp.Client_request.TextDocumentRename params ->
+          (match vault with
+           | None -> WorkspaceEdit.create ()
+           | Some v ->
+             let uri = params.textDocument.uri in
+             let rel_path = self#rel_path_of_uri uri in
+             let content = Option.value (self#read_file rel_path) ~default:"" in
+             let edits =
+               Lsp_lib.Rename.rename
+                 ~index:v.index
+                 ~docs:v.docs
+                 ~read_file:self#read_file
+                 ~rel_path
+                 ~content
+                 ~line:params.position.line
+                 ~character:params.position.character
+                 ~new_name:params.newName
+                 ()
+             in
+             let grouped =
+               List.group edits ~break:(fun a b -> not (String.equal a.rel_path b.rel_path))
+             in
+             let documentChanges =
+               List.filter_map grouped ~f:(function
+                 | [] -> None
+                 | ({ Lsp_lib.Rename.rel_path; _ } :: _ as edits) ->
+                   let content = Option.value (self#read_file rel_path) ~default:"" in
+                   let uri = DocumentUri.of_path (Filename.concat v.vault_root rel_path) in
+                   let textDocument =
+                     OptionalVersionedTextDocumentIdentifier.create ~uri ()
+                   in
+                   let edits =
+                     List.map edits ~f:(fun (edit : Lsp_lib.Rename.edit) ->
+                       let to_position offset =
+                         let line, character =
+                           Lsp_lib.Util.position_of_byte_offset content offset
+                         in
+                         Position.create ~line ~character
+                       in
+                       `TextEdit
+                         (TextEdit.create
+                            ~range:
+                              (Range.create
+                                 ~start:(to_position edit.first_byte)
+                                 ~end_:(to_position edit.last_byte))
+                            ~newText:edit.new_text))
+                   in
+                   Some (`TextDocumentEdit (TextDocumentEdit.create ~edits ~textDocument)))
+             in
+             let documentChanges =
+               match
+                 Lsp_lib.Find_references.detect_target
+                   ~index:v.index
+                   ~rel_path
+                   ~content
+                   ~line:params.position.line
+                   ~character:params.position.character
+               with
+               | Some (Path_only { path }) when Lsp_lib.Rename.valid_note_name params.newName ->
+                 let new_path =
+                   Lsp_lib.Rename.renamed_note_path ~path ~new_name:params.newName
+                 in
+                 let oldUri = DocumentUri.of_path (Filename.concat v.vault_root path) in
+                 let newUri = DocumentUri.of_path (Filename.concat v.vault_root new_path) in
+                 documentChanges @ [ `RenameFile (RenameFile.create ~oldUri ~newUri ()) ]
+               | _ -> documentChanges
+             in
+             WorkspaceEdit.create ~documentChanges ())
         | _ -> failwith "unhandled request"
 
     method! on_req_completion

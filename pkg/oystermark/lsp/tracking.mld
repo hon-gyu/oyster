@@ -38,6 +38,11 @@ Subsections are encouraged if needed.
   go-to-definition target column ([position_of_textloc], needs the
   target file's content).
 
+{1 rename}
+- Spec: {!page-"feature-rename"}
+- Implementation: {!module-Lsp_lib.Rename}
+- Test: {!module-Test_lsp.Test_rename}
+
 {1 inlay-hints}
 - Spec: {!page-"feature-inlay-hints"}
 - Implementation: {!module-Lsp_lib.Inlay_hints.implementation}

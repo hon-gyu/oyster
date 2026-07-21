@@ -6,20 +6,20 @@ wikilink brackets.
 {1 Activation}
 
 The server advertises [completionProvider] with trigger characters
-[[\[] and [#].  Completion is requested via [textDocument/completion].
+[\[\[] and [#]. Completion is requested via [textDocument/completion].
 
 {1:trigger_context Trigger context}
 
 Completion activates when the cursor is inside an incomplete wikilink:
 
 {ul
-  {- [ [[<cursor>]] ] — typing the note name}
-  {- [ [[note#<cursor>]] ] — typing a heading or block-ID fragment}
-  {- [ ![[<cursor>]] ] — embed link, same behavior}
+  {- [\[\[<cursor>\]\]] — typing the note name}
+  {- [\[\[note#<cursor>\]\]] — typing a heading or block-ID fragment}
+  {- [!\[\[<cursor>\]\]] — embed link, same behavior}
 }
 
-Detection: scan backwards from the cursor for an unmatched [[\[] ] (or
-[![\[] ]) on the same line.  If found, the text between [[\[] ] and the
+Detection: scan backwards from the cursor for an unmatched [\[\[] (or
+[!\[\[]) on the same line. If found, the text after the opening brackets and the
 cursor is the {e prefix}.
 
 {1 Completion modes}
@@ -48,7 +48,7 @@ Items are sorted alphabetically by label.
 {2:fragment_completion Fragment completion}
 
 When the prefix contains [#], the text before [#] identifies the target
-note (or the current file if empty, as in [ [[#<cursor>]] ]).  The text
+note (or the current file if empty, as in [\[\[#<cursor>\]\]]). The text
 after [#] is the fragment prefix.
 
 Suggestions come from the target file's AST:
@@ -89,7 +89,7 @@ returned.
 {1 Edge cases}
 
 {ul
-  {- {b Cursor not inside [ [[...]] ]}: no completions.}
+  {- {b Cursor not inside [\[\[...\]\]]}: no completions.}
   {- {b Empty vault}: empty completion list.}
   {- {b Ambiguous note name in fragment mode}: resolve using vault
      resolution rules (same as go-to-definition); suggest fragments

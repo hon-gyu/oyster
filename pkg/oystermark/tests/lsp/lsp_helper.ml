@@ -264,6 +264,29 @@ let references (s : session) ~(rel_path : string) ~(line : int) ~(character : in
   Yojson.Safe.Util.member "result" resp
 ;;
 
+(** Send a textDocument/rename request and return just the workspace edit. *)
+let rename
+      (s : session)
+      ~(rel_path : string)
+      ~(line : int)
+      ~(character : int)
+      ~(new_name : string)
+  : Yojson.Safe.t
+  =
+  let id = fresh_id s in
+  let uri = sprintf "file://%s" (Filename.concat s.vault_root rel_path) in
+  let params =
+    `Assoc
+      [ "textDocument", `Assoc [ "uri", `String uri ]
+      ; "position", `Assoc [ "line", `Int line; "character", `Int character ]
+      ; "newName", `String new_name
+      ]
+  in
+  send_message s.oc (make_request ~id ~method_:"textDocument/rename" params);
+  let resp = read_response s.ic ~id in
+  Yojson.Safe.Util.member "result" resp
+;;
+
 (** Send a textDocument/completion request and return just the result. *)
 let completion (s : session) ~(rel_path : string) ~(line : int) ~(character : int)
   : Yojson.Safe.t

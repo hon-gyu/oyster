@@ -1,0 +1,28 @@
+{0 Rename refactoring}
+
+Rename a note, heading, block ID, or explicit attribute anchor and update every
+vault link or embed that resolves to it.
+
+{1 Input}
+
+The [textDocument/rename] request supplies a cursor position and a non-empty
+new name. The cursor may be on the definition or on a resolved link to it.
+
+{1 Result}
+
+The server returns a [WorkspaceEdit] containing edits for the definition and
+all references. Edits replace only the semantic destination component: link
+labels, wikilink aliases, embed markers, and other fragments are preserved.
+
+Renaming a note updates its link destinations and includes an LSP file rename;
+the file remains in its existing directory. Heading definitions replace the heading text. Heading link fragments use the
+new heading text; resolution subsequently uses its slug. Block and attribute
+definitions replace only their identifier, without the [^] or [#] marker.
+
+Results are grouped by document and ordered by byte position.
+
+{1 Safety}
+
+No edit is returned when the cursor has no resolved rename target, the new
+name is empty, or an identifier contains characters outside letters, digits,
+[-], and [_]. Note names may not contain path separators or be [.] or [..].

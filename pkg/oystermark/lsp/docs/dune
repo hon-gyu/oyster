@@ -1,2 +1,2 @@
-(documentation
- (package oystermark))
+;; Pages are collected by [pkg/oystermark/docs/dune] so odoc sees one package
+;; page graph rather than a separate graph for each source directory.

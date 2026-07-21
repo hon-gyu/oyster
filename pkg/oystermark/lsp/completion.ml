@@ -28,9 +28,9 @@ type item =
 
 (** {2 Trigger detection} *)
 
-(** The wikilink prefix under the cursor: the text between the innermost open
-    [[[] (also matches the [[] of [![[]) and the cursor.  [None] if the cursor
-    is not inside an open wikilink — i.e. no [[[] precedes it on the line, or a
+(** The wikilink prefix under the cursor: the text after the innermost pair of
+    opening square brackets (including an embed) and before the cursor. [None]
+    if the cursor is not inside an open wikilink, or a
     [\]] closes it first.  See {!page-"feature-completion".trigger_context}. *)
 let wikilink_prefix ~(content : string) ~(line : int) ~(character : int) : string option =
   let offset = Lsp_util.byte_offset_of_position content ~line ~character in

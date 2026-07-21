@@ -11,6 +11,7 @@
   diagnostics
   hover
   find_references
+  rename
   inlay_hints)
  (libraries oystermark core trace.core)
  (inline_tests)
@@ -29,6 +30,3 @@
   eio_main
   opentelemetry.trace
   opentelemetry-client-cohttp-eio))
-
-(documentation
- (package oystermark))
