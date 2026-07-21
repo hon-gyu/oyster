@@ -1,14 +1,6 @@
 (** Protocol-facing server core: vault state, document synchronization, and
     one LSP-typed handler per feature.
 
-    [main.ml] is a thin [linol-eio] adapter over this module — it owns
-    JSON-RPC framing, capability advertisement, and nothing else.  Everything
-    that can be wrong about a response lives here instead: byte-offset →
-    [Position] conversion, URI construction, [WorkspaceEdit] shape, and which
-    documents get fresh diagnostics after a save.  Keeping it out of the
-    executable is what lets the tests in [tests/lsp/] drive a real server
-    in-process rather than spawning one over a pipe.
-
     Handlers take vault-relative paths and 0-based UTF-16 positions, mirroring
     the pure logic layer; conversion from a [DocumentUri.t] happens at the edge
     via {!rel_path_of_uri}.  Every handler answers [None] before {!initialize}

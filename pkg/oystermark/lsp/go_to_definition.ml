@@ -10,7 +10,7 @@ open Core
     See {!page-"feature-go-to-definition".resolution}. *)
 
 (** Extract a 0-based [(line, character)] position from an optional
-    [Cmarkit.Textloc.t].  When [content] (the target file's content, whose
+    {!Cmarkit.Textloc.t}.  When [content] (the target file's content, whose
     positions [Textloc]s are relative to) is given, [character] is a UTF-16
     column; otherwise a byte column.  Returns [(0, 0)] if [None].
     See {!page-"feature-go-to-definition".target_position}. *)

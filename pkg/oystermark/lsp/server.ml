@@ -1,4 +1,4 @@
-(** Implementation of {!Server}; see [server.mli] for the contract.
+(** Implementation of {!Server}
 
     Two content sources are in play and the difference is deliberate:
     diagnostics and the cursor-position features answer against
