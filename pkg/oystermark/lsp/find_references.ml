@@ -33,7 +33,8 @@ type target =
   | Path_attr of
       { path : string
       ; id : string
-      } (** An explicit djot attribute id ([{#id}]); see
+      }
+  (** An explicit djot attribute id ([{#id}]); see
             {!page-"feature-attribute-anchors"}. *)
 
 (** {2 Target detection}

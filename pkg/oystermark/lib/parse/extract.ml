@@ -63,8 +63,7 @@ let get_block_by_caret_id (blocks : Cmarkit.Block.t list) (id : string)
   let open Cmarkit in
   let has_matching_id (meta : Meta.t) : bool =
     match Block.Block_id.find meta with
-    | Some (block_id : Block.Block_id.t) ->
-      String.equal (Block.Block_id.id block_id) id
+    | Some (block_id : Block.Block_id.t) -> String.equal (Block.Block_id.id block_id) id
     | None -> false
   in
   (* A standalone [^id] paragraph is one whose entire inline content is just
@@ -142,8 +141,7 @@ let get_block_by_attr_id (blocks : Cmarkit.Block.t list) (id : string)
         ~inline:(fun _f found i ->
           match i with
           | Inline.Ext_attributes (a, _)
-            when attr_matches (Inline.Attributes.attributes a) ->
-            Folder.ret true
+            when attr_matches (Inline.Attributes.attributes a) -> Folder.ret true
           | _ -> if found then Folder.ret true else Folder.default)
         ~inline_ext_default:(fun _f found _ -> found)
         ~block_ext_default:(fun _f found _ -> found)

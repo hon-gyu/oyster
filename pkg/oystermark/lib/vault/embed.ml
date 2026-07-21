@@ -125,7 +125,9 @@ let is_expandable_embed_paragraph
 
 (** A fallback paragraph that renders the embed as a plain link (used when
     [embed_depth >= max_depth] or when the target cannot be resolved to a note). *)
-let fallback_block (wl : Cmarkit.Inline.Wikilink.t) (meta : Cmarkit.Meta.t) : Cmarkit.Block.t =
+let fallback_block (wl : Cmarkit.Inline.Wikilink.t) (meta : Cmarkit.Meta.t)
+  : Cmarkit.Block.t
+  =
   let wl_link =
     Cmarkit.Inline.Wikilink.make ~embed:false (Cmarkit.Inline.Wikilink.content wl)
   in
@@ -303,11 +305,14 @@ and expand_doc
     (* Self-references: extract from current doc *)
     | Some Resolve.Curr_file -> embed_self ~fragment:None (fun blocks -> blocks)
     | Some (Resolve.Curr_heading { heading; slug; _ }) ->
-      embed_self ~fragment:(Some (Cmarkit.Inline.Wikilink.Heading [ heading ])) (fun blocks ->
-        Parse.Extract.get_heading_section blocks slug)
+      embed_self
+        ~fragment:(Some (Cmarkit.Inline.Wikilink.Heading [ heading ]))
+        (fun blocks -> Parse.Extract.get_heading_section blocks slug)
     | Some (Resolve.Curr_block { block_id }) ->
-      embed_self ~fragment:(Some (Cmarkit.Inline.Wikilink.Block_ref block_id)) (fun blocks ->
-        Option.to_list (Parse.Extract.get_block_by_caret_id blocks block_id))
+      embed_self
+        ~fragment:(Some (Cmarkit.Inline.Wikilink.Block_ref block_id))
+        (fun blocks ->
+           Option.to_list (Parse.Extract.get_block_by_caret_id blocks block_id))
     | Some (Resolve.Curr_attr { id; _ }) ->
       (* Attribute anchors have no [Wikilink.fragment] variant, so the embed
          metadata records no fragment. See {!page-"feature-attribute-anchors"}. *)
@@ -316,11 +321,16 @@ and expand_doc
     (* Cross-file references: look up in vault and recursively expand *)
     | Some (Resolve.Note { path }) -> embed ~fragment:None path (fun blocks -> blocks)
     | Some (Resolve.Heading { path; heading; slug; _ }) ->
-      embed ~fragment:(Some (Cmarkit.Inline.Wikilink.Heading [ heading ])) path (fun blocks ->
-        Parse.Extract.get_heading_section blocks slug)
+      embed
+        ~fragment:(Some (Cmarkit.Inline.Wikilink.Heading [ heading ]))
+        path
+        (fun blocks -> Parse.Extract.get_heading_section blocks slug)
     | Some (Resolve.Block { path; block_id }) ->
-      embed ~fragment:(Some (Cmarkit.Inline.Wikilink.Block_ref block_id)) path (fun blocks ->
-        Option.to_list (Parse.Extract.get_block_by_caret_id blocks block_id))
+      embed
+        ~fragment:(Some (Cmarkit.Inline.Wikilink.Block_ref block_id))
+        path
+        (fun blocks ->
+           Option.to_list (Parse.Extract.get_block_by_caret_id blocks block_id))
     | Some (Resolve.Attr { path; id; _ }) ->
       embed ~fragment:None path (fun blocks ->
         Option.to_list (Parse.Extract.get_block_by_attr_id blocks id))
@@ -392,11 +402,7 @@ let reverse_embed_doc (doc : Cmarkit.Doc.t) : Cmarkit.Doc.t =
                if String.is_empty source_path then None else Some (strip_md source_path)
              in
              let wl =
-               Parse.Common.wikilink_of_fields
-                 ~target
-                 ~fragment
-                 ~display:None
-                 ~embed:true
+               Parse.Common.wikilink_of_fields ~target ~fragment ~display:None ~embed:true
              in
              let inline = Cmarkit.Inline.Ext_wikilink (wl, Cmarkit.Meta.none) in
              let p =

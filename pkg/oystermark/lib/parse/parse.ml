@@ -34,10 +34,7 @@ let mk_mapper () : Cmarkit.Mapper.t =
   Cmarkit.Mapper.make
     ~inline_ext_default:(fun _m i -> Some i)
     ~block:
-      (compose_all_block_maps
-         [ Heading_slug.mk_block_map ()
-         ; Cb_attribute.block_map
-         ])
+      (compose_all_block_maps [ Heading_slug.mk_block_map (); Cb_attribute.block_map ])
     ()
 ;;
 
@@ -134,8 +131,7 @@ let div_sexp_of_block : Common.block_sexp =
     Some
       (with_meta
          meta
-         (Sexp.List
-            [ Atom "Div"; class_sexp; recurse_block (Cmarkit.Block.Div.block d) ]))
+         (Sexp.List [ Atom "Div"; class_sexp; recurse_block (Cmarkit.Block.Div.block d) ]))
   | _ -> None
 ;;
 
@@ -289,25 +285,37 @@ let%test_module "Extract" =
 
     let%expect_test "get_block_by_caret_id: inline" =
       let doc = of_string example_inline_caret_id in
-      Format.printf "%a%!" pp_block_opt (Extract.get_block_by_caret_id [ Cmarkit.Doc.block doc ] "abc123");
+      Format.printf
+        "%a%!"
+        pp_block_opt
+        (Extract.get_block_by_caret_id [ Cmarkit.Doc.block doc ] "abc123");
       [%expect {| Second paragraph text ^abc123 |}]
     ;;
 
     let%expect_test "get_block_by_caret_id: standalone blockquote" =
       let doc = of_string example_blockquote_caret_id in
-      Format.printf "%a%!" pp_block_opt (Extract.get_block_by_caret_id [ Cmarkit.Doc.block doc ] "bq001");
+      Format.printf
+        "%a%!"
+        pp_block_opt
+        (Extract.get_block_by_caret_id [ Cmarkit.Doc.block doc ] "bq001");
       [%expect {| > A blockquote here. |}]
     ;;
 
     let%expect_test "get_block_by_caret_id: not found" =
       let doc = of_string example_not_found in
-      Format.printf "%a%!" pp_block_opt (Extract.get_block_by_caret_id [ Cmarkit.Doc.block doc ] "nope");
+      Format.printf
+        "%a%!"
+        pp_block_opt
+        (Extract.get_block_by_caret_id [ Cmarkit.Doc.block doc ] "nope");
       [%expect {| <none> |}]
     ;;
 
     let%expect_test "get_block_by_caret_id: standalone list" =
       let doc = of_string example_list_caret_id in
-      Format.printf "%a%!" pp_block_opt (Extract.get_block_by_caret_id [ Cmarkit.Doc.block doc ] "lst001");
+      Format.printf
+        "%a%!"
+        pp_block_opt
+        (Extract.get_block_by_caret_id [ Cmarkit.Doc.block doc ] "lst001");
       [%expect
         {|
     - Item one
@@ -317,9 +325,15 @@ let%test_module "Extract" =
 
     let%expect_test "get_block_by_caret_id: nested list" =
       let doc = of_string example_nested_list_caret_id in
-      Format.printf "%a%!" pp_block_opt (Extract.get_block_by_caret_id [ Cmarkit.Doc.block doc ] "firstline");
+      Format.printf
+        "%a%!"
+        pp_block_opt
+        (Extract.get_block_by_caret_id [ Cmarkit.Doc.block doc ] "firstline");
       [%expect {| a nested list ^firstline |}];
-      Format.printf "%a%!" pp_block_opt (Extract.get_block_by_caret_id [ Cmarkit.Doc.block doc ] "inneritem");
+      Format.printf
+        "%a%!"
+        pp_block_opt
+        (Extract.get_block_by_caret_id [ Cmarkit.Doc.block doc ] "inneritem");
       [%expect
         {|
     item
@@ -385,10 +399,14 @@ And here is another.
       , 1 )
     ;;
 
-    let example_no_class = "no_class", {|:::
+    let example_no_class =
+      ( "no_class"
+      , {|:::
 content
 :::
-|}, 1
+|}
+      , 1 )
+    ;;
 
     let example_nested_divs =
       ( "nested_divs"
@@ -402,45 +420,61 @@ content
     ;;
 
     let example_nested_divs_same_length =
-      "nested_divs_same_length", {|::: warning
+      ( "nested_divs_same_length"
+      , {|::: warning
 content
 :::
-:::|}, 2
+:::|}
+      , 2 )
     ;;
 
-    let example_EOF_closes = "EOF_closes", {|::: warning
-unclosed content|}, 1
+    let example_EOF_closes =
+      ( "EOF_closes"
+      , {|::: warning
+unclosed content|}
+      , 1 )
+    ;;
 
     let example_extra_closing_fence =
-      "extra_closing_fence", {|::: warning
+      ( "extra_closing_fence"
+      , {|::: warning
 content
 :::
-:::|}, 2
+:::|}
+      , 2 )
     ;;
 
     let non_example_less_than_3_colons =
-      "less_than_3_colons", {|:: not-a-div
+      ( "less_than_3_colons"
+      , {|:: not-a-div
 content
-::|}, 0
+::|}
+      , 0 )
     ;;
 
     let non_example_extra_words_after_class =
-      "extra_words_after_class", {|::: warning extra
+      ( "extra_words_after_class"
+      , {|::: warning extra
 content
-:::|}, 0
+:::|}
+      , 0 )
     ;;
 
     let non_example_div_does_not_interfere_with_code_blocks =
-      "div_does_not_interfere_with_code_blocks", {|```
+      ( "div_does_not_interfere_with_code_blocks"
+      , {|```
 ::: not-a-div
-```|}, 0
+```|}
+      , 0 )
     ;;
 
     let example_closing_fence_must_be_at_least_as_long =
-      "closing_fence_must_be_at_least_as_long", {|:::: warning
+      ( "closing_fence_must_be_at_least_as_long"
+      , {|:::: warning
 content
 :::
-::::|}, 2
+::::|}
+      , 2 )
     ;;
 
     let examples =
@@ -748,8 +782,7 @@ body
 :::|}
       in
       Format.printf "%a%!" pp_doc doc;
-      [%expect
-        {| (Attributes #foo (Div (class warning) (Paragraph (Text body)))) |}]
+      [%expect {| (Attributes #foo (Div (class warning) (Paragraph (Text body)))) |}]
     ;;
 
     let%expect_test "attaches to keyed block" =
@@ -789,8 +822,7 @@ key:
     let%expect_test "inline attribute on keyed value" =
       let doc = of_string "key: value{.x}" in
       Format.printf "%a%!" pp_doc doc;
-      [%expect
-        {| (Keyed (Text "key: ") (Paragraph (Attributes .x (Text value)))) |}]
+      [%expect {| (Keyed (Text "key: ") (Paragraph (Attributes .x (Text value)))) |}]
     ;;
 
     let%expect_test "inline attribute on keyed key" =

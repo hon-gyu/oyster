@@ -1,6 +1,7 @@
 ; The mlmdx dialect preprocessor. dune runs `mlmdx-pp <file>` on each .mlmdx and
 ; reads its output via the classic -pp binary-AST protocol: the compiler's AST
 ; magic number followed by a marshaled (filename, structure) pair.
+
 (executable
  (name mlmdx_pp)
  (public_name mlmdx-pp)

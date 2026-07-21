@@ -149,9 +149,7 @@ let resolve_headings (headings : Index.heading_entry list) (query : string list)
 (** Resolve a fragment string against a file's explicit attribute ids
     ([{#id}]). Exact string comparison; first match in document order wins.
     See {!page-"feature-attribute-anchors".resolution}. *)
-let resolve_attr (attrs : Index.attr_entry list) (id : string)
-  : Index.attr_entry option
-  =
+let resolve_attr (attrs : Index.attr_entry list) (id : string) : Index.attr_entry option =
   List.find attrs ~f:(fun (a : Index.attr_entry) -> String.equal a.id id)
 ;;
 

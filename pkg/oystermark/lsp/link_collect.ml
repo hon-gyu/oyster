@@ -64,13 +64,14 @@ let collect_links (doc : Cmarkit.Doc.t) : located_link list =
           in
           try_add_link acc link_ref kind (Cmarkit.Meta.textloc meta)
         | _ -> acc)
-      (* Keyed nodes are now native [Cmarkit.Block] constructors, so the
+        (* Keyed nodes are now native [Cmarkit.Block] constructors, so the
          default fold recurses into their label and body automatically. Only
          other block extensions (e.g. frontmatter) reach here; ignore them. *)
       ~block_ext_default:(fun _f acc _b -> acc)
       ~inline:(fun _f acc i ->
         match i with
-        | Cmarkit.Inline.Link (link, meta) | Cmarkit.Inline.Image (link, meta) as inline ->
+        | (Cmarkit.Inline.Link (link, meta) | Cmarkit.Inline.Image (link, meta)) as inline
+          ->
           let loc = Cmarkit.Meta.textloc meta in
           let ref_ = Cmarkit.Inline.Link.reference link in
           (match Oystermark.Vault.Link_ref.of_cmark_reference ref_ with

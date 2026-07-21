@@ -62,10 +62,13 @@ let note_name_items (index : Oystermark.Vault.Index.t) : item list =
   in
   let basename p = String.chop_suffix_if_exists (Filename.basename p) ~suffix:".md" in
   let counts =
-    List.fold md_files ~init:(Map.empty (module String)) ~f:(fun m p ->
-      Map.update m (basename p) ~f:(function
-        | None -> 1
-        | Some n -> n + 1))
+    List.fold
+      md_files
+      ~init:(Map.empty (module String))
+      ~f:(fun m p ->
+        Map.update m (basename p) ~f:(function
+          | None -> 1
+          | Some n -> n + 1))
   in
   List.map md_files ~f:(fun p ->
     let base = basename p in

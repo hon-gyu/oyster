@@ -183,11 +183,11 @@ let find_block_id (md : string) : string option =
   let folder =
     Cmarkit.Folder.make
       ~block:(fun _f acc -> function
-        | Cmarkit.Block.Paragraph (_p, meta) ->
-          (match Cmarkit.Block.Block_id.find meta with
-           | Some bid -> Cmarkit.Folder.ret (Some (Cmarkit.Block.Block_id.id bid))
-           | None -> Cmarkit.Folder.default)
-        | _ -> Cmarkit.Folder.default)
+         | Cmarkit.Block.Paragraph (_p, meta) ->
+           (match Cmarkit.Block.Block_id.find meta with
+            | Some bid -> Cmarkit.Folder.ret (Some (Cmarkit.Block.Block_id.id bid))
+            | None -> Cmarkit.Folder.default)
+         | _ -> Cmarkit.Folder.default)
       ()
   in
   Cmarkit.Folder.fold_doc folder None doc
@@ -204,7 +204,8 @@ let%expect_test "block_id" =
     List.map block_id_cases ~f:(fun (name, input) -> name, input, find_block_id input)
   in
   print_string (Ascii_table.to_string_noattr cols rows);
-  [%expect {|
+  [%expect
+    {|
     ┌───────────────────┬────────────────────┬──────────┐
     │ name              │ input              │ result   │
     ├───────────────────┼────────────────────┼──────────┤

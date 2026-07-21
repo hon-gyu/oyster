@@ -11,6 +11,7 @@ let read_file file =
   Fun.protect
     ~finally:(fun () -> close_in ic)
     (fun () -> really_input_string ic (in_channel_length ic))
+;;
 
 let () =
   let file = Sys.argv.(1) in
@@ -19,3 +20,4 @@ let () =
   output_string stdout Config.ast_impl_magic_number;
   output_value stdout file;
   output_value stdout structure
+;;

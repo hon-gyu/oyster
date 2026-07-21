@@ -59,14 +59,16 @@ let events (entry : Oystermark.Vault.Index.file_entry) =
     List.filter_map entry.attrs ~f:(fun a ->
       event_of_loc ~name:("#" ^ a.id) ~kind:Attribute_id a.loc)
   in
-  List.sort (headings @ blocks @ attrs) ~compare:(fun a b ->
-    match Int.compare a.first_byte b.first_byte with
-    | 0 ->
-      (match a.kind, b.kind with
-       | Heading _, (Block_id | Attribute_id) -> -1
-       | (Block_id | Attribute_id), Heading _ -> 1
-       | _ -> Int.compare a.last_byte b.last_byte)
-    | c -> c)
+  List.sort
+    (headings @ blocks @ attrs)
+    ~compare:(fun a b ->
+      match Int.compare a.first_byte b.first_byte with
+      | 0 ->
+        (match a.kind, b.kind with
+         | Heading _, (Block_id | Attribute_id) -> -1
+         | (Block_id | Attribute_id), Heading _ -> 1
+         | _ -> Int.compare a.last_byte b.last_byte)
+      | c -> c)
 ;;
 
 let symbols ~(entry : Oystermark.Vault.Index.file_entry) ~(content_length : int)
@@ -92,15 +94,12 @@ let symbols ~(entry : Oystermark.Vault.Index.file_entry) ~(content_length : int)
     match event.kind with
     | Heading level ->
       close_until level event.first_byte;
-      let node =
-        { event; section_last_byte = content_length; children_rev = [] }
-      in
+      let node = { event; section_last_byte = content_length; children_rev = [] } in
       attach node;
       heading_stack := (level, node) :: !heading_stack
     | Block_id | Attribute_id ->
       attach { event; section_last_byte = event.last_byte; children_rev = [] });
-  List.iter !heading_stack ~f:(fun (_, node) ->
-    node.section_last_byte <- content_length);
+  List.iter !heading_stack ~f:(fun (_, node) -> node.section_last_byte <- content_length);
   let rec freeze node =
     { name = node.event.name
     ; kind = node.event.kind
@@ -123,4 +122,3 @@ let document_outline ~(index : Oystermark.Vault.Index.t) ~rel_path ~content =
 module For_test = struct
   let document_outline = document_outline
 end
-

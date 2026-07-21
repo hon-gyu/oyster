@@ -60,7 +60,11 @@ let test_index : Index.t =
       ; { rel_path = "indir_same_name.md"; headings = []; blocks = []; attrs = [] }
       ; { rel_path = "dir/indir_same_name.md"; headings = []; blocks = []; attrs = [] }
       ; { rel_path = "dir/indir2.md"; headings = []; blocks = []; attrs = [] }
-      ; { rel_path = "dir/inner_dir/note_in_inner_dir.md"; headings = []; blocks = []; attrs = [] }
+      ; { rel_path = "dir/inner_dir/note_in_inner_dir.md"
+        ; headings = []
+        ; blocks = []
+        ; attrs = []
+        }
       ; { rel_path = "dir/inner_dir/deep.md"
         ; headings = []
         ; blocks = [ { id = "deep1"; loc = None } ]

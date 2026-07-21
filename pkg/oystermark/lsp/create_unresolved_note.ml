@@ -15,14 +15,14 @@ let safe_note_path target =
   let components = String.split target ~on:'/' in
   let safe_component component =
     (not (String.is_empty component))
-    && not (String.mem component '\\')
+    && (not (String.mem component '\\'))
     && not (String.equal component "." || String.equal component "..")
   in
   let extension = snd (Filename.split_extension target) in
   if
     String.is_empty target
     || Filename.is_absolute target
-    || not (List.for_all components ~f:safe_component)
+    || (not (List.for_all components ~f:safe_component))
     || Option.exists extension ~f:(fun ext -> not (String.equal ext ".md"))
   then None
   else Some (if Option.is_some extension then target else target ^ ".md")

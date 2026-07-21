@@ -146,7 +146,8 @@ let vertex_of_resolved_target (target : Vault.Resolve.target) (src_path : string
     Some { path = src_path; kind = Heading { heading; slug; loc } }
   | Vault.Resolve.Curr_block { block_id; loc } ->
     Some { path = src_path; kind = Block { block_id; loc } }
-  | Vault.Resolve.Curr_attr { id; loc } -> Some { path = src_path; kind = Attr { id; loc } }
+  | Vault.Resolve.Curr_attr { id; loc } ->
+    Some { path = src_path; kind = Attr { id; loc } }
   | Vault.Resolve.Unresolved -> None
 ;;
 

@@ -143,7 +143,8 @@ let%test_module "go_to_definition" =
       ; "note-e.md", "# Epsilon\n\nSelf ref [[#Alpha]].\n"
       ; "note-f.md", "# Zeta\n\nThe [key term]{#key-term} is defined here.\n"
       ; ( "note-g.md"
-        , "# Eta\n\nSee [[note-f#key-term]].\n\nSelf [[#local]].\n\n{#local}\n> Aside.\n" )
+        , "# Eta\n\nSee [[note-f#key-term]].\n\nSelf [[#local]].\n\n{#local}\n> Aside.\n"
+        )
       ; "note-h.md", "# Theta\n\nééé[[note-a]]\n"
       ; "note-i.md", "# Iota\n\n日本 [key]{#jp} tail.\n"
       ; "note-j.md", "# Kappa\n\nSee [[note-i#jp]].\n"

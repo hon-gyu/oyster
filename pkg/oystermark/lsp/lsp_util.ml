@@ -59,7 +59,9 @@ let byte_offset_of_position
   let units = ref 0 in
   let stop = ref false in
   while
-    (not !stop) && !pos < len && (not (Char.equal (String.get content !pos) '\n'))
+    (not !stop)
+    && !pos < len
+    && (not (Char.equal (String.get content !pos) '\n'))
     && !units < character
   do
     let dec = Stdlib.String.get_utf_8_uchar content !pos in
@@ -117,9 +119,7 @@ let position_of_byte_offset ?(encoding = Utf16) (content : string) (offset : int
     A [none] location maps to [(0, 0)].  See
     {!page-"feature-utf16-positions"} and
     {!page-"feature-go-to-definition".target_position}. *)
-let position_of_textloc ?content ?(encoding = Utf16) (tl : Cmarkit.Textloc.t)
-  : int * int
-  =
+let position_of_textloc ?content ?(encoding = Utf16) (tl : Cmarkit.Textloc.t) : int * int =
   if Cmarkit.Textloc.is_none tl
   then 0, 0
   else (
