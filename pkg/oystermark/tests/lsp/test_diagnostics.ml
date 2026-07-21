@@ -71,7 +71,17 @@ let%expect_test "external link skipped" =
 
 let%expect_test "embed wikilink unresolved" =
   show ~rel_path:"note-b.md" ~content:"see ![[missing.png]] here";
-  [%expect {| ((first_byte 4) (last_byte 19) (message "unresolved link: missing.png")) |}]
+  [%expect {| ((first_byte 4) (last_byte 19) (message "unresolved image: missing.png")) |}]
+;;
+
+let%expect_test "note embed unresolved" =
+  show ~rel_path:"note-b.md" ~content:"see ![[missing-note]] here";
+  [%expect {| ((first_byte 4) (last_byte 20) (message "unresolved embed: missing-note")) |}]
+;;
+
+let%expect_test "markdown image unresolved" =
+  show ~rel_path:"note-b.md" ~content:"see ![alt](missing.png) here";
+  [%expect {| ((first_byte 4) (last_byte 22) (message "unresolved image: missing.png")) |}]
 ;;
 
 (* Trace

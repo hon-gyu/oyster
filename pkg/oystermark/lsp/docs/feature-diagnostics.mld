@@ -1,9 +1,8 @@
 {0 Diagnostics}
 
-Report two classes of problem as diagnostics: {b unresolved links} (so
-the user can distinguish resolved from unresolved links without
-navigating) and {b duplicate anchor ids} (so ambiguous jump targets are
-visible at their source).
+Report unresolved links, broken embeds, broken images, and duplicate anchor
+ids as diagnostics. This makes broken destinations visible without navigating
+and reports ambiguous anchor targets at their source.
 
 {1 Trigger}
 
@@ -23,6 +22,16 @@ Every recognized link form in the document is checked:
 }
 
 External URLs ([https://...], [http://...]) are skipped.
+
+Unresolved destinations are categorized from their source syntax:
+
+{ul
+  {- Ordinary wikilinks and Markdown links report ["unresolved link"].}
+  {- Note transclusions and non-image wikilink embeds report
+     ["unresolved embed"].}
+  {- Markdown images and wikilink embeds with a recognized image extension
+     report ["unresolved image"].}
+}
 
 {1:resolution_check Resolution check}
 
@@ -73,7 +82,7 @@ auto-deduped during parsing.
   | range        | byte range of the link or anchor (see {!page-"feature-utf16-positions"}) |
   | severity     | Warning                                             |
   | source       | ["oystermark"]                                      |
-  | message      | human-readable description, e.g. ["unresolved link: note"] or ["duplicate anchor id: foo"] |
+  | message      | category and target, e.g. ["unresolved embed: note"], ["unresolved image: picture.png"], or ["duplicate anchor id: foo"] |
 }
 
 Resolved links and unique anchor ids produce no diagnostic. Diagnostics
@@ -85,8 +94,10 @@ are returned sorted by range start for determinism.
   {- {b Empty document}: zero diagnostics.}
   {- {b Self-referencing fragment} ([[[#heading]]]): resolved against
      the current file; unresolved if heading/block not found.}
-  {- {b Embed links} ([![[note]]]): treated identically to regular
-     wikilinks for diagnostic purposes.}
+  {- {b Embed links}: an unresolved note transclusion reports
+     ["unresolved embed"].}
+  {- {b Images}: an unresolved media wikilink or Markdown image reports
+     ["unresolved image"]. Existing image files produce no diagnostic.}
   {- {b Unique anchor id}: no diagnostic, even when it is never
      referenced.}
   {- {b Duplicate id, some occurrences unlocated}: only the located

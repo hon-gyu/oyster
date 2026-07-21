@@ -1,4 +1,4 @@
-(** Diagnostics: report unresolved links as warnings.
+(** Diagnostics: report unresolved links, embeds, and images as warnings.
 
     Spec: {!page-"feature-diagnostics"}. *)
 
@@ -104,10 +104,16 @@ let compute
           | Some (Block_ref b) -> "#^" ^ b
           | None -> ""
         in
+        let category =
+          match ll.kind with
+          | Link_collect.Link -> "link"
+          | Embed -> "embed"
+          | Image -> "image"
+        in
         Some
           { first_byte = ll.first_byte
           ; last_byte = ll.last_byte
-          ; message = "unresolved link: " ^ target_str ^ fragment_str
+          ; message = "unresolved " ^ category ^ ": " ^ target_str ^ fragment_str
           })
       else None)
   in
@@ -145,6 +151,7 @@ let%test_module "compute" =
     let files =
       [ "note-a.md", "# Alpha\n\n## Section One\n\nBody text ^block1\n"
       ; "note-b.md", "# Beta\n\nLink to [[note-a]] here.\n"
+      ; "image.png", ""
       ]
     ;;
 
@@ -223,7 +230,24 @@ let%test_module "compute" =
     let%expect_test "embed wikilink unresolved" =
       show ~rel_path:"note-b.md" ~content:"see ![[missing.png]] here";
       [%expect
-        {| ((first_byte 4) (last_byte 19) (message "unresolved link: missing.png")) |}]
+        {| ((first_byte 4) (last_byte 19) (message "unresolved image: missing.png")) |}]
+    ;;
+
+    let%expect_test "note embed unresolved" =
+      show ~rel_path:"note-b.md" ~content:"see ![[missing-note]] here";
+      [%expect
+        {| ((first_byte 4) (last_byte 20) (message "unresolved embed: missing-note")) |}]
+    ;;
+
+    let%expect_test "markdown image unresolved" =
+      show ~rel_path:"note-b.md" ~content:"see ![alt](missing.png) here";
+      [%expect
+        {| ((first_byte 4) (last_byte 22) (message "unresolved image: missing.png")) |}]
+    ;;
+
+    let%expect_test "resolved image produces no diagnostic" =
+      show ~rel_path:"note-b.md" ~content:"see ![[image.png]] here";
+      [%expect {| |}]
     ;;
 
     (* Duplicate anchor ids. See {!page-"feature-diagnostics".duplicate_ids}. *)
