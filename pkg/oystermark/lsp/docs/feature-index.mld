@@ -14,6 +14,7 @@
   {- {!page-"feature-hover"}}
   {- {!page-"feature-find-references"}}
   {- {!page-"feature-rename"}}
+  {- {!page-"feature-document-outline"}}
   {- {!page-"feature-inlay-hints"}}
   {- {!page-"feature-completion"}}
   {- {!page-"feature-utf16-positions"}}

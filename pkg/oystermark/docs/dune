@@ -40,7 +40,7 @@
   index self-describing-note-gen code-exec-cache-design tracking
   design-260322-lsp design-260322-tracing design-index
   feature-attribute-anchors feature-codeaction-create-unresolved-link
-  feature-completion feature-diagnostics feature-document-sync
+  feature-completion feature-diagnostics feature-document-outline feature-document-sync
   feature-find-references feature-go-to-definition feature-hover feature-index
   feature-inlay-hints feature-rename feature-utf16-positions
   cmarkit-label-resolution cmarkit-mapper-api pandoc-attribute))

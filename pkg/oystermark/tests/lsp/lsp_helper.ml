@@ -287,6 +287,16 @@ let rename
   Yojson.Safe.Util.member "result" resp
 ;;
 
+(** Send a textDocument/documentSymbol request and return its result. *)
+let document_symbols (s : session) ~(rel_path : string) : Yojson.Safe.t =
+  let id = fresh_id s in
+  let uri = sprintf "file://%s" (Filename.concat s.vault_root rel_path) in
+  let params = `Assoc [ "textDocument", `Assoc [ "uri", `String uri ] ] in
+  send_message s.oc (make_request ~id ~method_:"textDocument/documentSymbol" params);
+  let resp = read_response s.ic ~id in
+  Yojson.Safe.Util.member "result" resp
+;;
+
 (** Send a textDocument/completion request and return just the result. *)
 let completion (s : session) ~(rel_path : string) ~(line : int) ~(character : int)
   : Yojson.Safe.t

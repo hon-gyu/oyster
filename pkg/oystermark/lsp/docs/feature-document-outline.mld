@@ -1,0 +1,37 @@
+{0 Document outline}
+
+Expose the current Markdown file as a hierarchical symbol tree for editor
+outline panels and breadcrumbs. This feature implements
+[textDocument/documentSymbol] only; vault-wide [workspace/symbol] search is
+out of scope.
+
+{1 Symbols}
+
+The outline is built from the file entry in {!Oystermark.Vault.Index}:
+
+{ul
+  {- Headings are symbols named by their displayed text. They nest according
+     to heading level, including skipped levels.}
+  {- Caret block IDs are key symbols named [^id].}
+  {- Explicit attribute anchors are key symbols named [#id].}
+}
+
+An anchor belongs to the deepest heading that precedes it. Anchors before the
+first heading are top-level symbols. Symbols without source locations are
+omitted.
+
+{1 Ranges}
+
+A heading's selection range is its heading node. Its full range covers the
+section through the byte before the next heading of the same or a higher
+level, or through the end of the document. Anchor range and selection range
+both cover the indexed anchor node.
+
+Positions are converted according to {!page-"feature-utf16-positions"}.
+
+{1 Result}
+
+The server advertises [documentSymbolProvider] and returns hierarchical
+[DocumentSymbol] values in source order. An unindexed or non-Markdown file
+returns no symbols.
+

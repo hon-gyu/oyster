@@ -43,6 +43,11 @@ Subsections are encouraged if needed.
 - Implementation: {!module-Lsp_lib.Rename}
 - Test: {!module-Test_lsp.Test_rename}
 
+{1 document-outline}
+- Spec: {!page-"feature-document-outline"}
+- Implementation: {!module-Lsp_lib.Document_outline}
+- Test: {!module-Test_lsp.Test_document_outline}
+
 {1 inlay-hints}
 - Spec: {!page-"feature-inlay-hints"}
 - Implementation: {!module-Lsp_lib.Inlay_hints.implementation}

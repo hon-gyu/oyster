@@ -13,4 +13,5 @@ module Diagnostics = Diagnostics
 module Hover = Hover
 module Find_references = Find_references
 module Rename = Rename
+module Document_outline = Document_outline
 module Inlay_hints = Inlay_hints

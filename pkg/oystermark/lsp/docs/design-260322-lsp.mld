@@ -85,7 +85,7 @@ The resolved target is mapped to a file path and line number.  For
 [Heading] and [Block] targets, the target file is parsed and the line
 number is read from the heading/block-ID AST node's [Textloc] metadata
 (using heading slugs from {!Oystermark.Parse.Heading_slug} and block IDs
-from {!Oystermark.Parse.Block_id}).
+from {!Cmarkit.Block.Block_id}).
 
 {1 Editor setup}
 

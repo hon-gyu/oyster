@@ -12,6 +12,7 @@
   hover
   find_references
   rename
+  document_outline
   inlay_hints)
  (libraries oystermark core trace.core)
  (inline_tests)

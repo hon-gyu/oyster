@@ -23,6 +23,7 @@ class oystermark_server ~sw =
     method! config_definition = Some (`Bool true)
     method! config_hover = Some (`Bool true)
     method! config_inlay_hints = Some (`Bool true)
+    method! config_symbol = Some (`Bool true)
 
     method! config_completion : CompletionOptions.t option =
       (* [[[] opens a wikilink; [#] starts a fragment. See {!page-"feature-completion"}. *)
@@ -230,6 +231,60 @@ class oystermark_server ~sw =
            let pos = Position.create ~line ~character in
            let range = Range.create ~start:pos ~end_:pos in
            Some (`Location [ Location.create ~uri ~range ]))
+
+    method! on_req_symbol
+      ~notify_back:_
+      ~id:_
+      ~(uri : DocumentUri.t)
+      ~workDoneToken:_
+      ~partialResultToken:_
+      ()
+      : [ `DocumentSymbol of DocumentSymbol.t list
+        | `SymbolInformation of SymbolInformation.t list
+        ]
+          option =
+      match vault with
+      | None -> None
+      | Some v ->
+        let rel_path = self#rel_path_of_uri uri in
+        let content = Option.value (self#read_file rel_path) ~default:"" in
+        let symbols =
+          Lsp_lib.Document_outline.document_outline
+            ~index:v.index
+            ~rel_path
+            ~content
+        in
+        let to_position offset =
+          let line, character = Lsp_lib.Util.position_of_byte_offset content offset in
+          Position.create ~line ~character
+        in
+        let rec to_lsp (symbol : Lsp_lib.Document_outline.symbol) =
+          let range =
+            Range.create
+              ~start:(to_position symbol.first_byte)
+              ~end_:(to_position symbol.last_byte)
+          in
+          let selectionRange =
+            Range.create
+              ~start:(to_position symbol.selection_first_byte)
+              ~end_:(to_position symbol.selection_last_byte)
+          in
+          let kind, detail =
+            match symbol.kind with
+            | Heading level -> SymbolKind.Namespace, sprintf "heading %d" level
+            | Block_id -> SymbolKind.Key, "block id"
+            | Attribute_id -> SymbolKind.Key, "attribute id"
+          in
+          DocumentSymbol.create
+            ~name:symbol.name
+            ~kind
+            ~detail
+            ~range
+            ~selectionRange
+            ~children:(List.map symbol.children ~f:to_lsp)
+            ()
+        in
+        Some (`DocumentSymbol (List.map symbols ~f:to_lsp))
 
     method! on_request_unhandled
       : type r. notify_back:_ -> id:_ -> r Linol.Lsp.Client_request.t -> r =
