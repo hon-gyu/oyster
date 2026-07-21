@@ -14,8 +14,9 @@
   rename
   document_outline
   create_unresolved_note
-  inlay_hints)
- (libraries oystermark core trace.core)
+  inlay_hints
+  server)
+ (libraries oystermark core linol.lsp trace.core)
  (inline_tests)
  (preprocess
   (pps ppx_jane ppx_string)))

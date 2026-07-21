@@ -32,15 +32,12 @@ let files =
 let index = Vault_helper.make_index files
 let read_file rel_path = List.Assoc.find files ~equal:String.equal rel_path
 
-let%expect_test "e2e: hover on wikilink to note" =
+let%expect_test "server: hover on wikilink to note" =
   let s = start_server ~vault_root in
-  initialize s;
   did_open s ~rel_path:"note-b.md";
   (* Line 2: "Link to [[note-a]] here." — cursor on "note-a" *)
-  let response = hover s ~rel_path:"note-b.md" ~line:2 ~character:13 in
-  let result = parse_hover_result response in
+  let result = Server.hover s ~rel_path:"note-b.md" ~line:2 ~character:13 |> hover_text in
   print_s [%sexp (result : string option)];
-  shutdown s;
   [%expect
     {|
     ( "*Path*:note-a.md\
@@ -58,15 +55,12 @@ let%expect_test "e2e: hover on wikilink to note" =
     |}]
 ;;
 
-let%expect_test "e2e: hover on heading fragment" =
+let%expect_test "server: hover on heading fragment" =
   let s = start_server ~vault_root in
-  initialize s;
   did_open s ~rel_path:"note-b.md";
   (* Line 4: "See [[note-a#Section One]]." *)
-  let response = hover s ~rel_path:"note-b.md" ~line:4 ~character:10 in
-  let result = parse_hover_result response in
+  let result = Server.hover s ~rel_path:"note-b.md" ~line:4 ~character:10 |> hover_text in
   print_s [%sexp (result : string option)];
-  shutdown s;
   [%expect
     {|
     ( "*Path*:note-a.md\
@@ -78,15 +72,12 @@ let%expect_test "e2e: hover on heading fragment" =
     |}]
 ;;
 
-let%expect_test "e2e: hover on block fragment" =
+let%expect_test "server: hover on block fragment" =
   let s = start_server ~vault_root in
-  initialize s;
   did_open s ~rel_path:"note-b.md";
   (* Line 6: "Also [[note-a#^block1]]." *)
-  let response = hover s ~rel_path:"note-b.md" ~line:6 ~character:10 in
-  let result = parse_hover_result response in
+  let result = Server.hover s ~rel_path:"note-b.md" ~line:6 ~character:10 |> hover_text in
   print_s [%sexp (result : string option)];
-  shutdown s;
   [%expect
     {|
     ( "*Path*:note-a.md\
@@ -95,15 +86,12 @@ let%expect_test "e2e: hover on block fragment" =
     |}]
 ;;
 
-let%expect_test "e2e: hover on empty note" =
+let%expect_test "server: hover on empty note" =
   let s = start_server ~vault_root in
-  initialize s;
   did_open s ~rel_path:"note-c.md";
   (* Line 2: "See [[empty]]." *)
-  let response = hover s ~rel_path:"note-c.md" ~line:2 ~character:8 in
-  let result = parse_hover_result response in
+  let result = Server.hover s ~rel_path:"note-c.md" ~line:2 ~character:8 |> hover_text in
   print_s [%sexp (result : string option)];
-  shutdown s;
   [%expect
     {|
     ( "*Path*:empty.md\
@@ -112,26 +100,22 @@ let%expect_test "e2e: hover on empty note" =
     |}]
 ;;
 
-let%expect_test "e2e: hover on unresolved link" =
+let%expect_test "server: hover on unresolved link" =
   let s = start_server ~vault_root in
-  initialize s;
   did_open s ~rel_path:"note-b.md";
   (* Line 10: "Unresolved [[missing-note]]." *)
-  let response = hover s ~rel_path:"note-b.md" ~line:10 ~character:16 in
-  let result = parse_hover_result response in
+  let result =
+    Server.hover s ~rel_path:"note-b.md" ~line:10 ~character:16 |> hover_text
+  in
   print_s [%sexp (result : string option)];
-  shutdown s;
   [%expect {| () |}]
 ;;
 
-let%expect_test "e2e: hover cursor not on link" =
+let%expect_test "server: hover cursor not on link" =
   let s = start_server ~vault_root in
-  initialize s;
   did_open s ~rel_path:"note-b.md";
-  let response = hover s ~rel_path:"note-b.md" ~line:0 ~character:2 in
-  let result = parse_hover_result response in
+  let result = Server.hover s ~rel_path:"note-b.md" ~line:0 ~character:2 |> hover_text in
   print_s [%sexp (result : string option)];
-  shutdown s;
   [%expect {| () |}]
 ;;
 

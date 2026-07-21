@@ -2,6 +2,7 @@
     Impl: {!Lsp_lib.Document_outline}. *)
 
 open Core
+open Linol_lsp.Lsp.Types
 open Lsp_helper
 
 let content =
@@ -15,9 +16,7 @@ let content =
    ### Sibling\n"
 ;;
 
-let index, _docs =
-  Lsp_lib.Find_references.For_test.make_vault [ "outline.md", content ]
-;;
+let index, _docs = Lsp_lib.Find_references.For_test.make_vault [ "outline.md", content ]
 
 let rec show depth (symbol : Lsp_lib.Document_outline.symbol) =
   printf
@@ -60,23 +59,18 @@ let%expect_test "unknown file has no outline" =
   [%expect {| 0 symbols |}]
 ;;
 
-let%expect_test "e2e documentSymbol returns a hierarchical result" =
+let%expect_test "server: documentSymbol returns a hierarchical result" =
   let vault_root = Filename.concat (Core_unix.getcwd ()) "data" in
   let s = start_server ~vault_root in
-  initialize s;
   did_open s ~rel_path:"note-a.md";
-  let result = document_symbols s ~rel_path:"note-a.md" in
-  let rec print_symbols depth = function
-    | `List symbols ->
-      List.iter symbols ~f:(fun symbol ->
-        let name = Yojson.Safe.Util.(member "name" symbol |> to_string) in
-        printf "%s%s\n" (String.make (depth * 2) ' ') name;
-        print_symbols (depth + 1) (Yojson.Safe.Util.member "children" symbol))
-    | `Null -> ()
-    | _ -> ()
+  let rec print_symbols depth (symbols : DocumentSymbol.t list) =
+    List.iter symbols ~f:(fun (symbol : DocumentSymbol.t) ->
+      printf "%s%s\n" (String.make (depth * 2) ' ') symbol.name;
+      print_symbols (depth + 1) (Option.value symbol.children ~default:[]))
   in
-  print_symbols 0 result;
-  shutdown s;
+  Server.document_symbol s ~rel_path:"note-a.md"
+  |> Option.value ~default:[]
+  |> print_symbols 0;
   [%expect
     {|
     Alpha
@@ -85,4 +79,3 @@ let%expect_test "e2e documentSymbol returns a hierarchical result" =
       Section Two
     |}]
 ;;
-

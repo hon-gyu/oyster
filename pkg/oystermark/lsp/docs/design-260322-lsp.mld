@@ -27,18 +27,26 @@ just the file.
 
 {v
                        ┌──────────────┐
-  editor  ◄──JSON-RPC──►  main.ml     │   linol-eio server (stdio)
-                       │   (thin glue) │
+  editor  ◄──JSON-RPC──►  main.ml     │   linol-eio adapter (stdio)
+                       │  (framing)   │
                        └──────┬───────┘
                               │ delegates to
                        ┌──────▼───────┐
-                       │  lsp_lib.ml  │   pure logic, no LSP types
+                       │  server.ml   │   protocol types, no transport
+                       │              │
+                       │  • vault state, open buffers
+                       │  • byte offset ⇄ Position
+                       │  • URI construction
+                       │  • WorkspaceEdit / Diagnostic shaping
+                       └──────┬───────┘
+                              │ delegates to
+                       ┌──────▼───────┐
+                       │  lsp_lib.*   │   pure logic, no LSP types
                        │              │
                        │  • parse doc (via Parse.of_string)
                        │  • AST-based link detection
                        │  • position conversion
-                       │  • AST-based heading / block-ID lookup
-                       │  • go_to_definition (end-to-end)
+                       │  • one module per feature
                        └──────┬───────┘
                               │ uses
                        ┌──────▼───────┐
@@ -47,23 +55,28 @@ just the file.
                        └──────────────┘
 v}
 
-{2 Server ([main.ml])}
+{2 Transport ([main.ml])}
 
-The [oystermark_server] class inherits from [Linol_eio.Jsonrpc2.server] and
-overrides:
+The [oystermark_server] class inherits from [Linol_eio.Jsonrpc2.server].  It
+advertises capabilities, unwraps request params into vault-relative paths and
+positions, and forwards to {!Lsp_lib.Server}.  Nothing else belongs here: the
+executable is the one layer the tests cannot reach.
 
-{ul
-  {- [config_definition] — advertises go-to-definition support.}
-  {- [on_req_initialize] — captures the workspace root from [rootUri].}
-  {- [on_notif_doc_did_open], [on_notif_doc_did_save] — rebuild the vault
-     index.  The index is rebuilt from disk each time (simple, correct;
-     optimise later).}
-  {- [on_req_definition] — delegates to [Lsp_lib.go_to_definition].}
-}
+{2 Server core ([server.ml])}
 
-{2 Pure logic ([lsp_lib.ml])}
+Owns the mutable state — the {!Oystermark.Vault.t} and the set of open buffers
+— and turns pure-layer results into protocol values.  See
+{!page-"feature-document-sync"} for the synchronization contract and
+{!Lsp_lib.Server} for the per-request API.
 
-All testable logic lives here, free of LSP protocol types.
+Because this layer is a library rather than an executable, the tests in
+[tests/lsp/] drive it in-process: [Server.create], [Server.initialize],
+[Server.did_open], then a direct call to the handler under test.
+
+{2 Pure logic ([lsp_lib.*])}
+
+One module per feature, free of LSP protocol types.  Positions are byte
+offsets into the document; the server core converts them at the boundary.
 
 {3 Link detection}
 
@@ -111,20 +124,29 @@ backends (OTEL / in-memory), design choices, and version constraints.
 
 {2 Unit tests}
 
-[lsp_lib.ml] contains inline [ppx_expect] tests covering link detection,
-position conversion, heading/block-ID lookup, and end-to-end
-[go_to_definition] with an in-memory vault.
+Each feature module carries inline [ppx_expect] tests over an in-memory
+vault, covering link detection, position conversion, and heading/block-ID
+lookup.
 
 {2 Trace-based tests}
 
-[test/lsp_trace/test_lsp_trace.ml] captures OTEL spans via
-[Trace_collect] and asserts on span names and attributes using
-[ppx_expect].  This validates not just the result but the internal
-execution path.
+[Trace_collect] captures OTEL spans and asserts on span names and
+attributes using [ppx_expect].  This validates not just the result but the
+internal execution path.
 
-{2 Integration tests}
+{2 Server tests}
 
-[test/lsp/test_lsp_integration.ml] spawns the real [oystermark-lsp]
-binary as a subprocess, sends JSON-RPC messages (initialize, didOpen,
-definition), and asserts on the responses.  A small test vault under
-[test/lsp/data/] provides the fixture files.
+[tests/lsp/] drives {!Lsp_lib.Server} directly, one file per feature, with a
+small test vault under [tests/lsp/data/].  These cover what the unit tests
+cannot: URI handling, byte-offset → [Position]
+conversion, workspace-edit shape, and the diagnostic refresh that fires on
+save.
+
+There is deliberately no subprocess and no JSON-RPC in the test path.  An
+earlier harness spawned the real [oystermark-lsp] binary and spoke the
+protocol over a pipe, which meant every assertion was mediated by message
+framing, out-of-order notification filtering, and a read timeout — and a
+server crash surfaced as a hung test rather than an exception.  Moving the
+handlers out of [main.ml] into a library removed the need for any of it.
+What remains untested is JSON serialization and the linol dispatch table,
+both of which are upstream code.

@@ -4,8 +4,8 @@
 open Core
 open Lsp_helper
 
-(** Vault root for integration (E2E) tests — points at the on-disk [data/]
-       directory. *)
+(** Vault root for the server-level tests — points at the on-disk [data/]
+    directory. *)
 let vault_root =
   let cwd = Core_unix.getcwd () in
   Filename.concat cwd "data"
@@ -31,36 +31,33 @@ let files =
 
 let index = Vault_helper.make_index files
 
-let%expect_test "e2e: wikilink to note" =
+let%expect_test "server: wikilink to note" =
   let s = start_server ~vault_root in
-  initialize s;
   did_open s ~rel_path:"note-b.md";
-  let response = definition s ~rel_path:"note-b.md" ~line:2 ~character:13 in
-  let result = parse_definition_result vault_root response in
+  let result =
+    Server.definition s ~rel_path:"note-b.md" ~line:2 ~character:13 |> definition_result s
+  in
   print_s [%sexp (result : Lsp_lib.Go_to_definition.definition_result option)];
-  shutdown s;
   [%expect {| (((path note-a.md) (line 0) (character 0))) |}]
 ;;
 
-let%expect_test "e2e: wikilink to heading" =
+let%expect_test "server: wikilink to heading" =
   let s = start_server ~vault_root in
-  initialize s;
   did_open s ~rel_path:"note-b.md";
-  let response = definition s ~rel_path:"note-b.md" ~line:4 ~character:10 in
-  let result = parse_definition_result vault_root response in
+  let result =
+    Server.definition s ~rel_path:"note-b.md" ~line:4 ~character:10 |> definition_result s
+  in
   print_s [%sexp (result : Lsp_lib.Go_to_definition.definition_result option)];
-  shutdown s;
   [%expect {| (((path note-a.md) (line 2) (character 0))) |}]
 ;;
 
-let%expect_test "e2e: wikilink to block id" =
+let%expect_test "server: wikilink to block id" =
   let s = start_server ~vault_root in
-  initialize s;
   did_open s ~rel_path:"note-b.md";
-  let response = definition s ~rel_path:"note-b.md" ~line:6 ~character:10 in
-  let result = parse_definition_result vault_root response in
+  let result =
+    Server.definition s ~rel_path:"note-b.md" ~line:6 ~character:10 |> definition_result s
+  in
   print_s [%sexp (result : Lsp_lib.Go_to_definition.definition_result option)];
-  shutdown s;
   [%expect {| (((path note-a.md) (line 4) (character 0))) |}]
 ;;
 
@@ -68,58 +65,56 @@ let%expect_test "e2e: wikilink to block id" =
    [ [key term] ] resolves through the JSON-RPC wire to a mid-line character.
    See {!page-"feature-attribute-anchors"} and
    {!page-"feature-go-to-definition".target_position}. *)
-let%expect_test "e2e: wikilink to inline attribute anchor (column-precise)" =
+let%expect_test "server: wikilink to inline attribute anchor (column-precise)" =
   let s = start_server ~vault_root in
-  initialize s;
   did_open s ~rel_path:"anchor-source.md";
-  let response = definition s ~rel_path:"anchor-source.md" ~line:2 ~character:10 in
-  let result = parse_definition_result vault_root response in
+  let result =
+    Server.definition s ~rel_path:"anchor-source.md" ~line:2 ~character:10
+    |> definition_result s
+  in
   print_s [%sexp (result : Lsp_lib.Go_to_definition.definition_result option)];
-  shutdown s;
   [%expect {| (((path anchor-target.md) (line 2) (character 4))) |}]
 ;;
 
-let%expect_test "e2e: markdown link" =
+let%expect_test "server: markdown link" =
   let s = start_server ~vault_root in
-  initialize s;
   did_open s ~rel_path:"note-b.md";
-  let response = definition s ~rel_path:"note-b.md" ~line:8 ~character:18 in
-  let result = parse_definition_result vault_root response in
+  let result =
+    Server.definition s ~rel_path:"note-b.md" ~line:8 ~character:18 |> definition_result s
+  in
   print_s [%sexp (result : Lsp_lib.Go_to_definition.definition_result option)];
-  shutdown s;
   [%expect {| (((path note-a.md) (line 0) (character 0))) |}]
 ;;
 
-let%expect_test "e2e: unresolved link" =
+let%expect_test "server: unresolved link" =
   let s = start_server ~vault_root in
-  initialize s;
   did_open s ~rel_path:"note-b.md";
-  let response = definition s ~rel_path:"note-b.md" ~line:10 ~character:16 in
-  let result = parse_definition_result vault_root response in
+  let result =
+    Server.definition s ~rel_path:"note-b.md" ~line:10 ~character:16
+    |> definition_result s
+  in
   print_s [%sexp (result : Lsp_lib.Go_to_definition.definition_result option)];
-  shutdown s;
   [%expect {| () |}]
 ;;
 
-let%expect_test "e2e: cursor not on link" =
+let%expect_test "server: cursor not on link" =
   let s = start_server ~vault_root in
-  initialize s;
   did_open s ~rel_path:"note-b.md";
-  let response = definition s ~rel_path:"note-b.md" ~line:0 ~character:2 in
-  let result = parse_definition_result vault_root response in
+  let result =
+    Server.definition s ~rel_path:"note-b.md" ~line:0 ~character:2 |> definition_result s
+  in
   print_s [%sexp (result : Lsp_lib.Go_to_definition.definition_result option)];
-  shutdown s;
   [%expect {| () |}]
 ;;
 
-let%expect_test "e2e: cross-directory link" =
+let%expect_test "server: cross-directory link" =
   let s = start_server ~vault_root in
-  initialize s;
   did_open s ~rel_path:"subdir/nested.md";
-  let response = definition s ~rel_path:"subdir/nested.md" ~line:2 ~character:13 in
-  let result = parse_definition_result vault_root response in
+  let result =
+    Server.definition s ~rel_path:"subdir/nested.md" ~line:2 ~character:13
+    |> definition_result s
+  in
   print_s [%sexp (result : Lsp_lib.Go_to_definition.definition_result option)];
-  shutdown s;
   [%expect {| (((path note-a.md) (line 0) (character 0))) |}]
 ;;
 

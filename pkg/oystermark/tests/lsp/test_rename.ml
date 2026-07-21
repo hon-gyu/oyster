@@ -106,21 +106,13 @@ let%expect_test "rename note preserves aliases and fragments" =
     |}]
 ;;
 
-let%expect_test "e2e note rename includes text edits and a file operation" =
+let%expect_test "server: note rename includes text edits and a file operation" =
   let vault_root = Filename.concat (Core_unix.getcwd ()) "data" in
   let s = start_server ~vault_root in
-  initialize s;
   did_open s ~rel_path:"note-b.md";
-  let result = rename s ~rel_path:"note-b.md" ~line:2 ~character:13 ~new_name:"renamed" in
-  let changes = Yojson.Safe.Util.(member "documentChanges" result |> to_list) in
-  let kinds =
-    List.map changes ~f:(fun change ->
-      match Yojson.Safe.Util.member "kind" change with
-      | `String kind -> kind
-      | _ -> "text-edits")
-  in
-  List.iter kinds ~f:print_endline;
-  shutdown s;
+  Server.rename s ~rel_path:"note-b.md" ~line:2 ~character:13 ~new_name:"renamed"
+  |> document_change_kinds
+  |> List.iter ~f:print_endline;
   [%expect
     {|
     text-edits

@@ -14,14 +14,12 @@ let vault_root =
    "Target" and the inline attribute anchor [{#key-term}], so both — the
    heading slug and the attribute id — are offered.
    See {!page-"feature-attribute-anchors"}. *)
-let%expect_test "e2e: fragment completion offers heading and attribute id" =
+let%expect_test "server: fragment completion offers heading and attribute id" =
   let s = start_server ~vault_root in
-  initialize s;
   did_open s ~rel_path:"complete-src.md";
-  let response = completion s ~rel_path:"complete-src.md" ~line:2 ~character:20 in
-  let items = parse_completion_result response in
-  List.iter items ~f:(fun (label, insert) -> printf "%s -> %s\n" label insert);
-  shutdown s;
+  Server.completion s ~rel_path:"complete-src.md" ~line:2 ~character:20
+  |> completion_items
+  |> List.iter ~f:(fun (label, insert) -> printf "%s -> %s\n" label insert);
   [%expect
     {|
     Target -> target
