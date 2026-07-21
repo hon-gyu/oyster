@@ -13,6 +13,7 @@
   find_references
   rename
   document_outline
+  create_unresolved_note
   inlay_hints)
  (libraries oystermark core trace.core)
  (inline_tests)

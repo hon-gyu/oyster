@@ -297,6 +297,37 @@ let document_symbols (s : session) ~(rel_path : string) : Yojson.Safe.t =
   Yojson.Safe.Util.member "result" resp
 ;;
 
+(** Send a textDocument/codeAction request for a range. *)
+let code_actions
+      (s : session)
+      ~(rel_path : string)
+      ~(start_line : int)
+      ~(start_character : int)
+      ~(end_line : int)
+      ~(end_character : int)
+  : Yojson.Safe.t
+  =
+  let id = fresh_id s in
+  let uri = sprintf "file://%s" (Filename.concat s.vault_root rel_path) in
+  let position line character =
+    `Assoc [ "line", `Int line; "character", `Int character ]
+  in
+  let params =
+    `Assoc
+      [ "textDocument", `Assoc [ "uri", `String uri ]
+      ; ( "range"
+        , `Assoc
+            [ "start", position start_line start_character
+            ; "end", position end_line end_character
+            ] )
+      ; "context", `Assoc [ "diagnostics", `List [] ]
+      ]
+  in
+  send_message s.oc (make_request ~id ~method_:"textDocument/codeAction" params);
+  let resp = read_response s.ic ~id in
+  Yojson.Safe.Util.member "result" resp
+;;
+
 (** Send a textDocument/completion request and return just the result. *)
 let completion (s : session) ~(rel_path : string) ~(line : int) ~(character : int)
   : Yojson.Safe.t

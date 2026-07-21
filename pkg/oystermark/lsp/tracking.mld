@@ -48,6 +48,11 @@ Subsections are encouraged if needed.
 - Implementation: {!module-Lsp_lib.Document_outline}
 - Test: {!module-Test_lsp.Test_document_outline}
 
+{1 create-unresolved-note}
+- Spec: {!page-"feature-codeaction-create-unresolved-link"}
+- Implementation: {!module-Lsp_lib.Create_unresolved_note}
+- Test: {!module-Test_lsp.Test_create_unresolved_note}
+
 {1 inlay-hints}
 - Spec: {!page-"feature-inlay-hints"}
 - Implementation: {!module-Lsp_lib.Inlay_hints.implementation}

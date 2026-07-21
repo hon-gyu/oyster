@@ -25,6 +25,10 @@ class oystermark_server ~sw =
     method! config_inlay_hints = Some (`Bool true)
     method! config_symbol = Some (`Bool true)
 
+    method! config_code_action_provider =
+      `CodeActionOptions
+        (CodeActionOptions.create ~codeActionKinds:[ CodeActionKind.QuickFix ] ())
+
     method! config_completion : CompletionOptions.t option =
       (* [[[] opens a wikilink; [#] starts a fragment. See {!page-"feature-completion"}. *)
       Some (CompletionOptions.create ~triggerCharacters:[ "["; "#" ] ())
@@ -285,6 +289,86 @@ class oystermark_server ~sw =
             ()
         in
         Some (`DocumentSymbol (List.map symbols ~f:to_lsp))
+
+    method! on_req_code_action
+      ~notify_back:_
+      ~id:_
+      (params : CodeActionParams.t)
+      : CodeActionResult.t =
+      let quick_fixes_requested =
+        match params.context.only with
+        | None -> true
+        | Some kinds -> List.mem kinds CodeActionKind.QuickFix ~equal:Poly.equal
+      in
+      if not quick_fixes_requested
+      then Some []
+      else
+        match vault with
+        | None -> Some []
+        | Some v ->
+          let uri = params.textDocument.uri in
+          let rel_path = self#rel_path_of_uri uri in
+          let content = Option.value (self#read_file rel_path) ~default:"" in
+          let first_byte =
+            Lsp_lib.Util.byte_offset_of_position
+              content
+              ~line:params.range.start.line
+              ~character:params.range.start.character
+          in
+          let last_byte =
+            Lsp_lib.Util.byte_offset_of_position
+              content
+              ~line:params.range.end_.line
+              ~character:params.range.end_.character
+          in
+          (match
+             Lsp_lib.Create_unresolved_note.action_at_range
+               ~index:v.index
+               ~rel_path
+               ~content
+               ~first_byte
+               ~last_byte
+           with
+           | None -> Some []
+           | Some action ->
+             let target_uri =
+               DocumentUri.of_path (Filename.concat v.vault_root action.rel_path)
+             in
+             let create =
+               `CreateFile
+                 (CreateFile.create
+                    ~uri:target_uri
+                    ~options:
+                      (CreateFileOptions.create ~ignoreIfExists:false ~overwrite:false ())
+                    ())
+             in
+             let zero = Position.create ~line:0 ~character:0 in
+             let textDocument =
+               OptionalVersionedTextDocumentIdentifier.create ~uri:target_uri ()
+             in
+             let initial_text = "# " ^ action.title ^ "\n" in
+             let initialize =
+               `TextDocumentEdit
+                 (TextDocumentEdit.create
+                    ~textDocument
+                    ~edits:
+                      [ `TextEdit
+                          (TextEdit.create
+                             ~range:(Range.create ~start:zero ~end_:zero)
+                             ~newText:initial_text)
+                      ])
+             in
+             let edit = WorkspaceEdit.create ~documentChanges:[ create; initialize ] () in
+             let title = sprintf "Create note \"%s\"" action.rel_path in
+             Some
+               [ `CodeAction
+                   (CodeAction.create
+                      ~title
+                      ~kind:CodeActionKind.QuickFix
+                      ~isPreferred:true
+                      ~edit
+                      ())
+               ])
 
     method! on_request_unhandled
       : type r. notify_back:_ -> id:_ -> r Linol.Lsp.Client_request.t -> r =

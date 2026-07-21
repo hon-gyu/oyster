@@ -14,4 +14,5 @@ module Hover = Hover
 module Find_references = Find_references
 module Rename = Rename
 module Document_outline = Document_outline
+module Create_unresolved_note = Create_unresolved_note
 module Inlay_hints = Inlay_hints
