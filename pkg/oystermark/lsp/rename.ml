@@ -31,6 +31,56 @@ let renamed_note_path ~path ~new_name =
   Filename.concat (Filename.dirname path) new_name
 ;;
 
+(** Byte offset within [line] of the {e id text} (past the [#]) of an attribute
+    specifier naming [id] — block-level ([ {#id} ] on its own line) or inline
+    ([ [text]{#id} ]).
+
+    Only genuine specifiers match, because the candidate is parsed with
+    {!Oystermark.Parse.Cb_attribute.of_string} rather than string-searched.
+    That rejects the two ways a bare ["#" ^ id] substring search goes wrong:
+    a {e link fragment} ([ [[note#id]] ]) is not a definition, and an id that
+    merely {e shares a prefix} ([ {#id-2} ]) is a different anchor.
+    See {!page-"feature-attribute-anchors"}. *)
+let attr_id_offset ~(id : string) (line : string) : int option =
+  let n = String.length line in
+  let is_id_char c = Char.is_alphanum c || Char.equal c '-' || Char.equal c '_' in
+  (* Offset of ["#" ^ id] within a specifier body, requiring the id to end at a
+     boundary so [#id] does not match inside [#id-2]. *)
+  let offset_in_body body =
+    let pattern = "#" ^ id in
+    let rec seek from =
+      match String.substr_index body ~pos:from ~pattern with
+      | None -> None
+      | Some p ->
+        let after = p + String.length pattern in
+        if after >= String.length body || not (is_id_char body.[after])
+        then Some p
+        else seek (p + 1)
+    in
+    seek 0
+  in
+  let rec scan i =
+    if i >= n
+    then None
+    else if Char.equal line.[i] '{'
+    then (
+      match String.index_from line i '}' with
+      | None -> None
+      | Some close ->
+        let body = String.sub line ~pos:(i + 1) ~len:(close - i - 1) in
+        let matched =
+          match Oystermark.Parse.Cb_attribute.of_string body with
+          | Some { id = Some found; _ } when String.equal found id -> offset_in_body body
+          | _ -> None
+        in
+        (match matched with
+         | Some p -> Some (i + 1 + p + 1)
+         | None -> scan (close + 1)))
+    else scan (i + 1)
+  in
+  scan 0
+;;
+
 let line_bounds content line =
   let rec loop pos current =
     if current = line
@@ -82,11 +132,11 @@ let definition_edit ~rel_path ~content ~line target ~new_name =
          ; new_text = new_name
          })
      | Path_attr { id; _ } ->
-       String.substr_index text ~pattern:("#" ^ id)
+       attr_id_offset ~id text
        |> Option.map ~f:(fun pos ->
          { rel_path
-         ; first_byte = start + pos + 1
-         ; last_byte = start + pos + 1 + String.length id
+         ; first_byte = start + pos
+         ; last_byte = start + pos + String.length id
          ; new_text = new_name
          })
      | Path_only _ -> None)
@@ -114,12 +164,16 @@ let find_definition_line content target =
           String.equal (Oystermark.Parse.Heading_slug.slugify heading) slug)
       | Path_block { block_id; _ } ->
         Option.equal String.equal (Find_references.block_id_of_line text) (Some block_id)
-      | Path_attr { id; _ } -> String.is_substring text ~substring:("#" ^ id)
+      | Path_attr { id; _ } -> Option.is_some (attr_id_offset ~id text)
       | Path_only _ -> false
     in
     Option.some_if found line)
 ;;
 
+(** Bounds of a link's destination within [slice] (the link's full source text):
+    [(style, dest_start, dest_stop)], both {e slice-relative}, with [dest_stop]
+    exclusive.  The destination excludes a wikilink's [|alias] and a markdown
+    link's title, so it is exactly the part a rename may rewrite. *)
 let destination_bounds slice =
   match String.substr_index slice ~pattern:"[[" with
   | Some open_pos ->
@@ -155,14 +209,18 @@ let reference_edit ~content (r : Find_references.reference) target ~new_name =
   else (
     let slice = String.sub content ~pos:r.first_byte ~len in
     destination_bounds slice
-    |> Option.bind ~f:(fun (style, start, finish) ->
-      let destination = String.sub slice ~pos:start ~len:(finish - start) in
+    |> Option.bind ~f:(fun (style, dest_start, dest_stop) ->
+      let destination = String.sub slice ~pos:dest_start ~len:(dest_stop - dest_start) in
+      (* [dest_start] and [dest_stop] are slice-relative; offsets derived from
+         [destination] below are destination-relative and so need [dest_start]
+         added back. Keeping the two frames straight matters: conflating them
+         once made fragment renames overrun the link's closing delimiter. *)
       match target with
       | Find_references.Path_only _ ->
-        let finish =
+        let target_stop =
           Option.value (String.index destination '#') ~default:(String.length destination)
         in
-        let old_target = String.prefix destination finish in
+        let old_target = String.prefix destination target_stop in
         let basename =
           if String.is_suffix destination ~suffix:".md"
           then
@@ -181,8 +239,8 @@ let reference_edit ~content (r : Find_references.reference) target ~new_name =
         in
         Some
           { rel_path = r.rel_path
-          ; first_byte = r.first_byte + start
-          ; last_byte = r.first_byte + start + finish
+          ; first_byte = r.first_byte + dest_start
+          ; last_byte = r.first_byte + dest_start + target_stop
           ; new_text = replacement
           }
       | Path_heading _ | Path_block _ | Path_attr _ ->
@@ -199,8 +257,8 @@ let reference_edit ~content (r : Find_references.reference) target ~new_name =
             | `Markdown -> String.substr_replace_all new_name ~pattern:" " ~with_:"%20"
           in
           { rel_path = r.rel_path
-          ; first_byte = r.first_byte + start + hash + 1 + String.length marker
-          ; last_byte = r.first_byte + start + finish
+          ; first_byte = r.first_byte + dest_start + hash + 1 + String.length marker
+          ; last_byte = r.first_byte + dest_stop
           ; new_text
           })))
 ;;

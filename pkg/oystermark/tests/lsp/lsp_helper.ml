@@ -140,6 +140,32 @@ let document_change_kinds (edit : WorkspaceEdit.t) : string list =
     | `TextDocumentEdit _ -> "text-edits")
 ;;
 
+(** Apply [edits] to [content] and return the result, exactly as a client
+    would: byte ranges are resolved against the {e original} content, so the
+    edits are applied right-to-left.
+
+    Asserting on the applied text — not just on each [newText] — is what
+    catches an edit whose {e range} is wrong: a replacement can carry the
+    right new text and still eat the link's closing delimiter.  Overlapping
+    edits raise, since a client's behaviour on them is undefined. *)
+let apply_edits (content : string) (edits : Lsp_lib.Rename.edit list) : string =
+  List.sort edits ~compare:(fun a b -> Int.descending a.first_byte b.first_byte)
+  |> List.fold ~init:(content, String.length content) ~f:(fun (acc, prev_start) e ->
+    if e.last_byte > prev_start
+    then
+      failwithf
+        "overlapping edits: [%d-%d] extends past the next edit's start %d"
+        e.first_byte
+        e.last_byte
+        prev_start
+        ();
+    ( String.sub acc ~pos:0 ~len:e.first_byte
+      ^ e.new_text
+      ^ String.subo acc ~pos:e.last_byte
+    , e.first_byte ))
+  |> fst
+;;
+
 (** Every [newText] a workspace edit would insert, in order. *)
 let inserted_texts (edit : WorkspaceEdit.t) : string list =
   Option.value edit.documentChanges ~default:[]

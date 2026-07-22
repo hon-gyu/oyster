@@ -6,6 +6,13 @@
     via {!rel_path_of_uri}.  Every handler answers [None] before {!initialize}
     has supplied a vault root.
 
+    Handlers split into a buffer-reading group and a disk-reading group.  The
+    incoming position, however, is always a {e buffer} coordinate, so the
+    disk-reading handlers index a live position into content that may be one
+    save behind.  For {!rename} and {!code_action} — the two that return edits
+    a client applies back to the buffer — that is unsound, not merely stale.
+    See {!page-"feature-document-sync".mixed-frame}.
+
     Spec: {!page-"feature-document-sync"}. *)
 
 open Linol_lsp.Lsp.Types
@@ -80,7 +87,10 @@ val prepare_rename : t -> rel_path:string -> line:int -> character:int -> Range.
 
 (** Spec: {!page-"feature-rename"}.  Text edits are grouped per file; renaming
     a whole note additionally emits a [RenameFile] operation so the note moves
-    along with its links. *)
+    along with its links.
+
+    Ranges are computed against disk content — unsound if [rel_path] has
+    unsaved edits.  See {!page-"feature-document-sync".mixed-frame}. *)
 val rename
   :  t
   -> rel_path:string
@@ -97,7 +107,11 @@ val document_symbol : t -> rel_path:string -> DocumentSymbol.t list option
     in one workspace edit so the client applies both atomically.
 
     [only] is the client's requested code-action-kind filter; we have nothing
-    but quick fixes to offer, so anything that excludes them yields []. *)
+    but quick fixes to offer, so anything that excludes them yields [].
+
+    The requested range is resolved against disk content — unsound if
+    [rel_path] has unsaved edits.  See
+    {!page-"feature-document-sync".mixed-frame}. *)
 val code_action
   :  t
   -> ?only:CodeActionKind.t list

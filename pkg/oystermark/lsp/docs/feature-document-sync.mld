@@ -89,6 +89,44 @@ Remove the entry from [open_docs].  No rebuild.
      up on the next didOpen or didSave.}
 }
 
+{1:mixed-frame Hazard: mixed position frames}
+
+{b The split above is not clean, and the seam is worth naming
+explicitly.}
+
+An LSP request carries a position — a [(line, character)] pair — that
+the client computed against {e its own buffer}. The disk-group
+handlers then convert that position to a byte offset against {e disk}
+content. When the buffer has unsaved edits above the cursor, the two
+disagree, and the handler resolves a different location than the one
+the user's cursor is on.
+
+This is a different failure from the staleness described above.
+Answering one save behind is a defensible tradeoff: the answer is
+{e old but coherent}. Indexing a live coordinate into stale content is
+neither — the byte offset is meaningless, so the answer is about
+whatever text happens to sit there now.
+
+The consequences differ by handler:
+
+{ul
+  {- {b find references}, {b prepare rename}, {b document outline},
+     {b inlay hints}: a wrong-or-empty result. Annoying, recoverable,
+     visibly wrong to the user.}
+  {- {b rename} and {b code actions}: these {e return edits}, with
+     byte ranges derived from disk content, which the client then
+     applies to the {e buffer}. A shifted range does not fail loudly;
+     it silently rewrites the wrong span of a file the user is
+     editing.}
+}
+
+Until the split is resolved, treat rename and code actions on a dirty
+buffer as unsound rather than merely stale. The narrow fix is to
+resolve the request's own position — and compute any returned edit
+ranges — against [open_docs] content whenever the file is open, even
+while vault-wide {e scanning} continues to read from disk. The broad
+fix is the first open question below.
+
 {1:open-questions Open questions}
 
 {ul
@@ -97,7 +135,10 @@ Remove the entry from [open_docs].  No rebuild.
      missing is re-resolving links against them on didChange rather
      than rebuilding the vault from disk.  The current split is
      simpler but can surprise users who expect find-references to
-     reflect what they see on screen.  Not yet decided.}
+     reflect what they see on screen — and, per
+     {{!section-"mixed-frame"}the hazard above}, it is what makes
+     rename and code actions unsound on a dirty buffer.  Not yet
+     decided.}
   {- {b Should diagnostics recompute on didChange at all?}  Keeping
      them live is ergonomic but inconsistent with the rest of the
      feature set answering from disk.  The alternative is to refresh

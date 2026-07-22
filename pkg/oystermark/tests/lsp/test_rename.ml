@@ -23,6 +23,20 @@ let show edits =
     printf "%s [%d-%d] -> %s\n" e.rel_path e.first_byte e.last_byte e.new_text)
 ;;
 
+(** The edits' {e effect}, per file. An edit can carry the right [new_text] and
+    still span the wrong range, so the ranges are only really pinned down by
+    applying them — see {!Lsp_helper.apply_edits}. *)
+let show_applied edits =
+  List.map edits ~f:(fun (e : Lsp_lib.Rename.edit) -> e.rel_path)
+  |> List.dedup_and_sort ~compare:String.compare
+  |> List.iter ~f:(fun rel_path ->
+    let edits =
+      List.filter edits ~f:(fun (e : Lsp_lib.Rename.edit) ->
+        String.equal e.rel_path rel_path)
+    in
+    printf "--- %s\n%s" rel_path (apply_edits (Option.value_exn (read_file rel_path)) edits))
+;;
+
 let%expect_test "rename heading from its definition updates wikilinks and markdown link" =
   let content = Option.value_exn (read_file "target.md") in
   Lsp_lib.Rename.For_test.rename
@@ -35,13 +49,26 @@ let%expect_test "rename heading from its definition updates wikilinks and markdo
     ~character:3
     ~new_name:"New Heading"
     ()
-  |> show;
+  |> fun edits ->
+  show edits;
+  show_applied edits;
   [%expect
     {|
-    links.md [9-22] -> New Heading
-    links.md [39-53] -> New Heading
-    links.md [68-89] -> New%20Heading
+    links.md [9-20] -> New Heading
+    links.md [39-50] -> New Heading
+    links.md [68-81] -> New%20Heading
     target.md [2-13] -> New Heading
+    --- links.md
+    [[target#New Heading|alias]]
+    ![[target#New Heading]]
+    [label](target#New%20Heading)
+    [[target#old-id|anchor]]
+    [[target|note]]
+    --- target.md
+    # New Heading
+
+    {#old-id}
+    > Paragraph
     |}]
 ;;
 
@@ -57,11 +84,24 @@ let%expect_test "rename explicit anchor from a referring link" =
     ~character:12
     ~new_name:"new-id"
     ()
-  |> show;
+  |> fun edits ->
+  show edits;
+  show_applied edits;
   [%expect
     {|
-    links.md [92-100] -> new-id
+    links.md [92-98] -> new-id
     target.md [17-23] -> new-id
+    --- links.md
+    [[target#Old Heading|alias]]
+    ![[target#Old Heading]]
+    [label](target#Old%20Heading)
+    [[target#new-id|anchor]]
+    [[target|note]]
+    --- target.md
+    # Old Heading
+
+    {#new-id}
+    > Paragraph
     |}]
 ;;
 
@@ -95,7 +135,9 @@ let%expect_test "rename note preserves aliases and fragments" =
     ~character:3
     ~new_name:"renamed note"
     ()
-  |> show;
+  |> fun edits ->
+  show edits;
+  show_applied edits;
   [%expect
     {|
     links.md [2-8] -> renamed note
@@ -103,6 +145,60 @@ let%expect_test "rename note preserves aliases and fragments" =
     links.md [61-67] -> renamed%20note
     links.md [85-91] -> renamed note
     links.md [110-116] -> renamed note
+    --- links.md
+    [[renamed note#Old Heading|alias]]
+    ![[renamed note#Old Heading]]
+    [label](renamed%20note#Old%20Heading)
+    [[renamed note#old-id|anchor]]
+    [[renamed note|note]]
+    |}]
+;;
+
+(* An id that is a prefix of another id, and a link fragment sitting in the
+   definition file, are both things a bare ["#" ^ id] search would mistake for
+   the definition. See {!Lsp_lib.Rename.attr_id_offset}. *)
+let collide_files =
+  [ ( "collide.md"
+    , "# Doc\n\nSee [[collide#note]] first.\n\n{#note-extended}\n> Longer.\n\n{#note}\n> Short.\n"
+    )
+  ]
+;;
+
+let collide_index, collide_docs =
+  Lsp_lib.Find_references.For_test.make_vault collide_files
+;;
+
+let collide_read_file path = List.Assoc.find collide_files ~equal:String.equal path
+
+let%expect_test "attribute rename is not confused by prefixes or link fragments" =
+  let content = Option.value_exn (collide_read_file "collide.md") in
+  let edits =
+    Lsp_lib.Rename.For_test.rename
+      ~index:collide_index
+      ~docs:collide_docs
+      ~read_file:collide_read_file
+      ~rel_path:"collide.md"
+      ~content
+      ~line:7
+      ~character:2
+      ~new_name:"renamed"
+      ()
+  in
+  show edits;
+  printf "---\n%s" (apply_edits content edits);
+  [%expect {|
+    collide.md [21-25] -> renamed
+    collide.md [66-70] -> renamed
+    ---
+    # Doc
+
+    See [[collide#renamed]] first.
+
+    {#note-extended}
+    > Longer.
+
+    {#renamed}
+    > Short.
     |}]
 ;;
 
