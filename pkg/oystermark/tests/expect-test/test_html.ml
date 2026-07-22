@@ -10,19 +10,22 @@ let test_index : Vault.Index.t =
             ; { text = "L3"; level = 3; slug = "l3"; loc = None }
             ]
         ; blocks = [ { id = "para1"; loc = None }; { id = "block-2"; loc = None } ]
+        ; attrs = []
         }
       ; { rel_path = "Note 2.md"
         ; headings =
             [ { text = "Some heading"; level = 2; slug = "some-heading"; loc = None } ]
         ; blocks = []
+        ; attrs = []
         }
-      ; { rel_path = "image.png"; headings = []; blocks = [] }
-      ; { rel_path = "video.mp4"; headings = []; blocks = [] }
-      ; { rel_path = "audio.mp3"; headings = []; blocks = [] }
-      ; { rel_path = "doc.pdf"; headings = []; blocks = [] }
+      ; { rel_path = "image.png"; headings = []; blocks = []; attrs = [] }
+      ; { rel_path = "video.mp4"; headings = []; blocks = []; attrs = [] }
+      ; { rel_path = "audio.mp3"; headings = []; blocks = []; attrs = [] }
+      ; { rel_path = "doc.pdf"; headings = []; blocks = []; attrs = [] }
       ; { rel_path = "dir/deep.md"
         ; headings = []
         ; blocks = [ { id = "d1"; loc = None } ]
+        ; attrs = []
         }
       ]
   ; dirs = []

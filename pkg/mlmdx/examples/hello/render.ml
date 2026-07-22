@@ -15,3 +15,4 @@ let () =
     }
   in
   print_endline (JSX.render (Hello.make ~components ()))
+;;

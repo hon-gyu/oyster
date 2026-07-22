@@ -45,7 +45,9 @@ let of_oymarkit (a : Cmarkit.Attribute.t) : t =
 
 (** Parse the contents of a [{...}] specifier (without the braces). Returns
     [None] when the body is not a well-formed attribute spec. *)
-let of_string (s : string) : t option = Option.map (Cmarkit.Attribute.of_string s) ~f:of_oymarkit
+let of_string (s : string) : t option =
+  Option.map (Cmarkit.Attribute.of_string s) ~f:of_oymarkit
+;;
 
 let sexp_of_meta : Common.meta_sexp =
   fun meta ->

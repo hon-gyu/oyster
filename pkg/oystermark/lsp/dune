@@ -7,11 +7,16 @@
   lsp_config
   link_collect
   go_to_definition
+  completion
   diagnostics
   hover
   find_references
-  inlay_hints)
- (libraries oystermark core trace.core)
+  rename
+  document_outline
+  create_unresolved_note
+  inlay_hints
+  server)
+ (libraries oystermark core linol.lsp trace.core)
  (inline_tests)
  (preprocess
   (pps ppx_jane ppx_string)))
@@ -28,6 +33,3 @@
   eio_main
   opentelemetry.trace
   opentelemetry-client-cohttp-eio))
-
-(documentation
- (package oystermark))

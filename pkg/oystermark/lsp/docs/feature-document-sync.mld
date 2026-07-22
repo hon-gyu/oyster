@@ -5,14 +5,17 @@ disk as the user opens, edits, saves, and closes files.
 
 {1 State}
 
+Held by {!Lsp_lib.Server}:
+
 {ul
   {- [vault]: a {!Oystermark.Vault.t} holding the index, pre-resolved
      docs, and vault root.  Built from disk; rebuilt on didOpen and
      didSave.}
-  {- [open_docs]: a set of vault-relative paths for documents the
-     editor currently has open.  Used only to know {i which} files
-     need diagnostic refresh after a save — {b it does not track
-     buffer contents}.}
+  {- [open_docs]: vault-relative path → buffer content, for every
+     document the editor currently has open.  It answers two
+     questions: {i which} files need a diagnostic refresh after a
+     save, and what the user is currently looking at in a file whose
+     edits are unsaved.}
 }
 
 {1 Current behavior}
@@ -21,20 +24,26 @@ disk as the user opens, edits, saves, and closes files.
 buffer-vs-disk story is not yet settled — see
 {{!section-"open-questions"}Open questions} below.}
 
-Feature handlers (find references, inlay hints, go-to-definition,
-hover) read document content from disk via [read_file].  If the user
-has unsaved edits, those features may return stale results until the
-next save.
+Handlers split into two groups by which content they answer against:
 
-Diagnostics are computed against the live buffer content passed in
-notification payloads, so squigglies update as the user types.
+{ul
+  {- {b Buffer}: diagnostics, hover, go-to-definition, completion.
+     These are anchored at the cursor, so they read the open buffer
+     and reflect unsaved edits immediately.  Resolution still happens
+     against the last-built vault, so a link to a note created but
+     not yet saved stays unresolved.}
+  {- {b Disk}: find references, rename, document outline, inlay
+     hints, code actions.  These range over the whole vault, where
+     mixing one live buffer with N stale files would be more
+     confusing than being uniformly one save behind.}
+}
 
 {1 Notification handling}
 
 {2 [textDocument/didOpen]}
 
 {ol
-  {- Add the document's rel_path to [open_docs].}
+  {- Record the document's rel_path and content in [open_docs].}
   {- Rebuild the vault from disk.  This catches files that were added
      out-of-band since the last rebuild.}
   {- Publish diagnostics for the opened document, computed against
@@ -43,9 +52,10 @@ notification payloads, so squigglies update as the user types.
 
 {2 [textDocument/didChange]}
 
-Recompute and publish diagnostics for the changed document against
-[new_content].  Nothing else happens — [vault] is {i not} rebuilt
-and feature handlers continue to see the pre-edit disk state.
+Update the document's entry in [open_docs], then recompute and
+publish diagnostics against the new content.  [vault] is {i not}
+rebuilt, so link resolution — and every disk-reading handler —
+continues to see the pre-edit state.
 
 {2 [textDocument/didSave]}
 
@@ -66,10 +76,10 @@ Remove the entry from [open_docs].  No rebuild.
 {1 Observable consequences}
 
 {ul
-  {- Unsaved edits don't affect features other than diagnostics.
-     Adding a new [[[note-x]]] link to an unsaved buffer and
-     immediately running find-references on [note-x] will not show
-     the new link.}
+  {- Unsaved edits don't affect the vault-wide features.  Adding a
+     new [[[note-x]]] link to an unsaved buffer and immediately
+     running find-references on [note-x] will not show the new
+     link.}
   {- Diagnostics for the active buffer are live — the squiggly under
      an unresolved link appears and disappears as the user types.}
   {- Diagnostics for sibling buffers refresh only on save.  If [a.md]
@@ -79,14 +89,55 @@ Remove the entry from [open_docs].  No rebuild.
      up on the next didOpen or didSave.}
 }
 
+{1:mixed-frame Hazard: mixed position frames}
+
+{b The split above is not clean, and the seam is worth naming
+explicitly.}
+
+An LSP request carries a position — a [(line, character)] pair — that
+the client computed against {e its own buffer}. The disk-group
+handlers then convert that position to a byte offset against {e disk}
+content. When the buffer has unsaved edits above the cursor, the two
+disagree, and the handler resolves a different location than the one
+the user's cursor is on.
+
+This is a different failure from the staleness described above.
+Answering one save behind is a defensible tradeoff: the answer is
+{e old but coherent}. Indexing a live coordinate into stale content is
+neither — the byte offset is meaningless, so the answer is about
+whatever text happens to sit there now.
+
+The consequences differ by handler:
+
+{ul
+  {- {b find references}, {b prepare rename}, {b document outline},
+     {b inlay hints}: a wrong-or-empty result. Annoying, recoverable,
+     visibly wrong to the user.}
+  {- {b rename} and {b code actions}: these {e return edits}, with
+     byte ranges derived from disk content, which the client then
+     applies to the {e buffer}. A shifted range does not fail loudly;
+     it silently rewrites the wrong span of a file the user is
+     editing.}
+}
+
+Until the split is resolved, treat rename and code actions on a dirty
+buffer as unsound rather than merely stale. The narrow fix is to
+resolve the request's own position — and compute any returned edit
+ranges — against [open_docs] content whenever the file is open, even
+while vault-wide {e scanning} continues to read from disk. The broad
+fix is the first open question below.
+
 {1:open-questions Open questions}
 
 {ul
-  {- {b Should feature handlers honor unsaved buffer content?}  Doing
-     so means holding a server-side copy of every open buffer and
-     incrementally re-resolving links on didChange.  The current
-     behavior is simpler but can surprise users who expect
-     find-references to reflect what they see on screen.  Not yet
+  {- {b Should the vault-wide handlers honor unsaved buffer content
+     too?}  The buffers are already held in [open_docs]; what is
+     missing is re-resolving links against them on didChange rather
+     than rebuilding the vault from disk.  The current split is
+     simpler but can surprise users who expect find-references to
+     reflect what they see on screen — and, per
+     {{!section-"mixed-frame"}the hazard above}, it is what makes
+     rename and code actions unsound on a dirty buffer.  Not yet
      decided.}
   {- {b Should diagnostics recompute on didChange at all?}  Keeping
      them live is ergonomic but inconsistent with the rest of the

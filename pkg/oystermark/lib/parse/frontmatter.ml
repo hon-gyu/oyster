@@ -83,6 +83,52 @@ let of_string (s : string) : Yaml.value option * string =
       find_close [] lines)
 ;;
 
+(** [blank_frontmatter s] is [(yaml, input)] where [input] is [s] with any
+    leading frontmatter block replaced by whitespace — each non-newline byte
+    becomes a space, newlines are kept — so every byte and line position is
+    preserved. Parsing [input] instead of the stripped {!of_string} body keeps
+    the parsed AST's [Cmarkit.Textloc] offsets aligned with the {e original}
+    file, which LSP positions depend on. When [s] has no (closed) frontmatter,
+    [input] is [s] unchanged. *)
+let blank_frontmatter (s : string) : Yaml.value option * string =
+  let n = String.length s in
+  let line_end pos =
+    match String.index_from s pos '\n' with
+    | Some i -> i
+    | None -> n
+  in
+  let first_end = line_end 0 in
+  if first_end >= n || not (is_delimiter (String.sub s ~pos:0 ~len:first_end))
+  then None, s
+  else (
+    let rec find_close pos yaml_lines =
+      if pos >= n
+      then None (* reached end without a closing delimiter *)
+      else (
+        let e = line_end pos in
+        let line = String.sub s ~pos ~len:(e - pos) in
+        if is_delimiter line
+        then (
+          let body_start = if e < n then e + 1 else n in
+          let yaml_str = String.concat ~sep:"\n" (List.rev yaml_lines) in
+          let yaml =
+            match Yaml.of_string yaml_str with
+            | Ok v -> Some v
+            | Error _ -> None
+          in
+          Some (yaml, body_start))
+        else find_close (e + 1) (line :: yaml_lines))
+    in
+    match find_close (first_end + 1) [] with
+    | None -> None, s (* unclosed: whole string is body, matching {!of_string} *)
+    | Some (yaml, body_start) ->
+      let b = Bytes.of_string s in
+      for i = 0 to body_start - 1 do
+        if not (Char.equal (Bytes.get b i) '\n') then Bytes.set b i ' '
+      done;
+      yaml, Bytes.to_string b)
+;;
+
 let escape_html (s : string) : string =
   let buf = Buffer.create (String.length s) in
   Cmarkit_html.buffer_add_html_escaped_string buf s;
@@ -185,5 +231,63 @@ module For_test = struct
     yaml:
     body: # Body
     |}]
+  ;;
+
+  (* [blank_frontmatter] preserves byte and line positions: the frontmatter
+     region becomes whitespace (newlines kept), the body is byte-identical, and
+     the total length is unchanged. Shown with [|] markers around the result. *)
+  let show_blank (s : string) : unit =
+    let yaml, input = blank_frontmatter s in
+    Printf.printf
+      "yaml: %s\nsame_length: %b\ninput:\n|%s|\n"
+      (to_string yaml)
+      (String.length s = String.length input)
+      input
+  ;;
+
+  let%expect_test "blank_frontmatter: preserves positions" =
+    show_blank "---\ntitle: K\n---\n# Kap\n\nBody.\n";
+    [%expect
+      {|
+      yaml: title: K
+
+      same_length: true
+      input:
+      |
+
+
+      # Kap
+
+      Body.
+      |
+      |}]
+  ;;
+
+  let%expect_test "blank_frontmatter: no frontmatter is unchanged" =
+    show_blank "# Kap\n\nBody.\n";
+    [%expect
+      {|
+      yaml: <none>
+      same_length: true
+      input:
+      |# Kap
+
+      Body.
+      |
+      |}]
+  ;;
+
+  let%expect_test "blank_frontmatter: unclosed is unchanged" =
+    show_blank "---\ntitle: K\nno closing\n";
+    [%expect
+      {|
+      yaml: <none>
+      same_length: true
+      input:
+      |---
+      title: K
+      no closing
+      |
+      |}]
   ;;
 end

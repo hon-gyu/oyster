@@ -10,5 +10,4 @@ type split =
   }
 
 val split_initial_prelude : string -> split
-
 val of_string : file:string -> string -> Parsetree.structure

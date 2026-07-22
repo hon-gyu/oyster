@@ -1,6 +1,3 @@
-(documentation
- (package oystermark))
-
 (rule
  (mode
   (promote (until-clean)))

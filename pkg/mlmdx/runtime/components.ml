@@ -52,3 +52,4 @@ let default =
   ; code = host "code"
   ; blockquote = host "blockquote"
   }
+;;

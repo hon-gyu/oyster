@@ -5,3 +5,7 @@
  (inline_tests)
  (preprocess
   (pps ppx_jane ppx_string ppx_quick_test)))
+
+(documentation
+ (package oystermark-core)
+ (mld_files index))

@@ -1,3 +1,35 @@
-{0 Code Action: Create Unresolved Link}
+{0 Code action: create unresolved note}
 
-For a unresolved link diagnostics as in {!page-"feature-diagnostics"}, provide a code action to create a new note for the unresolved link.
+For an unresolved ordinary-link diagnostic from {!page-"feature-diagnostics"},
+provide a quick fix that creates the missing Markdown note.
+
+{1 Activation}
+
+The server advertises [codeActionProvider] for [quickfix]. A
+[textDocument/codeAction] request returns the action when its range intersects
+an unresolved ordinary wikilink or Markdown link with no fragment.
+
+Broken embeds and images do not offer this action.
+
+{1 Target path}
+
+The link target is interpreted as a vault-relative path, matching
+{!Oystermark.Vault.Resolve.resolve}. A missing [.md] suffix is appended. The
+action is unavailable for absolute paths, path components [.] or [..], empty
+components, or extensions other than [.md].
+
+{1 Workspace edit}
+
+The preferred quick fix is titled [Create note "path.md"]. Its workspace edit:
+
+{ol
+  {- creates the target without overwriting an existing file;}
+  {- inserts an H1 using the target basename.}
+}
+
+The link source is unchanged because it already names the newly-created note.
+
+{1 Limitations}
+
+Fragment links are excluded because creating a file alone would not create the
+requested heading or anchor. The action does not create parent directories.

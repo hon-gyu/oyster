@@ -40,9 +40,11 @@ let target_to_href : Resolve.target -> string = function
   | Resolve.File { path } -> "/" ^ path
   | Resolve.Heading { path; slug; _ } -> file_url_path path ^ "#" ^ slug
   | Resolve.Block { path; block_id } -> file_url_path path ^ "#^" ^ block_id
+  | Resolve.Attr { path; id; _ } -> file_url_path path ^ "#" ^ id
   | Resolve.Curr_file -> ""
   | Resolve.Curr_heading { slug; _ } -> "#" ^ slug
   | Resolve.Curr_block { block_id } -> "#^" ^ block_id
+  | Resolve.Curr_attr { id; _ } -> "#" ^ id
   | Resolve.Unresolved -> "#"
 ;;
 
@@ -88,8 +90,7 @@ let emit_html_attrs
     Buffer.add_char buf '"'
   in
   Option.iter id ~f:(fun id -> emit "id" id);
-  if not (List.is_empty classes)
-  then emit "class" (String.concat ~sep:" " classes);
+  if not (List.is_empty classes) then emit "class" (String.concat ~sep:" " classes);
   List.iter kvs ~f:(fun (k, v) -> emit k v);
   Buffer.contents buf
 ;;
@@ -114,7 +115,8 @@ let cb_attr_html ?key_prefix (a : Cb_attribute.t) : string =
 let wikilink_default_display (w : Cmarkit.Inline.Wikilink.t) : string =
   match Cmarkit.Inline.Wikilink.target w, Cmarkit.Inline.Wikilink.fragment w with
   | Some t, None -> t
-  | Some t, Some (Cmarkit.Inline.Wikilink.Heading hs) -> t ^ "#" ^ String.concat ~sep:"#" hs
+  | Some t, Some (Cmarkit.Inline.Wikilink.Heading hs) ->
+    t ^ "#" ^ String.concat ~sep:"#" hs
   | Some t, Some (Cmarkit.Inline.Wikilink.Block_ref b) -> t ^ "#^" ^ b
   | None, Some (Cmarkit.Inline.Wikilink.Heading hs) -> String.concat ~sep:"#" hs
   | None, Some (Cmarkit.Inline.Wikilink.Block_ref b) -> "^" ^ b
@@ -148,7 +150,11 @@ let parse_image_dims (s : string) : (int * int option) option =
 ;;
 
 (* Render a wikilink as HTML. Handles embed=true for media content. *)
-let render_wikilink (c : Cmarkit_renderer.context) (w : Cmarkit.Inline.Wikilink.t) (meta : Meta.t) : unit
+let render_wikilink
+      (c : Cmarkit_renderer.context)
+      (w : Cmarkit.Inline.Wikilink.t)
+      (meta : Meta.t)
+  : unit
   =
   let href_of_meta (meta : Meta.t) =
     match Meta.find Resolve.resolved_key meta with
@@ -265,7 +271,8 @@ let render_image
     buffer_add_attr_value alt_buf alt;
     let alt_esc = Buffer.contents alt_buf in
     let extra_attrs = Option.value_map attr ~default:"" ~f:cmarkit_attr_html in
-    C.string c
+    C.string
+      c
       (sprintf
          "<a href=\"%s\"><img src=\"%s\" alt=\"%s\"%s%s/></a>"
          href_esc
@@ -328,10 +335,7 @@ let render_inline ?(attr : Attribute.t option) (c : Cmarkit_renderer.context)
 
 let inline (c : Cmarkit_renderer.context) : Inline.t -> bool = function
   | Inline.Ext_attributes (a, _) ->
-    render_inline
-      ~attr:(Inline.Attributes.attributes a)
-      c
-      (Inline.Attributes.inline a)
+    render_inline ~attr:(Inline.Attributes.attributes a) c (Inline.Attributes.inline a)
   | i -> render_inline c i
 ;;
 
@@ -366,10 +370,7 @@ let render_callout
     in
     C.string
       c
-      (sprintf
-         "<details class=\"callout\" data-callout=\"%s\"%s>\n"
-         kind
-         open_attr);
+      (sprintf "<details class=\"callout\" data-callout=\"%s\"%s>\n" kind open_attr);
     C.string c "<summary class=\"callout-title\">";
     render_title ();
     C.string c "</summary>\n";
@@ -510,9 +511,7 @@ let keyed_list_item ~(style : struct_style) ~(tight : bool) c (item, _) =
         C.string c "<div class=\"task\"><input type=\"checkbox\" disabled><div>";
         "</div></div></li>\n"
       | `Checked | `Other _ ->
-        C.string
-          c
-          "<div class=\"task\"><input type=\"checkbox\" disabled checked><div>";
+        C.string c "<div class=\"task\"><input type=\"checkbox\" disabled checked><div>";
         "</div></div></li>\n"
       | `Cancelled ->
         C.string c "<div class=\"task\"><input type=\"checkbox\" disabled><del>";
@@ -541,9 +540,10 @@ let render_keyed_list ~(style : struct_style) c (l : Block.List'.t) =
         | `Roman_upper -> "I"
         | `Decimal -> assert false
       in
-      (if start = 1
-       then sprintf "<ol type=\"%s\">\n" type'
-       else sprintf "<ol type=\"%s\" start=\"%d\">\n" type' start), "</ol>\n"
+      ( (if start = 1
+         then sprintf "<ol type=\"%s\">\n" type'
+         else sprintf "<ol type=\"%s\" start=\"%d\">\n" type' start)
+      , "</ol>\n" )
   in
   C.string c opening;
   List.iter (Block.List'.items l) ~f:(keyed_list_item ~style ~tight c);
@@ -564,7 +564,11 @@ let render_block
     match attr with
     | None -> ""
     | Some a ->
-      emit_html_attrs ~id:None ~classes:(Attribute.classes a) ~kvs:(Attribute.key_values a) ()
+      emit_html_attrs
+        ~id:None
+        ~classes:(Attribute.classes a)
+        ~kvs:(Attribute.key_values a)
+        ()
   in
   function
   | Block.Heading (h, meta) ->
@@ -606,7 +610,8 @@ let render_block
        let id_attr =
          match attr_id, block_id with
          | Some id, _ -> sprintf " id=\"%s\"" id
-         | None, Some (b : Block.Block_id.t) -> sprintf " id=\"^%s\"" (Block.Block_id.id b)
+         | None, Some (b : Block.Block_id.t) ->
+           sprintf " id=\"^%s\"" (Block.Block_id.id b)
          | None, None -> ""
        in
        C.string c (sprintf "<p%s%s>" id_attr attr_non_id_html);

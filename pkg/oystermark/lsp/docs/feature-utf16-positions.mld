@@ -68,14 +68,33 @@ conversion simplifies to a byte count (current behavior).
 
 {1 Implementation site}
 
-All conversion logic lives in [lsp_util.ml]:
+All conversion logic lives in [lsp_util.ml], keyed on an [encoding] type
+([Utf8 | Utf16 | Utf32]):
 
 {ul
-  {- [byte_offset_of_position] gains a [~encoding] parameter
-     (default [utf-16]).}
-  {- A new [position_of_byte_offset] function is added for the
-     inverse direction.}
+  {- {!Lsp_lib.Util.byte_offset_of_position} and
+     {!Lsp_lib.Util.position_of_byte_offset} both take a
+     [?encoding] parameter defaulting to [Utf16] — the mandatory
+     baseline — so every existing caller becomes UTF-16-correct with no
+     signature change. Both decode UTF-8 with
+     [Stdlib.String.get_utf_8_uchar] and count code units per the
+     negotiated encoding.}
+  {- The server advertises [positionEncoding = utf-16] in its
+     capabilities. Only UTF-16 is advertised today, so negotiation always
+     resolves to UTF-16; the [~encoding] parameter carries the plumbing
+     for offering [utf-8]/[utf-32] later.}
 }
+
+{2 Go-to-definition target column}
+
+{!Lsp_lib.Util.position_of_textloc} converts a [Cmarkit.Textloc] to a
+position for the go-to-definition {e target}
+(see {!page-"feature-go-to-definition".target_position}). Given the
+target file's content it decodes the line's bytes and returns a UTF-16
+column; without content it degrades to a byte column. Go-to-definition
+supplies the content — the current buffer for self-file targets,
+[read_file] for cross-file targets — so target columns are UTF-16-encoded
+like every other position.
 
 {1 Edge cases}
 

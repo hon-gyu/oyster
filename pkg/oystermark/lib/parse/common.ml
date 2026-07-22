@@ -80,7 +80,10 @@ let sexp_of_wikilink (wl : Inline.Wikilink.t) : Sexp.t =
     match Inline.Wikilink.fragment wl with
     | None -> Sexp.List []
     | Some (Inline.Wikilink.Heading hs) ->
-      Sexp.List [ Sexp.List (Atom "Heading" :: [ Sexp.List (List.map hs ~f:(fun s -> Sexp.Atom s)) ]) ]
+      Sexp.List
+        [ Sexp.List
+            (Atom "Heading" :: [ Sexp.List (List.map hs ~f:(fun s -> Sexp.Atom s)) ])
+        ]
     | Some (Inline.Wikilink.Block_ref id) ->
       Sexp.List [ Sexp.List [ Atom "Block_ref"; Atom id ] ]
   in
@@ -102,7 +105,10 @@ let sexp_of_wikilink (wl : Inline.Wikilink.t) : Sexp.t =
     just list order with [None] as the fallthrough signal, analogous to
     [Cmarkit.Mapper]'s [`Default]. *)
 type inline_sexp =
-  (Inline.t -> Sexp.t) -> with_meta:(Meta.t -> Sexp.t -> Sexp.t) -> Inline.t -> Sexp.t option
+  (Inline.t -> Sexp.t)
+  -> with_meta:(Meta.t -> Sexp.t -> Sexp.t)
+  -> Inline.t
+  -> Sexp.t option
 
 (** A sexp-converter for blocks. Receives both [recurse_inline] and
     [recurse_block]. [with_meta] wraps a block sexp with its metadata

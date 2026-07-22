@@ -1,5 +1,6 @@
 ; Full-chain example: hello.mlmdx is preprocessed by the mlmdx dialect (mlmdx-pp)
 ; into module Hello, then render.ml renders it to an HTML string.
+
 (executable
  (name render)
  (modules render hello greeting panel)
@@ -10,5 +11,6 @@
 ; Cram test pinning the end-to-end render output. This is the one path the
 ; codegen inline expect tests don't cover: mlmdx-pp -> html_of_jsx.ppx ->
 ; JSX.render -> HTML string.
+
 (cram
  (deps %{exe:render.exe}))

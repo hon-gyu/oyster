@@ -15,6 +15,11 @@ type target =
       ; block_id : string
       ; loc : Cmarkit.Textloc.t option
       }
+  | Attr of
+      { path : string
+      ; id : string
+      ; loc : Cmarkit.Textloc.t option
+      }
   | Curr_file
   | Curr_heading of
       { heading : string
@@ -24,6 +29,10 @@ type target =
       }
   | Curr_block of
       { block_id : string
+      ; loc : Cmarkit.Textloc.t option
+      }
+  | Curr_attr of
+      { id : string
       ; loc : Cmarkit.Textloc.t option
       }
   | Unresolved

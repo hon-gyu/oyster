@@ -13,6 +13,9 @@
   {- {!page-"feature-diagnostics"}}
   {- {!page-"feature-hover"}}
   {- {!page-"feature-find-references"}}
+  {- {!page-"feature-rename"}}
+  {- {!page-"feature-document-outline"}}
+  {- {!page-"feature-codeaction-create-unresolved-link"}}
   {- {!page-"feature-inlay-hints"}}
   {- {!page-"feature-completion"}}
   {- {!page-"feature-utf16-positions"}}

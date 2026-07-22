@@ -16,6 +16,10 @@
  (preprocess
   (pps ppx_jane ppx_string)))
 
+(documentation
+ (package trace-collect)
+ (mld_files index))
+
 (library
  (name trace_collect_test)
  (modules test_trace)

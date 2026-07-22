@@ -1,10 +1,9 @@
 (library
  (name test_lsp)
  (package oystermark)
- (libraries core core_unix yojson lsp_lib trace_collect)
+ (libraries core core_unix linol.lsp lsp_lib trace_collect)
  (inline_tests
   (deps
-   (source_tree data)
-   %{bin:oystermark-lsp}))
+   (source_tree data)))
  (preprocess
   (pps ppx_expect ppx_jane)))

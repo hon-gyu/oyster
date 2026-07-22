@@ -28,35 +28,73 @@ Once a link is detected, it is resolved against the vault index via
 results are:
 
 {t
-  | Link form                 | Target path       | Target line              |
-  |---------------------------|-------------------|--------------------------|
-  | [[[note]]]                | resolved file     | 0 (top of file)          |
-  | [[text](note)]            | resolved file     | 0                        |
-  | [![[file.png]]]           | resolved file     | 0                        |
-  | [[[note#Heading]]]        | resolved file     | line of matching heading |
-  | [[[note#^blockid]]]       | resolved file     | line of matching block   |
-  | [[[#Heading]]]            | current file      | line of heading          |
-  | [[[#^blockid]]]           | current file      | line of block            |
-  | unresolved link           | {e None}          | —                        |
+  | Link form                 | Target path       | Target position               |
+  |---------------------------|-------------------|-------------------------------|
+  | [[[note]]]                | resolved file     | top of file (line 0, char 0)  |
+  | [[text](note)]            | resolved file     | line 0, char 0                |
+  | [![[file.png]]]           | resolved file     | line 0, char 0                |
+  | [[[note#Heading]]]        | resolved file     | position of matching heading  |
+  | [[[note#^blockid]]]       | resolved file     | position of matching block    |
+  | [[[note#id]]]             | resolved file     | position of attribute anchor  |
+  | [[[#Heading]]]            | current file      | position of heading           |
+  | [[[#^blockid]]]           | current file      | position of block             |
+  | [[[#id]]]                 | current file      | position of attribute anchor  |
+  | unresolved link           | {e None}          | —                             |
 }
 
 {2 Heading lookup}
 
 Headings are matched by {e slug}: the heading text is slugified (e.g.
 "Section One" becomes [section-one]) and compared against the fragment.
-The line number is read from the heading AST node's [Cmarkit.Textloc]
+The position is read from the heading AST node's [Cmarkit.Textloc]
 metadata.
 
 {2 Block-ID lookup}
 
 Block IDs ([^id] suffix on a paragraph) are matched by exact string
-comparison on the ID.  The line number is read from the paragraph AST
+comparison on the ID.  The position is read from the paragraph AST
 node's [Cmarkit.Textloc] metadata.
+
+{2 Attribute-anchor lookup}
+
+A fragment naming an explicit djot attribute id ([{#id}]) resolves to the
+attributed inline span, block, or heading. See
+{!page-"feature-attribute-anchors"} for how ids are collected and how the
+fragment namespace (slug, caret id, attribute id) is searched. The
+position is read from the attributed node's [Cmarkit.Textloc]; for an
+{e inline} anchor this is column-precise, so the jump lands mid-line.
+
+{2:target_position Target position (line and character)}
+
+Both the 0-based [line] and the 0-based [character] of the target are
+derived from the resolved node's [Cmarkit.Textloc]:
+
+{ul
+  {- [line] is [fst (first_line loc) - 1] (the [Textloc] line number is
+     one-based).}
+  {- [character] is a UTF-16 code-unit offset within the line (see
+     {!page-"feature-utf16-positions"}). It is computed by decoding the
+     line's bytes from [snd (first_line loc)] to [first_byte loc] via
+     {!Lsp_lib.Util.position_of_textloc}, using the {e target file's}
+     content.}
+}
+
+The target content is obtained from the current buffer for self-file
+targets ([Curr_heading]/[Curr_block]/[Curr_attr]) and via the [read_file]
+callback for cross-file targets ([Heading]/[Block]/[Attr]). The raw file
+content is used directly: [Textloc] offsets are aligned with the original
+file, including files with YAML frontmatter, because the parser blanks
+(rather than strips) the frontmatter region — see
+{!Oystermark.Parse.Frontmatter.blank_frontmatter}. If [read_file] returns
+[None], [character] degrades to a byte offset.
+
+Targets without a location (whole-file [Note]/[File], self-reference
+[Curr_file]) resolve to line 0, character 0.
 
 {2 Fallback}
 
-If the target heading or block ID is not found in the target file, or the
-target file cannot be read, the result falls back to line 0.
+If the target heading, block ID, or attribute id is not found in the
+target file, the result falls back to line 0, character 0.
 
 {1:edge_cases Edge cases}
 

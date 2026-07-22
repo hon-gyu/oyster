@@ -101,6 +101,17 @@ let extract_block ~(block_id : string) (content : string) : string option =
     Some (String.concat ~sep:"\n" para_lines)
 ;;
 
+(** Extract the block carrying attribute id [{#id}] from [content] and render it
+    back to CommonMark.  Content-based (robust to unsaved edits), reusing
+    {!Oystermark.Parse.Extract.get_block_by_attr_id}.  [None] if not found.
+    See {!page-"feature-attribute-anchors"}. *)
+let extract_attr_block ~(id : string) (content : string) : string option =
+  let doc = Lsp_util.parse_doc content in
+  Oystermark.Parse.Extract.get_block_by_attr_id [ Cmarkit.Doc.block doc ] id
+  |> Option.map ~f:(fun b ->
+    Oystermark.Parse.commonmark_of_doc (Cmarkit.Doc.make b) |> String.strip)
+;;
+
 (** {2 Heading-level parsing} *)
 
 (** Return the ATX heading level (1–6) of [line], or [None]. *)
@@ -231,6 +242,14 @@ let hover
              | None -> file_content
            in
            Some (format_hover ~path body))
+      | Attr { path; id; _ } ->
+        (match read_file path with
+         | None -> None
+         | Some file_content ->
+           let body =
+             Option.value (extract_attr_block ~id file_content) ~default:file_content
+           in
+           Some (format_hover ~path body))
       | Curr_file ->
         let body =
           match link_ref.fragment with
@@ -265,6 +284,9 @@ let hover
           | Some p -> p
           | None -> content
         in
+        Some (format_hover ~path:rel_path body)
+      | Curr_attr { id; _ } ->
+        let body = Option.value (extract_attr_block ~id content) ~default:content in
         Some (format_hover ~path:rel_path body)
     in
     Option.map result_opt ~f:(fun raw ->
@@ -397,6 +419,8 @@ let%test_module "hover" =
       ; "note-e.md", "# Epsilon\n\nSelf [[#Epsilon]].\n"
       ; "empty.md", ""
       ; "note-f.md", "# Zeta\n\nSee [[empty]].\n"
+      ; "note-g.md", "# Eta\n\nThe [key term]{#kt} matters here.\n"
+      ; "note-h.md", "# Theta\n\nSee [[note-g#kt]].\n"
       ]
     ;;
 
@@ -476,6 +500,20 @@ let%test_module "hover" =
         # Epsilon
 
         Self [[#Epsilon]].
+        |}]
+    ;;
+
+    (* Hovering a link to an inline attribute anchor shows the containing
+       block. See {!page-"feature-attribute-anchors"}. *)
+    let%expect_test "attribute-anchor fragment" =
+      let content = List.Assoc.find_exn files ~equal:String.equal "note-h.md" in
+      show ~rel_path:"note-h.md" ~content ~line:2 ~character:8;
+      [%expect
+        {|
+        [13-25]
+        *Path*:note-g.md
+
+        The key term{#kt} matters here.
         |}]
     ;;
 

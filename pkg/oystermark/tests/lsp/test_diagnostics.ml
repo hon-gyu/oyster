@@ -71,7 +71,20 @@ let%expect_test "external link skipped" =
 
 let%expect_test "embed wikilink unresolved" =
   show ~rel_path:"note-b.md" ~content:"see ![[missing.png]] here";
-  [%expect {| ((first_byte 4) (last_byte 19) (message "unresolved link: missing.png")) |}]
+  [%expect
+    {| ((first_byte 4) (last_byte 19) (message "unresolved image: missing.png")) |}]
+;;
+
+let%expect_test "note embed unresolved" =
+  show ~rel_path:"note-b.md" ~content:"see ![[missing-note]] here";
+  [%expect
+    {| ((first_byte 4) (last_byte 20) (message "unresolved embed: missing-note")) |}]
+;;
+
+let%expect_test "markdown image unresolved" =
+  show ~rel_path:"note-b.md" ~content:"see ![alt](missing.png) here";
+  [%expect
+    {| ((first_byte 4) (last_byte 22) (message "unresolved image: missing.png")) |}]
 ;;
 
 (* Trace
@@ -103,40 +116,30 @@ let%expect_test "trace: diagnostics spans" =
     |}]
 ;;
 
-(* E2E
+(* Server
 ------------ *)
 
-let%expect_test "e2e: unresolved link produces diagnostic on didOpen" =
+let%expect_test "server: unresolved link produces diagnostic on didOpen" =
   let s = start_server ~vault_root in
-  initialize s;
-  did_open s ~rel_path:"note-b.md";
-  (* The server publishes diagnostics as a notification after didOpen. *)
-  let notif = read_notification s.ic ~method_:"textDocument/publishDiagnostics" in
-  let diags = parse_diagnostics_notification notif in
-  List.iter diags ~f:(fun (msg, line, char) -> printf "%d:%d %s\n" line char msg);
-  shutdown s;
+  open_doc s ~rel_path:"note-b.md"
+  |> diagnostic_positions
+  |> List.iter ~f:(fun (msg, line, char) -> printf "%d:%d %s\n" line char msg);
   [%expect {| 10:11 unresolved link: missing-note |}]
 ;;
 
-let%expect_test "e2e: didChange republishes diagnostics" =
+let%expect_test "server: didChange republishes diagnostics" =
   let s = start_server ~vault_root in
-  initialize s;
-  did_open s ~rel_path:"subdir/nested.md";
   (* didOpen: no unresolved links *)
-  let notif = read_notification s.ic ~method_:"textDocument/publishDiagnostics" in
-  let diags = parse_diagnostics_notification notif in
-  printf "after open: %d diagnostics\n" (List.length diags);
+  let on_open = open_doc s ~rel_path:"subdir/nested.md" in
+  printf "after open: %d diagnostics\n" (List.length on_open);
   (* didChange: add an unresolved link *)
   did_change
     s
     ~rel_path:"subdir/nested.md"
-    ~version:2
-    ~text:"# Nested\n\nLink to [[non-exist]] now.\n";
-  let notif = read_notification s.ic ~method_:"textDocument/publishDiagnostics" in
-  let diags = parse_diagnostics_notification notif in
-  List.iter diags ~f:(fun (msg, line, char) ->
+    ~text:"# Nested\n\nLink to [[non-exist]] now.\n"
+  |> diagnostic_positions
+  |> List.iter ~f:(fun (msg, line, char) ->
     printf "after change: %d:%d %s\n" line char msg);
-  shutdown s;
   [%expect
     {|
     after open: 0 diagnostics
@@ -144,13 +147,9 @@ let%expect_test "e2e: didChange republishes diagnostics" =
     |}]
 ;;
 
-let%expect_test "e2e: resolved links produce no diagnostics" =
+let%expect_test "server: resolved links produce no diagnostics" =
   let s = start_server ~vault_root in
-  initialize s;
-  did_open s ~rel_path:"subdir/nested.md";
-  let notif = read_notification s.ic ~method_:"textDocument/publishDiagnostics" in
-  let diags = parse_diagnostics_notification notif in
+  let diags = open_doc s ~rel_path:"subdir/nested.md" in
   printf "%d diagnostics\n" (List.length diags);
-  shutdown s;
   [%expect {| 0 diagnostics |}]
 ;;

@@ -83,17 +83,15 @@ let%expect_test "unit: partial range" =
   [%expect {| (2,14) 1 ref |}]
 ;;
 
-(* E2E tests
-   ========= *)
+(* Server tests
+   ============ *)
 
-let%expect_test "e2e: inlay hints for note-a" =
+let%expect_test "server: inlay hints for note-a" =
   let s = start_server ~vault_root in
-  initialize s;
   did_open s ~rel_path:"note-a.md";
-  let response = inlay_hint s ~rel_path:"note-a.md" ~start_line:0 ~end_line:20 in
-  let result = parse_inlay_hint_result response in
-  List.iter result ~f:(fun (line, char, label) -> printf "(%d,%d) %s\n" line char label);
-  shutdown s;
+  Server.inlay_hint s ~rel_path:"note-a.md" ~start_line:0 ~end_line:20
+  |> inlay_hint_positions
+  |> List.iter ~f:(fun (line, char, label) -> printf "(%d,%d) %s\n" line char label);
   [%expect
     {|
     (0,0) 5 refs
@@ -101,13 +99,13 @@ let%expect_test "e2e: inlay hints for note-a" =
     |}]
 ;;
 
-let%expect_test "e2e: inlay hints for file with no refs" =
+let%expect_test "server: inlay hints for file with no refs" =
   let s = start_server ~vault_root in
-  initialize s;
   did_open s ~rel_path:"note-b.md";
-  let response = inlay_hint s ~rel_path:"note-b.md" ~start_line:0 ~end_line:20 in
-  let result = parse_inlay_hint_result response in
+  let result =
+    Server.inlay_hint s ~rel_path:"note-b.md" ~start_line:0 ~end_line:20
+    |> inlay_hint_positions
+  in
   printf "%d hints\n" (List.length result);
-  shutdown s;
   [%expect {| 0 hints |}]
 ;;

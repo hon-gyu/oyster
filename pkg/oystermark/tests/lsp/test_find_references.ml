@@ -120,17 +120,15 @@ let%expect_test "unit: unresolved link returns empty" =
   [%expect {| 0 refs |}]
 ;;
 
-(* E2E tests
-   ========= *)
+(* Server tests
+   ============ *)
 
-let%expect_test "e2e: references to note-a" =
+let%expect_test "server: references to note-a" =
   let s = start_server ~vault_root in
-  initialize s;
   did_open s ~rel_path:"note-b.md";
-  let response = references s ~rel_path:"note-b.md" ~line:2 ~character:13 in
-  let result = parse_references_result s.vault_root response in
-  List.iter result ~f:(fun (path, line, char) -> printf "%s (%d,%d)\n" path line char);
-  shutdown s;
+  Server.references s ~rel_path:"note-b.md" ~line:2 ~character:13
+  |> reference_positions s
+  |> List.iter ~f:(fun (path, line, char) -> printf "%s (%d,%d)\n" path line char);
   [%expect
     {|
     note-b.md (2,8)
@@ -141,13 +139,13 @@ let%expect_test "e2e: references to note-a" =
     |}]
 ;;
 
-let%expect_test "e2e: no references for cursor on plain text" =
+let%expect_test "server: no references for cursor on plain text" =
   let s = start_server ~vault_root in
-  initialize s;
   did_open s ~rel_path:"note-a.md";
-  let response = references s ~rel_path:"note-a.md" ~line:0 ~character:0 in
-  let result = parse_references_result s.vault_root response in
+  let result =
+    Server.references s ~rel_path:"note-a.md" ~line:0 ~character:0
+    |> reference_positions s
+  in
   printf "%d refs\n" (List.length result);
-  shutdown s;
   [%expect {| 0 refs |}]
 ;;

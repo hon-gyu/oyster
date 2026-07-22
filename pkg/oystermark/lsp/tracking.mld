@@ -19,8 +19,8 @@ Subsections are encouraged if needed.
 
 {1 completion}
 - Spec: {!page-"feature-completion"}
-- Implementation: TODO
-- Test: TODO
+- Implementation: {!module-Lsp_lib.Completion}
+- Test: {!module-Lsp_lib.Completion.test}
 
 {1 find-references}
 - Spec: {!page-"feature-find-references"}
@@ -29,8 +29,29 @@ Subsections are encouraged if needed.
 
 {1 utf16-positions}
 - Spec: {!page-"feature-utf16-positions"}
-- Implementation: TODO
-- Test: TODO
+- Implementation: {!Lsp_lib.Util.byte_offset_of_position} and
+  {!Lsp_lib.Util.position_of_byte_offset} take [?encoding] (default
+  [Utf16]); server advertises [positionEncoding = utf-16].
+- Test: {!Lsp_lib.Util}'s "utf-16 position encoding" module, plus a
+  UTF-16 cursor case in {!module-Lsp_lib.Go_to_definition.test}.
+- Not yet done: offering utf-8/utf-32 negotiation, and UTF-16 for the
+  go-to-definition target column ([position_of_textloc], needs the
+  target file's content).
+
+{1 rename}
+- Spec: {!page-"feature-rename"}
+- Implementation: {!module-Lsp_lib.Rename}
+- Test: {!module-Test_lsp.Test_rename}
+
+{1 document-outline}
+- Spec: {!page-"feature-document-outline"}
+- Implementation: {!module-Lsp_lib.Document_outline}
+- Test: {!module-Test_lsp.Test_document_outline}
+
+{1 create-unresolved-note}
+- Spec: {!page-"feature-codeaction-create-unresolved-link"}
+- Implementation: {!module-Lsp_lib.Create_unresolved_note}
+- Test: {!module-Test_lsp.Test_create_unresolved_note}
 
 {1 inlay-hints}
 - Spec: {!page-"feature-inlay-hints"}
@@ -41,3 +62,31 @@ Subsections are encouraged if needed.
 - Spec: {!page-"feature-index"}
 - Implementation: TODO
 - Test: TODO
+
+{1 attribute-anchors}
+- Spec: {!page-"feature-attribute-anchors"}
+- Core: {!Oystermark.Vault.Index.extract_attr_ids} (collection),
+  {!Oystermark.Vault.Resolve.resolve} ([Attr]/[Curr_attr] cases).
+- Consumers: {!module-Lsp_lib.Go_to_definition} and
+  {!module-Lsp_lib.Find_references} (attribute anchor targets).
+- Test: {!module-Lsp_lib.Go_to_definition.test},
+  {!module-Lsp_lib.Find_references.test}, and
+  [Oystermark.Vault.Index]'s [extract_attr_ids] expect test.
+- Column precision: go-to-definition returns a [(line, character)]
+  position; inline anchors land mid-line. The [character] is a UTF-16
+  column decoded from the target file's body (read via [read_file] for
+  cross-file, the buffer for self-file) by
+  {!Lsp_lib.Util.position_of_textloc}. Spec
+  {!page-"feature-go-to-definition".target_position}.
+- Diagnostics: duplicate anchor ids are reported (see the
+  {{!page-"feature-diagnostics".duplicate_ids}diagnostics spec}).
+- Section extraction: {!Oystermark.Parse.Extract.get_block_by_attr_id}
+  feeds both embed ([![[note#id]]]) and hover, so an attribute anchor
+  previews/embeds its containing block instead of the whole file.
+- Frontmatter positions: {!Oystermark.Parse.Frontmatter.blank_frontmatter}
+  blanks (rather than strips) the frontmatter region before parsing, so
+  every parsed [Textloc] is full-file-relative. This fixes line/byte
+  positions for frontmatter files across all LSP features (gtd,
+  find-references, diagnostics, hover ranges) at once.
+- Follow-ups (not yet done): attribute ids in completion (completion is
+  itself unimplemented).

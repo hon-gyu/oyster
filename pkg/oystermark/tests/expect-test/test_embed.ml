@@ -55,6 +55,35 @@ let%expect_test "block ref" =
     |}]
 ;;
 
+(* Embed an attribute anchor: block attribute ({#note}) wrapping a blockquote.
+   See {!page-"feature-attribute-anchors"}. *)
+let%expect_test "attribute anchor: block" =
+  render
+    [ "a.md", "![[b#note]]"; "b.md", "Intro.\n\n{#note}\n> An aside.\n\nAfter." ]
+    "a.md";
+  [%expect
+    {|
+    <div class="embed" data-embed-depth="1">
+    <blockquote>
+    <p>An aside.</p>
+    </blockquote>
+    </div>
+    |}]
+;;
+
+(* Inline attribute anchor: the containing paragraph is embedded. *)
+let%expect_test "attribute anchor: inline span" =
+  render
+    [ "a.md", "![[b#kt]]"; "b.md", "Intro.\n\nThe [key term]{#kt} matters.\n" ]
+    "a.md";
+  [%expect
+    {|
+    <div class="embed" data-embed-depth="1">
+    <p>The <span id="kt">key term</span> matters.</p>
+    </div>
+    |}]
+;;
+
 let%expect_test "max_depth=0: fallback link" =
   render ~max_depth:0 [ "a.md", "![[b]]"; "b.md", "Should not appear." ] "a.md";
   [%expect {| <p><a href="/b/">b</a></p> |}]

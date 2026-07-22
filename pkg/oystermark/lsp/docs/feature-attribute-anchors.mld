@@ -1,0 +1,149 @@
+{0 Attribute anchors}
+
+With full djot conformance, {{!page-"design-index"}oymarkit} preserves
+{e explicit identifiers} attached to inline spans and blocks via djot
+attributes ([{#id}]). This spec defines a third {e anchor kind} — the
+explicit attribute id — alongside the two implicit kinds Oystermark
+already resolves: heading slugs and caret block IDs.
+
+This is a {b foundational} spec. It describes the anchor namespace and
+its resolution semantics; the navigation features that consume it
+(go-to-definition, find-references, diagnostics, completion) reference
+this page for the anchor model and add only their feature-specific
+behavior.
+
+{1 Motivation}
+
+Before djot attributes, a fragment ([#...]) could only target:
+
+{ul
+  {- a {b heading}, matched by slug ([[[note#Section One]]]);}
+  {- a {b caret block ID}, matched by exact string ([[[note#^blockid]]]).}
+}
+
+Djot attributes let {e any} inline span or block carry an explicit id:
+
+{[
+## Overview {#intro}
+
+The [key term]{#key-term} is defined here.
+
+> A blockquote with an id.
+{#aside}
+]}
+
+This makes the id a first-class, author-controlled anchor. Unlike a
+heading slug (derived from text, changes when the text changes) or a
+caret id (whole-paragraph granularity), an attribute id is stable and
+can pin an {e arbitrary sub-inline} target.
+
+{1 Anchor collection}
+
+An {b attribute anchor} is any inline or block AST node carrying a djot
+attribute whose {!Oystermark.Vault.Index}-visible id is present (i.e.
+{!Cmarkit.Attribute.id} returns [Some id]).
+
+{2 Sources}
+
+{ul
+  {- {b Block attributes}: the attribute attached to a block (paragraph,
+     blockquote, list, code block, ...).}
+  {- {b Inline attributes}: [Cmarkit.Inline.Ext_attributes], attaching
+     [{#id}] to a span.}
+  {- {b Heading ids}: a heading's [Cmarkit.Block.Heading.id] of the form
+     [`Id s] (an id supplied explicitly rather than derived as a slug).}
+}
+
+{2 Location precision}
+
+Each anchor records a [Cmarkit.Textloc] from the node it annotates:
+
+{ul
+  {- Block and heading anchors record a {b line} (as the existing heading
+     and block-ID anchors do).}
+  {- Inline anchors record a {b line and character}, because the
+     annotated span has a column-precise [textloc]. Navigation to an
+     inline anchor may therefore land on a character offset, not only the
+     start of a line.}
+}
+
+This is the qualitative upgrade over the existing anchor kinds, which are
+line-granular only.
+
+{1 Resolution}
+
+Fragment resolution ([note#id] and self-reference [#id]) is extended so
+the fragment string is matched, in order, against:
+
+{ol
+  {- heading slugs (existing);}
+  {- caret block IDs — the fragment is stripped of a leading [^] for the
+     comparison (existing);}
+  {- attribute ids (new), by exact string comparison.}
+}
+
+The first match wins. A [note#id] wikilink or a [(#id)] markdown-link
+fragment that matches an attribute id resolves to that anchor's path and
+location. This adds a corresponding case to
+{!Oystermark.Vault.Resolve.resolve}: an attribute-id target (and a
+self-file [Curr_*] variant), carrying the anchor's [Cmarkit.Textloc].
+
+{2 Namespace and precedence}
+
+Heading slugs, caret block IDs, and attribute ids share {b one} fragment
+namespace. When a fragment string could match more than one kind, the
+order above is authoritative and the first match wins. Authoring the same
+id in two kinds (e.g. a heading whose slug equals an explicit [{#id}]
+elsewhere) is a {e collision}; see {!page-"feature-diagnostics"} for
+detection.
+
+{1 Uniqueness}
+
+Djot attribute merge semantics are {b override}, not accumulation: a
+duplicated id does not combine, so two nodes carrying the same
+[{#id}] make the target {e ambiguous}. Within a single file, attribute
+ids are expected to be unique.
+
+{ul
+  {- {b Resolution}: on a duplicate, the first anchor in document order is
+     chosen (consistent with existing multi-target resolution, which
+     picks the first candidate).}
+  {- {b Diagnostics}: duplicate ids in one file are reported; see
+     {!page-"feature-diagnostics"}.}
+}
+
+{1 Feature deltas}
+
+This anchor kind threads through the existing navigation features. Each
+feature's own spec is authoritative; the deltas are:
+
+{t
+  | Feature            | Delta                                                              |
+  |--------------------|--------------------------------------------------------------------|
+  | go-to-definition   | [#id] fragment resolves to an attribute anchor; inline anchors jump to line {e and} character. |
+  | find-references    | cursor on a [{#id}] anchor finds links whose fragment targets that id. |
+  | diagnostics        | [#id] with no matching anchor is unresolved; duplicate ids in a file are reported. |
+  | completion         | after [#], attribute ids join headings and block IDs in the suggestion set. |
+}
+
+{1 Edge cases}
+
+{ul
+  {- {b Empty / comment-only attribute} ([{}] or [{% ... %}]): carries no
+     id ([Cmarkit.Attribute.id] returns [None]); contributes no anchor.}
+  {- {b Attribute with classes / key-values but no id}: contributes no
+     anchor (only [id] is an anchor).}
+  {- {b Explicit heading id vs. slug}: when a heading carries an explicit
+     [{#id}], both the derived slug {e and} the explicit id resolve to
+     that heading, unless the id collides with another anchor (first
+     match wins per the order above).}
+}
+
+{1 Assumptions and limitations}
+
+{ul
+  {- Position encoding: see {!page-"feature-utf16-positions"}.}
+  {- Anchor collection is a core ({!Oystermark.Vault.Index}) concern; the
+     LSP consumes the index and adds no anchor logic of its own, per the
+     glue-layer design.}
+}

@@ -6,10 +6,25 @@
 
 open Core
 
+(** How the source syntax consumes its target. This lets diagnostics
+    distinguish navigation links from transclusions and media. *)
+type kind =
+  | Link
+  | Embed
+  | Image
+[@@deriving sexp, equal, compare]
+
+let is_image_target target =
+  let target = String.lowercase target in
+  List.exists [ ".png"; ".jpg"; ".jpeg"; ".gif"; ".svg"; ".webp" ] ~f:(fun ext ->
+    String.is_suffix target ~suffix:ext)
+;;
+
 (** A link found in the AST together with its byte range.
     [first_byte] and [last_byte] are 0-based absolute byte positions. *)
 type located_link =
   { link_ref : Oystermark.Vault.Link_ref.t
+  ; kind : kind
   ; first_byte : int
   ; last_byte : int
   }
@@ -22,11 +37,12 @@ type located_link =
 let collect_links (doc : Cmarkit.Doc.t) : located_link list =
   Trace_core.with_span ~__FILE__ ~__LINE__ "collect_links"
   @@ fun _sp ->
-  let try_add_link acc link_ref loc =
+  let try_add_link acc link_ref kind loc =
     if Cmarkit.Textloc.is_none loc
     then acc
     else
       { link_ref
+      ; kind
       ; first_byte = Cmarkit.Textloc.first_byte loc
       ; last_byte = Cmarkit.Textloc.last_byte loc
       }
@@ -38,19 +54,37 @@ let collect_links (doc : Cmarkit.Doc.t) : located_link list =
         match i with
         | Cmarkit.Inline.Ext_wikilink (wl, meta) ->
           let link_ref = Oystermark.Vault.Link_ref.of_wikilink wl in
-          try_add_link acc link_ref (Cmarkit.Meta.textloc meta)
+          let kind =
+            if Cmarkit.Inline.Wikilink.embed wl
+            then (
+              match link_ref.target with
+              | Some target when is_image_target target -> Image
+              | _ -> Embed)
+            else Link
+          in
+          try_add_link acc link_ref kind (Cmarkit.Meta.textloc meta)
         | _ -> acc)
-      (* Keyed nodes are now native [Cmarkit.Block] constructors, so the
+        (* Keyed nodes are now native [Cmarkit.Block] constructors, so the
          default fold recurses into their label and body automatically. Only
          other block extensions (e.g. frontmatter) reach here; ignore them. *)
       ~block_ext_default:(fun _f acc _b -> acc)
       ~inline:(fun _f acc i ->
         match i with
-        | Cmarkit.Inline.Link (link, meta) | Cmarkit.Inline.Image (link, meta) ->
+        | (Cmarkit.Inline.Link (link, meta) | Cmarkit.Inline.Image (link, meta)) as inline
+          ->
           let loc = Cmarkit.Meta.textloc meta in
           let ref_ = Cmarkit.Inline.Link.reference link in
           (match Oystermark.Vault.Link_ref.of_cmark_reference ref_ with
-           | Some link_ref -> Cmarkit.Folder.ret (try_add_link acc link_ref loc)
+           | Some link_ref ->
+             let kind =
+               match inline with
+               | Cmarkit.Inline.Image _ ->
+                 (match link_ref.target with
+                  | Some target when String.is_suffix target ~suffix:".md" -> Embed
+                  | _ -> Image)
+               | _ -> Link
+             in
+             Cmarkit.Folder.ret (try_add_link acc link_ref kind loc)
            | None -> Cmarkit.Folder.default)
         | _ -> Cmarkit.Folder.default)
       ()

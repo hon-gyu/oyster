@@ -31,6 +31,10 @@ type vertex_kind =
       { block_id : string
       ; loc : textloc option
       }
+  | Attr of
+      { id : string
+      ; loc : textloc option
+      }
 [@@deriving sexp, compare]
 
 type vertex =
@@ -136,11 +140,14 @@ let vertex_of_resolved_target (target : Vault.Resolve.target) (src_path : string
     Some { path; kind = Heading { heading; slug; loc } }
   | Vault.Resolve.Block { path; block_id; loc } ->
     Some { path; kind = Block { block_id; loc } }
+  | Vault.Resolve.Attr { path; id; loc } -> Some { path; kind = Attr { id; loc } }
   | Vault.Resolve.Curr_file -> Some { path = src_path; kind = Note }
   | Vault.Resolve.Curr_heading { heading; slug; loc; _ } ->
     Some { path = src_path; kind = Heading { heading; slug; loc } }
   | Vault.Resolve.Curr_block { block_id; loc } ->
     Some { path = src_path; kind = Block { block_id; loc } }
+  | Vault.Resolve.Curr_attr { id; loc } ->
+    Some { path = src_path; kind = Attr { id; loc } }
   | Vault.Resolve.Unresolved -> None
 ;;
 
@@ -231,6 +238,7 @@ module Dot = Graph.Graphviz.Dot (struct
         | Note -> ":tgt:note"
         | Heading { slug; _ } -> ":tgt:h:" ^ slug
         | Block { block_id; _ } -> ":tgt:b:" ^ block_id
+        | Attr { id; _ } -> ":tgt:a:" ^ id
       in
       Printf.sprintf "%S" (v.path ^ kind_suffix)
     ;;
@@ -250,6 +258,7 @@ module Dot = Graph.Graphviz.Dot (struct
       | Note -> [ `Label base_label ]
       | Heading { heading; _ } -> [ `Label (Printf.sprintf "%s § %s" base_label heading) ]
       | Block { block_id } -> [ `Label (Printf.sprintf "%s ^%s" base_label block_id) ]
+      | Attr { id } -> [ `Label (Printf.sprintf "%s #%s" base_label id) ]
     ;;
 
     let get_subgraph _v = None

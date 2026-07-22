@@ -63,8 +63,7 @@ let get_block_by_caret_id (blocks : Cmarkit.Block.t list) (id : string)
   let open Cmarkit in
   let has_matching_id (meta : Meta.t) : bool =
     match Block.Block_id.find meta with
-    | Some (block_id : Block.Block_id.t) ->
-      String.equal (Block.Block_id.id block_id) id
+    | Some (block_id : Block.Block_id.t) -> String.equal (Block.Block_id.id block_id) id
     | None -> false
   in
   (* A standalone [^id] paragraph is one whose entire inline content is just
@@ -113,6 +112,62 @@ let get_block_by_caret_id (blocks : Cmarkit.Block.t list) (id : string)
        | None -> search_items rest)
   in
   search None (flatten blocks)
+;;
+
+(** Extract the block carrying an explicit djot attribute id ([{#id}]).
+
+    Two cases (see {!page-"feature-attribute-anchors"}):
+    - {b Block attribute}: a [Block.Ext_attributes] whose merged attribute has
+      the id.  The {e wrapped} block is returned.
+    - {b Inline attribute}: an [Inline.Ext_attributes] carrying the id somewhere
+      in a paragraph's or heading's inline content.  The containing block is
+      returned.
+
+    Container blocks (block quotes, list items, [Blocks]) are searched
+    recursively; the first match in document order wins. *)
+let get_block_by_attr_id (blocks : Cmarkit.Block.t list) (id : string)
+  : Cmarkit.Block.t option
+  =
+  let open Cmarkit in
+  let attr_matches (attr : Attribute.t) : bool =
+    match Attribute.id attr with
+    | Some i -> String.equal i id
+    | None -> false
+  in
+  (* Does [inline]'s tree carry an inline attribute with the target id? *)
+  let inline_has_attr (inline : Inline.t) : bool =
+    let folder =
+      Folder.make
+        ~inline:(fun _f found i ->
+          match i with
+          | Inline.Ext_attributes (a, _)
+            when attr_matches (Inline.Attributes.attributes a) -> Folder.ret true
+          | _ -> if found then Folder.ret true else Folder.default)
+        ~inline_ext_default:(fun _f found _ -> found)
+        ~block_ext_default:(fun _f found _ -> found)
+        ()
+    in
+    Folder.fold_inline folder false inline
+  in
+  let rec find_in (blocks : Block.t list) : Block.t option =
+    List.find_map (flatten blocks) ~f:find_block
+  and find_block (block : Block.t) : Block.t option =
+    match block with
+    | Block.Ext_attributes (a, _) when attr_matches (Block.Attributes.attributes a) ->
+      Some (Block.Attributes.block a)
+    | Block.Ext_attributes (a, _) -> find_block (Block.Attributes.block a)
+    | Block.Block_quote (bq, _) -> find_block (Block.Block_quote.block bq)
+    | Block.List (l, _) ->
+      List.find_map (Block.List'.items l) ~f:(fun (item, _) ->
+        find_block (Block.List_item.block item))
+    | Block.Blocks (bs, _) -> find_in bs
+    | Block.Paragraph (p, _) ->
+      if inline_has_attr (Block.Paragraph.inline p) then Some block else None
+    | Block.Heading (h, _) ->
+      if inline_has_attr (Block.Heading.inline h) then Some block else None
+    | _ -> None
+  in
+  find_in blocks
 ;;
 
 module For_test = struct

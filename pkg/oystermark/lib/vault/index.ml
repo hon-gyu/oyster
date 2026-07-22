@@ -16,10 +16,22 @@ type block_entry =
   ; loc : Cmarkit.Textloc.t option
   }
 
+(** An explicit djot attribute id ([{#id}]) attached to an inline span or block.
+
+    Unlike {!heading_entry} (matched by derived slug) and {!block_entry}
+    (whole-paragraph [^caret] ids), an attribute anchor can pin an arbitrary
+    inline sub-span, so [loc] may carry a column, not only a line.
+    See {!page-"feature-attribute-anchors"}. *)
+type attr_entry =
+  { id : string
+  ; loc : Cmarkit.Textloc.t option
+  }
+
 type file_entry =
   { rel_path : string
   ; headings : heading_entry list
   ; blocks : block_entry list
+  ; attrs : attr_entry list
   }
 
 type t =
@@ -73,7 +85,8 @@ let extract_block_ids (doc : Cmarkit.Doc.t) : block_entry list =
                let tl = Cmarkit.Meta.textloc meta in
                if Cmarkit.Textloc.is_none tl then None else Some tl
              in
-             Cmarkit.Folder.ret (acc @ [ { id = Cmarkit.Block.Block_id.id bid; loc } ])
+             Cmarkit.Folder.ret
+               (acc @ [ ({ id = Cmarkit.Block.Block_id.id bid; loc } : block_entry) ])
            | None -> Cmarkit.Folder.default)
         | _ -> Cmarkit.Folder.default)
       ~inline_ext_default:(fun _f acc _i -> acc)
@@ -81,6 +94,54 @@ let extract_block_ids (doc : Cmarkit.Doc.t) : block_entry list =
       ()
   in
   Cmarkit.Folder.fold_doc folder [] doc
+;;
+
+(* Extract explicit djot attribute ids ([{#id}]) from a document.
+
+   Attribute ids come from three AST sources (see {!page-"feature-attribute-anchors"}):
+   - [Block.Ext_attributes]: a djot attribute line attached to a block.
+   - [Inline.Ext_attributes]: [{#id}] attached to an inline span (column-precise).
+   - a heading carrying an explicitly-supplied [`Id], distinct from its slug.
+
+   The [Ext_attributes] wrappers are visited by the top-level folder callback and
+   then recursed into manually, so ids nested inside an attributed block/span are
+   still collected. *)
+let extract_attr_ids (doc : Cmarkit.Doc.t) : attr_entry list =
+  let loc_of_meta meta =
+    let tl = Cmarkit.Meta.textloc meta in
+    if Cmarkit.Textloc.is_none tl then None else Some tl
+  in
+  let add_id acc id meta = ({ id; loc = loc_of_meta meta } : attr_entry) :: acc in
+  let add_attr acc attr meta =
+    match Cmarkit.Attribute.id attr with
+    | Some id -> add_id acc id meta
+    | None -> acc
+  in
+  let folder =
+    Cmarkit.Folder.make
+      ~inline:(fun f acc i ->
+        match i with
+        | Cmarkit.Inline.Ext_attributes (a, meta) ->
+          let acc = add_attr acc (Cmarkit.Inline.Attributes.attributes a) meta in
+          Cmarkit.Folder.ret
+            (Cmarkit.Folder.fold_inline f acc (Cmarkit.Inline.Attributes.inline a))
+        | _ -> Cmarkit.Folder.default)
+      ~block:(fun f acc b ->
+        match b with
+        | Cmarkit.Block.Ext_attributes (a, meta) ->
+          let acc = add_attr acc (Cmarkit.Block.Attributes.attributes a) meta in
+          Cmarkit.Folder.ret
+            (Cmarkit.Folder.fold_block f acc (Cmarkit.Block.Attributes.block a))
+        | Cmarkit.Block.Heading (h, meta) ->
+          (match Cmarkit.Block.Heading.id h with
+           | Some (`Id id) -> Cmarkit.Folder.ret (add_id acc id meta)
+           | Some (`Auto _) | None -> Cmarkit.Folder.default)
+        | _ -> Cmarkit.Folder.default)
+      ~inline_ext_default:(fun _f acc _i -> acc)
+      ~block_ext_default:(fun _f acc _b -> acc)
+      ()
+  in
+  List.rev (Cmarkit.Folder.fold_doc folder [] doc)
 ;;
 
 (** Recursively list all entries (files and directories), returning relative
@@ -150,5 +211,36 @@ Third paragraph ^block-2
     {|
     para1
     block-2
+    |}]
+;;
+
+let%expect_test "extract_attr_ids" =
+  let md =
+    {|
+{#intro}
+## Overview
+
+The [key term]{#key-term} is defined here.
+
+{#aside}
+> A blockquote.
+
+Plain paragraph, no id.
+|}
+  in
+  let doc = Parse.of_string md in
+  let attrs = extract_attr_ids doc in
+  List.iter attrs ~f:(fun (a : attr_entry) ->
+    let line =
+      match a.loc with
+      | Some tl -> Int.to_string (fst (Cmarkit.Textloc.first_line tl))
+      | None -> "?"
+    in
+    Printf.printf "%s @ line %s\n" a.id line);
+  [%expect
+    {|
+    intro @ line 3
+    key-term @ line 5
+    aside @ line 8
     |}]
 ;;
