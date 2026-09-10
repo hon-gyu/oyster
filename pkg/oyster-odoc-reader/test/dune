@@ -1,0 +1,7 @@
+(test
+ (name generated_html_test)
+ (libraries oyster_odoc_reader)
+ (deps
+  (source_tree fixture))
+ (action
+  (run %{test} %{dep:fixture/demo/page.html.json})))

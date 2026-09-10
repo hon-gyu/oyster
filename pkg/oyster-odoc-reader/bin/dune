@@ -1,0 +1,6 @@
+(executable
+ (public_name oyster-odoc-reader)
+ (package oyster-odoc-reader)
+ (name main)
+ (modules main)
+ (libraries oyster_odoc_reader fpath))

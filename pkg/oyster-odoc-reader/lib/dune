@@ -1,0 +1,4 @@
+(library
+ (name oyster_odoc_reader)
+ (public_name oyster-odoc-reader)
+ (libraries odoc.odoc odoc.model odoc.document fpath lambdasoup yojson unix))

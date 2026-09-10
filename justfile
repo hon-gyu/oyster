@@ -33,9 +33,10 @@ devc-down:
         echo "No running dev container found"
     fi
 
+# oyster-publish CLI alias
 [no-exit-message]
-oyster-publish:
-    just -f pkg/oyster-publish/justfile oyster-publish
+oyster-publish *ARGS:
+    just -f pkg/oyster-publish/justfile oyster-publish {{ ARGS }}
 
 mod lsp "pkg/oystermark/lsp"
 

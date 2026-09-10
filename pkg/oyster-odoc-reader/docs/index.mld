@@ -1,0 +1,60 @@
+{0 oyster-odoc-reader}
+
+Read odoc documentation into an OysterMark vault: one note per odoc page.
+
+{1 Where it enters}
+
+By the time odoc writes a [.odocl] file it has parsed the doc comments,
+resolved every cross-reference, rendered the signatures and assigned an anchor
+to each declaration. The file itself is an internal OCaml [Marshal] value. The
+reader therefore asks the [odoc] executable on [PATH] to consume it and emit
+embeddable JSON, then translates the JSON metadata and HTML fragments. The
+installed command may be used across OCaml switches because only the active
+[odoc] process touches its internal representation.
+
+Run the reader in the same active environment as [dune build @doc]. The
+cross-process contract is the textual output of
+[odoc html-generate --as-json], whose fields and HTML shapes used here have
+reader fixtures.
+
+Entry point: {!Oyster_odoc_reader.Notes.of_odocl}.
+
+{1 How each construct is spelled}
+
+{ul
+{- {b Signatures} stay in a fenced code block. A fence's content is literal, so
+   it cannot hold a link; the cross-references odoc resolved inside the
+   signature are collected and emitted as wikilinks on a [Refs:] line beneath
+   the fence. The edges reach the vault graph; their position within the
+   signature does not survive.}
+{- {b Documented members} — a record field or a constructor with its own anchor
+   and prose — keep their code line inside that same fence. No anchor can
+   attach to a line inside a code block, so the anchor and the prose follow the
+   fence as a keyed item.}
+{- {b Tags} ([@param], [@raise], [@since]) arrive as a description whose key
+   splits into a tag name and an optional argument, which is the label chain a
+   keyed node wants: [- parameter: `x`: ...].}
+{- {b Expansions} each become a note of their own, whatever odoc's inline
+   preference was, and the fence that held one collapses to [sig ... end].}
+}
+
+{1 Addressing}
+
+Notes mirror odoc's own page tree — a directory per module, carrying odoc's
+disambiguating [kind-] prefix — so a module and a module type of the same name
+do not collide. See {!Oyster_odoc_reader.Address}.
+
+Anchor identifiers admit only \[A-Za-z0-9_-\]. A ['.'] would read as a djot
+class separator, so odoc's field and constructor anchors ([type-t.field]) are
+rewritten and the original kept in an [odoc-anchor] key.
+
+{1 Known gaps}
+
+{ul
+{- The per-token syntax classes odoc attaches inside a signature
+   ([Source.Tag]) are lost when the signature flattens into a fence.}
+{- [source_anchor], odoc's link from an item back to its source code, is not
+   emitted.}
+{- A page's frontmatter — [short_title], [children_order], [toc_status],
+   [order_category] — is not carried into YAML frontmatter.}
+}

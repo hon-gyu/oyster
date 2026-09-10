@@ -77,6 +77,20 @@
   ("add topics" "to describe" your project)))
 
 (package
+ (name oyster-odoc-reader)
+ (synopsis "Read odoc documentation into an OysterMark vault")
+ (description
+  "Renders the pages odoc has already compiled and linked -- .odocl files -- into OysterMark notes, one note per odoc page.")
+ (depends
+  ocaml
+  (dune
+   (>= 3.22))
+  odoc
+  fpath
+  lambdasoup
+  yojson))
+
+(package
   (name trace-collect)
   (synopsis "A short synopsis")
   (description "A longer description")

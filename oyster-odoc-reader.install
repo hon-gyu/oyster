@@ -1,0 +1,45 @@
+lib: [
+  "_build/install/default/lib/oyster-odoc-reader/META"
+  "_build/install/default/lib/oyster-odoc-reader/address.ml"
+  "_build/install/default/lib/oyster-odoc-reader/address.mli"
+  "_build/install/default/lib/oyster-odoc-reader/dune-package"
+  "_build/install/default/lib/oyster-odoc-reader/notes.ml"
+  "_build/install/default/lib/oyster-odoc-reader/notes.mli"
+  "_build/install/default/lib/oyster-odoc-reader/opam"
+  "_build/install/default/lib/oyster-odoc-reader/oyster_odoc_reader.a"
+  "_build/install/default/lib/oyster-odoc-reader/oyster_odoc_reader.cma"
+  "_build/install/default/lib/oyster-odoc-reader/oyster_odoc_reader.cmi"
+  "_build/install/default/lib/oyster-odoc-reader/oyster_odoc_reader.cmt"
+  "_build/install/default/lib/oyster-odoc-reader/oyster_odoc_reader.cmti"
+  "_build/install/default/lib/oyster-odoc-reader/oyster_odoc_reader.cmx"
+  "_build/install/default/lib/oyster-odoc-reader/oyster_odoc_reader.cmxa"
+  "_build/install/default/lib/oyster-odoc-reader/oyster_odoc_reader.ml"
+  "_build/install/default/lib/oyster-odoc-reader/oyster_odoc_reader.mli"
+  "_build/install/default/lib/oyster-odoc-reader/oyster_odoc_reader__.cmi"
+  "_build/install/default/lib/oyster-odoc-reader/oyster_odoc_reader__.cmt"
+  "_build/install/default/lib/oyster-odoc-reader/oyster_odoc_reader__.cmx"
+  "_build/install/default/lib/oyster-odoc-reader/oyster_odoc_reader__.ml"
+  "_build/install/default/lib/oyster-odoc-reader/oyster_odoc_reader__Address.cmi"
+  "_build/install/default/lib/oyster-odoc-reader/oyster_odoc_reader__Address.cmt"
+  "_build/install/default/lib/oyster-odoc-reader/oyster_odoc_reader__Address.cmti"
+  "_build/install/default/lib/oyster-odoc-reader/oyster_odoc_reader__Address.cmx"
+  "_build/install/default/lib/oyster-odoc-reader/oyster_odoc_reader__Notes.cmi"
+  "_build/install/default/lib/oyster-odoc-reader/oyster_odoc_reader__Notes.cmt"
+  "_build/install/default/lib/oyster-odoc-reader/oyster_odoc_reader__Notes.cmti"
+  "_build/install/default/lib/oyster-odoc-reader/oyster_odoc_reader__Notes.cmx"
+  "_build/install/default/lib/oyster-odoc-reader/oyster_odoc_reader__Render.cmi"
+  "_build/install/default/lib/oyster-odoc-reader/oyster_odoc_reader__Render.cmt"
+  "_build/install/default/lib/oyster-odoc-reader/oyster_odoc_reader__Render.cmti"
+  "_build/install/default/lib/oyster-odoc-reader/oyster_odoc_reader__Render.cmx"
+  "_build/install/default/lib/oyster-odoc-reader/render.ml"
+  "_build/install/default/lib/oyster-odoc-reader/render.mli"
+]
+libexec: [
+  "_build/install/default/lib/oyster-odoc-reader/oyster_odoc_reader.cmxs"
+]
+bin: [
+  "_build/install/default/bin/oyster-odoc-reader"
+]
+doc: [
+  "_build/install/default/doc/oyster-odoc-reader/odoc-pages/index.mld" {"odoc-pages/index.mld"}
+]

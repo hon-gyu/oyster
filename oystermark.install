@@ -1,0 +1,255 @@
+lib: [
+  "_build/install/default/lib/oystermark/META"
+  "_build/install/default/lib/oystermark/context/context.a" {"context/context.a"}
+  "_build/install/default/lib/oystermark/context/context.cma" {"context/context.cma"}
+  "_build/install/default/lib/oystermark/context/context.cmi" {"context/context.cmi"}
+  "_build/install/default/lib/oystermark/context/context.cmt" {"context/context.cmt"}
+  "_build/install/default/lib/oystermark/context/context.cmti" {"context/context.cmti"}
+  "_build/install/default/lib/oystermark/context/context.cmx" {"context/context.cmx"}
+  "_build/install/default/lib/oystermark/context/context.cmxa" {"context/context.cmxa"}
+  "_build/install/default/lib/oystermark/context/context.ml" {"context/context.ml"}
+  "_build/install/default/lib/oystermark/context/context.mli" {"context/context.mli"}
+  "_build/install/default/lib/oystermark/dune-package"
+  "_build/install/default/lib/oystermark/lsp_lib/anchors.ml" {"lsp_lib/anchors.ml"}
+  "_build/install/default/lib/oystermark/lsp_lib/command_block.ml" {"lsp_lib/command_block.ml"}
+  "_build/install/default/lib/oystermark/lsp_lib/completion.ml" {"lsp_lib/completion.ml"}
+  "_build/install/default/lib/oystermark/lsp_lib/create_unresolved_note.ml" {"lsp_lib/create_unresolved_note.ml"}
+  "_build/install/default/lib/oystermark/lsp_lib/daily_notes.ml" {"lsp_lib/daily_notes.ml"}
+  "_build/install/default/lib/oystermark/lsp_lib/diagnostics.ml" {"lsp_lib/diagnostics.ml"}
+  "_build/install/default/lib/oystermark/lsp_lib/document_outline.ml" {"lsp_lib/document_outline.ml"}
+  "_build/install/default/lib/oystermark/lsp_lib/find_references.ml" {"lsp_lib/find_references.ml"}
+  "_build/install/default/lib/oystermark/lsp_lib/go_to_definition.ml" {"lsp_lib/go_to_definition.ml"}
+  "_build/install/default/lib/oystermark/lsp_lib/hover.ml" {"lsp_lib/hover.ml"}
+  "_build/install/default/lib/oystermark/lsp_lib/inlay_hints.ml" {"lsp_lib/inlay_hints.ml"}
+  "_build/install/default/lib/oystermark/lsp_lib/link_collect.ml" {"lsp_lib/link_collect.ml"}
+  "_build/install/default/lib/oystermark/lsp_lib/link_direction.ml" {"lsp_lib/link_direction.ml"}
+  "_build/install/default/lib/oystermark/lsp_lib/lsp_config.ml" {"lsp_lib/lsp_config.ml"}
+  "_build/install/default/lib/oystermark/lsp_lib/lsp_lib.a" {"lsp_lib/lsp_lib.a"}
+  "_build/install/default/lib/oystermark/lsp_lib/lsp_lib.cma" {"lsp_lib/lsp_lib.cma"}
+  "_build/install/default/lib/oystermark/lsp_lib/lsp_lib.cmi" {"lsp_lib/lsp_lib.cmi"}
+  "_build/install/default/lib/oystermark/lsp_lib/lsp_lib.cmt" {"lsp_lib/lsp_lib.cmt"}
+  "_build/install/default/lib/oystermark/lsp_lib/lsp_lib.cmx" {"lsp_lib/lsp_lib.cmx"}
+  "_build/install/default/lib/oystermark/lsp_lib/lsp_lib.cmxa" {"lsp_lib/lsp_lib.cmxa"}
+  "_build/install/default/lib/oystermark/lsp_lib/lsp_lib.ml" {"lsp_lib/lsp_lib.ml"}
+  "_build/install/default/lib/oystermark/lsp_lib/lsp_lib__.cmi" {"lsp_lib/lsp_lib__.cmi"}
+  "_build/install/default/lib/oystermark/lsp_lib/lsp_lib__.cmt" {"lsp_lib/lsp_lib__.cmt"}
+  "_build/install/default/lib/oystermark/lsp_lib/lsp_lib__.cmx" {"lsp_lib/lsp_lib__.cmx"}
+  "_build/install/default/lib/oystermark/lsp_lib/lsp_lib__.ml" {"lsp_lib/lsp_lib__.ml"}
+  "_build/install/default/lib/oystermark/lsp_lib/lsp_lib__Anchors.cmi" {"lsp_lib/lsp_lib__Anchors.cmi"}
+  "_build/install/default/lib/oystermark/lsp_lib/lsp_lib__Anchors.cmt" {"lsp_lib/lsp_lib__Anchors.cmt"}
+  "_build/install/default/lib/oystermark/lsp_lib/lsp_lib__Anchors.cmx" {"lsp_lib/lsp_lib__Anchors.cmx"}
+  "_build/install/default/lib/oystermark/lsp_lib/lsp_lib__Command_block.cmi" {"lsp_lib/lsp_lib__Command_block.cmi"}
+  "_build/install/default/lib/oystermark/lsp_lib/lsp_lib__Command_block.cmt" {"lsp_lib/lsp_lib__Command_block.cmt"}
+  "_build/install/default/lib/oystermark/lsp_lib/lsp_lib__Command_block.cmx" {"lsp_lib/lsp_lib__Command_block.cmx"}
+  "_build/install/default/lib/oystermark/lsp_lib/lsp_lib__Completion.cmi" {"lsp_lib/lsp_lib__Completion.cmi"}
+  "_build/install/default/lib/oystermark/lsp_lib/lsp_lib__Completion.cmt" {"lsp_lib/lsp_lib__Completion.cmt"}
+  "_build/install/default/lib/oystermark/lsp_lib/lsp_lib__Completion.cmx" {"lsp_lib/lsp_lib__Completion.cmx"}
+  "_build/install/default/lib/oystermark/lsp_lib/lsp_lib__Create_unresolved_note.cmi" {"lsp_lib/lsp_lib__Create_unresolved_note.cmi"}
+  "_build/install/default/lib/oystermark/lsp_lib/lsp_lib__Create_unresolved_note.cmt" {"lsp_lib/lsp_lib__Create_unresolved_note.cmt"}
+  "_build/install/default/lib/oystermark/lsp_lib/lsp_lib__Create_unresolved_note.cmx" {"lsp_lib/lsp_lib__Create_unresolved_note.cmx"}
+  "_build/install/default/lib/oystermark/lsp_lib/lsp_lib__Daily_notes.cmi" {"lsp_lib/lsp_lib__Daily_notes.cmi"}
+  "_build/install/default/lib/oystermark/lsp_lib/lsp_lib__Daily_notes.cmt" {"lsp_lib/lsp_lib__Daily_notes.cmt"}
+  "_build/install/default/lib/oystermark/lsp_lib/lsp_lib__Daily_notes.cmx" {"lsp_lib/lsp_lib__Daily_notes.cmx"}
+  "_build/install/default/lib/oystermark/lsp_lib/lsp_lib__Diagnostics.cmi" {"lsp_lib/lsp_lib__Diagnostics.cmi"}
+  "_build/install/default/lib/oystermark/lsp_lib/lsp_lib__Diagnostics.cmt" {"lsp_lib/lsp_lib__Diagnostics.cmt"}
+  "_build/install/default/lib/oystermark/lsp_lib/lsp_lib__Diagnostics.cmx" {"lsp_lib/lsp_lib__Diagnostics.cmx"}
+  "_build/install/default/lib/oystermark/lsp_lib/lsp_lib__Document_outline.cmi" {"lsp_lib/lsp_lib__Document_outline.cmi"}
+  "_build/install/default/lib/oystermark/lsp_lib/lsp_lib__Document_outline.cmt" {"lsp_lib/lsp_lib__Document_outline.cmt"}
+  "_build/install/default/lib/oystermark/lsp_lib/lsp_lib__Document_outline.cmx" {"lsp_lib/lsp_lib__Document_outline.cmx"}
+  "_build/install/default/lib/oystermark/lsp_lib/lsp_lib__Find_references.cmi" {"lsp_lib/lsp_lib__Find_references.cmi"}
+  "_build/install/default/lib/oystermark/lsp_lib/lsp_lib__Find_references.cmt" {"lsp_lib/lsp_lib__Find_references.cmt"}
+  "_build/install/default/lib/oystermark/lsp_lib/lsp_lib__Find_references.cmx" {"lsp_lib/lsp_lib__Find_references.cmx"}
+  "_build/install/default/lib/oystermark/lsp_lib/lsp_lib__Go_to_definition.cmi" {"lsp_lib/lsp_lib__Go_to_definition.cmi"}
+  "_build/install/default/lib/oystermark/lsp_lib/lsp_lib__Go_to_definition.cmt" {"lsp_lib/lsp_lib__Go_to_definition.cmt"}
+  "_build/install/default/lib/oystermark/lsp_lib/lsp_lib__Go_to_definition.cmx" {"lsp_lib/lsp_lib__Go_to_definition.cmx"}
+  "_build/install/default/lib/oystermark/lsp_lib/lsp_lib__Hover.cmi" {"lsp_lib/lsp_lib__Hover.cmi"}
+  "_build/install/default/lib/oystermark/lsp_lib/lsp_lib__Hover.cmt" {"lsp_lib/lsp_lib__Hover.cmt"}
+  "_build/install/default/lib/oystermark/lsp_lib/lsp_lib__Hover.cmx" {"lsp_lib/lsp_lib__Hover.cmx"}
+  "_build/install/default/lib/oystermark/lsp_lib/lsp_lib__Inlay_hints.cmi" {"lsp_lib/lsp_lib__Inlay_hints.cmi"}
+  "_build/install/default/lib/oystermark/lsp_lib/lsp_lib__Inlay_hints.cmt" {"lsp_lib/lsp_lib__Inlay_hints.cmt"}
+  "_build/install/default/lib/oystermark/lsp_lib/lsp_lib__Inlay_hints.cmx" {"lsp_lib/lsp_lib__Inlay_hints.cmx"}
+  "_build/install/default/lib/oystermark/lsp_lib/lsp_lib__Link_collect.cmi" {"lsp_lib/lsp_lib__Link_collect.cmi"}
+  "_build/install/default/lib/oystermark/lsp_lib/lsp_lib__Link_collect.cmt" {"lsp_lib/lsp_lib__Link_collect.cmt"}
+  "_build/install/default/lib/oystermark/lsp_lib/lsp_lib__Link_collect.cmx" {"lsp_lib/lsp_lib__Link_collect.cmx"}
+  "_build/install/default/lib/oystermark/lsp_lib/lsp_lib__Link_direction.cmi" {"lsp_lib/lsp_lib__Link_direction.cmi"}
+  "_build/install/default/lib/oystermark/lsp_lib/lsp_lib__Link_direction.cmt" {"lsp_lib/lsp_lib__Link_direction.cmt"}
+  "_build/install/default/lib/oystermark/lsp_lib/lsp_lib__Link_direction.cmx" {"lsp_lib/lsp_lib__Link_direction.cmx"}
+  "_build/install/default/lib/oystermark/lsp_lib/lsp_lib__Lsp_config.cmi" {"lsp_lib/lsp_lib__Lsp_config.cmi"}
+  "_build/install/default/lib/oystermark/lsp_lib/lsp_lib__Lsp_config.cmt" {"lsp_lib/lsp_lib__Lsp_config.cmt"}
+  "_build/install/default/lib/oystermark/lsp_lib/lsp_lib__Lsp_config.cmx" {"lsp_lib/lsp_lib__Lsp_config.cmx"}
+  "_build/install/default/lib/oystermark/lsp_lib/lsp_lib__Lsp_util.cmi" {"lsp_lib/lsp_lib__Lsp_util.cmi"}
+  "_build/install/default/lib/oystermark/lsp_lib/lsp_lib__Lsp_util.cmt" {"lsp_lib/lsp_lib__Lsp_util.cmt"}
+  "_build/install/default/lib/oystermark/lsp_lib/lsp_lib__Lsp_util.cmx" {"lsp_lib/lsp_lib__Lsp_util.cmx"}
+  "_build/install/default/lib/oystermark/lsp_lib/lsp_lib__Reference_counts.cmi" {"lsp_lib/lsp_lib__Reference_counts.cmi"}
+  "_build/install/default/lib/oystermark/lsp_lib/lsp_lib__Reference_counts.cmt" {"lsp_lib/lsp_lib__Reference_counts.cmt"}
+  "_build/install/default/lib/oystermark/lsp_lib/lsp_lib__Reference_counts.cmx" {"lsp_lib/lsp_lib__Reference_counts.cmx"}
+  "_build/install/default/lib/oystermark/lsp_lib/lsp_lib__Rename.cmi" {"lsp_lib/lsp_lib__Rename.cmi"}
+  "_build/install/default/lib/oystermark/lsp_lib/lsp_lib__Rename.cmt" {"lsp_lib/lsp_lib__Rename.cmt"}
+  "_build/install/default/lib/oystermark/lsp_lib/lsp_lib__Rename.cmx" {"lsp_lib/lsp_lib__Rename.cmx"}
+  "_build/install/default/lib/oystermark/lsp_lib/lsp_lib__Server.cmi" {"lsp_lib/lsp_lib__Server.cmi"}
+  "_build/install/default/lib/oystermark/lsp_lib/lsp_lib__Server.cmt" {"lsp_lib/lsp_lib__Server.cmt"}
+  "_build/install/default/lib/oystermark/lsp_lib/lsp_lib__Server.cmti" {"lsp_lib/lsp_lib__Server.cmti"}
+  "_build/install/default/lib/oystermark/lsp_lib/lsp_lib__Server.cmx" {"lsp_lib/lsp_lib__Server.cmx"}
+  "_build/install/default/lib/oystermark/lsp_lib/lsp_lib__Toc.cmi" {"lsp_lib/lsp_lib__Toc.cmi"}
+  "_build/install/default/lib/oystermark/lsp_lib/lsp_lib__Toc.cmt" {"lsp_lib/lsp_lib__Toc.cmt"}
+  "_build/install/default/lib/oystermark/lsp_lib/lsp_lib__Toc.cmx" {"lsp_lib/lsp_lib__Toc.cmx"}
+  "_build/install/default/lib/oystermark/lsp_lib/lsp_util.ml" {"lsp_lib/lsp_util.ml"}
+  "_build/install/default/lib/oystermark/lsp_lib/reference_counts.ml" {"lsp_lib/reference_counts.ml"}
+  "_build/install/default/lib/oystermark/lsp_lib/rename.ml" {"lsp_lib/rename.ml"}
+  "_build/install/default/lib/oystermark/lsp_lib/server.ml" {"lsp_lib/server.ml"}
+  "_build/install/default/lib/oystermark/lsp_lib/server.mli" {"lsp_lib/server.mli"}
+  "_build/install/default/lib/oystermark/lsp_lib/toc.ml" {"lsp_lib/toc.ml"}
+  "_build/install/default/lib/oystermark/opam"
+  "_build/install/default/lib/oystermark/oystermark.a"
+  "_build/install/default/lib/oystermark/oystermark.cma"
+  "_build/install/default/lib/oystermark/oystermark.cmi"
+  "_build/install/default/lib/oystermark/oystermark.cmt"
+  "_build/install/default/lib/oystermark/oystermark.cmx"
+  "_build/install/default/lib/oystermark/oystermark.cmxa"
+  "_build/install/default/lib/oystermark/oystermark.ml"
+  "_build/install/default/lib/oystermark/oystermark__.cmi"
+  "_build/install/default/lib/oystermark/oystermark__.cmt"
+  "_build/install/default/lib/oystermark/oystermark__.cmx"
+  "_build/install/default/lib/oystermark/oystermark__.ml"
+  "_build/install/default/lib/oystermark/oystermark__Version.cmi"
+  "_build/install/default/lib/oystermark/oystermark__Version.cmt"
+  "_build/install/default/lib/oystermark/oystermark__Version.cmx"
+  "_build/install/default/lib/oystermark/parse/common.ml" {"parse/common.ml"}
+  "_build/install/default/lib/oystermark/parse/extract.ml" {"parse/extract.ml"}
+  "_build/install/default/lib/oystermark/parse/frontmatter.ml" {"parse/frontmatter.ml"}
+  "_build/install/default/lib/oystermark/parse/parse.a" {"parse/parse.a"}
+  "_build/install/default/lib/oystermark/parse/parse.cma" {"parse/parse.cma"}
+  "_build/install/default/lib/oystermark/parse/parse.cmi" {"parse/parse.cmi"}
+  "_build/install/default/lib/oystermark/parse/parse.cmt" {"parse/parse.cmt"}
+  "_build/install/default/lib/oystermark/parse/parse.cmx" {"parse/parse.cmx"}
+  "_build/install/default/lib/oystermark/parse/parse.cmxa" {"parse/parse.cmxa"}
+  "_build/install/default/lib/oystermark/parse/parse.ml" {"parse/parse.ml"}
+  "_build/install/default/lib/oystermark/parse/parse__.cmi" {"parse/parse__.cmi"}
+  "_build/install/default/lib/oystermark/parse/parse__.cmt" {"parse/parse__.cmt"}
+  "_build/install/default/lib/oystermark/parse/parse__.cmx" {"parse/parse__.cmx"}
+  "_build/install/default/lib/oystermark/parse/parse__.ml" {"parse/parse__.ml"}
+  "_build/install/default/lib/oystermark/parse/parse__Common.cmi" {"parse/parse__Common.cmi"}
+  "_build/install/default/lib/oystermark/parse/parse__Common.cmt" {"parse/parse__Common.cmt"}
+  "_build/install/default/lib/oystermark/parse/parse__Common.cmx" {"parse/parse__Common.cmx"}
+  "_build/install/default/lib/oystermark/parse/parse__Extract.cmi" {"parse/parse__Extract.cmi"}
+  "_build/install/default/lib/oystermark/parse/parse__Extract.cmt" {"parse/parse__Extract.cmt"}
+  "_build/install/default/lib/oystermark/parse/parse__Extract.cmx" {"parse/parse__Extract.cmx"}
+  "_build/install/default/lib/oystermark/parse/parse__Frontmatter.cmi" {"parse/parse__Frontmatter.cmi"}
+  "_build/install/default/lib/oystermark/parse/parse__Frontmatter.cmt" {"parse/parse__Frontmatter.cmt"}
+  "_build/install/default/lib/oystermark/parse/parse__Frontmatter.cmx" {"parse/parse__Frontmatter.cmx"}
+  "_build/install/default/lib/oystermark/parse/parse__Struct.cmi" {"parse/parse__Struct.cmi"}
+  "_build/install/default/lib/oystermark/parse/parse__Struct.cmt" {"parse/parse__Struct.cmt"}
+  "_build/install/default/lib/oystermark/parse/parse__Struct.cmti" {"parse/parse__Struct.cmti"}
+  "_build/install/default/lib/oystermark/parse/parse__Struct.cmx" {"parse/parse__Struct.cmx"}
+  "_build/install/default/lib/oystermark/parse/parse__Struct_for_test.cmi" {"parse/parse__Struct_for_test.cmi"}
+  "_build/install/default/lib/oystermark/parse/parse__Struct_for_test.cmt" {"parse/parse__Struct_for_test.cmt"}
+  "_build/install/default/lib/oystermark/parse/parse__Struct_for_test.cmx" {"parse/parse__Struct_for_test.cmx"}
+  "_build/install/default/lib/oystermark/parse/parse__Textloc_conv.cmi" {"parse/parse__Textloc_conv.cmi"}
+  "_build/install/default/lib/oystermark/parse/parse__Textloc_conv.cmt" {"parse/parse__Textloc_conv.cmt"}
+  "_build/install/default/lib/oystermark/parse/parse__Textloc_conv.cmx" {"parse/parse__Textloc_conv.cmx"}
+  "_build/install/default/lib/oystermark/parse/struct.ml" {"parse/struct.ml"}
+  "_build/install/default/lib/oystermark/parse/struct.mli" {"parse/struct.mli"}
+  "_build/install/default/lib/oystermark/parse/struct_for_test.ml" {"parse/struct_for_test.ml"}
+  "_build/install/default/lib/oystermark/parse/textloc_conv.ml" {"parse/textloc_conv.ml"}
+  "_build/install/default/lib/oystermark/pp_struct/pp_struct.a" {"pp_struct/pp_struct.a"}
+  "_build/install/default/lib/oystermark/pp_struct/pp_struct.cma" {"pp_struct/pp_struct.cma"}
+  "_build/install/default/lib/oystermark/pp_struct/pp_struct.cmi" {"pp_struct/pp_struct.cmi"}
+  "_build/install/default/lib/oystermark/pp_struct/pp_struct.cmt" {"pp_struct/pp_struct.cmt"}
+  "_build/install/default/lib/oystermark/pp_struct/pp_struct.cmx" {"pp_struct/pp_struct.cmx"}
+  "_build/install/default/lib/oystermark/pp_struct/pp_struct.cmxa" {"pp_struct/pp_struct.cmxa"}
+  "_build/install/default/lib/oystermark/pp_struct/pp_struct.ml" {"pp_struct/pp_struct.ml"}
+  "_build/install/default/lib/oystermark/vault/embed.ml" {"vault/embed.ml"}
+  "_build/install/default/lib/oystermark/vault/index.ml" {"vault/index.ml"}
+  "_build/install/default/lib/oystermark/vault/index.mli" {"vault/index.mli"}
+  "_build/install/default/lib/oystermark/vault/link_ref.ml" {"vault/link_ref.ml"}
+  "_build/install/default/lib/oystermark/vault/rename.ml" {"vault/rename.ml"}
+  "_build/install/default/lib/oystermark/vault/vault.a" {"vault/vault.a"}
+  "_build/install/default/lib/oystermark/vault/vault.cma" {"vault/vault.cma"}
+  "_build/install/default/lib/oystermark/vault/vault.cmi" {"vault/vault.cmi"}
+  "_build/install/default/lib/oystermark/vault/vault.cmt" {"vault/vault.cmt"}
+  "_build/install/default/lib/oystermark/vault/vault.cmx" {"vault/vault.cmx"}
+  "_build/install/default/lib/oystermark/vault/vault.cmxa" {"vault/vault.cmxa"}
+  "_build/install/default/lib/oystermark/vault/vault.ml" {"vault/vault.ml"}
+  "_build/install/default/lib/oystermark/vault/vault__.cmi" {"vault/vault__.cmi"}
+  "_build/install/default/lib/oystermark/vault/vault__.cmt" {"vault/vault__.cmt"}
+  "_build/install/default/lib/oystermark/vault/vault__.cmx" {"vault/vault__.cmx"}
+  "_build/install/default/lib/oystermark/vault/vault__.ml" {"vault/vault__.ml"}
+  "_build/install/default/lib/oystermark/vault/vault__Embed.cmi" {"vault/vault__Embed.cmi"}
+  "_build/install/default/lib/oystermark/vault/vault__Embed.cmt" {"vault/vault__Embed.cmt"}
+  "_build/install/default/lib/oystermark/vault/vault__Embed.cmx" {"vault/vault__Embed.cmx"}
+  "_build/install/default/lib/oystermark/vault/vault__Index.cmi" {"vault/vault__Index.cmi"}
+  "_build/install/default/lib/oystermark/vault/vault__Index.cmt" {"vault/vault__Index.cmt"}
+  "_build/install/default/lib/oystermark/vault/vault__Index.cmti" {"vault/vault__Index.cmti"}
+  "_build/install/default/lib/oystermark/vault/vault__Index.cmx" {"vault/vault__Index.cmx"}
+  "_build/install/default/lib/oystermark/vault/vault__Link_ref.cmi" {"vault/vault__Link_ref.cmi"}
+  "_build/install/default/lib/oystermark/vault/vault__Link_ref.cmt" {"vault/vault__Link_ref.cmt"}
+  "_build/install/default/lib/oystermark/vault/vault__Link_ref.cmx" {"vault/vault__Link_ref.cmx"}
+  "_build/install/default/lib/oystermark/vault/vault__Rename.cmi" {"vault/vault__Rename.cmi"}
+  "_build/install/default/lib/oystermark/vault/vault__Rename.cmt" {"vault/vault__Rename.cmt"}
+  "_build/install/default/lib/oystermark/vault/vault__Rename.cmx" {"vault/vault__Rename.cmx"}
+  "_build/install/default/lib/oystermark/vault_fs/fs_utils.ml" {"vault_fs/fs_utils.ml"}
+  "_build/install/default/lib/oystermark/vault_fs/vault_fs.a" {"vault_fs/vault_fs.a"}
+  "_build/install/default/lib/oystermark/vault_fs/vault_fs.cma" {"vault_fs/vault_fs.cma"}
+  "_build/install/default/lib/oystermark/vault_fs/vault_fs.cmi" {"vault_fs/vault_fs.cmi"}
+  "_build/install/default/lib/oystermark/vault_fs/vault_fs.cmt" {"vault_fs/vault_fs.cmt"}
+  "_build/install/default/lib/oystermark/vault_fs/vault_fs.cmx" {"vault_fs/vault_fs.cmx"}
+  "_build/install/default/lib/oystermark/vault_fs/vault_fs.cmxa" {"vault_fs/vault_fs.cmxa"}
+  "_build/install/default/lib/oystermark/vault_fs/vault_fs.ml" {"vault_fs/vault_fs.ml"}
+  "_build/install/default/lib/oystermark/vault_fs/vault_fs__.cmi" {"vault_fs/vault_fs__.cmi"}
+  "_build/install/default/lib/oystermark/vault_fs/vault_fs__.cmt" {"vault_fs/vault_fs__.cmt"}
+  "_build/install/default/lib/oystermark/vault_fs/vault_fs__.cmx" {"vault_fs/vault_fs__.cmx"}
+  "_build/install/default/lib/oystermark/vault_fs/vault_fs__.ml" {"vault_fs/vault_fs__.ml"}
+  "_build/install/default/lib/oystermark/vault_fs/vault_fs__Fs_utils.cmi" {"vault_fs/vault_fs__Fs_utils.cmi"}
+  "_build/install/default/lib/oystermark/vault_fs/vault_fs__Fs_utils.cmt" {"vault_fs/vault_fs__Fs_utils.cmt"}
+  "_build/install/default/lib/oystermark/vault_fs/vault_fs__Fs_utils.cmx" {"vault_fs/vault_fs__Fs_utils.cmx"}
+  "_build/install/default/lib/oystermark/version.ml"
+]
+libexec: [
+  "_build/install/default/lib/oystermark/context/context.cmxs" {"context/context.cmxs"}
+  "_build/install/default/lib/oystermark/lsp_lib/lsp_lib.cmxs" {"lsp_lib/lsp_lib.cmxs"}
+  "_build/install/default/lib/oystermark/oystermark.cmxs"
+  "_build/install/default/lib/oystermark/parse/parse.cmxs" {"parse/parse.cmxs"}
+  "_build/install/default/lib/oystermark/pp_struct/pp_struct.cmxs" {"pp_struct/pp_struct.cmxs"}
+  "_build/install/default/lib/oystermark/vault/vault.cmxs" {"vault/vault.cmxs"}
+  "_build/install/default/lib/oystermark/vault_fs/vault_fs.cmxs" {"vault_fs/vault_fs.cmxs"}
+]
+bin: [
+  "_build/install/default/bin/mlmdx-pp"
+  "_build/install/default/bin/ocamlmerlin-mlmdx"
+  "_build/install/default/bin/oyster"
+  "_build/install/default/bin/oystermark-lsp"
+]
+doc: [
+  "_build/install/default/doc/oystermark/odoc-config.sexp"
+  "_build/install/default/doc/oystermark/odoc-pages/cmarkit-label-resolution.mld" {"odoc-pages/cmarkit-label-resolution.mld"}
+  "_build/install/default/doc/oystermark/odoc-pages/cmarkit-mapper-api.mld" {"odoc-pages/cmarkit-mapper-api.mld"}
+  "_build/install/default/doc/oystermark/odoc-pages/design-260322-lsp.mld" {"odoc-pages/design-260322-lsp.mld"}
+  "_build/install/default/doc/oystermark/odoc-pages/design-260322-tracing.mld" {"odoc-pages/design-260322-tracing.mld"}
+  "_build/install/default/doc/oystermark/odoc-pages/design-index.mld" {"odoc-pages/design-index.mld"}
+  "_build/install/default/doc/oystermark/odoc-pages/feature-attribute-anchors.mld" {"odoc-pages/feature-attribute-anchors.mld"}
+  "_build/install/default/doc/oystermark/odoc-pages/feature-codeaction-create-unresolved-link.mld" {"odoc-pages/feature-codeaction-create-unresolved-link.mld"}
+  "_build/install/default/doc/oystermark/odoc-pages/feature-codelens-reference-counts.mld" {"odoc-pages/feature-codelens-reference-counts.mld"}
+  "_build/install/default/doc/oystermark/odoc-pages/feature-command-block.mld" {"odoc-pages/feature-command-block.mld"}
+  "_build/install/default/doc/oystermark/odoc-pages/feature-completion-markdown-links.mld" {"odoc-pages/feature-completion-markdown-links.mld"}
+  "_build/install/default/doc/oystermark/odoc-pages/feature-completion.mld" {"odoc-pages/feature-completion.mld"}
+  "_build/install/default/doc/oystermark/odoc-pages/feature-configuration.mld" {"odoc-pages/feature-configuration.mld"}
+  "_build/install/default/doc/oystermark/odoc-pages/feature-daily-notes.mld" {"odoc-pages/feature-daily-notes.mld"}
+  "_build/install/default/doc/oystermark/odoc-pages/feature-diagnostics.mld" {"odoc-pages/feature-diagnostics.mld"}
+  "_build/install/default/doc/oystermark/odoc-pages/feature-document-outline.mld" {"odoc-pages/feature-document-outline.mld"}
+  "_build/install/default/doc/oystermark/odoc-pages/feature-document-sync.mld" {"odoc-pages/feature-document-sync.mld"}
+  "_build/install/default/doc/oystermark/odoc-pages/feature-find-references.mld" {"odoc-pages/feature-find-references.mld"}
+  "_build/install/default/doc/oystermark/odoc-pages/feature-footnotes.mld" {"odoc-pages/feature-footnotes.mld"}
+  "_build/install/default/doc/oystermark/odoc-pages/feature-go-to-definition.mld" {"odoc-pages/feature-go-to-definition.mld"}
+  "_build/install/default/doc/oystermark/odoc-pages/feature-hover.mld" {"odoc-pages/feature-hover.mld"}
+  "_build/install/default/doc/oystermark/odoc-pages/feature-index.mld" {"odoc-pages/feature-index.mld"}
+  "_build/install/default/doc/oystermark/odoc-pages/feature-inlay-hints-link-direction.mld" {"odoc-pages/feature-inlay-hints-link-direction.mld"}
+  "_build/install/default/doc/oystermark/odoc-pages/feature-projects.mld" {"odoc-pages/feature-projects.mld"}
+  "_build/install/default/doc/oystermark/odoc-pages/feature-rename.mld" {"odoc-pages/feature-rename.mld"}
+  "_build/install/default/doc/oystermark/odoc-pages/feature-toc.mld" {"odoc-pages/feature-toc.mld"}
+  "_build/install/default/doc/oystermark/odoc-pages/feature-utf16-positions.mld" {"odoc-pages/feature-utf16-positions.mld"}
+  "_build/install/default/doc/oystermark/odoc-pages/index.mld" {"odoc-pages/index.mld"}
+  "_build/install/default/doc/oystermark/odoc-pages/pandoc-attribute.mld" {"odoc-pages/pandoc-attribute.mld"}
+  "_build/install/default/doc/oystermark/odoc-pages/template-context-example.mld" {"odoc-pages/template-context-example.mld"}
+  "_build/install/default/doc/oystermark/odoc-pages/template-context.mld" {"odoc-pages/template-context.mld"}
+  "_build/install/default/doc/oystermark/odoc-pages/tracking.mld" {"odoc-pages/tracking.mld"}
+]
