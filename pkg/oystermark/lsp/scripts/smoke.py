@@ -424,6 +424,76 @@ def run_disabled(binary):
         shutil.rmtree(root, ignore_errors=True)
 
 
+def run_file_operations(binary):
+    """A folder moved in the editor's explorer.
+
+    `workspace/willRenameFiles` and `workspace/didRenameFiles` only arrive if
+    the capability asks for them, and linol has no dedicated hook for either.
+    See `docs/feature-rename.mld`, section File operations."""
+    root = tempfile.mkdtemp(prefix="oysterlsp-smoke-move-")
+    os.makedirs(os.path.join(root, "d"))
+    with open(os.path.join(root, "top.md"), "w") as f:
+        f.write("[[a]] [x](d/a.md)\n")
+    with open(os.path.join(root, "d", "a.md"), "w") as f:
+        f.write("# A\n")
+
+    s = Session(binary, root)
+    try:
+        caps = s.request(
+            "initialize",
+            {"processId": None, "rootUri": "file://" + root, "capabilities": {}},
+        )["capabilities"]
+        s.notify("initialized", {})
+
+        print("\ncapabilities")
+        operations = (caps.get("workspace") or {}).get("fileOperations") or {}
+        check("asks for willRename", "willRename" in operations, f"got {operations}")
+        check("asks for didRename", "didRename" in operations)
+
+        files = [{"oldUri": s.uri("d"), "newUri": s.uri("e")}]
+        print("\nworkspace/willRenameFiles")
+        edit = s.request("workspace/willRenameFiles", {"files": files}) or {}
+        texts = [
+            e["newText"]
+            for change in edit.get("documentChanges", [])
+            for e in change.get("edits", [])
+        ]
+        check("rewrites the path the move breaks", texts == ["e/a.md"], f"got {texts}")
+
+        print("\nworkspace/didRenameFiles")
+        os.rename(os.path.join(root, "d"), os.path.join(root, "e"))
+        s.notify("workspace/didRenameFiles", {"files": files})
+        # linol answers definition only for an open document.
+        s.notify(
+            "textDocument/didOpen",
+            {
+                "textDocument": {
+                    "uri": s.uri("top.md"),
+                    "languageId": "markdown",
+                    "version": 1,
+                    "text": "[[a]] [x](d/a.md)\n",
+                }
+            },
+        )
+        locations = s.request(
+            "textDocument/definition",
+            {
+                "textDocument": {"uri": s.uri("top.md")},
+                "position": {"line": 0, "character": 2},
+            },
+        )
+        uris = [loc["uri"] for loc in locations or []]
+        check(
+            "the index follows the move",
+            uris == [s.uri("e/a.md")],
+            f"got {uris}",
+            hint="a stale index still points at the old path",
+        )
+    finally:
+        s.close()
+        shutil.rmtree(root, ignore_errors=True)
+
+
 if __name__ == "__main__":
     binary = sys.argv[1] if len(sys.argv) > 1 else DEFAULT_BINARY
     if not os.path.exists(binary):
@@ -440,6 +510,8 @@ if __name__ == "__main__":
     # The vault that asked not to be served: one message, and nothing else.
     print("\n### vault with \"disable\": true")
     run_disabled(binary)
+    print("\n### folder moved in the editor")
+    run_file_operations(binary)
     print(
         f"\n{len(failures)} failure(s)"
         + (": " + ", ".join(failures) if failures else "")

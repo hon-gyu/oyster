@@ -49,6 +49,26 @@ class oystermark_server ~sw =
         referencesProvider = Some (`Bool true)
       ; renameProvider =
           Some (`RenameOptions (RenameOptions.create ~prepareProvider:true ()))
+      ; workspace =
+          (* Every file and folder: moving a directory moves the notes in it.
+             See {!page-"feature-rename".file_operations}. *)
+          (let everything =
+             FileOperationRegistrationOptions.create
+               ~filters:
+                 [ FileOperationFilter.create
+                     ~scheme:"file"
+                     ~pattern:(FileOperationPattern.create ~glob:"**" ())
+                     ()
+                 ]
+           in
+           Some
+             (ServerCapabilities.create_workspace
+                ~fileOperations:
+                  (FileOperationOptions.create
+                     ~willRename:everything
+                     ~didRename:everything
+                     ())
+                ()))
       ; positionEncoding = Some PositionEncodingKind.UTF16
       ; executeCommandProvider =
           Some (ExecuteCommandOptions.create ~commands:[ Server.daily_note_command ] ())
@@ -341,8 +361,20 @@ class oystermark_server ~sw =
                    (if created then "created" else "daily note is at")
                    (DocumentUri.to_path uri))))
 
-    (** [references], [prepareRename] and [rename] have no dedicated hook in
-        {!Linol_eio.Jsonrpc2.server}, so they arrive here. *)
+    method private renames (params : RenameFilesParams.t) =
+      List.map params.files ~f:(fun (file : FileRename.t) ->
+        ( self#rel_path (DocumentUri.of_string file.oldUri)
+        , self#rel_path (DocumentUri.of_string file.newUri) ))
+
+    (** [didRenameFiles] has no dedicated hook either. *)
+    method! on_notification_unhandled ~notify_back:_ notification =
+      match notification with
+      | Linol.Lsp.Client_notification.DidRenameFiles params ->
+        Server.did_rename_files server ~renames:(self#renames params)
+      | _ -> ()
+
+    (** [references], [prepareRename], [rename] and [willRenameFiles] have no
+        dedicated hook in {!Linol_eio.Jsonrpc2.server}, so they arrive here. *)
     method! on_request_unhandled
       : type r. notify_back:_ -> id:_ -> r Linol.Lsp.Client_request.t -> r =
       fun ~notify_back ~id:_ (req : r Linol.Lsp.Client_request.t) ->
@@ -366,6 +398,8 @@ class oystermark_server ~sw =
             ~line:params.position.line
             ~character:params.position.character
             ~new_name:params.newName
+        | Linol.Lsp.Client_request.WillRenameFiles params ->
+          Some (Server.will_rename_files server ~renames:(self#renames params))
         | _ -> failwith "unhandled request"
   end
 

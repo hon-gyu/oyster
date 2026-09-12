@@ -226,6 +226,11 @@ val set_asset : t -> Asset.t -> t
 (** remove an asset from the index. no-op when absent *)
 val remove_asset : t -> Path.t -> t
 
+(** Move every note and asset from its path [p] to [f p], keeping its content.
+    Links are not rewritten, so they resolve from the moved sources as authored.
+    When [f] maps two paths to one, the later in path order is kept. *)
+val map_paths : t -> f:(Path.t -> Path.t) -> t
+
 (** Resolve an authored reference related to a [source] note.
 
     On duplicated anchors, the first one in document order is returned.

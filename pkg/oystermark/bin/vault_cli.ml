@@ -123,28 +123,48 @@ let apply_edits content edits =
 ;;
 
 let apply_change root (change : Vault.Rename.change) =
-  Option.iter change.rename_file ~f:(fun (_old_path, new_path) ->
-    let new_path = Filename.concat root new_path in
-    match Sys_unix.file_exists new_path with
+  List.iter change.moves ~f:(fun (_, dst) ->
+    let dst = Filename.concat root dst in
+    match Sys_unix.file_exists dst with
     | `No -> ()
-    | `Yes | `Unknown -> failwithf "refusing to overwrite %s" new_path ());
+    | `Yes | `Unknown -> failwithf "refusing to overwrite %s" dst ());
   List.group change.edits ~break:(fun a b -> not (String.equal a.rel_path b.rel_path))
   |> List.iter ~f:(fun edits ->
     let rel_path = (List.hd_exn edits).rel_path in
     let path = Filename.concat root rel_path in
     let content = In_channel.read_all path in
     Out_channel.write_all path ~data:(apply_edits content edits));
-  Option.iter change.rename_file ~f:(fun (old_path, new_path) ->
-    let old_path = Filename.concat root old_path in
-    let new_path = Filename.concat root new_path in
-    Core_unix.rename ~src:old_path ~dst:new_path)
+  List.iter change.moves ~f:(fun (src, dst) ->
+    let dst = Filename.concat root dst in
+    Core_unix.mkdir_p (Filename.dirname dst);
+    Core_unix.rename ~src:(Filename.concat root src) ~dst)
 ;;
 
 let print_change (change : Vault.Rename.change) =
   List.iter change.edits ~f:(fun edit ->
     printf "%s:%d-%d -> %S\n" edit.rel_path edit.first_byte edit.last_byte edit.new_text);
-  Option.iter change.rename_file ~f:(fun (old_path, new_path) ->
-    printf "rename %s -> %s\n" old_path new_path)
+  List.iter change.moves ~f:(fun (src, dst) -> printf "move %s -> %s\n" src dst)
+;;
+
+let apply_flag =
+  Command.Param.flag
+    "--apply"
+    Command.Param.no_arg
+    ~doc:" Apply the displayed change to disk"
+;;
+
+let read_file root rel_path =
+  try Some (In_channel.read_all (Filename.concat root rel_path)) with
+  | _ -> None
+;;
+
+let finish_change root ~apply = function
+  | Error message ->
+    eprintf "%s\n" message;
+    exit 1
+  | Ok change ->
+    print_change change;
+    if apply then apply_change root change else printf "dry run; pass --apply to write\n"
 ;;
 
 let rename_command target_name summary make_target =
@@ -154,29 +174,17 @@ let rename_command target_name summary make_target =
      and note = anon ("note" %: string)
      and target = anon (target_name %: string)
      and new_name = anon ("new-name" %: string)
-     and apply = flag "--apply" no_arg ~doc:" Apply the displayed change to disk" in
+     and apply = apply_flag in
      fun () ->
        let vault = load root in
        let path = resolve_note vault note in
-       let read_file rel_path =
-         try Some (In_channel.read_all (Filename.concat root rel_path)) with
-         | _ -> None
-       in
-       let target = make_target vault path target in
-       match
-         Vault.Rename.plan
-           ~index:vault.index
-           ~docs:(Vault.docs vault)
-           ~read_file
-           target
-           ~new_name
-       with
-       | Error message -> failwith message
-       | Ok change ->
-         print_change change;
-         if apply
-         then apply_change root change
-         else printf "dry run; pass --apply to write\n")
+       Vault.Rename.plan
+         ~index:vault.index
+         ~docs:(Vault.docs vault)
+         ~read_file:(read_file root)
+         (make_target vault path target)
+         ~new_name
+       |> finish_change root ~apply)
 ;;
 
 let rename_note_command =
@@ -185,28 +193,34 @@ let rename_note_command =
     (let%map_open.Command root = vault_param
      and note = anon ("note" %: string)
      and new_name = anon ("new-name" %: string)
-     and apply = flag "--apply" no_arg ~doc:" Apply the displayed change to disk" in
+     and apply = apply_flag in
      fun () ->
        let vault = load root in
        let path = resolve_note vault note in
-       let read_file rel_path =
-         try Some (In_channel.read_all (Filename.concat root rel_path)) with
-         | _ -> None
-       in
-       match
-         Vault.Rename.plan
-           ~index:vault.index
-           ~docs:(Vault.docs vault)
-           ~read_file
-           ({ path; subject = Note } : Vault.Rename.target)
-           ~new_name
-       with
-       | Error message -> failwith message
-       | Ok change ->
-         print_change change;
-         if apply
-         then apply_change root change
-         else printf "dry run; pass --apply to write\n")
+       Vault.Rename.plan
+         ~index:vault.index
+         ~docs:(Vault.docs vault)
+         ~read_file:(read_file root)
+         ({ path; subject = Note } : Vault.Rename.target)
+         ~new_name
+       |> finish_change root ~apply)
+;;
+
+let move_command =
+  Command.basic
+    ~summary:"Move a note, asset, or directory and rewrite the links it would break"
+    (let%map_open.Command root = vault_param
+     and src = anon ("path" %: string)
+     and dst = anon ("new-path" %: string)
+     and apply = apply_flag in
+     fun () ->
+       let vault = load root in
+       let vault_path p = String.rstrip p ~drop:(Char.equal '/') in
+       Vault.Rename.plan_moves
+         ~index:vault.index
+         ~read_file:(read_file root)
+         [ vault_path src, vault_path dst ]
+       |> finish_change root ~apply)
 ;;
 
 let heading_target (vault : Vault.t) path heading =
@@ -392,6 +406,7 @@ let command =
     ; "context", context_command
     ; "block", block_command
     ; "rename-note", rename_note_command
+    ; "move", move_command
     ; ( "rename-heading"
       , rename_command
           "heading"

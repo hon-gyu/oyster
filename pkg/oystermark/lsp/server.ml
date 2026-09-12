@@ -1527,6 +1527,36 @@ let prepare_rename t ~rel_path ~line ~character =
   prepare_rename_local project ~rel_path ~line ~character
 ;;
 
+(** Per-project edits as one [TextDocumentEdit] per file, ordered by path. *)
+let text_document_edits (edits : (t * Feature.Rename.edit) list) =
+  List.dedup_and_sort edits ~compare:(fun (pa, a) (pb, b) ->
+    [%compare: string * int * int * string]
+      (absolute_path pa a.rel_path, a.first_byte, a.last_byte, a.new_text)
+      (absolute_path pb b.rel_path, b.first_byte, b.last_byte, b.new_text))
+  |> List.group ~break:(fun (pa, a) (pb, b) ->
+    not (String.equal (absolute_path pa a.rel_path) (absolute_path pb b.rel_path)))
+  |> List.filter_map ~f:(function
+    | [] -> None
+    | (project, first) :: _ as edits ->
+      let path = absolute_path project first.rel_path in
+      let content = In_channel.read_all path in
+      let textDocument =
+        OptionalVersionedTextDocumentIdentifier.create ~uri:(DocumentUri.of_path path) ()
+      in
+      let edits =
+        List.map edits ~f:(fun (_, edit) ->
+          `TextEdit
+            (TextEdit.create
+               ~range:
+                 (range_of_bytes
+                    content
+                    ~first_byte:edit.first_byte
+                    ~last_byte:edit.last_byte)
+               ~newText:edit.new_text))
+      in
+      Some (`TextDocumentEdit (TextDocumentEdit.create ~edits ~textDocument)))
+;;
+
 let rename t ~rel_path ~line ~character ~new_name =
   let source_project, source_rel_path = route t rel_path in
   match source_project.vault with
@@ -1559,37 +1589,8 @@ let rename t ~rel_path ~line ~character ~new_name =
               | Error _ -> []
               | Ok change -> List.map change.edits ~f:(fun edit -> project, edit))
            | _ -> [])
-         |> List.dedup_and_sort ~compare:(fun (pa, a) (pb, b) ->
-           [%compare: string * int * int * string]
-             (absolute_path pa a.rel_path, a.first_byte, a.last_byte, a.new_text)
-             (absolute_path pb b.rel_path, b.first_byte, b.last_byte, b.new_text))
        in
-       let text_document_edits =
-         List.group edits ~break:(fun (pa, a) (pb, b) ->
-           not (String.equal (absolute_path pa a.rel_path) (absolute_path pb b.rel_path)))
-         |> List.filter_map ~f:(function
-           | [] -> None
-           | (project, first) :: _ as edits ->
-             let path = absolute_path project first.rel_path in
-             let content = In_channel.read_all path in
-             let textDocument =
-               OptionalVersionedTextDocumentIdentifier.create
-                 ~uri:(DocumentUri.of_path path)
-                 ()
-             in
-             let edits =
-               List.map edits ~f:(fun (_, edit) ->
-                 `TextEdit
-                   (TextEdit.create
-                      ~range:
-                        (range_of_bytes
-                           content
-                           ~first_byte:edit.first_byte
-                           ~last_byte:edit.last_byte)
-                      ~newText:edit.new_text))
-             in
-             Some (`TextDocumentEdit (TextDocumentEdit.create ~edits ~textDocument)))
-       in
+       let text_document_edits = text_document_edits edits in
        let documentChanges =
          match target with
          | Path_only { path } when Feature.Rename.valid_note_name new_name ->
@@ -1615,6 +1616,94 @@ let rename t ~rel_path ~line ~character ~new_name =
          | _ -> text_document_edits
        in
        WorkspaceEdit.create ~documentChanges ())
+;;
+
+(* File operations
+   =============== *)
+
+(** The workspace-relative [renames] that move something [project] indexes to
+    another place inside it, as project-local paths. *)
+let project_moves t project renames =
+  match project.vault with
+  | None -> []
+  | Some vault ->
+    let indexed =
+      List.map
+        (Oystermark.Vault.Index.notes vault.index)
+        ~f:Oystermark.Vault.Index.Note.path
+      @ List.map
+          (Oystermark.Vault.Index.assets vault.index)
+          ~f:Oystermark.Vault.Index.Asset.path
+    in
+    List.filter_map renames ~f:(fun (src, dst) ->
+      match
+        local_path project (absolute_path t src), local_path project (absolute_path t dst)
+      with
+      | Some src, Some dst when List.exists indexed ~f:(path_is_within ~root:src) ->
+        Some (src, dst)
+      | _ -> None)
+;;
+
+let will_rename_files t ~renames =
+  let edits =
+    projects t
+    |> List.concat_map ~f:(fun project ->
+      match project.vault, project_moves t project renames with
+      | None, _ | _, [] -> []
+      | Some vault, moves ->
+        (match
+           Oystermark.Vault.Rename.plan_moves
+             ~index:vault.index
+             ~read_file:(read_file project)
+             moves
+         with
+         | Error _ -> []
+         | Ok change -> List.map change.edits ~f:(fun edit -> project, edit)))
+  in
+  WorkspaceEdit.create ~documentChanges:(text_document_edits edits) ()
+;;
+
+let rescan (project : t) =
+  match project.vault, project.workspace_root with
+  | Some _, Some root ->
+    project.vault
+    <- Some
+         (build_vault
+            ~nested_roots:project.nested_roots
+            ~imported_roots:project.imported_roots
+            ~exclude:project.config.exclude
+            root)
+  | _ -> ()
+;;
+
+let did_rename_files t ~renames =
+  (* A rename within one project moves index entries in place; one that
+     crosses a project boundary changes which vaults hold the files, which only
+     a rescan of the projects involved works out. *)
+  let within_one_project (src, dst) =
+    phys_equal (fst (route t src)) (fst (route t dst))
+  in
+  List.iter (projects t) ~f:(fun project ->
+    let local path = local_path project (absolute_path t path) in
+    let involved =
+      List.filter renames ~f:(fun (src, dst) ->
+        Option.is_some (local src) || Option.is_some (local dst))
+    in
+    if not (List.for_all involved ~f:within_one_project)
+    then rescan project
+    else (
+      match
+        ( project.vault
+        , List.filter_map involved ~f:(fun (src, dst) ->
+            Option.both (local src) (local dst)) )
+      with
+      | None, _ | _, [] -> ()
+      | Some vault, moves ->
+        project.vault
+        <- Some
+             (Oystermark.Vault.map_paths
+                vault
+                ~f:(Oystermark.Vault.Rename.moved_path moves))))
 ;;
 
 let document_symbol t ~rel_path =

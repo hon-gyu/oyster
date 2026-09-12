@@ -553,6 +553,25 @@ let remove_asset : t -> Path.t -> t =
   fun t p -> make t.notes_by_path (Map.remove t.assets_by_path p)
 ;;
 
+let map_paths (t : t) ~(f : Path.t -> Path.t) : t =
+  let move_stat (stat : file_stat) = { stat with rel_path = f stat.rel_path } in
+  let notes =
+    Map.data t.notes_by_path
+    |> List.map ~f:(fun (note : Note.t) ->
+      let note = { note with file_stat = move_stat note.file_stat } in
+      Note.path note, note)
+    |> String.Map.of_alist_reduce ~f:(fun _ last -> last)
+  in
+  let assets =
+    Map.data t.assets_by_path
+    |> List.map ~f:(fun (asset : Asset.t) ->
+      let asset : Asset.t = { file_stat = move_stat asset.file_stat } in
+      Asset.path asset, asset)
+    |> String.Map.of_alist_reduce ~f:(fun _ last -> last)
+  in
+  make notes assets
+;;
+
 let unresolved_links (index : t) (note_path : Path.t) : (Link.t * resolution_error) list =
   let path = note_path in
   Option.value_map (find_note index path) ~default:[] ~f:(fun n ->

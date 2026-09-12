@@ -1,0 +1,4 @@
+; End-to-end runs of the [oyster] command-line client against a scratch vault.
+
+(cram
+ (deps %{bin:oyster}))

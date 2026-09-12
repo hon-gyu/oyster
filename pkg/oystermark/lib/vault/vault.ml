@@ -55,6 +55,18 @@ let remove_path (vault : t) path : t =
   }
 ;;
 
+(** Move every document and asset from its path [p] to [f p], unchanged. See
+    {!Index.map_paths}. *)
+let map_paths (vault : t) ~(f : string -> string) : t =
+  { vault with
+    index = Index.map_paths vault.index ~f
+  ; documents =
+      Map.to_alist vault.documents
+      |> List.map ~f:(fun (path, doc) -> f path, doc)
+      |> String.Map.of_alist_reduce ~f:(fun _ last -> last)
+  }
+;;
+
 (** Construct a vault from transformed documents, retaining the base vault's file dates,
     non-note assets, metadata, and root. *)
 let of_docs ~(base : t) (docs : (string * Cmarkit.Doc.t) list) : t =

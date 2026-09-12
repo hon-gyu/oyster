@@ -169,6 +169,16 @@ val rename
   -> new_name:string
   -> WorkspaceEdit.t
 
+(** Spec: {!page-"feature-rename".file_operations}.  The link edits a client
+    applies before it moves files or directories, given as workspace-relative
+    [(old, new)] paths.  The edits address the old paths. *)
+val will_rename_files : t -> renames:(string * string) list -> WorkspaceEdit.t
+
+(** Spec: {!page-"feature-rename".file_operations}.  Move the index entries of
+    files or directories the client has moved, given as workspace-relative
+    [(old, new)] paths. *)
+val did_rename_files : t -> renames:(string * string) list -> unit
+
 (** Spec: {!page-"feature-document-outline"}. *)
 val document_symbol : t -> rel_path:string -> DocumentSymbol.t list option
 

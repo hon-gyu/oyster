@@ -3,6 +3,7 @@
 
 open Core
 open Lsp_helper
+open Linol_lsp.Lsp.Types
 
 let files =
   [ "target.md", "# Old Heading\n\n{#old-id}\n> Paragraph\n"
@@ -223,4 +224,62 @@ let%expect_test "server: note rename includes text edits and a file operation" =
     text-edits
     rename
     |}]
+;;
+
+(** Each text edit of a workspace edit as [path line:char-line:char -> text]. *)
+let show_text_document_edits s (edit : WorkspaceEdit.t) =
+  Option.value edit.documentChanges ~default:[]
+  |> List.iter ~f:(function
+    | `TextDocumentEdit (e : TextDocumentEdit.t) ->
+      List.iter e.edits ~f:(function
+        | `TextEdit (t : TextEdit.t) ->
+          printf
+            "%s %d:%d-%d:%d -> %s\n"
+            (Server.rel_path_of_uri s e.textDocument.uri)
+            t.range.start.line
+            t.range.start.character
+            t.range.end_.line
+            t.range.end_.character
+            t.newText
+        | `AnnotatedTextEdit _ -> print_endline "annotated edit")
+    | `CreateFile _ | `RenameFile _ | `DeleteFile _ -> print_endline "file operation")
+;;
+
+let moved_vault =
+  [ "top.md", "[[a]] [[d/a#A]] [x](d/a.md)\n"
+  ; "d/a.md", "# A\n\n[up](../top.md) [[d/b]]\n"
+  ; "d/b.md", "B\n"
+  ]
+;;
+
+let%expect_test "server: moving a folder rewrites the links it would break" =
+  with_tmp_vault ~files:moved_vault (fun vault_root ->
+    let s = start_server ~vault_root () in
+    Server.will_rename_files s ~renames:[ "d", "archive/e" ] |> show_text_document_edits s);
+  [%expect
+    {|
+    d/a.md 2:5-2:14 -> ../../top.md
+    d/a.md 2:18-2:21 -> e/b
+    top.md 0:8-0:11 -> e/a
+    top.md 0:20-0:26 -> e/a.md
+    |}]
+;;
+
+let%expect_test "server: a finished move re-keys the index" =
+  with_tmp_vault ~files:moved_vault (fun vault_root ->
+    let s = start_server ~vault_root () in
+    let definition_of_bare_link () =
+      Server.definition s ~rel_path:"top.md" ~line:0 ~character:2
+      |> definition_result s
+      |> Option.iter ~f:(fun (d : Lsp_lib.Go_to_definition.definition_result) ->
+        print_endline d.path)
+    in
+    Core_unix.rename
+      ~src:(Filename.concat vault_root "d")
+      ~dst:(Filename.concat vault_root "e");
+    definition_of_bare_link ();
+    [%expect {| d/a.md |}];
+    Server.did_rename_files s ~renames:[ "d", "e" ];
+    definition_of_bare_link ();
+    [%expect {| e/a.md |}])
 ;;
