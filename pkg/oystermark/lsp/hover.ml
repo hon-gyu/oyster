@@ -270,39 +270,17 @@ let truncate ~max_chars (s : string) : string =
     shown ^ "\n\n" ^ notice)
 ;;
 
-(** The section headed by the heading whose identifier is [slug]: the heading
-    itself and everything up to the next heading of equal or higher level.
-    [None] when no such heading exists.
+(** The text [address] names in [content], [None] when it names nothing.
 
-    Both the heading and the section's end come from
-    {!Anchors} — that is, from the parser.  A [#] inside a fenced code block
-    does not end a section, and a heading carrying an authored [ \{#id\} ] is
-    found by the id its author wrote.  See {!page-"feature-hover"}. *)
-let heading_section ~(slug : string) (content : string) : string option =
-  let anchors = Anchors.of_content content in
-  Anchors.find_heading anchors ~slug |> Option.map ~f:(Anchors.section anchors content)
-;;
-
-(** The paragraph carrying the caret id [block_id], or [None] when the note
-    has no such id.  Located by {!Anchors}, so a [ ^id] written inside a code
-    block is not one.  See {!page-"feature-hover"}. *)
-let extract_block ~(block_id : string) (content : string) : string option =
-  let anchors = Anchors.of_content content in
-  Anchors.find anchors ~id:block_id ~is_kind:(function
-    | Anchors.Block -> true
-    | Heading _ | Attr -> false)
-  |> Option.map ~f:(Anchors.block_text content)
-;;
-
-(** Extract the block carrying attribute id [{#id}] from [content] and render it
-    back to CommonMark.  Content-based (robust to unsaved edits), reusing
-    {!Oystermark.Extract.get_block_by_attr_id}.  [None] if not found.
-    See {!page-"feature-attribute-anchors"}. *)
-let extract_attr_block ~(id : string) (content : string) : string option =
+    The blocks are the ones embedding transcludes ({!Oystermark.Extract.read}),
+    shown as the file writes them ({!Oystermark.Extract.source_text}) rather
+    than re-rendered.  See {!page-"feature-hover"}. *)
+let read_address (address : Oystermark.Extract.Address.t) (content : string)
+  : string option
+  =
   let doc = Lsp_util.parse_doc content in
-  Oystermark.Extract.get_block_by_attr_id [ Cmarkit.Doc.block doc ] id
-  |> Option.map ~f:(fun b ->
-    Oystermark.Parse.commonmark_of_doc (Cmarkit.Doc.make b) |> String.strip)
+  Oystermark.Extract.read [ Cmarkit.Doc.block doc ] address
+  |> Oystermark.Extract.source_text content
 ;;
 
 (** {2 Formatting} *)
@@ -384,11 +362,9 @@ let hover
                 ~sep:"-"
                 (List.map hs ~f:Oystermark.Parse.Common.heading_id_of_text)
             in
-            Option.value (heading_section ~slug file_content) ~default:file_content
+            Option.value (read_address (Heading slug) file_content) ~default:file_content
           | Some (Caret_id bid) ->
-            (match extract_block ~block_id:bid file_content with
-             | Some p -> p
-             | None -> file_content)
+            Option.value (read_address (Caret bid) file_content) ~default:file_content
           | None -> file_content
         in
         Some (path, Text body)
@@ -411,17 +387,11 @@ let hover
          | None -> None
          | Some file_content ->
            let body =
-             match anchor.value with
-             | Heading h ->
-               Option.value
-                 (heading_section ~slug:h.slug file_content)
-                 ~default:file_content
-             | Block { id; kind = Obsidian_caret } ->
-               Option.value
-                 (extract_block ~block_id:id file_content)
-                 ~default:file_content
-             | Block { id; kind = Djot_attr } | Inline { id } ->
-               Option.value (extract_attr_block ~id file_content) ~default:file_content
+             Option.value
+               (read_address
+                  (Oystermark.Extract.Anchor.address anchor.value)
+                  file_content)
+               ~default:file_content
            in
            Some (path, Text body))
     in
@@ -502,14 +472,15 @@ let%test_module "truncate" =
   end)
 ;;
 
-let%test_module "heading_section" =
+let%test_module "read_address: heading" =
   (module struct
     let content =
       "# Title\n\nIntro.\n\n## Section One\n\nBody one.\n\n## Section Two\n\nBody two.\n"
     ;;
 
     let show ~slug content =
-      print_string (Option.value (heading_section ~slug content) ~default:"<not found>")
+      print_string
+        (Option.value (read_address (Heading slug) content) ~default:"<not found>")
     ;;
 
     let%expect_test "extracts first section" =
@@ -542,17 +513,17 @@ let%test_module "heading_section" =
   end)
 ;;
 
-let%test_module "extract_block" =
+let%test_module "read_address: caret" =
   (module struct
     let content = "First para.\n\nSecond para ^abc\n\nThird para.\n"
 
     let%expect_test "finds block" =
-      print_s [%sexp (extract_block ~block_id:"abc" content : string option)];
+      print_s [%sexp (read_address (Caret "abc") content : string option)];
       [%expect {| ("Second para ^abc") |}]
     ;;
 
     let%expect_test "missing block returns None" =
-      print_s [%sexp (extract_block ~block_id:"nope" content : string option)];
+      print_s [%sexp (read_address (Caret "nope") content : string option)];
       [%expect {| () |}]
     ;;
   end)
@@ -830,7 +801,7 @@ let%test_module "hover" =
         [13-25]
         *Path*:note-g.md
 
-        The key term{#kt} matters here.
+        The [key term]{#kt} matters here.
         |}]
     ;;
 

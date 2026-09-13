@@ -17,16 +17,8 @@ type edit = Oystermark.Vault.Rename.edit =
 let valid_note_name = Oystermark.Vault.Rename.valid_note_name
 let renamed_note_path = Oystermark.Vault.Rename.renamed_note_path
 
-let shared_target = function
-  | Find_references.Path_only { path } ->
-    ({ path; subject = Note } : Oystermark.Vault.Rename.target)
-  | Path_heading { path; slug } -> { path; subject = Heading { slug } }
-  | Path_block { path; block_id } -> { path; subject = Block { id = block_id } }
-  | Path_attr { path; id } -> { path; subject = Attr { id } }
-;;
-
 let plan_target ~index ~docs ~read_file target ~new_name =
-  Oystermark.Vault.Rename.plan ~index ~docs ~read_file (shared_target target) ~new_name
+  Oystermark.Vault.Rename.plan ~index ~docs ~read_file target ~new_name
 ;;
 
 let rename ~index ~docs ~read_file ~rel_path ~content ~line ~character ~new_name () =

@@ -43,28 +43,12 @@ module Path : sig
   val equal : t -> t -> bool
 end
 
-type heading =
+type heading = Extract.Anchor.heading =
   { text : string
   ; level : int
   ; slug : string
-    (** The identifier the parser gave the heading. See {!Parse.Common.heading_id}. *)
   }
 [@@deriving sexp, equal, compare]
-
-type referenceable_block_kind =
-  | Djot_attr
-  | Obsidian_caret
-[@@deriving sexp, equal, compare]
-
-(** Block other than heading, made referenceable because of either djot attribute or Obsidian caret. *)
-type block =
-  { id : string
-  ; kind : referenceable_block_kind
-  }
-[@@deriving sexp, equal, compare]
-
-(** Inline, made referenceable because of attached djot attribute id ([ {#id} ]). *)
-type inline = { id : string } [@@deriving sexp, equal, compare]
 
 type file_stat =
   { rel_path : Path.t
@@ -72,17 +56,21 @@ type file_stat =
   ; mtime : (int * int * int) option (** modified date YYYY/MM/DD, when available *)
   }
 
-type anchor_value =
+(** See {!Extract.Anchor.value}. *)
+type anchor_value = Extract.Anchor.value =
   | Heading of heading
-  | Block of block
-  | Inline of inline
+  | Caret of string
+  | Attr of
+      { id : string
+      ; inline : bool
+      }
 [@@deriving sexp, equal, compare]
 
 (** Construct a vault-qualified reference to [anchor] in [tgt_path] *)
 val link_ref_of_anchor : tgt_path:Path.t -> anchor_value -> Link_ref.t
 
 module Anchor : sig
-  type t =
+  type t = Extract.Anchor.t =
     { value : anchor_value
     ; loc : loc (** non-none loc *)
     }

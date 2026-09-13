@@ -12,16 +12,9 @@ open Core
 
 (** {2 Rename target} *)
 
-type subject =
-  | Note
-  | Heading of { slug : string }
-  | Block of { id : string }
-  | Attr of { id : string }
-[@@deriving sexp, equal]
-
 type target =
   { path : string
-  ; subject : subject
+  ; address : Extract.Address.t option (** [None] is the note itself. *)
   }
 [@@deriving sexp, equal]
 

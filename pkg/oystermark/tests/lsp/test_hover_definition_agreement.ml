@@ -110,7 +110,7 @@ let%expect_test "hover and definition name the same anchor" =
     [[#Alpha]]               agree    note-a.md:0 "# Alpha" | hover note-a.md "# Alpha"
     [[note-b#Section One]]   agree    note-b.md:2 "## Section One" | hover note-b.md "## Section One"
     [[note-b#^block1]]       agree    note-b.md:4 "Body text ^block1" | hover note-b.md "Body text ^block1"
-    [[note-b#anchor]]        agree    note-b.md:6 "The [key term]{#anchor} is defined here." | hover note-b.md "The key term{#anchor} is defined here."
+    [[note-b#anchor]]        agree    note-b.md:6 "The [key term]{#anchor} is defined here." | hover note-b.md "The [key term]{#anchor} is defined here."
     [[note-b]]               agree    note-b.md:0 "# Beta" | hover note-b.md "# Beta"
     |}]
 ;;

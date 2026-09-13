@@ -63,9 +63,9 @@ let headings_in_range
   let lines = Array.of_list (String.split_lines content) in
   Anchors.of_content content
   |> List.filter_map ~f:(fun (a : Anchors.t) ->
-    match a.kind with
-    | Anchors.Block | Attr -> None
-    | Heading _ ->
+    match a.value with
+    | Caret _ | Attr _ -> None
+    | Heading heading ->
       if a.first_line < range_start_line || a.first_line >= range_end_line
       then None
       else (
@@ -74,7 +74,7 @@ let headings_in_range
           then String.length lines.(a.first_line)
           else 0
         in
-        Some (a.first_line, end_char, a.id)))
+        Some (a.first_line, end_char, heading.slug)))
 ;;
 
 (** Every count worth showing for [rel_path], in line order: the whole-note
@@ -107,7 +107,7 @@ let entries
   let file =
     if range_start_line <= 0 && range_end_line > 0
     then (
-      match authored (Path_only { path = rel_path }) with
+      match authored { path = rel_path; address = None } with
       | [] -> []
       | refs -> [ { line = 0; end_character = 0; rel_path; refs; target = File } ])
     else []
@@ -115,7 +115,7 @@ let entries
   let headings =
     headings_in_range ~content ~range_start_line ~range_end_line
     |> List.filter_map ~f:(fun (line, end_character, slug) ->
-      match authored (Path_heading { path = rel_path; slug }) with
+      match authored { path = rel_path; address = Some (Heading slug) } with
       | [] -> None
       | refs -> Some { line; end_character; rel_path; refs; target = Heading { slug } })
   in

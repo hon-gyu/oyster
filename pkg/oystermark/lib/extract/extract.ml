@@ -2,6 +2,9 @@
     by embedding and hover, and a walk over every addressable block of a note. *)
 open Core
 
+module Address = Address
+module Anchor = Anchor
+
 (** Flatten a block list by splicing any top-level [Blocks] nodes into a flat
     sequence. *)
 let rec flatten (blocks : Cmarkit.Block.t list) : Cmarkit.Block.t list =
@@ -19,34 +22,46 @@ let get_heading_section (blocks : Cmarkit.Block.t list) (heading_id : string)
   : Cmarkit.Block.t list
   =
   let open Cmarkit in
-  let blocks = flatten blocks in
-  (* Phase 1: skip blocks until we find the target heading *)
-  let rec find_heading
-    : Cmarkit.Block.t list -> (Cmarkit.Block.t * int * Cmarkit.Block.t list) option
-    = function
+  (* A heading carrying a block attribute is wrapped in [Ext_attributes]. *)
+  let rec heading_of (block : Block.t) : (Block.t * Block.Heading.t) option =
+    match block with
+    | Block.Heading (h, _) -> Some (block, h)
+    | Block.Ext_attributes (a, _) -> heading_of (Block.Attributes.block a)
+    | _ -> None
+  in
+  let rec in_list (blocks : Block.t list) : Block.t list option =
+    in_siblings (flatten blocks)
+  and in_siblings (blocks : Block.t list) : Block.t list option =
+    match blocks with
     | [] -> None
     | block :: rest ->
-      (match block with
-       | Block.Heading (h, _meta) ->
-         (match Parse.Common.heading_id h with
-          | Some id when String.equal id heading_id ->
-            Some (block, Block.Heading.level h, rest)
-          | _ -> find_heading rest)
-       | _ -> find_heading rest)
+      (match heading_of block with
+       | Some (heading, h)
+         when Option.equal String.equal (Parse.Common.heading_id h) (Some heading_id) ->
+         let level = Block.Heading.level h in
+         let ends (b : Block.t) =
+           match heading_of b with
+           | Some (_, h) -> Block.Heading.level h <= level
+           | None -> false
+         in
+         Some (heading :: List.take_while rest ~f:(fun b -> not (ends b)))
+       | _ ->
+         (match in_children block with
+          | Some _ as found -> found
+          | None -> in_siblings rest))
+  and in_children (block : Block.t) : Block.t list option =
+    match block with
+    | Block.Block_quote (bq, _) -> in_list [ Block.Block_quote.block bq ]
+    | Block.List (l, _) ->
+      List.find_map (Block.List'.items l) ~f:(fun (item, _) ->
+        in_list [ Block.List_item.block item ])
+    | Block.Ext_div (d, _) -> in_list [ Block.Div.block d ]
+    | Block.Ext_keyed ((_label, body), _) -> in_list [ body ]
+    | Block.Ext_footnote_definition (fn, _) -> in_list [ Block.Footnote.block fn ]
+    | Block.Ext_attributes (a, _) -> in_children (Block.Attributes.block a)
+    | _ -> None
   in
-  (* Phase 2: collect blocks until a heading of equal or lesser level *)
-  let rec collect (level : int) (acc : Cmarkit.Block.t list)
-    : Cmarkit.Block.t list -> Cmarkit.Block.t list
-    = function
-    | [] -> List.rev acc
-    | block :: rest ->
-      (match block with
-       | Block.Heading (h, _meta) when Block.Heading.level h <= level -> List.rev acc
-       | _ -> collect level (block :: acc) rest)
-  in
-  match find_heading blocks with
-  | None -> []
-  | Some (heading, level, rest) -> heading :: collect level [] rest
+  Option.value (in_list blocks) ~default:[]
 ;;
 
 (** Extract the block that {!Cmarkit.Block.Block_id.t} points to.
@@ -178,6 +193,29 @@ let get_block_by_attr_id (blocks : Cmarkit.Block.t list) (id : string)
     | _ -> None
   in
   find_in blocks
+;;
+
+let read (blocks : Cmarkit.Block.t list) (address : Address.t) : Cmarkit.Block.t list =
+  match address with
+  | Heading id -> get_heading_section blocks id
+  | Caret id -> Option.to_list (get_block_by_caret_id blocks id)
+  | Attr id -> Option.to_list (get_block_by_attr_id blocks id)
+;;
+
+let source_text (content : string) (blocks : Cmarkit.Block.t list) : string option =
+  let locs =
+    List.filter_map blocks ~f:(fun block ->
+      let loc = Cmarkit.Meta.textloc (Parse.Common.meta_of_block block) in
+      Option.some_if (not (Cmarkit.Textloc.is_none loc)) loc)
+  in
+  match
+    ( List.min_elt (List.map locs ~f:Cmarkit.Textloc.first_byte) ~compare:Int.compare
+    , List.max_elt (List.map locs ~f:Cmarkit.Textloc.last_byte) ~compare:Int.compare )
+  with
+  | Some pos, Some last ->
+    let stop = Int.min (last + 1) (String.length content) in
+    Some (String.sub content ~pos ~len:(stop - pos) |> String.rstrip)
+  | _ -> None
 ;;
 
 module For_test = struct
@@ -603,6 +641,116 @@ let%test_module "Extract" =
         "%a%!"
         pp_block_opt
         (get_block_by_attr_id [ Cmarkit.Doc.block doc ] "missing");
+      [%expect {| <none> |}]
+    ;;
+  end)
+;;
+
+let%test_module "read" =
+  (module struct
+    let show content (address : Address.t) =
+      let doc = Parse.of_string content in
+      read [ Cmarkit.Doc.block doc ] address
+      |> source_text content
+      |> Option.value ~default:"<none>"
+      |> print_endline
+    ;;
+
+    let%expect_test "heading: section of a top-level heading" =
+      show "## Sec\n\nContent.\n\n## Other\n\nNot this.\n" (Heading "sec");
+      [%expect
+        {|
+        ## Sec
+
+        Content.
+        |}]
+    ;;
+
+    let%expect_test "heading: inside a div, the section ends with the div" =
+      show "# Top\n\n::: warning\n## Inside\n\nbody\n:::\n\nafter\n" (Heading "inside");
+      [%expect
+        {|
+        ## Inside
+
+        body
+        |}]
+    ;;
+
+    let%expect_test "heading: a div after the heading belongs to the section whole" =
+      show "## A\n\ntext\n\n::: note\n## B\n:::\n\nmore\n\n## C\n" (Heading "a");
+      [%expect
+        {|
+        ## A
+
+        text
+
+        ::: note
+        ## B
+        :::
+
+        more
+        |}]
+    ;;
+
+    let%expect_test "heading: inside a block quote" =
+      show "> ## Q\n> text\n\nafter\n" (Heading "q");
+      [%expect
+        {|
+        ## Q
+        > text
+        |}]
+    ;;
+
+    let%expect_test "heading: an authored id starts the section at the heading" =
+      show "{#intro}\n# Introduction\n\nbody\n\n# Next\n" (Heading "intro");
+      [%expect
+        {|
+        # Introduction
+
+        body
+        |}]
+    ;;
+
+    let%expect_test "heading: a hash inside a code block does not end the section" =
+      show "# Alpha\n\n```\n# not a heading\n```\n\ntail\n\n# Beta\n" (Heading "alpha");
+      [%expect
+        {|
+        # Alpha
+
+        ```
+        # not a heading
+        ```
+
+        tail
+        |}]
+    ;;
+
+    let%expect_test "caret: the whole paragraph, marker included" =
+      show "# H\n\nFirst line\nsecond line ^abc\n\nafter\n" (Caret "abc");
+      [%expect
+        {|
+        First line
+        second line ^abc
+        |}]
+    ;;
+
+    let%expect_test "caret: on a line of its own, the previous block" =
+      show "> A quote.\n\n^q1\n" (Caret "q1");
+      [%expect {| > A quote. |}]
+    ;;
+
+    let%expect_test "attr: on inlines, the containing paragraph as written" =
+      show "The [key term]{#kt} is here.\n" (Attr "kt");
+      [%expect {| The [key term]{#kt} is here. |}]
+    ;;
+
+    let%expect_test "attr: on a block, the wrapped block" =
+      show "# H\n\n{#aside}\n> An aside block.\n" (Attr "aside");
+      [%expect {| > An aside block. |}]
+    ;;
+
+    let%expect_test "not found" =
+      show "# H\n\nPlain paragraph.\n" (Heading "missing");
       [%expect {| <none> |}]
     ;;
   end)

@@ -42,25 +42,12 @@ module Path = struct
   let equal : t -> t -> bool = String.equal
 end
 
-type heading =
+type heading = Extract.Anchor.heading =
   { text : string
   ; level : int
   ; slug : string
   }
 [@@deriving sexp, equal, compare]
-
-type referenceable_block_kind =
-  | Djot_attr
-  | Obsidian_caret
-[@@deriving sexp, equal, compare]
-
-type block =
-  { id : string
-  ; kind : referenceable_block_kind
-  }
-[@@deriving sexp, equal, compare]
-
-type inline = { id : string } [@@deriving sexp, equal, compare]
 
 type file_stat =
   { rel_path : Path.t
@@ -68,24 +55,27 @@ type file_stat =
   ; mtime : (int * int * int) option
   }
 
-type anchor_value =
+type anchor_value = Extract.Anchor.value =
   | Heading of heading
-  | Block of block
-  | Inline of inline
+  | Caret of string
+  | Attr of
+      { id : string
+      ; inline : bool
+      }
 [@@deriving sexp, equal, compare]
 
 let link_ref_of_anchor ~(tgt_path : Path.t) (anchor : anchor_value) : Link_ref.t =
-  match anchor with
-  | Heading h ->
-    { Link_ref.target = Some tgt_path; fragment = Some (Hash_path [ h.slug ]) }
-  | Block { id; kind = Obsidian_caret } ->
-    { Link_ref.target = Some tgt_path; fragment = Some (Caret_id id) }
-  | Block { id; kind = Djot_attr } | Inline { id } ->
-    { Link_ref.target = Some tgt_path; fragment = Some (Hash_path [ id ]) }
+  let fragment : Link_ref.fragment =
+    match anchor with
+    | Heading h -> Hash_path [ h.slug ]
+    | Caret id -> Caret_id id
+    | Attr { id; _ } -> Hash_path [ id ]
+  in
+  { Link_ref.target = Some tgt_path; fragment = Some fragment }
 ;;
 
 module Anchor = struct
-  type t =
+  type t = Extract.Anchor.t =
     { value : anchor_value
     ; loc : loc
     }
@@ -172,52 +162,22 @@ module Note = struct
 
   let of_doc (file_stat : file_stat) (doc : Cmarkit.Doc.t) : (t, string) result =
     let missing_loc = ref false in
-    let anchors = ref [] in
     let links = ref [] in
     let with_loc meta f =
       match loc_of_meta meta with
       | Some loc -> f loc
       | None -> missing_loc := true
     in
-    let add_anchor value meta =
-      with_loc meta (fun loc -> anchors := { Anchor.value; loc } :: !anchors)
-    in
     let add_link reference kind meta =
       with_loc meta (fun loc -> links := { Link.reference; kind; loc } :: !links)
-    in
-    let add_attr ~inline attr meta =
-      Option.iter (Cmarkit.Attribute.id attr) ~f:(fun id ->
-        add_anchor (if inline then Inline { id } else Block { id; kind = Djot_attr }) meta)
     in
     let folder =
       Cmarkit.Folder.make
         ~block:(fun f acc b ->
           match b with
-          | Cmarkit.Block.Heading (h, meta) ->
-            let text = Common.inline_to_plain_text (Cmarkit.Block.Heading.inline h) in
-            let slug =
-              Common.heading_id h
-              |> Option.value_exn
-                   ~message:"heading missing identifier; parse with Oystermark.Parse"
-            in
-            add_anchor
-              (Heading { text; level = Cmarkit.Block.Heading.level h; slug })
-              meta;
-            Cmarkit.Folder.default
-          | Cmarkit.Block.Paragraph (_, meta) ->
-            Option.iter (Cmarkit.Block.Block_id.find meta) ~f:(fun id ->
-              add_anchor
-                (Block { id = Cmarkit.Block.Block_id.id id; kind = Obsidian_caret })
-                meta);
-            Cmarkit.Folder.default
-          | Cmarkit.Block.Ext_keyed ((_label, body), meta) ->
-            Option.iter (Cmarkit.Block.Block_id.find meta) ~f:(fun id ->
-              add_anchor
-                (Block { id = Cmarkit.Block.Block_id.id id; kind = Obsidian_caret })
-                meta);
+          | Cmarkit.Block.Ext_keyed ((_label, body), _) ->
             Cmarkit.Folder.ret (Cmarkit.Folder.fold_block f acc body)
-          | Cmarkit.Block.Ext_attributes (a, meta) ->
-            add_attr ~inline:false (Cmarkit.Block.Attributes.attributes a) meta;
+          | Cmarkit.Block.Ext_attributes (a, _) ->
             Cmarkit.Folder.ret
               (Cmarkit.Folder.fold_block f acc (Cmarkit.Block.Attributes.block a))
           | _ -> Cmarkit.Folder.default)
@@ -239,8 +199,7 @@ module Note = struct
               (Link_ref.of_cmark_reference (Cmarkit.Inline.Link.reference l))
               ~f:(fun r -> add_link r Link.Embed meta);
             Cmarkit.Folder.default
-          | Cmarkit.Inline.Ext_attributes (a, meta) ->
-            add_attr ~inline:true (Cmarkit.Inline.Attributes.attributes a) meta;
+          | Cmarkit.Inline.Ext_attributes (a, _) ->
             Cmarkit.Folder.ret
               (Cmarkit.Folder.fold_inline f acc (Cmarkit.Inline.Attributes.inline a))
           | _ -> Cmarkit.Folder.default)
@@ -249,13 +208,16 @@ module Note = struct
         ()
     in
     ignore (Cmarkit.Folder.fold_doc folder () doc : unit);
+    let anchors = Extract.Anchor.of_doc doc in
+    if List.exists anchors ~f:(fun a -> Cmarkit.Textloc.is_none a.loc)
+    then missing_loc := true;
     if !missing_loc
     then Error "document is missing source locations"
     else
       Ok
         { file_stat
         ; frontmatter = Frontmatter.of_doc doc
-        ; anchors = List.rev !anchors
+        ; anchors
         ; links = List.rev !links
         }
   ;;
@@ -322,7 +284,7 @@ module Note = struct
     |> List.filter_map ~f:(fun anchor ->
       match anchor.value with
       | Heading heading -> Some (heading, anchor.loc)
-      | Block _ | Inline _ -> None)
+      | Caret _ | Attr _ -> None)
   ;;
 
   let links (note : t) : Link.t list = note.links
@@ -470,13 +432,13 @@ module Resolve_ = struct
          | [ id ] ->
            List.find (Note.anchors note) ~f:(fun a ->
              match a.value with
-             | Block { id = x; kind = Djot_attr } | Inline { id = x } -> String.equal x id
+             | Attr { id = x; _ } -> String.equal x id
              | _ -> false)
          | _ -> None)
     | Link_ref.Caret_id id ->
       List.find (Note.anchors note) ~f:(fun a ->
         match a.value with
-        | Block { id = x; kind = Obsidian_caret } -> String.equal x id
+        | Caret x -> String.equal x id
         | _ -> false)
   ;;
 end

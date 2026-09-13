@@ -21,25 +21,18 @@ open Core
 
 (** {1 Anchors} *)
 
-type kind =
-  | Heading of int (** ATX level, 1–6. *)
-  | Block (** A [ ^id] caret marker. *)
-  | Attr (** An explicit [ \{#id\} ], block-level or inline. *)
-[@@deriving sexp, equal, compare]
-
 (** One located anchor.
 
-    [id] is what a [#fragment] must name to reach it: for a heading that is
-    the identifier {e the parser assigned} — an authored [ \{#id\} ] included,
-    and deduplicated with [-1], [-2] — not a slug re-derived from the text.
+    Its {!address} is what a [#fragment] must name to reach it: for a heading
+    that is the identifier {e the parser assigned} — an authored [ \{#id\} ]
+    included, and deduplicated with [-1], [-2] — not a slug re-derived from the
+    text.
 
     [first_line] and [last_line] are the anchor's own extent, 0-based. An
     attribute anchor starts at the [ \{#id\} ] line and runs through the block
     it attributes; a caret id spans its whole paragraph. *)
 type t =
-  { kind : kind
-  ; id : string
-  ; text : string (** The heading's text; [""] for the other kinds. *)
+  { value : Oystermark.Extract.Anchor.value
   ; first_line : int
   ; last_line : int (** Inclusive. *)
   ; first_byte : int
@@ -47,13 +40,17 @@ type t =
   }
 [@@deriving sexp, equal, compare]
 
+let address (a : t) : Oystermark.Extract.Address.t =
+  Oystermark.Extract.Anchor.address a.value
+;;
+
 (** The line the id is {e written} on — where a rename edits and a definition
     jump should land. For a caret id that is the paragraph's last line, since
     the [ ^id] closes it; for the others it is where the anchor starts. *)
 let write_line (a : t) : int =
-  match a.kind with
-  | Heading _ | Attr -> a.first_line
-  | Block -> a.last_line
+  match a.value with
+  | Heading _ | Attr _ -> a.first_line
+  | Caret _ -> a.last_line
 ;;
 
 let of_loc (loc : Cmarkit.Textloc.t option) : (int * int * int * int) option =
@@ -73,42 +70,16 @@ let of_loc (loc : Cmarkit.Textloc.t option) : (int * int * int * int) option =
     block it attributes: the parser spans the specifier, so nothing here has
     to guess where it was written. *)
 let of_doc (doc : Cmarkit.Doc.t) : t list =
-  let module Index = Oystermark.Vault.Index in
-  let file_stat : Index.file_stat =
-    { rel_path = "__lsp__.md"; birthtime = None; mtime = None }
-  in
-  Index.Note.of_doc_exn file_stat doc
-  |> Index.Note.anchors
-  |> List.map ~f:(fun anchor ->
-    let first_line, last_line, first_byte, last_byte =
-      Option.value_exn (of_loc (Some anchor.loc))
-    in
-    let kind, id, text =
-      match anchor.value with
-      | Index.Heading h -> Heading h.level, h.slug, h.text
-      | Index.Block { id; kind = Obsidian_caret } -> Block, id, ""
-      | Index.Block { id; kind = Djot_attr } | Index.Inline { id } -> Attr, id, ""
-    in
-    { kind; id; text; first_line; last_line; first_byte; last_byte })
+  Oystermark.Extract.Anchor.of_doc doc
+  |> List.filter_map ~f:(fun (anchor : Oystermark.Extract.Anchor.t) ->
+    of_loc (Some anchor.loc)
+    |> Option.map ~f:(fun (first_line, last_line, first_byte, last_byte) ->
+      { value = anchor.value; first_line; last_line; first_byte; last_byte }))
 ;;
 
 let of_content (content : string) : t list = of_doc (Lsp_util.parse_doc content)
 
 (** {1 Lookup} *)
-
-(** The anchor of [kind] carrying [id].  Heading slugs, caret ids and
-    attribute ids share one namespace per file, so [kind] is what
-    distinguishes [ [[note#foo]] ] meaning the heading from the caret id —
-    the caller knows which it resolved to. *)
-let find (ts : t list) ~(id : string) ~(is_kind : kind -> bool) : t option =
-  List.find ts ~f:(fun a -> is_kind a.kind && String.equal a.id id)
-;;
-
-let find_heading (ts : t list) ~(slug : string) : t option =
-  find ts ~id:slug ~is_kind:(function
-    | Heading _ -> true
-    | Block | Attr -> false)
-;;
 
 (** The anchor the cursor is on, [None] when the line holds none.
 
@@ -124,58 +95,23 @@ let find_heading (ts : t list) ~(slug : string) : t option =
     resolve in.  See {!page-"feature-find-references".activation}. *)
 let at_line (ts : t list) ~(line : int) : t option =
   let covers (a : t) =
-    match a.kind with
-    | Heading _ | Attr -> a.first_line <= line && line <= a.last_line
-    | Block -> a.last_line = line
+    match a.value with
+    | Heading _ | Attr _ -> a.first_line <= line && line <= a.last_line
+    | Caret _ -> a.last_line = line
   in
-  let on_line k = List.find ts ~f:(fun a -> covers a && k a.kind) in
+  let on_line k = List.find ts ~f:(fun a -> covers a && k a.value) in
   List.find_map
     [ (function
-        | Heading _ -> true
+        | Oystermark.Extract.Anchor.Heading _ -> true
         | _ -> false)
     ; (function
-        | Block -> true
+        | Caret _ -> true
         | _ -> false)
     ; (function
-        | Attr -> true
+        | Attr _ -> true
         | _ -> false)
     ]
     ~f:on_line
-;;
-
-(** {1 Slices}
-
-    Both return raw source rather than a re-rendered AST: a preview should
-    show what the file says, and the byte ranges come from the parser
-    anyway. *)
-
-(** The section [a] heads: from its own first byte up to the next heading of
-    equal or higher level, or the end of [content].  [""] for a non-heading. *)
-let section (ts : t list) (content : string) (a : t) : string =
-  match a.kind with
-  | Block | Attr -> ""
-  | Heading level ->
-    let stop =
-      List.find_map ts ~f:(fun b ->
-        match b.kind with
-        | Heading l when l <= level && b.first_byte > a.first_byte -> Some b.first_byte
-        | _ -> None)
-    in
-    String.sub
-      content
-      ~pos:a.first_byte
-      ~len:(Option.value stop ~default:(String.length content) - a.first_byte)
-    |> String.rstrip
-;;
-
-(** The paragraph [a] marks, [ ^id] marker included — this is source, and the
-    marker is part of what the file says.  [""] for a non-caret anchor. *)
-let block_text (content : string) (a : t) : string =
-  match a.kind with
-  | Heading _ | Attr -> ""
-  | Block ->
-    String.sub content ~pos:a.first_byte ~len:(a.last_byte - a.first_byte)
-    |> String.rstrip
 ;;
 
 (* Tests
@@ -194,12 +130,12 @@ let%test_module "of_content" =
       show "# Alpha\n\nBody ^b1\n\nThe [key]{#kt} span.\n";
       [%expect
         {|
-        ((kind (Heading 1)) (id alpha) (text Alpha) (first_line 0) (last_line 0)
-         (first_byte 0) (last_byte 7))
-        ((kind Block) (id b1) (text "") (first_line 2) (last_line 2) (first_byte 9)
+        ((value (Heading ((text Alpha) (level 1) (slug alpha)))) (first_line 0)
+         (last_line 0) (first_byte 0) (last_byte 7))
+        ((value (Caret b1)) (first_line 2) (last_line 2) (first_byte 9)
          (last_byte 17))
-        ((kind Attr) (id kt) (text "") (first_line 4) (last_line 4) (first_byte 23)
-         (last_byte 33))
+        ((value (Attr (id kt) (inline true))) (first_line 4) (last_line 4)
+         (first_byte 23) (last_byte 33))
         |}]
     ;;
 
@@ -210,10 +146,10 @@ let%test_module "of_content" =
       show "{#intro}\n# Introduction\n";
       [%expect
         {|
-        ((kind Attr) (id intro) (text "") (first_line 0) (last_line 1) (first_byte 0)
-         (last_byte 23))
-        ((kind (Heading 1)) (id intro) (text Introduction) (first_line 1)
-         (last_line 1) (first_byte 9) (last_byte 23))
+        ((value (Attr (id intro) (inline false))) (first_line 0) (last_line 1)
+         (first_byte 0) (last_byte 23))
+        ((value (Heading ((text Introduction) (level 1) (slug intro))))
+         (first_line 1) (last_line 1) (first_byte 9) (last_byte 23))
         |}]
     ;;
 
@@ -221,10 +157,10 @@ let%test_module "of_content" =
       show "# Same\n\n# Same\n";
       [%expect
         {|
-        ((kind (Heading 1)) (id same) (text Same) (first_line 0) (last_line 0)
-         (first_byte 0) (last_byte 6))
-        ((kind (Heading 1)) (id same-1) (text Same) (first_line 2) (last_line 2)
-         (first_byte 8) (last_byte 14))
+        ((value (Heading ((text Same) (level 1) (slug same)))) (first_line 0)
+         (last_line 0) (first_byte 0) (last_byte 6))
+        ((value (Heading ((text Same) (level 1) (slug same-1)))) (first_line 2)
+         (last_line 2) (first_byte 8) (last_byte 14))
         |}]
     ;;
 
@@ -237,85 +173,9 @@ let%test_module "of_content" =
       show "::: warning\n# Inside\n:::\n";
       [%expect
         {|
-        ((kind (Heading 1)) (id inside) (text Inside) (first_line 1) (last_line 1)
-         (first_byte 12) (last_byte 20))
+        ((value (Heading ((text Inside) (level 1) (slug inside)))) (first_line 1)
+         (last_line 1) (first_byte 12) (last_byte 20))
         |}]
-    ;;
-  end)
-;;
-
-let%test_module "section" =
-  (module struct
-    let show ~slug content =
-      let ts = of_content content in
-      match find_heading ts ~slug with
-      | None -> print_endline "<not found>"
-      | Some a -> print_string (section ts content a)
-    ;;
-
-    let%expect_test "runs to the next heading of equal or higher level" =
-      show
-        ~slug:"beta"
-        "# Alpha\n\n## Beta\n\ntext\n\n### Gamma\n\nmore\n\n## Delta\n\nend\n";
-      [%expect
-        {|
-        ## Beta
-
-        text
-
-        ### Gamma
-
-        more
-        |}]
-    ;;
-
-    let%expect_test "a hash inside a code block does not end the section" =
-      show ~slug:"alpha" "# Alpha\n\n```\n# not a heading\n```\n\ntail\n\n# Beta\n";
-      [%expect
-        {|
-        # Alpha
-
-        ```
-        # not a heading
-        ```
-
-        tail
-        |}]
-    ;;
-
-    let%expect_test "authored id" =
-      show ~slug:"intro" "{#intro}\n# Introduction\n\nbody\n\n# Next\n";
-      [%expect
-        {|
-        # Introduction
-
-        body
-        |}]
-    ;;
-  end)
-;;
-
-let%test_module "block_text" =
-  (module struct
-    let show ~id content =
-      let ts = of_content content in
-      match find ts ~id ~is_kind:(Poly.equal Block) with
-      | None -> print_endline "<not found>"
-      | Some a -> print_string (block_text content a)
-    ;;
-
-    let%expect_test "the whole paragraph, marker included" =
-      show ~id:"abc" "# H\n\nFirst line\nsecond line ^abc\n\nafter\n";
-      [%expect
-        {|
-        First line
-        second line ^abc
-        |}]
-    ;;
-
-    let%expect_test "unknown id" =
-      show ~id:"nope" "text ^abc\n";
-      [%expect {| <not found> |}]
     ;;
   end)
 ;;
@@ -332,8 +192,8 @@ let%test_module "at_line" =
       show "# Alpha\n\ntext ^b\n" ~line:0;
       [%expect
         {|
-        ((kind (Heading 1)) (id alpha) (text Alpha) (first_line 0) (last_line 0)
-         (first_byte 0) (last_byte 7))
+        ((value (Heading ((text Alpha) (level 1) (slug alpha)))) (first_line 0)
+         (last_line 0) (first_byte 0) (last_byte 7))
         |}]
     ;;
 
@@ -343,7 +203,7 @@ let%test_module "at_line" =
       show "one\ntwo ^b\n" ~line:1;
       [%expect
         {|
-        ((kind Block) (id b) (text "") (first_line 0) (last_line 1) (first_byte 0)
+        ((value (Caret b)) (first_line 0) (last_line 1) (first_byte 0)
          (last_byte 10))
         |}]
     ;;
@@ -357,8 +217,8 @@ let%test_module "at_line" =
       show "The [key]{#kt} span.\n" ~line:0;
       [%expect
         {|
-        ((kind Attr) (id kt) (text "") (first_line 0) (last_line 0) (first_byte 4)
-         (last_byte 14))
+        ((value (Attr (id kt) (inline true))) (first_line 0) (last_line 0)
+         (first_byte 4) (last_byte 14))
         |}]
     ;;
 

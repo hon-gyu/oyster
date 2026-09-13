@@ -57,8 +57,7 @@ what exists, rather than where something already known to exist is written
 down.
 
 The difference is worth naming, because it changes what a mistake costs.
-Elsewhere — {!Lsp_lib.Hover.extract_block} finding a block id, or
-{!Lsp_lib.Rename} finding a definition line — the entity comes from the AST or
+Elsewhere — {!Lsp_lib.Rename} finding a definition line, say — the entity comes from the AST or
 the vault index, and the line search only re-locates it. A miss there points at
 the wrong line for something that genuinely exists. Here the scan {e is} the
 source of truth for references, so a false positive invents a footnote

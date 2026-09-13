@@ -13,16 +13,9 @@ module Index = Index
 
 (** {2 Rename target} *)
 
-type subject =
-  | Note
-  | Heading of { slug : string }
-  | Block of { id : string }
-  | Attr of { id : string }
-[@@deriving sexp, equal]
-
 type target =
   { path : string
-  ; subject : subject
+  ; address : Extract.Address.t option (** [None] is the note itself. *)
   }
 [@@deriving sexp, equal]
 
@@ -66,22 +59,16 @@ let destination_path (_, _, resolution) =
   Result.ok resolution |> Option.map ~f:Index.target_path
 ;;
 
-let matches { path; subject } ((_, _, resolution) as link) =
+let matches { path; address } ((_, _, resolution) as link) =
   let same_path =
     destination_path link |> Option.value_map ~default:false ~f:(String.equal path)
   in
   same_path
   &&
-  match subject, resolution with
-  | Note, Ok _ -> true
-  | Heading { slug }, Ok (Index.Anchor { anchor = { value = Heading h; _ }; _ }) ->
-    String.equal slug h.slug
-  | Block { id }, Ok (Index.Anchor { anchor = { value = Block b; _ }; _ }) ->
-    String.equal id b.id && Index.equal_referenceable_block_kind b.kind Obsidian_caret
-  | Attr { id }, Ok (Index.Anchor { anchor = { value = Block b; _ }; _ }) ->
-    String.equal id b.id && Index.equal_referenceable_block_kind b.kind Djot_attr
-  | Attr { id }, Ok (Index.Anchor { anchor = { value = Inline a; _ }; _ }) ->
-    String.equal id a.id
+  match address, resolution with
+  | None, Ok _ -> true
+  | Some address, Ok (Index.Anchor { anchor; _ }) ->
+    Extract.Address.equal address (Extract.Anchor.address anchor.value)
   | _ -> false
 ;;
 
@@ -139,15 +126,15 @@ let encode style text =
   | `Markdown -> String.substr_replace_all text ~pattern:" " ~with_:"%20"
 ;;
 
-let reference_edit ~read_file { subject; _ } ~new_name (source, (link : Index.Link.t), _) =
+let reference_edit ~read_file { address; _ } ~new_name (source, (link : Index.Link.t), _) =
   authored_destination ~read_file source link
   |> Option.bind ~f:(fun (style, destination_first, destination) ->
     String.index destination '#'
     |> Option.map ~f:(fun hash ->
       let marker_length =
-        match subject with
-        | Block _ -> 1
-        | Note | Heading _ | Attr _ -> 0
+        match address with
+        | Some (Extract.Address.Caret _) -> 1
+        | None | Some (Heading _ | Attr _) -> 0
       in
       { rel_path = source
       ; first_byte = destination_first + hash + 1 + marker_length
@@ -353,47 +340,24 @@ let attr_id_offset ~(id : string) line =
   scan 0
 ;;
 
-let definition_edit ~index ~read_file { path; subject } ~new_name =
-  Index.find_note index path
-  |> Option.bind ~f:(fun note ->
-    let loc =
-      match subject with
-      | Note -> None
-      | Heading { slug } ->
-        Index.Note.anchors note
-        |> List.find_map ~f:(fun anchor ->
-          match anchor.value with
-          | Index.Heading heading when String.equal heading.slug slug -> Some anchor.loc
-          | _ -> None)
-      | Block { id } ->
-        Index.Note.anchors note
-        |> List.find_map ~f:(fun anchor ->
-          match anchor.value with
-          | Index.Block { id = found; kind = Obsidian_caret } when String.equal found id
-            -> Some anchor.loc
-          | _ -> None)
-      | Attr { id } ->
-        Index.Note.anchors note
-        |> List.find_map ~f:(fun anchor ->
-          match anchor.value with
-          | (Index.Block { id = found; kind = Djot_attr } | Inline { id = found })
-            when String.equal found id -> Some anchor.loc
-          | _ -> None)
-    in
-    loc
-    |> Option.bind ~f:(fun loc ->
+let definition_edit ~index ~read_file { path; address } ~new_name =
+  Option.bind address ~f:(fun (address : Extract.Address.t) ->
+    Index.find_note index path
+    |> Option.bind ~f:(fun note ->
+      List.find (Index.Note.anchors note) ~f:(fun anchor ->
+        Extract.Address.equal address (Extract.Anchor.address anchor.value)))
+    |> Option.bind ~f:(fun (anchor : Index.Anchor.t) ->
       read_file path
       |> Option.bind ~f:(fun content ->
         let source_line =
-          match subject with
-          | Block _ -> fst (Cmarkit.Textloc.last_line loc) - 1
-          | Note | Heading _ | Attr _ -> fst (Cmarkit.Textloc.first_line loc) - 1
+          match address with
+          | Caret _ -> fst (Cmarkit.Textloc.last_line anchor.loc) - 1
+          | Heading _ | Attr _ -> fst (Cmarkit.Textloc.first_line anchor.loc) - 1
         in
         line_bounds content source_line
         |> Option.bind ~f:(fun (start, stop) ->
           let line = String.sub content ~pos:start ~len:(stop - start) in
-          match subject with
-          | Note -> None
+          match address with
           | Heading _ ->
             let hashes =
               String.length line
@@ -415,7 +379,7 @@ let definition_edit ~index ~read_file { path; subject } ~new_name =
               ; last_byte = start + text_stop
               ; new_text = new_name
               }
-          | Block { id } ->
+          | Caret id ->
             String.substr_index line ~pattern:("^" ^ id)
             |> Option.map ~f:(fun pos ->
               { rel_path = path
@@ -423,7 +387,7 @@ let definition_edit ~index ~read_file { path; subject } ~new_name =
               ; last_byte = start + pos + 1 + String.length id
               ; new_text = new_name
               })
-          | Attr { id } ->
+          | Attr id ->
             attr_id_offset ~id line
             |> Option.map ~f:(fun pos ->
               { rel_path = path
@@ -465,19 +429,19 @@ let plan_moves ~index ~read_file moves =
     { edits; moves })
 ;;
 
-let plan ~index ~docs ~read_file ({ path; subject } as target) ~new_name =
+let plan ~index ~docs ~read_file ({ path; address } as target) ~new_name =
   let valid =
-    match subject with
-    | Note -> valid_note_name new_name
-    | Heading _ -> not (String.is_empty (String.strip new_name))
-    | Block _ | Attr _ -> valid_id new_name
+    match address with
+    | None -> valid_note_name new_name
+    | Some (Extract.Address.Heading _) -> not (String.is_empty (String.strip new_name))
+    | Some (Caret _ | Attr _) -> valid_id new_name
   in
   if not valid
   then Error "invalid new name"
   else (
-    match subject with
-    | Note -> plan_moves ~index ~read_file [ path, renamed_note_path ~path ~new_name ]
-    | Heading _ | Block _ | Attr _ ->
+    match address with
+    | None -> plan_moves ~index ~read_file [ path, renamed_note_path ~path ~new_name ]
+    | Some _ ->
       let edits =
         resolved_links_of_docs index docs
         |> List.filter ~f:(matches target)
@@ -549,14 +513,14 @@ let%expect_test "plan note and heading renames" =
     plan ~index:v.index ~docs:v.docs ~read_file:(read_file v) target ~new_name
     |> show_change v
   in
-  show { path = "a.md"; subject = Note } "renamed";
+  show { path = "a.md"; address = None } "renamed";
   [%expect
     {|
     a.md -> renamed.md
     b.md
       [[renamed]] [[renamed#Alpha|label]] [x](renamed.md#Alpha)
     |}];
-  show { path = "a.md"; subject = Heading { slug = "alpha" } } "New title";
+  show { path = "a.md"; address = Some (Heading "alpha") } "New title";
   [%expect
     {|
     a.md
@@ -614,7 +578,7 @@ let%expect_test "moves keep links that a move would capture" =
     ~index:v.index
     ~docs:v.docs
     ~read_file:(read_file v)
-    { path = "a.md"; subject = Note }
+    { path = "a.md"; address = None }
     ~new_name:"b"
   |> show_change v;
   [%expect

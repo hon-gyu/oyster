@@ -328,14 +328,14 @@ let fragment_items (entry : Oystermark.Vault.Index.Note.t) : item list =
       ; insert_text = Some h.slug
       ; kind = Reference
       }
-    | Index.Block { id; kind = Obsidian_caret } ->
+    | Index.Caret id ->
       { label = "^" ^ id
       ; detail = None
       ; filter_text = Some id
       ; insert_text = Some ("^" ^ id)
       ; kind = Reference
       }
-    | Index.Block { id; kind = Djot_attr } | Index.Inline { id } ->
+    | Index.Attr { id; _ } ->
       { label = "#" ^ id
       ; detail = Some "attribute"
       ; filter_text = Some id

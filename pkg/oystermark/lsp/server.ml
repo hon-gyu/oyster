@@ -1338,20 +1338,8 @@ let vault_contains (project : t) path =
     || Option.is_some (Oystermark.Vault.Index.find_asset vault.index path)
 ;;
 
-let target_path : Feature.Find_references.target -> string = function
-  | Path_only { path }
-  | Path_heading { path; _ }
-  | Path_block { path; _ }
-  | Path_attr { path; _ } -> path
-;;
-
-let target_with_path (target : Feature.Find_references.target) path =
-  match target with
-  | Path_only _ -> Feature.Find_references.Path_only { path }
-  | Path_heading { slug; _ } -> Path_heading { path; slug }
-  | Path_block { block_id; _ } -> Path_block { path; block_id }
-  | Path_attr { id; _ } -> Path_attr { path; id }
-;;
+let target_path (target : Feature.Find_references.target) = target.path
+let target_with_path (target : Feature.Find_references.target) path = { target with path }
 
 let target_in_project ~source_project target project =
   let absolute = absolute_path source_project (target_path target) in
@@ -1382,7 +1370,9 @@ let global_reference_lenses t project ~rel_path ~content =
   then []
   else (
     let targets =
-      (0, Reference_counts.File, Feature.Find_references.Path_only { path = rel_path })
+      ( 0
+      , Reference_counts.File
+      , ({ path = rel_path; address = None } : Feature.Find_references.target) )
       :: (Reference_counts.headings_in_range
             ~content
             ~range_start_line:0
@@ -1390,7 +1380,8 @@ let global_reference_lenses t project ~rel_path ~content =
           |> List.map ~f:(fun (line, _, slug) ->
             ( line
             , Reference_counts.Heading { slug }
-            , Feature.Find_references.Path_heading { path = rel_path; slug } )))
+            , ({ path = rel_path; address = Some (Heading slug) }
+               : Feature.Find_references.target) )))
     in
     List.filter_map targets ~f:(fun (line, kind, target) ->
       let refs =
@@ -1593,7 +1584,7 @@ let rename t ~rel_path ~line ~character ~new_name =
        let text_document_edits = text_document_edits edits in
        let documentChanges =
          match target with
-         | Path_only { path } when Feature.Rename.valid_note_name new_name ->
+         | { path; address = None } when Feature.Rename.valid_note_name new_name ->
            let absolute = absolute_path source_project path in
            let owner, owner_path =
              match t.workspace_root with

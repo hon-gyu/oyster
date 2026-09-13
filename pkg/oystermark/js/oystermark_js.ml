@@ -42,17 +42,11 @@ let json_of_anchor_value = function
       ; "level", `Int level
       ; "slug", `String slug
       ]
-  | Block { id; kind } ->
-    `Assoc
-      [ "kind", `String "block"
-      ; "id", `String id
-      ; ( "syntax"
-        , `String
-            (match kind with
-             | Index.Djot_attr -> "attribute"
-             | Obsidian_caret -> "caret") )
-      ]
-  | Inline { id } -> `Assoc [ "kind", `String "inline"; "id", `String id ]
+  | Caret id ->
+    `Assoc [ "kind", `String "block"; "id", `String id; "syntax", `String "caret" ]
+  | Attr { id; inline = false } ->
+    `Assoc [ "kind", `String "block"; "id", `String id; "syntax", `String "attribute" ]
+  | Attr { id; inline = true } -> `Assoc [ "kind", `String "inline"; "id", `String id ]
 ;;
 
 let json_of_anchor (anchor : Index.Anchor.t) =

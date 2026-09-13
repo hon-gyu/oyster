@@ -1,37 +1,40 @@
 (** Read-only queries over parsed blocks: the blocks a link target denotes, used
     by embedding and hover, and a walk over every addressable block of a note. *)
 
-(** Collect the section starting at the heading whose identifier (see
-    {!Parse.Common.heading_id}) is [heading_id], up to (but not including) the
-    next heading of equal or lesser level.  Returns [ [] ] when the heading is not
-    found. *)
-val get_heading_section : Cmarkit.Block.t list -> string -> Cmarkit.Block.t list
+module Address = Address
+module Anchor = Anchor
 
-(** Extract the block that {!Cmarkit.Block.Block_id.t} points to.
+(** The blocks [address] names in [blocks], [ [] ] when it names none.
 
-    Three cases:
-    - {b Inline}: the [^id] appears at the end of a paragraph with other content.
-      The paragraph itself is the target.
-    - {b Standalone}: the [^id] is the entire paragraph.
-      It references the previous non-blank block.
-    - {b Keyed}: the id is on a {!Cmarkit.Block.Ext_keyed} node, having been
-      forwarded from the paragraph or list item the node supplanted. The node
-      itself is the target, so the reference denotes the label {e and} everything
-      the key claimed as children. It anchors a whole subtree. *)
-val get_block_by_caret_id : Cmarkit.Block.t list -> string -> Cmarkit.Block.t option
+    - {b Heading}: the heading's section: the heading and the blocks after it
+      in the same container, up to (but not including) the next heading of
+      equal or lesser level. The heading is found in any container (block
+      quote, list item, div, keyed block, footnote); its section ends with that
+      container, and a container after the heading belongs to the section
+      whole, headings inside it included. A heading carrying a block attribute
+      starts the section itself, without the attribute.
+    - {b Caret}: one block. When the [^id] ends a paragraph with other content,
+      that paragraph. When the [^id] is the entire paragraph, the previous
+      non-blank block. When the id is on a {!Cmarkit.Block.Ext_keyed} node,
+      having been forwarded from the paragraph or list item the node supplanted,
+      the node itself: the label {e and} everything the key claimed as children.
+    - {b Attr}: one block. For a block attribute, the block it wraps. For an
+      inline attribute, the paragraph or heading containing it. See
+      {!page-"feature-attribute-anchors"}.
 
-(** Extract the block carrying an explicit djot attribute id ([{#id}]).
+    Containers (block quotes, list items, [Blocks]) are searched recursively;
+    the first match in document order wins. *)
+val read : Cmarkit.Block.t list -> Address.t -> Cmarkit.Block.t list
 
-    Two cases (see {!page-"feature-attribute-anchors"}):
-    - {b Block attribute}: a [Block.Ext_attributes] whose merged attribute has
-      the id.  The {e wrapped} block is returned.
-    - {b Inline attribute}: an [Inline.Ext_attributes] carrying the id somewhere
-      in a paragraph's or heading's inline content.  The containing block is
-      returned.
+(** The text [blocks] were parsed from: [content] from where the first block
+    starts to where the last one ends, trailing whitespace dropped. [None] when
+    no block has a location.
 
-    Container blocks (block quotes, list items, [Blocks]) are searched
-    recursively; the first match in document order wins. *)
-val get_block_by_attr_id : Cmarkit.Block.t list -> string -> Cmarkit.Block.t option
+    [content] must be the source the blocks were parsed from, with locations.
+    The slice is exact bytes, so within a container whose syntax prefixes
+    every line (a block quote's [>], a list item's indentation), the lines
+    after the first keep that prefix and the first does not. *)
+val source_text : string -> Cmarkit.Block.t list -> string option
 
 module For_test : sig
   val example_headings : string

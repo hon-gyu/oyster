@@ -2,7 +2,7 @@
 
     Tests the core pipeline: parse -> resolve -> expand.  The expanded document
     is printed as CommonMark, with explicit markers for the transclusion
-    boundaries carried by {!Vault.Embed.embed_meta_key}. *)
+    boundaries carried by {!Vault.Transclusion.embed_meta_key}. *)
 
 open! Core
 open Oystermark
@@ -11,7 +11,7 @@ open Oystermark
 let print_expanded_doc (doc : Cmarkit.Doc.t) : unit =
   let rec print_block = function
     | Cmarkit.Block.Blocks (blocks, meta) ->
-      (match Cmarkit.Meta.find Vault.Embed.embed_meta_key meta with
+      (match Cmarkit.Meta.find Vault.Transclusion.embed_meta_key meta with
        | Some { depth; source_path; fragment = _ } ->
          printf "[embed depth=%d source=%s]\n" depth source_path;
          List.iter blocks ~f:print_block;
@@ -295,7 +295,7 @@ let render_reversed ?(max_depth = 5) (files : (string * string) list) (target : 
   let index = Vault.build_index ~md_docs:docs ~other_files:[] () in
   let expanded = Vault.Embed.expand_docs ~max_depth ~index docs in
   let doc = List.Assoc.find_exn expanded ~equal:String.equal target in
-  let reversed = Vault.Embed.reverse_embed_doc doc in
+  let reversed = Vault.Transclusion.reverse_embed_doc doc in
   print_string (Parse.commonmark_of_doc reversed)
 ;;
 

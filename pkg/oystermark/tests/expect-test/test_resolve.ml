@@ -291,19 +291,19 @@ let%expect_test "resolve_blocks" =
     ├─────────────────────────────┼───────────────────────────────────────────────────────┼──────────────────────────────────────────────────────────────────────────────────┤
     │ block found                 │ ((target ("Note 1")) (fragment ((Caret_id para1))))   │ (Anchor (note_path "Note 1.md")                                                  │
     │                             │                                                       │  (anchor                                                                         │
-    │                             │                                                       │   ((value (Block ((id para1) (kind Obsidian_caret))))                            │
+    │                             │                                                       │   ((value (Caret para1))                                                         │
     │                             │                                                       │    (loc                                                                          │
     │                             │                                                       │     ((first_byte 96) (last_byte 106) (first_line (9 96)) (last_line (9 96))))))) │
     │ block with hyphen           │ ((target ("Note 1")) (fragment ((Caret_id block-2)))) │ (Anchor (note_path "Note 1.md")                                                  │
     │                             │                                                       │  (anchor                                                                         │
-    │                             │                                                       │   ((value (Block ((id block-2) (kind Obsidian_caret))))                          │
+    │                             │                                                       │   ((value (Caret block-2))                                                       │
     │                             │                                                       │    (loc                                                                          │
     │                             │                                                       │     ((first_byte 109) (last_byte 122) (first_line (11 109))                      │
     │                             │                                                       │      (last_line (11 109)))))))                                                   │
     │ block not found -> fallback │ ((target ("Note 1")) (fragment ((Caret_id nope))))    │ (Missing_anchor Note 1.md)                                                       │
     │ block in deep file          │ ((target (deep)) (fragment ((Caret_id deep1))))       │ (Anchor (note_path dir/inner_dir/deep.md)                                        │
     │                             │                                                       │  (anchor                                                                         │
-    │                             │                                                       │   ((value (Block ((id deep1) (kind Obsidian_caret))))                            │
+    │                             │                                                       │   ((value (Caret deep1))                                                         │
     │                             │                                                       │    (loc ((first_byte 0) (last_byte 10) (first_line (1 0)) (last_line (1 0))))))) │
     │ block in unresolved file    │ ((target (nonexistent)) (fragment ((Caret_id x))))    │ Missing_path                                                                     │
     └─────────────────────────────┴───────────────────────────────────────────────────────┴──────────────────────────────────────────────────────────────────────────────────┘
@@ -340,7 +340,7 @@ let%expect_test "resolve_self_references" =
     │                         │                                                 │     ((first_byte 65) (last_byte 70) (first_line (5 65)) (last_line (5 65)))))))  │
     │ [[#^para1]]             │ ((target ()) (fragment ((Caret_id para1))))     │ (Anchor (note_path "Note 1.md")                                                  │
     │                         │                                                 │  (anchor                                                                         │
-    │                         │                                                 │   ((value (Block ((id para1) (kind Obsidian_caret))))                            │
+    │                         │                                                 │   ((value (Caret para1))                                                         │
     │                         │                                                 │    (loc                                                                          │
     │                         │                                                 │     ((first_byte 96) (last_byte 106) (first_line (9 96)) (last_line (9 96))))))) │
     │ [[#NoSuch]] -> fallback │ ((target ()) (fragment ((Hash_path (NoSuch))))) │ (Missing_anchor Note 1.md)                                                       │

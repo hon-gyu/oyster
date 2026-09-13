@@ -58,12 +58,12 @@ let events (entry : Oystermark.Vault.Index.Note.t) =
           @ headings
         , blocks
         , attrs )
-      | Index.Block { id; kind = Obsidian_caret } ->
+      | Index.Caret id ->
         ( headings
         , Option.to_list (event_of_loc ~name:("^" ^ id) ~kind:Block_id (Some anchor.loc))
           @ blocks
         , attrs )
-      | Index.Block { id; kind = Djot_attr } | Index.Inline { id } ->
+      | Index.Attr { id; _ } ->
         ( headings
         , blocks
         , Option.to_list

@@ -201,7 +201,7 @@ let rename_note_command =
          ~index:vault.index
          ~docs:(Vault.docs vault)
          ~read_file:(read_file root)
-         ({ path; subject = Note } : Vault.Rename.target)
+         ({ path; address = None } : Vault.Rename.target)
          ~new_name
        |> finish_change root ~apply)
 ;;
@@ -234,7 +234,7 @@ let heading_target (vault : Vault.t) path heading =
     |> List.find ~f:(fun h -> String.equal h.text heading || String.equal h.slug heading)
     |> Option.value_exn ~message:(sprintf "heading not found in %s: %s" path heading)
   in
-  ({ path; subject = Heading { slug = heading.slug } } : Vault.Rename.target)
+  ({ path; address = Some (Heading heading.slug) } : Vault.Rename.target)
 ;;
 
 (** Emit the vault as a Jinja template context on stdout.

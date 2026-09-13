@@ -25,23 +25,12 @@ type reference =
   }
 [@@deriving sexp, equal, compare]
 
-(** The kind of target we are looking for references to. *)
-type target =
-  | Path_only of { path : string }
-  | Path_heading of
-      { path : string
-      ; slug : string
-      }
-  | Path_block of
-      { path : string
-      ; block_id : string
-      }
-  | Path_attr of
-      { path : string
-      ; id : string
-      }
-  (** An explicit djot attribute id ([{#id}]); see
-            {!page-"feature-attribute-anchors"}. *)
+(** What references are looked for: the note or asset at [path], or the anchor
+    at [address] in the note at [path]. *)
+type target = Oystermark.Vault.Rename.target =
+  { path : string
+  ; address : Oystermark.Extract.Address.t option
+  }
 
 (** {2 Target detection}
 
@@ -70,30 +59,19 @@ let detect_target
     let resolved = Oystermark.Vault.Index.resolve index rel_path link_ref in
     (match resolved with
      | Error _ -> None
-     | Ok (Oystermark.Vault.Index.Note path | Asset path) -> Some (Path_only { path })
-     | Ok (Anchor { note_path = path; anchor = { value = Heading h; _ } }) ->
-       Some (Path_heading { path; slug = h.slug })
-     | Ok
-         (Anchor
-            { note_path = path
-            ; anchor = { value = Block { id; kind = Obsidian_caret }; _ }
-            }) -> Some (Path_block { path; block_id = id })
-     | Ok
-         (Anchor
-            { note_path = path; anchor = { value = Block { id; kind = Djot_attr }; _ } })
-     | Ok (Anchor { note_path = path; anchor = { value = Inline { id }; _ } }) ->
-       Some (Path_attr { path; id }))
+     | Ok (Oystermark.Vault.Index.Note path | Asset path) -> Some { path; address = None }
+     | Ok (Anchor { note_path; anchor }) ->
+       Some
+         { path = note_path
+         ; address = Some (Oystermark.Extract.Anchor.address anchor.value)
+         })
   | None ->
     (* Not on a link — is the cursor on an anchor?  The anchors come from the
        same [doc] the links did, so a [#] or a [ ^id] inside a code block is
        not one, and a heading's identifier is the one the parser assigned
        rather than a slug re-derived here.  See {!page-"feature-index"}. *)
     Anchors.at_line (Anchors.of_doc doc) ~line
-    |> Option.map ~f:(fun (a : Anchors.t) ->
-      match a.kind with
-      | Anchors.Heading _ -> Path_heading { path = rel_path; slug = a.id }
-      | Block -> Path_block { path = rel_path; block_id = a.id }
-      | Attr -> Path_attr { path = rel_path; id = a.id })
+    |> Option.map ~f:(fun a -> { path = rel_path; address = Some (Anchors.address a) })
 ;;
 
 (** {2 Vault scanning}
@@ -106,19 +84,13 @@ let resolved_matches (ref_target : target) (resolved : Oystermark.Vault.Index.ta
   : bool
   =
   match ref_target, resolved with
-  | Path_only { path }, resolved ->
+  | { path; address = None }, resolved ->
     String.equal path (Oystermark.Vault.Index.target_path resolved)
-  | Path_heading { path; slug }, Anchor { note_path; anchor = { value = Heading h; _ } }
-    -> String.equal path note_path && String.equal slug h.slug
-  | ( Path_block { path; block_id }
-    , Anchor { note_path; anchor = { value = Block { id; kind = Obsidian_caret }; _ } } )
-    -> String.equal path note_path && String.equal block_id id
-  | ( Path_attr { path; id }
-    , Anchor { note_path; anchor = { value = Block { id = found; kind = Djot_attr }; _ } }
-    )
-  | ( Path_attr { path; id }
-    , Anchor { note_path; anchor = { value = Inline { id = found }; _ } } ) ->
-    String.equal path note_path && String.equal id found
+  | { path; address = Some address }, Anchor { note_path; anchor } ->
+    String.equal path note_path
+    && Oystermark.Extract.Address.equal
+         address
+         (Oystermark.Extract.Anchor.address anchor.value)
   | _ -> false
 ;;
 
@@ -261,7 +233,7 @@ let find_references
 
 (** Count how many links across the vault resolve to [path] (any fragment). *)
 let count_file_refs ~index ~(docs : (string * Cmarkit.Doc.t) list) ~(path : string) : int =
-  List.length (scan_vault ~index ~docs (Path_only { path }))
+  List.length (scan_vault ~index ~docs { path; address = None })
 ;;
 
 (** Count how many links across the vault resolve to [path] with heading [slug]. *)
@@ -272,7 +244,7 @@ let count_heading_refs
       ~(slug : string)
   : int
   =
-  List.length (scan_vault ~index ~docs (Path_heading { path; slug }))
+  List.length (scan_vault ~index ~docs { path; address = Some (Heading slug) })
 ;;
 
 (** {1:test Test} *)
@@ -312,28 +284,28 @@ let%test_module "detect_target" =
     let show ~rel_path ~content ~line ~character =
       match detect_target ~index ~rel_path ~content ~line ~character with
       | None -> print_endline "<none>"
-      | Some (Path_only { path }) -> printf "Path_only %s\n" path
-      | Some (Path_heading { path; slug }) -> printf "Path_heading %s#%s\n" path slug
-      | Some (Path_block { path; block_id }) -> printf "Path_block %s#^%s\n" path block_id
-      | Some (Path_attr { path; id }) -> printf "Path_attr %s#%s\n" path id
+      | Some { path; address = None } -> printf "Note %s\n" path
+      | Some { path; address = Some (Heading slug) } -> printf "Heading %s#%s\n" path slug
+      | Some { path; address = Some (Caret id) } -> printf "Caret %s#^%s\n" path id
+      | Some { path; address = Some (Attr id) } -> printf "Attr %s#%s\n" path id
     ;;
 
     let%expect_test "cursor on wikilink" =
       let content = List.Assoc.find_exn files ~equal:String.equal "note-b.md" in
       show ~rel_path:"note-b.md" ~content ~line:2 ~character:13;
-      [%expect {| Path_only note-a.md |}]
+      [%expect {| Note note-a.md |}]
     ;;
 
     let%expect_test "cursor on heading" =
       let content = List.Assoc.find_exn files ~equal:String.equal "note-a.md" in
       show ~rel_path:"note-a.md" ~content ~line:2 ~character:3;
-      [%expect {| Path_heading note-a.md#section-one |}]
+      [%expect {| Heading note-a.md#section-one |}]
     ;;
 
     let%expect_test "cursor on block id line" =
       let content = List.Assoc.find_exn files ~equal:String.equal "note-a.md" in
       show ~rel_path:"note-a.md" ~content ~line:4 ~character:5;
-      [%expect {| Path_block note-a.md#^block1 |}]
+      [%expect {| Caret note-a.md#^block1 |}]
     ;;
 
     (* Cursor on a link resolving to an attribute anchor ([{#aside}] in note-h).
@@ -341,14 +313,14 @@ let%test_module "detect_target" =
     let%expect_test "cursor on link to attribute id" =
       let content = List.Assoc.find_exn files ~equal:String.equal "note-i.md" in
       show ~rel_path:"note-i.md" ~content ~line:2 ~character:8;
-      [%expect {| Path_attr note-h.md#aside |}]
+      [%expect {| Attr note-h.md#aside |}]
     ;;
 
     (* Cursor on a standalone block-attribute line [ {#aside} ]. *)
     let%expect_test "cursor on attribute anchor line" =
       let content = List.Assoc.find_exn files ~equal:String.equal "note-h.md" in
       show ~rel_path:"note-h.md" ~content ~line:4 ~character:2;
-      [%expect {| Path_attr note-h.md#aside |}]
+      [%expect {| Attr note-h.md#aside |}]
     ;;
 
     let%expect_test "cursor on plain text" =

@@ -59,7 +59,7 @@ let collect_anchor_occurrences (doc : Cmarkit.Doc.t) : (string * (int * int)) li
       match anchor.value with
       | Index.Heading h when Set.mem mirrored h.slug -> None
       | Index.Heading h -> Some h.slug
-      | Index.Block { id; _ } | Index.Inline { id } -> Some id
+      | Index.Caret id | Index.Attr { id; _ } -> Some id
     in
     Option.map id ~f:(fun id ->
       id, (Cmarkit.Textloc.first_byte anchor.loc, Cmarkit.Textloc.last_byte anchor.loc)))
