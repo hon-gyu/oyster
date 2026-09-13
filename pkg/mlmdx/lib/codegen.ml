@@ -26,14 +26,16 @@ type split =
 let source_start = { byte = 0; line = 1 }
 let mknoloc txt : _ Location.loc = { txt; loc = Location.none }
 let lident s = mknoloc (Longident.Lident s)
-let jsx_id name = Ast_helper.Exp.ident (mknoloc (Longident.Ldot (Lident "JSX", name)))
+let lpath parts = Option.get (Longident.unflatten parts)
+let jsx_id name = Ast_helper.Exp.ident (mknoloc (lpath [ "JSX"; name ]))
+let etuple es = Ast_helper.Exp.tuple (List.map (fun e -> None, e) es)
 let estring s = Ast_helper.Exp.constant (Ast_helper.Const.string s)
 let ebool b = Ast_helper.Exp.construct (lident (if b then "true" else "false")) None
 
 let rec elist = function
   | [] -> Ast_helper.Exp.construct (lident "[]") None
   | e :: es ->
-    Ast_helper.Exp.construct (lident "::") (Some (Ast_helper.Exp.tuple [ e; elist es ]))
+    Ast_helper.Exp.construct (lident "::") (Some (etuple [ e; elist es ]))
 ;;
 
 let jsx name args =
@@ -50,7 +52,7 @@ let node ?(attrs = []) tag ~children =
    table renders vanilla elements, so an un-themed page is unchanged. Literal
    JSX and component calls in the page keep using {!node}/{!component_call}. *)
 let components_lident name =
-  Longident.Ldot (Longident.Ldot (Lident "Mlmdx", "Components"), name)
+  lpath [ "Mlmdx"; "Components"; name ]
 ;;
 
 let md_elt tag ~children =
@@ -143,12 +145,6 @@ let quote_close s quote i =
   go (i + 1)
 ;;
 
-let longident_of_dotted s =
-  match String.split_on_char '.' s with
-  | [] -> Longident.Lident s
-  | x :: xs ->
-    List.fold_left (fun acc part -> Longident.Ldot (acc, part)) (Longident.Lident x) xs
-;;
 
 type attr_value =
   | Absent
@@ -300,7 +296,7 @@ let host_attr { name; value } =
     | Expr_value e when is_boolean_html_attr name -> variant "Bool" e
     | Expr_value e -> variant "String" e
   in
-  Ast_helper.Exp.tuple [ estring name; value ]
+  etuple [ estring name; value ]
 ;;
 
 let is_ocaml_label name =
@@ -334,7 +330,7 @@ let component_attr { name; value } =
 
 let component_call tag attrs ?children () =
   let make =
-    Ast_helper.Exp.ident (mknoloc (Longident.Ldot (longident_of_dotted tag, "make")))
+    Ast_helper.Exp.ident (mknoloc (lpath (String.split_on_char '.' tag @ [ "make" ])))
   in
   let unit = Ast_helper.Exp.construct (lident "()") None in
   let args = List.map component_attr attrs in
