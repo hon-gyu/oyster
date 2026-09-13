@@ -1,7 +1,7 @@
 (library
  (name test_lsp)
- ; (package oystermark)
- (libraries core core_unix linol.lsp lsp_lib trace_collect)
+ (package oystermark)
+ (libraries core core_unix linol.lsp lsp_lib)
  (inline_tests
   (deps
    (source_tree data)

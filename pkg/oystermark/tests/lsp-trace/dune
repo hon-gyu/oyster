@@ -1,0 +1,6 @@
+(library
+ (name test_lsp_trace)
+ (libraries core lsp_lib test_lsp trace_collect)
+ (inline_tests)
+ (preprocess
+  (pps ppx_expect ppx_jane)))
