@@ -158,7 +158,7 @@ let markdown_dest ~(content : string) ~(line : int) ~(character : int) : md_dest
     See {!page-"feature-completion".note_name_completion}. *)
 let note_name_items (index : Oystermark.Vault.Index.t) : item list =
   let md_files =
-    Oystermark.Vault.Index.notes index |> List.map ~f:Oystermark.Vault.Index.Note.path
+    Oystermark.Vault.Index.notes index |> List.map ~f:Oystermark.Vault.Index.Entry.path
   in
   let basename p = String.chop_suffix_if_exists (Filename.basename p) ~suffix:".md" in
   let counts =
@@ -252,8 +252,8 @@ let max_path_items = 500
     short at {!max_path_items}. *)
 let path_items ~(image : bool) (index : Oystermark.Vault.Index.t) : item list * bool =
   let module Index = Oystermark.Vault.Index in
-  let title (note : Index.Note.t) =
-    Index.Note.headings note
+  let title (note : Index.Entry.t) =
+    Index.Entry.headings note
     |> List.find_map ~f:(fun (h, _) -> if h.level = 1 then Some h.text else None)
   in
   let item rel_path detail =
@@ -272,7 +272,8 @@ let path_items ~(image : bool) (index : Oystermark.Vault.Index.t) : item list * 
       } )
   in
   let items =
-    List.map (Index.notes index) ~f:(fun note -> item (Index.Note.path note) (title note))
+    List.map (Index.notes index) ~f:(fun note ->
+      item (Index.Entry.path note) (title note))
     @ List.map (Index.assets index) ~f:(fun asset -> item (Index.Asset.path asset) None)
     |> List.sort ~compare:(fun (ga, a) (gb, b) ->
       match Int.compare ga gb with
@@ -295,7 +296,7 @@ let target_entry
       ~(rel_path : string)
       ~(content : string)
       (note_part : string)
-  : Oystermark.Vault.Index.Note.t option
+  : Oystermark.Vault.Index.Entry.t option
   =
   let module Index = Oystermark.Vault.Index in
   let find = Index.find_note index in
@@ -303,10 +304,10 @@ let target_entry
   then (
     let doc = Lsp_util.parse_doc content in
     let file_stat : Index.file_stat = { rel_path; birthtime = None; mtime = None } in
-    Some (Index.Note.of_doc_exn file_stat doc))
+    Some (Index.Entry.of_doc_exn file_stat doc))
   else (
     let link_ref =
-      { Oystermark.Vault.Link_ref.target = Some note_part; fragment = None }
+      { Oystermark.Note.Link_ref.target = Some note_part; fragment = None }
     in
     match Oystermark.Vault.Index.resolve index rel_path link_ref with
     | Ok (Note path) -> find path
@@ -316,9 +317,9 @@ let target_entry
 (** Heading, block-id, and attribute-id suggestions for a file entry.  All three
     kinds share one fragment namespace (see {!page-"feature-attribute-anchors"}).
     See {!page-"feature-completion".fragment_completion}. *)
-let fragment_items (entry : Oystermark.Vault.Index.Note.t) : item list =
+let fragment_items (entry : Oystermark.Vault.Index.Entry.t) : item list =
   let module Index = Oystermark.Vault.Index in
-  Index.Note.anchors entry
+  Index.Entry.anchors entry
   |> List.map ~f:(fun anchor ->
     match anchor.value with
     | Index.Heading h ->

@@ -29,7 +29,7 @@ type reference =
     at [address] in the note at [path]. *)
 type target = Oystermark.Vault.Rename.target =
   { path : string
-  ; address : Oystermark.Extract.Address.t option
+  ; address : Oystermark.Note.Address.t option
   }
 
 (** {2 Target detection}
@@ -63,7 +63,7 @@ let detect_target
      | Ok (Anchor { note_path; anchor }) ->
        Some
          { path = note_path
-         ; address = Some (Oystermark.Extract.Anchor.address anchor.value)
+         ; address = Some (Oystermark.Note.Anchor.address anchor.value)
          })
   | None ->
     (* Not on a link — is the cursor on an anchor?  The anchors come from the
@@ -88,9 +88,7 @@ let resolved_matches (ref_target : target) (resolved : Oystermark.Vault.Index.ta
     String.equal path (Oystermark.Vault.Index.target_path resolved)
   | { path; address = Some address }, Anchor { note_path; anchor } ->
     String.equal path note_path
-    && Oystermark.Extract.Address.equal
-         address
-         (Oystermark.Extract.Anchor.address anchor.value)
+    && Oystermark.Note.Address.equal address (Oystermark.Note.Anchor.address anchor.value)
   | _ -> false
 ;;
 
@@ -155,7 +153,7 @@ let collect_from_doc
         match i with
         | Cmarkit.Inline.Link (link, meta) | Cmarkit.Inline.Image (link, meta) ->
           (match
-             Oystermark.Vault.Link_ref.of_cmark_reference
+             Oystermark.Note.Link_ref.of_cmark_reference
                (Cmarkit.Inline.Link.reference link)
            with
            | Some link_ref -> Cmarkit.Folder.ret (check_link acc link_ref meta)
@@ -164,7 +162,7 @@ let collect_from_doc
       ~inline_ext_default:(fun _f acc i ->
         match i with
         | Cmarkit.Inline.Ext_wikilink (w, meta) ->
-          check_link acc (Oystermark.Vault.Link_ref.of_wikilink w) meta
+          check_link acc (Oystermark.Note.Link_ref.of_wikilink w) meta
         | _ -> acc)
       ~block_ext_default:(fun _f acc _b -> acc)
       ()

@@ -102,7 +102,7 @@ Each heading becomes one list item:
 
 {ul
   {- The link text is the heading's plain text, as
-     {!Oystermark.Vault.Index.Note.headings} reports it, with [\[], [\]]
+     {!Oystermark.Vault.Index.Entry.headings} reports it, with [\[], [\]]
      and the backslash itself backslash-escaped, so that a heading containing
      brackets still produces a well-formed link.}
   {- The destination is the heading's {e slug} — the identifier the parser

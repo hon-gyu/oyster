@@ -42,7 +42,7 @@ module Path = struct
   let equal : t -> t -> bool = String.equal
 end
 
-type heading = Extract.Anchor.heading =
+type heading = Note.Anchor.heading =
   { text : string
   ; level : int
   ; slug : string
@@ -55,7 +55,7 @@ type file_stat =
   ; mtime : (int * int * int) option
   }
 
-type anchor_value = Extract.Anchor.value =
+type anchor_value = Note.Anchor.value =
   | Heading of heading
   | Caret of string
   | Attr of
@@ -64,18 +64,8 @@ type anchor_value = Extract.Anchor.value =
       }
 [@@deriving sexp, equal, compare]
 
-let link_ref_of_anchor ~(tgt_path : Path.t) (anchor : anchor_value) : Link_ref.t =
-  let fragment : Link_ref.fragment =
-    match anchor with
-    | Heading h -> Hash_path [ h.slug ]
-    | Caret id -> Caret_id id
-    | Attr { id; _ } -> Hash_path [ id ]
-  in
-  { Link_ref.target = Some tgt_path; fragment = Some fragment }
-;;
-
 module Anchor = struct
-  type t = Extract.Anchor.t =
+  type t = Note.Anchor.t =
     { value : anchor_value
     ; loc : loc
     }
@@ -83,23 +73,18 @@ module Anchor = struct
 end
 
 module Link = struct
-  type kind =
+  type kind = Note.Link.kind =
     | Link
     | Embed
   [@@deriving sexp, equal, compare]
 
-  type t =
-    { reference : Link_ref.t
+  type t = Note.Link.t =
+    { reference : Note.Link_ref.t
     ; kind : kind
     ; loc : loc
     }
   [@@deriving sexp, equal, compare]
 end
-
-let loc_of_meta meta =
-  let loc = Cmarkit.Meta.textloc meta in
-  if Cmarkit.Textloc.is_none loc then None else Some loc
-;;
 
 (** Frontmatter accessors *)
 module Frontmatter_ = struct
@@ -152,7 +137,7 @@ module Frontmatter_ = struct
   ;;
 end
 
-module Note = struct
+module Entry = struct
   type t =
     { file_stat : file_stat
     ; frontmatter : Yaml.value option
@@ -161,65 +146,13 @@ module Note = struct
     }
 
   let of_doc (file_stat : file_stat) (doc : Cmarkit.Doc.t) : (t, string) result =
-    let missing_loc = ref false in
-    let links = ref [] in
-    let with_loc meta f =
-      match loc_of_meta meta with
-      | Some loc -> f loc
-      | None -> missing_loc := true
-    in
-    let add_link reference kind meta =
-      with_loc meta (fun loc -> links := { Link.reference; kind; loc } :: !links)
-    in
-    let folder =
-      Cmarkit.Folder.make
-        ~block:(fun f acc b ->
-          match b with
-          | Cmarkit.Block.Ext_keyed ((_label, body), _) ->
-            Cmarkit.Folder.ret (Cmarkit.Folder.fold_block f acc body)
-          | Cmarkit.Block.Ext_attributes (a, _) ->
-            Cmarkit.Folder.ret
-              (Cmarkit.Folder.fold_block f acc (Cmarkit.Block.Attributes.block a))
-          | _ -> Cmarkit.Folder.default)
-        ~inline:(fun f acc i ->
-          match i with
-          | Cmarkit.Inline.Ext_wikilink (w, meta) ->
-            add_link
-              (Link_ref.of_wikilink w)
-              (if Cmarkit.Inline.Wikilink.embed w then Link.Embed else Link.Link)
-              meta;
-            Cmarkit.Folder.default
-          | Cmarkit.Inline.Link (l, meta) ->
-            Option.iter
-              (Link_ref.of_cmark_reference (Cmarkit.Inline.Link.reference l))
-              ~f:(fun r -> add_link r Link.Link meta);
-            Cmarkit.Folder.default
-          | Cmarkit.Inline.Image (l, meta) ->
-            Option.iter
-              (Link_ref.of_cmark_reference (Cmarkit.Inline.Link.reference l))
-              ~f:(fun r -> add_link r Link.Embed meta);
-            Cmarkit.Folder.default
-          | Cmarkit.Inline.Ext_attributes (a, _) ->
-            Cmarkit.Folder.ret
-              (Cmarkit.Folder.fold_inline f acc (Cmarkit.Inline.Attributes.inline a))
-          | _ -> Cmarkit.Folder.default)
-        ~inline_ext_default:(fun _ acc _ -> acc)
-        ~block_ext_default:(fun _ acc _ -> acc)
-        ()
-    in
-    ignore (Cmarkit.Folder.fold_doc folder () doc : unit);
-    let anchors = Extract.Anchor.of_doc doc in
-    if List.exists anchors ~f:(fun a -> Cmarkit.Textloc.is_none a.loc)
-    then missing_loc := true;
-    if !missing_loc
+    let anchors = Note.Anchor.of_doc doc in
+    let links = Note.Link.of_doc doc in
+    if
+      List.exists anchors ~f:(fun a -> Cmarkit.Textloc.is_none a.loc)
+      || List.exists links ~f:(fun l -> Cmarkit.Textloc.is_none l.loc)
     then Error "document is missing source locations"
-    else
-      Ok
-        { file_stat
-        ; frontmatter = Frontmatter.of_doc doc
-        ; anchors
-        ; links = List.rev !links
-        }
+    else Ok { file_stat; frontmatter = Frontmatter.of_doc doc; anchors; links }
   ;;
 
   let of_doc_exn (file_stat : file_stat) (doc : Cmarkit.Doc.t) : t =
@@ -327,7 +260,7 @@ let target_path : target -> Path.t = function
 type backlink_map = (target * backlink) list String.Map.t
 
 type t =
-  { notes_by_path : Note.t String.Map.t
+  { notes_by_path : Entry.t String.Map.t
   ; assets_by_path : Asset.t String.Map.t
   ; backlinks : backlink_map Lazy.t
     (* Resolving every link in the vault is [O(notes + links)] and each
@@ -336,10 +269,10 @@ type t =
         written to (the LSP's incremental updates) from paying for it. *)
   }
 
-let notes (index : t) : Note.t list = Map.data index.notes_by_path
+let notes (index : t) : Entry.t list = Map.data index.notes_by_path
 let assets (index : t) : Asset.t list = Map.data index.assets_by_path
 
-let find_note (index : t) (path : Path.t) : Note.t option =
+let find_note (index : t) (path : Path.t) : Entry.t option =
   Map.find index.notes_by_path path
 ;;
 
@@ -394,60 +327,13 @@ module Resolve_ = struct
       |> List.min_elt ~compare:(fun a b ->
         [%compare: int * int] (match_rank ~source_dir a) (match_rank ~source_dir b))
   ;;
-
-  let heading_matches h q =
-    String.equal h.text q || String.equal h.slug (Common.heading_id_of_text q)
-  ;;
-
-  let resolve_heading anchors query =
-    let hs =
-      List.filter_map anchors ~f:(fun a ->
-        match a.Anchor.value with
-        | Heading h -> Some (h, a)
-        | _ -> None)
-      |> Array.of_list
-    in
-    let qs = Array.of_list query in
-    let rec search hi qi prev =
-      if hi >= Array.length hs || qi >= Array.length qs
-      then None
-      else (
-        let h, a = hs.(hi) in
-        if heading_matches h qs.(qi) && h.level > prev
-        then
-          if qi = Array.length qs - 1
-          then Some a
-          else
-            Option.first_some (search (hi + 1) (qi + 1) h.level) (search (hi + 1) qi prev)
-        else search (hi + 1) qi prev)
-    in
-    if Array.is_empty qs then None else search 0 0 0
-  ;;
-
-  let resolve_fragment note = function
-    | Link_ref.Hash_path hs ->
-      Option.first_some
-        (resolve_heading (Note.anchors note) hs)
-        (match hs with
-         | [ id ] ->
-           List.find (Note.anchors note) ~f:(fun a ->
-             match a.value with
-             | Attr { id = x; _ } -> String.equal x id
-             | _ -> false)
-         | _ -> None)
-    | Link_ref.Caret_id id ->
-      List.find (Note.anchors note) ~f:(fun a ->
-        match a.value with
-        | Caret x -> String.equal x id
-        | _ -> false)
-  ;;
 end
 
 open Resolve_
 
-let resolve (index : t) (source : Path.t) (ref : Link_ref.t) : resolution =
+let resolve (index : t) (source : Path.t) (ref : Note.Link_ref.t) : resolution =
   let path =
-    match ref.Link_ref.target with
+    match ref.Note.Link_ref.target with
     | None -> Some source
     | Some t -> resolve_path index ~source t
   in
@@ -466,7 +352,7 @@ let resolve (index : t) (source : Path.t) (ref : Link_ref.t) : resolution =
         | None -> Error (Missing_anchor p)
         | Some n ->
           Option.value_map
-            (resolve_fragment n f)
+            (Note.Link_ref.resolve_fragment (Entry.anchors n) f)
             ~default:(Error (Missing_anchor p))
             ~f:(fun anchor -> Ok (Anchor { note_path = p; anchor }))))
 ;;
@@ -477,8 +363,8 @@ let resolve (index : t) (source : Path.t) (ref : Link_ref.t) : resolution =
     document order; each bucket preserves that order. *)
 let compute_backlinks (index : t) : backlink_map =
   List.fold (notes index) ~init:String.Map.empty ~f:(fun acc note ->
-    let source = Note.path note in
-    List.fold (Note.links note) ~init:acc ~f:(fun acc link ->
+    let source = Entry.path note in
+    List.fold (Entry.links note) ~init:acc ~f:(fun acc link ->
       match resolve index source link.reference with
       | Error _ -> acc
       | Ok target ->
@@ -495,9 +381,9 @@ let make notes_by_path assets_by_path : t =
 
 let empty : t = make String.Map.empty String.Map.empty
 
-let set_note : t -> Note.t -> t =
+let set_note : t -> Entry.t -> t =
   fun t n ->
-  let p = Note.path n in
+  let p = Entry.path n in
   make (Map.set t.notes_by_path ~key:p ~data:n) (Map.remove t.assets_by_path p)
 ;;
 
@@ -519,9 +405,9 @@ let map_paths (t : t) ~(f : Path.t -> Path.t) : t =
   let move_stat (stat : file_stat) = { stat with rel_path = f stat.rel_path } in
   let notes =
     Map.data t.notes_by_path
-    |> List.map ~f:(fun (note : Note.t) ->
+    |> List.map ~f:(fun (note : Entry.t) ->
       let note = { note with file_stat = move_stat note.file_stat } in
-      Note.path note, note)
+      Entry.path note, note)
     |> String.Map.of_alist_reduce ~f:(fun _ last -> last)
   in
   let assets =
@@ -537,7 +423,7 @@ let map_paths (t : t) ~(f : Path.t -> Path.t) : t =
 let unresolved_links (index : t) (note_path : Path.t) : (Link.t * resolution_error) list =
   let path = note_path in
   Option.value_map (find_note index path) ~default:[] ~f:(fun n ->
-    List.filter_map (Note.links n) ~f:(fun l ->
+    List.filter_map (Entry.links n) ~f:(fun l ->
       match resolve index path l.reference with
       | Ok _ -> None
       | Error e -> Some (l, e)))

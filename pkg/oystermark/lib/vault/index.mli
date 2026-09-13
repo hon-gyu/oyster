@@ -43,7 +43,7 @@ module Path : sig
   val equal : t -> t -> bool
 end
 
-type heading = Extract.Anchor.heading =
+type heading = Note.Anchor.heading =
   { text : string
   ; level : int
   ; slug : string
@@ -56,8 +56,8 @@ type file_stat =
   ; mtime : (int * int * int) option (** modified date YYYY/MM/DD, when available *)
   }
 
-(** See {!Extract.Anchor.value}. *)
-type anchor_value = Extract.Anchor.value =
+(** See {!Note.Anchor.value}. *)
+type anchor_value = Note.Anchor.value =
   | Heading of heading
   | Caret of string
   | Attr of
@@ -66,11 +66,8 @@ type anchor_value = Extract.Anchor.value =
       }
 [@@deriving sexp, equal, compare]
 
-(** Construct a vault-qualified reference to [anchor] in [tgt_path] *)
-val link_ref_of_anchor : tgt_path:Path.t -> anchor_value -> Link_ref.t
-
 module Anchor : sig
-  type t = Extract.Anchor.t =
+  type t = Note.Anchor.t =
     { value : anchor_value
     ; loc : loc (** non-none loc *)
     }
@@ -81,20 +78,20 @@ end
 module Link : sig
   (** How the authored syntax uses its target. Whether an embed transcludes a
       note or displays an asset is determined after resolution. *)
-  type kind =
+  type kind = Note.Link.kind =
     | Link
     | Embed
   [@@deriving sexp, equal, compare]
 
-  type t =
-    { reference : Link_ref.t
+  type t = Note.Link.t =
+    { reference : Note.Link_ref.t
     ; kind : kind
     ; loc : loc (** Non-none loc *)
     }
   [@@deriving sexp, equal, compare]
 end
 
-module Note : sig
+module Entry : sig
   type t
 
   (** @return [Error] if the document is not parsed with source locations enabled (missing location information) *)
@@ -186,12 +183,12 @@ type t
 val empty : t
 
 (** Returned in ascending canonical path order. *)
-val notes : t -> Note.t list
+val notes : t -> Entry.t list
 
 (** Returned in ascending canonical path order. *)
 val assets : t -> Asset.t list
 
-val find_note : t -> Path.t -> Note.t option
+val find_note : t -> Path.t -> Entry.t option
 val find_asset : t -> Path.t -> Asset.t option
 
 (** Insert or replace the note at its canonical path, removing any asset at the same path.
@@ -203,7 +200,7 @@ val find_asset : t -> Path.t -> Asset.t option
 
     The result of any update sequence is observationally equivalent to rebuilding the index
     from its resulting notes and assets. *)
-val set_note : t -> Note.t -> t
+val set_note : t -> Entry.t -> t
 
 (** remove a note from the index. no-op when absent *)
 val remove_note : t -> Path.t -> t
@@ -226,7 +223,7 @@ val map_paths : t -> f:(Path.t -> Path.t) -> t
     @param source
       The path of the note containing the link reference. It doesn't need to be
       present in the index. *)
-val resolve : t -> Path.t -> Link_ref.t -> resolution
+val resolve : t -> Path.t -> Note.Link_ref.t -> resolution
 
 (** The links of the note at the given path that fail to resolve, in document
     order. [ [] ] when the note is absent from the index. *)

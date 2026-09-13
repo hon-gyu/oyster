@@ -19,7 +19,7 @@ type diagnostic =
 
     Such an id reaches the collection below twice: once as the heading's slug,
     which the parser resolves from the attribute, and once as the attribute
-    line {!Oystermark.Vault.Index.Note.val-anchors} sees.  One authored anchor
+    line {!Oystermark.Vault.Index.Entry.val-anchors} sees.  One authored anchor
     is not a collision, so the heading occurrence is dropped and the attribute
     line — the better place to jump to — is kept.  A genuine collision between
     the same id written twice is still two attribute occurrences.
@@ -52,8 +52,8 @@ let collect_anchor_occurrences (doc : Cmarkit.Doc.t) : (string * (int * int)) li
   let file_stat : Index.file_stat =
     { rel_path = "__diagnostics__.md"; birthtime = None; mtime = None }
   in
-  Index.Note.of_doc_exn file_stat doc
-  |> Index.Note.anchors
+  Index.Entry.of_doc_exn file_stat doc
+  |> Index.Entry.anchors
   |> List.filter_map ~f:(fun anchor ->
     let id =
       match anchor.value with
@@ -119,10 +119,10 @@ let compute
           | None -> ""
         in
         let fragment_str =
-          match ll.reference.fragment with
-          | Some (Oystermark.Vault.Link_ref.Hash_path h) -> "#" ^ String.concat ~sep:"#" h
-          | Some (Caret_id b) -> "#^" ^ b
-          | None -> ""
+          Option.value_map
+            ll.reference.fragment
+            ~default:""
+            ~f:Oystermark.Note.Link_ref.string_of_fragment
         in
         let category =
           match ll.kind with

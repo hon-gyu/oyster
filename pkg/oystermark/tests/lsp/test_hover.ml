@@ -117,3 +117,64 @@ let%expect_test "server: hover cursor not on link" =
   print_s [%sexp (result : string option)];
   [%expect {| () |}]
 ;;
+
+(* When the index is older than the file (for example, with unsaved edits),
+   hover resolves the fragment against the file content, using the same rules
+   as the index. *)
+let%expect_test "fragment missing from a stale index is read from the file" =
+  let stale =
+    [ "target.md", "# Target\n"
+    ; "source.md", "[[target#Parent#Child]] [[target#Solo]] [[target#^fresh]]\n"
+    ]
+  in
+  let fresh =
+    "# Target\n\n\
+     ## Parent\n\n\
+     intro\n\n\
+     ### Child\n\n\
+     child body\n\n\
+     ## Solo\n\n\
+     solo body\n\n\
+     new para ^fresh\n"
+  in
+  let index = Vault_helper.make_index stale in
+  let read_file = function
+    | "target.md" -> Some fresh
+    | path -> List.Assoc.find stale ~equal:String.equal path
+  in
+  let content = List.Assoc.find_exn stale ~equal:String.equal "source.md" in
+  List.iter [ "Parent#Child"; "Solo"; "^fresh" ] ~f:(fun needle ->
+    let offset = Option.value_exn (String.substr_index content ~pattern:needle) in
+    let line, character = Lsp_lib.Util.position_of_byte_offset content offset in
+    Lsp_lib.Hover.hover
+      ~index
+      ~rel_path:"source.md"
+      ~content
+      ~line
+      ~character
+      ~read_file
+      ()
+    |> Option.value_map ~default:"<none>" ~f:(fun (text, _, _) -> text)
+    |> printf "== %s\n%s\n" needle);
+  [%expect
+    {|
+    == Parent#Child
+    *Path*:target.md
+
+    ### Child
+
+    child body
+    == Solo
+    *Path*:target.md
+
+    ## Solo
+
+    solo body
+
+    new para ^fresh
+    == ^fresh
+    *Path*:target.md
+
+    new para ^fresh
+    |}]
+;;

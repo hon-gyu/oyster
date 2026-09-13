@@ -1,4 +1,4 @@
 (library
  (name oystermark)
  (public_name oystermark)
- (libraries parse extract vault context dune-build-info))
+ (libraries parse note vault context dune-build-info))

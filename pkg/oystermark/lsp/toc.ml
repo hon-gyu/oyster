@@ -178,8 +178,8 @@ let entries ~(doc : Cmarkit.Doc.t) ~(regions : region list) : entry list =
   let file_stat : Index.file_stat =
     { rel_path = "__toc__.md"; birthtime = None; mtime = None }
   in
-  Index.Note.of_doc_exn file_stat doc
-  |> Index.Note.headings
+  Index.Entry.of_doc_exn file_stat doc
+  |> Index.Entry.headings
   |> List.filter_map ~f:(fun (h, loc) ->
     let located_inside = inside (Cmarkit.Textloc.first_byte loc) in
     if located_inside || String.is_empty (String.strip h.text)

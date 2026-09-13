@@ -49,9 +49,9 @@ let inline_to_plain_text (inline : Inline.t) : string =
   String.concat ~sep:"\n" (List.map lines ~f:(String.concat ~sep:""))
 ;;
 
-(** [Cmarkit.Block.meta] raises on a block type extension defined outside
-    [Cmarkit], such as {!Frontmatter.Frontmatter}, which carries no metadata at
-    all. Such a block has no location to report, which is [Meta.none]. *)
+(** Like [Cmarkit.Block.meta], but returns [Meta.none] instead of raising for a
+    block extension defined outside [Cmarkit], such as
+    {!Frontmatter.Frontmatter}. *)
 let meta_of_block (block : Block.t) : Meta.t = Block.meta ~ext:(fun _ -> Meta.none) block
 
 (** The info string of a code block: [python] for [ ```python ]. [None] for a

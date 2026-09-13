@@ -36,12 +36,12 @@ Pre-resolution file-level parsing: frontmatter, wikilinks, block IDs, and callou
 
 See {!Oystermark.Parse}.
 
-{2 Extract}
+{2 Note}
 
-Read-only queries over parsed blocks: the blocks a link target denotes, and a
-walk over every addressable block of a note.
+A single note: what in it can be addressed and linked to, and the operations
+that read and update it.
 
-See {!Oystermark.Extract}.
+See {!Oystermark.Note}.
 
 {2 Vault}
 

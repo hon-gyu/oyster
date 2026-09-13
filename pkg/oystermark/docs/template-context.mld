@@ -50,8 +50,8 @@ author never wrote there.
  {- [path], [dir], [name], [stem] — [dir] is [""] at the vault root, not ["."],
     so a template can compare it against an authored prefix directly.}
  {- [segments] — [dir] split into components, for grouping by subtree.}
- {- [title] — see {!Oystermark.Vault.Index.Note.title}.}
- {- [tags] — see {!Oystermark.Vault.Index.Note.tags}.}
+ {- [title] — see {!Oystermark.Vault.Index.Entry.title}.}
+ {- [tags] — see {!Oystermark.Vault.Index.Entry.tags}.}
  {- [frontmatter] — the parsed YAML as JSON, so a template can read keys this
     library has no opinion about. [{}] when the note has no frontmatter, or
     when its frontmatter is not a mapping and so has no keys to index.}

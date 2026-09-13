@@ -12,7 +12,7 @@ let option f = function
 ;;
 
 let json_of_fragment = function
-  | Vault.Link_ref.Hash_path path ->
+  | Oystermark.Note.Link_ref.Hash_path path ->
     `Assoc
       [ "kind", `String "hash-path"
       ; "path", `List (List.map path ~f:(fun s -> `String s))
@@ -20,7 +20,7 @@ let json_of_fragment = function
   | Caret_id id -> `Assoc [ "kind", `String "caret-id"; "id", `String id ]
 ;;
 
-let json_of_reference (reference : Vault.Link_ref.t) =
+let json_of_reference (reference : Oystermark.Note.Link_ref.t) =
   `Assoc
     [ "target", option (fun s -> `String s) reference.target
     ; "fragment", option json_of_fragment reference.fragment
@@ -81,14 +81,15 @@ let json_of_link index source (link : Index.Link.t) =
     ]
 ;;
 
-let json_of_note vault (note : Index.Note.t) =
-  let path = Index.Note.path note in
+let json_of_note vault (note : Index.Entry.t) =
+  let path = Index.Entry.path note in
   let doc = Option.value_exn (Vault.find_doc vault path) in
   `Assoc
     [ "path", `String path
     ; "mdast", Json.from_string (Cmarkit_mdast.of_doc ~strip_block_id:false doc)
-    ; "anchors", `List (List.map (Index.Note.anchors note) ~f:json_of_anchor)
-    ; "links", `List (List.map (Index.Note.links note) ~f:(json_of_link vault.index path))
+    ; "anchors", `List (List.map (Index.Entry.anchors note) ~f:json_of_anchor)
+    ; ( "links"
+      , `List (List.map (Index.Entry.links note) ~f:(json_of_link vault.index path)) )
     ]
 ;;
 

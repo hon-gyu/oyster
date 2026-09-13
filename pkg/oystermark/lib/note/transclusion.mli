@@ -1,13 +1,12 @@
-(** {1 Transclusion: the note-local operations embedding is made of}
+(** {1 Transclusion: note-local embedding operations}
 
     {@meta[
     ai-disclosure: autonomous
     ]}
 
-    Recognizing an embed in a note, the fragment a transclusion records,
-    wrapping blocks as a transclusion, and turning a transclusion back into
-    embed syntax. Nothing here resolves a link or reads another note: that is
-    {!Embed}.
+    Recognizes embeds in a note, wraps blocks as a transclusion, and turns a
+    transclusion back into embed syntax. Link resolution and reading other notes
+    happen in [Vault.Embed].
 
     Supported embed sources:
     - {b Cmarkit.Inline.Wikilink embeds}: [!\[\[NOTE\]\]] syntax (parsed as {!Cmarkit.Inline.Wikilink.t}
@@ -20,7 +19,7 @@
 
     - rule: an embed can only be expanded if it's in a container block that
       has no other children or blank children only. Not enforced:
-      {!is_expandable_embed_paragraph} implements the rule, but {!Embed}
+      {!is_expandable_embed_paragraph} implements the rule, but [Vault.Embed]
       recognizes an embed with {!embed_source_of_inline} alone, so an embed
       paragraph among other blocks is expanded too.
     - future TODO: we allow embed Inline.t to violate the above rule. But at
@@ -46,39 +45,38 @@ type embed_meta =
 
 val embed_meta_key : embed_meta Cmarkit.Meta.key
 
-(** Top-level content blocks of a doc, stripping leading frontmatter. When the
-    doc's top block is itself a transclusion, it is kept whole, so that a
-    further embed of the doc still sees the transclusion boundary. *)
+(** Top-level content blocks of a doc, without leading frontmatter. If the doc's
+    top block is a transclusion, it is returned as a single block so the
+    transclusion boundary is kept. *)
 val non_fm_blocks : Cmarkit.Doc.t -> Cmarkit.Block.t list
 
-(** The two kinds of inline that can trigger block-level transclusion. *)
+(** The inlines that can trigger block-level transclusion. *)
 type embed_source =
   | Wikilink_embed of Cmarkit.Inline.Wikilink.t * Cmarkit.Meta.t
-  (** [!\[\[NOTE\]\]], with the meta {!fallback_block} keeps. *)
+  (** [!\[\[NOTE\]\]], with its meta for {!fallback_block}. *)
   | Image_embed of Link_ref.t
-  (** [!\[alt\](note.md)]: a transclusion only when the target resolves to a note. *)
+  (** [!\[alt\](note.md)]. Transcluded only if the target resolves to a note. *)
 
-(** [inline] as an embed source, when it is a single one. A paragraph's inline
-    content is wrapped in [Inlines], which is looked through. *)
+(** The embed source that [inline] consists of, if it is exactly one. A
+    one-element [Inlines] wrapper is ignored. *)
 val embed_source_of_inline : Cmarkit.Inline.t -> embed_source option
 
-(** [block] as an embed source, when it is a paragraph holding a single embed
-    source and every other block of [siblings] is a blank line. *)
+(** The embed source of [block] if [block] is a paragraph with exactly one embed
+    source and every other block in [siblings] is a blank line. *)
 val is_expandable_embed_paragraph
   :  Cmarkit.Block.t
   -> siblings:Cmarkit.Block.t list
   -> embed_source option
 
-(** A paragraph holding the wikilink embed [wl] as a plain link, for an embed
-    that reached the depth limit. *)
+(** A paragraph with [wl] as a plain, non-embed link. Used when an embed reaches
+    the depth limit. *)
 val fallback_block : Cmarkit.Inline.Wikilink.t -> Cmarkit.Meta.t -> Cmarkit.Block.t
 
-(** The fragment a transclusion of [anchor] records in {!embed_meta}. An
-    attribute anchor records none. *)
-val fragment : Extract.Anchor.value -> Cmarkit.Inline.Wikilink.fragment option
+(** The fragment stored in {!embed_meta} for a transclusion of [anchor]. [None]
+    for an attribute anchor. *)
+val fragment : Anchor.value -> Cmarkit.Inline.Wikilink.fragment option
 
-(** [blocks] wrapped as a transclusion: a [Cmarkit.Block.Blocks] carrying
-    {!embed_meta}. *)
+(** [blocks] wrapped in a [Cmarkit.Block.Blocks] node that carries {!embed_meta}. *)
 val transclude
   :  depth:int
   -> source_path:string
@@ -92,9 +90,8 @@ val transclude
     This restores the original embedding syntax (up to the difference between
     wikilink and commonmark inline link, as noted in {!Spec.reverse_embed}).
 
-    The [.md] extension is stripped from [source_path] to produce idiomatic
-    wikilink targets.  Nested embeds are reversed recursively — innermost
-    first, since the mapper walks depth-first. *)
+    The [.md] extension is removed from [source_path]. Nested embeds are reversed
+    innermost first. *)
 val reverse_embed_doc : Cmarkit.Doc.t -> Cmarkit.Doc.t
 
 (** {2 Tests} *)

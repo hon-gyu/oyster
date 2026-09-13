@@ -51,10 +51,9 @@ let json_of_string_opt : string option -> Yojson.Safe.t = function
 let line_of_loc (loc : Cmarkit.Textloc.t) : int = fst (Cmarkit.Textloc.first_line loc)
 
 (* The authored fragment, rendered back to the syntax it was written in. *)
-let json_of_fragment : Vault.Link_ref.fragment option -> Yojson.Safe.t = function
+let json_of_fragment : Note.Link_ref.fragment option -> Yojson.Safe.t = function
   | None -> `Null
-  | Some (Hash_path segments) -> `String ("#" ^ String.concat segments ~sep:"#")
-  | Some (Caret_id id) -> `String ("^" ^ id)
+  | Some fragment -> `String (Note.Link_ref.string_of_fragment fragment)
 ;;
 
 let string_of_link_kind : Index.Link.kind -> string = function
@@ -130,27 +129,27 @@ let json_of_backlink index (b : Index.backlink) : Yojson.Safe.t =
     [ "source", `String b.source
     ; ( "title"
       , match Index.find_note index b.source with
-        | Some note -> `String (Index.Note.title note)
+        | Some note -> `String (Index.Entry.title note)
         | None -> `Null )
     ; "kind", `String (string_of_link_kind b.link.kind)
     ; "line", `Int (line_of_loc b.link.loc)
     ]
 ;;
 
-let json_of_note index (note : Index.Note.t) : Yojson.Safe.t =
-  let path = Index.Note.path note in
+let json_of_note index (note : Index.Entry.t) : Yojson.Safe.t =
+  let path = Index.Entry.path note in
   let backlinks = Index.backlinks_of_note ~include_anchors:true index path in
-  let links = Index.Note.links note in
+  let links = Index.Entry.links note in
   `Assoc
     [ "path", `String path
     ; "dir", `String (dir_of_path path)
     ; "segments", segments_of_path path
     ; "name", `String (Index.Path.basename path)
     ; "stem", `String (stem_of_path path)
-    ; "title", `String (Index.Note.title note)
-    ; "tags", `List (List.map (Index.Note.tags note) ~f:(fun t -> `String t))
+    ; "title", `String (Index.Entry.title note)
+    ; "tags", `List (List.map (Index.Entry.tags note) ~f:(fun t -> `String t))
     ; ( "frontmatter"
-      , match Index.Note.frontmatter note with
+      , match Index.Entry.frontmatter note with
         | None -> `Assoc []
         | Some v ->
           (* A template indexes into [note.frontmatter]; a scalar or sequence at
@@ -158,9 +157,9 @@ let json_of_note index (note : Index.Note.t) : Yojson.Safe.t =
           (match json_of_yaml v with
            | `Assoc _ as assoc -> assoc
            | _ -> `Assoc []) )
-    ; "created", json_of_date (Index.Note.created note)
-    ; "modified", json_of_date (Index.Note.modified note)
-    ; "headings", `List (List.map (Index.Note.headings note) ~f:json_of_heading)
+    ; "created", json_of_date (Index.Entry.created note)
+    ; "modified", json_of_date (Index.Entry.modified note)
+    ; "headings", `List (List.map (Index.Entry.headings note) ~f:json_of_heading)
     ; "links", `List (List.map links ~f:(json_of_link index ~source:path))
     ; "link_count", `Int (List.length links)
     ; "backlinks", `List (List.map backlinks ~f:(json_of_backlink index))
@@ -186,8 +185,8 @@ let json_of_asset (asset : Index.Asset.t) : Yojson.Safe.t =
 (* Tags sorted; the paths under each in ascending canonical path order. *)
 let json_of_tags index : Yojson.Safe.t =
   List.fold (Index.notes index) ~init:String.Map.empty ~f:(fun acc note ->
-    List.fold (Index.Note.tags note) ~init:acc ~f:(fun acc tag ->
-      Map.add_multi acc ~key:tag ~data:(Index.Note.path note)))
+    List.fold (Index.Entry.tags note) ~init:acc ~f:(fun acc tag ->
+      Map.add_multi acc ~key:tag ~data:(Index.Entry.path note)))
   (* [add_multi] prepends and [Index.notes] is already ordered, so reversing
      each bucket restores ascending path order. *)
   |> Map.map ~f:(fun paths -> `List (List.rev_map paths ~f:(fun p -> `String p)))
@@ -198,7 +197,7 @@ let json_of_tags index : Yojson.Safe.t =
 let json_of_unresolved index : Yojson.Safe.t =
   `List
     (List.concat_map (Index.notes index) ~f:(fun note ->
-       let path = Index.Note.path note in
+       let path = Index.Entry.path note in
        List.map (Index.unresolved_links index path) ~f:(fun (link, error) ->
          `Assoc
            [ "source", `String path
@@ -220,10 +219,10 @@ let of_vault (vault : Vault.t) : Yojson.Safe.t =
   let orphans = Index.orphans index in
   let unresolved = json_of_unresolved index in
   let notes_json =
-    List.map notes ~f:(fun note -> Index.Note.path note, json_of_note index note)
+    List.map notes ~f:(fun note -> Index.Entry.path note, json_of_note index note)
   in
   let link_count =
-    List.sum (module Int) notes ~f:(fun note -> List.length (Index.Note.links note))
+    List.sum (module Int) notes ~f:(fun note -> List.length (Index.Entry.links note))
   in
   `Assoc
     [ ( "vault"

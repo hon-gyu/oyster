@@ -15,7 +15,7 @@ module Index = Index
 
 type target =
   { path : string
-  ; address : Extract.Address.t option (** [None] is the note itself. *)
+  ; address : Note.Address.t option (** [None] is the note itself. *)
   }
 [@@deriving sexp, equal]
 
@@ -68,7 +68,7 @@ let matches { path; address } ((_, _, resolution) as link) =
   match address, resolution with
   | None, Ok _ -> true
   | Some address, Ok (Index.Anchor { anchor; _ }) ->
-    Extract.Address.equal address (Extract.Anchor.address anchor.value)
+    Note.Address.equal address (Note.Anchor.address anchor.value)
   | _ -> false
 ;;
 
@@ -133,7 +133,7 @@ let reference_edit ~read_file { address; _ } ~new_name (source, (link : Index.Li
     |> Option.map ~f:(fun hash ->
       let marker_length =
         match address with
-        | Some (Extract.Address.Caret _) -> 1
+        | Some (Note.Address.Caret _) -> 1
         | None | Some (Heading _ | Attr _) -> 0
       in
       { rel_path = source
@@ -159,7 +159,7 @@ let within ~dir path = String.equal path dir || String.is_prefix path ~prefix:(d
 
 let check_moves index moves =
   let paths =
-    List.map (Index.notes index) ~f:Index.Note.path
+    List.map (Index.notes index) ~f:Index.Entry.path
     @ List.map (Index.assets index) ~f:Index.Asset.path
   in
   let check_one (src, dst) =
@@ -267,7 +267,8 @@ let move_edit
       let authored =
         match style with
         | `Wikilink -> String.prefix destination target_stop
-        | `Markdown -> Link_ref.percent_decode (String.prefix destination target_stop)
+        | `Markdown ->
+          Note.Link_ref.percent_decode (String.prefix destination target_stop)
       in
       if String.is_empty authored
       then None
@@ -341,11 +342,11 @@ let attr_id_offset ~(id : string) line =
 ;;
 
 let definition_edit ~index ~read_file { path; address } ~new_name =
-  Option.bind address ~f:(fun (address : Extract.Address.t) ->
+  Option.bind address ~f:(fun (address : Note.Address.t) ->
     Index.find_note index path
     |> Option.bind ~f:(fun note ->
-      List.find (Index.Note.anchors note) ~f:(fun anchor ->
-        Extract.Address.equal address (Extract.Anchor.address anchor.value)))
+      List.find (Index.Entry.anchors note) ~f:(fun anchor ->
+        Note.Address.equal address (Note.Anchor.address anchor.value)))
     |> Option.bind ~f:(fun (anchor : Index.Anchor.t) ->
       read_file path
       |> Option.bind ~f:(fun content ->
@@ -406,10 +407,10 @@ let resolved_links_of_docs index docs =
       |> Option.value_map
            ~default:
              ({ rel_path = source; birthtime = None; mtime = None } : Index.file_stat)
-           ~f:Index.Note.file_stat
+           ~f:Index.Entry.file_stat
     in
-    Index.Note.of_doc_exn file_stat doc
-    |> Index.Note.links
+    Index.Entry.of_doc_exn file_stat doc
+    |> Index.Entry.links
     |> List.map ~f:(fun link -> source, link, Index.resolve index source link.reference))
 ;;
 
@@ -433,7 +434,7 @@ let plan ~index ~docs ~read_file ({ path; address } as target) ~new_name =
   let valid =
     match address with
     | None -> valid_note_name new_name
-    | Some (Extract.Address.Heading _) -> not (String.is_empty (String.strip new_name))
+    | Some (Note.Address.Heading _) -> not (String.is_empty (String.strip new_name))
     | Some (Caret _ | Attr _) -> valid_id new_name
   in
   if not valid
@@ -472,7 +473,7 @@ module For_test = struct
     let index =
       List.fold files ~init:Index.empty ~f:(fun index (path, _) ->
         match List.Assoc.find docs ~equal:String.equal path with
-        | Some doc -> Index.set_note index (Index.Note.of_doc_exn (stat path) doc)
+        | Some doc -> Index.set_note index (Index.Entry.of_doc_exn (stat path) doc)
         | None -> Index.set_asset index (Index.Asset.create (stat path)))
     in
     { files; docs; index }

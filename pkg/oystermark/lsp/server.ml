@@ -1621,7 +1621,7 @@ let project_moves t project renames =
     let indexed =
       List.map
         (Oystermark.Vault.Index.notes vault.index)
-        ~f:Oystermark.Vault.Index.Note.path
+        ~f:Oystermark.Vault.Index.Entry.path
       @ List.map
           (Oystermark.Vault.Index.assets vault.index)
           ~f:Oystermark.Vault.Index.Asset.path

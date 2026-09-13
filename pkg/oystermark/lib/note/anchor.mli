@@ -1,4 +1,4 @@
-(** An anchor as it occurs in a note: what an {!Address.t} resolves to. *)
+(** An anchor in a note, with its location. *)
 
 type heading =
   { text : string (** The heading as plain text. *)
@@ -28,5 +28,5 @@ val address : value -> Address.t
 
 (** Every anchor of [doc] in document order, duplicates included.
 
-    Raises when a heading has no identifier: parse with {!Parse.of_string}. *)
+    @raise when a heading has no identifier: parse with {!Parse.of_string}. *)
 val of_doc : Cmarkit.Doc.t -> t list

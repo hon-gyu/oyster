@@ -1,6 +1,4 @@
 module Index = Index
-module Link_ref = Link_ref
-module Transclusion = Transclusion
 module Embed = Embed
 module Rename = Rename
 open Core

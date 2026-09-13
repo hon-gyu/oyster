@@ -46,10 +46,10 @@ let event_of_loc ~name ~kind = function
       }
 ;;
 
-let events (entry : Oystermark.Vault.Index.Note.t) =
+let events (entry : Oystermark.Vault.Index.Entry.t) =
   let module Index = Oystermark.Vault.Index in
   let headings, blocks, attrs =
-    Index.Note.anchors entry
+    Index.Entry.anchors entry
     |> List.fold ~init:([], [], []) ~f:(fun (headings, blocks, attrs) anchor ->
       match anchor.value with
       | Index.Heading h ->
@@ -82,7 +82,8 @@ let events (entry : Oystermark.Vault.Index.Note.t) =
       | c -> c)
 ;;
 
-let symbols ~(entry : Oystermark.Vault.Index.Note.t) ~(content_length : int) : symbol list
+let symbols ~(entry : Oystermark.Vault.Index.Entry.t) ~(content_length : int)
+  : symbol list
   =
   let roots_rev = ref [] in
   let heading_stack : (int * node) list ref = ref [] in

@@ -1,6 +1,4 @@
 module Index = Index
-module Link_ref = Link_ref
-module Transclusion = Transclusion
 module Embed = Embed
 module Rename = Rename
 open Core
@@ -32,7 +30,7 @@ let build_index
   =
   let index =
     List.fold md_docs ~init:Index.empty ~f:(fun index (path, doc) ->
-      Index.set_note index (Index.Note.of_doc_exn (stat_of_path path) doc))
+      Index.set_note index (Index.Entry.of_doc_exn (stat_of_path path) doc))
   in
   List.fold other_files ~init:index ~f:(fun index path ->
     Index.set_asset index (Index.Asset.create (stat_of_path path)))
@@ -41,10 +39,10 @@ let build_index
 let set_doc (vault : t) path doc : t =
   let stat =
     Index.find_note vault.index path
-    |> Option.value_map ~default:(file_stat path) ~f:Index.Note.file_stat
+    |> Option.value_map ~default:(file_stat path) ~f:Index.Entry.file_stat
   in
   { vault with
-    index = Index.set_note vault.index (Index.Note.of_doc_exn stat doc)
+    index = Index.set_note vault.index (Index.Entry.of_doc_exn stat doc)
   ; documents = Map.set vault.documents ~key:path ~data:doc
   }
 ;;
@@ -75,9 +73,9 @@ let of_docs ~(base : t) (docs : (string * Cmarkit.Doc.t) list) : t =
     List.fold docs ~init:Index.empty ~f:(fun index (path, doc) ->
       let stat =
         Index.find_note base.index path
-        |> Option.value_map ~default:(file_stat path) ~f:Index.Note.file_stat
+        |> Option.value_map ~default:(file_stat path) ~f:Index.Entry.file_stat
       in
-      Index.set_note index (Index.Note.of_doc_exn stat doc))
+      Index.set_note index (Index.Entry.of_doc_exn stat doc))
   in
   let index = List.fold (Index.assets base.index) ~init:index ~f:Index.set_asset in
   { base with index; documents = String.Map.of_alist_exn docs }

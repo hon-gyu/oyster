@@ -45,7 +45,7 @@ let print_field (json : Yojson.Safe.t) (field : string) =
 
 (** {1 Titles}
 
-    See {!Oystermark.Vault.Index.Note.title}. *)
+    See {!Oystermark.Vault.Index.Entry.title}. *)
 
 let%expect_test "title falls back frontmatter, then first h1, then basename" =
   let json =
@@ -119,7 +119,7 @@ let%expect_test "the tag index groups paths by tag" =
 
 (** {1 Dates}
 
-    [created] is authored, not stat'd: see {!Oystermark.Vault.Index.Note.created}
+    [created] is authored, not stat'd: see {!Oystermark.Vault.Index.Entry.created}
     for why. [modified] is [null] here because these vaults never touch disk. *)
 
 let%expect_test "created reads frontmatter created, then date" =

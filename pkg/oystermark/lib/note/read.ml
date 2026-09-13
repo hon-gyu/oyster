@@ -1,9 +1,4 @@
-(** Read-only queries over parsed blocks: the blocks a link target denotes, used
-    by embedding and hover, and a walk over every addressable block of a note. *)
 open Core
-
-module Address = Address
-module Anchor = Anchor
 
 (** Flatten a block list by splicing any top-level [Blocks] nodes into a flat
     sequence. *)
@@ -14,10 +9,7 @@ let rec flatten (blocks : Cmarkit.Block.t list) : Cmarkit.Block.t list =
     | other -> [ other ])
 ;;
 
-(** Collect the section starting at the heading whose identifier (see
-    {!Parse.Common.heading_id}) is [heading_id], up to (but not including) the
-    next heading of equal or lesser level.  Returns [] when the heading is not
-    found. *)
+(** The [Heading] case of {!read}. *)
 let get_heading_section (blocks : Cmarkit.Block.t list) (heading_id : string)
   : Cmarkit.Block.t list
   =
@@ -64,17 +56,7 @@ let get_heading_section (blocks : Cmarkit.Block.t list) (heading_id : string)
   Option.value (in_list blocks) ~default:[]
 ;;
 
-(** Extract the block that {!Cmarkit.Block.Block_id.t} points to.
-
-    Three cases:
-    - {b Inline}: the [^id] appears at the end of a paragraph with other content.
-      The paragraph itself is the target.
-    - {b Standalone}: the [^id] is the entire paragraph.
-      It references the previous non-blank block.
-    - {b Keyed}: the id is on a {!Cmarkit.Block.Ext_keyed} node, having been
-      forwarded from the paragraph or list item the node supplanted. The node
-      itself is the target, so the reference denotes the label {e and} everything
-      the key claimed as children. It anchors a whole subtree. *)
+(** The [Caret] case of {!read}. *)
 let get_block_by_caret_id (blocks : Cmarkit.Block.t list) (id : string)
   : Cmarkit.Block.t option
   =
@@ -139,17 +121,7 @@ let get_block_by_caret_id (blocks : Cmarkit.Block.t list) (id : string)
   search None (flatten blocks)
 ;;
 
-(** Extract the block carrying an explicit djot attribute id ([{#id}]).
-
-    Two cases (see {!page-"feature-attribute-anchors"}):
-    - {b Block attribute}: a [Block.Ext_attributes] whose merged attribute has
-      the id.  The {e wrapped} block is returned.
-    - {b Inline attribute}: an [Inline.Ext_attributes] carrying the id somewhere
-      in a paragraph's or heading's inline content.  The containing block is
-      returned.
-
-    Container blocks (block quotes, list items, [Blocks]) are searched
-    recursively; the first match in document order wins. *)
+(** The [Attr] case of {!read}. *)
 let get_block_by_attr_id (blocks : Cmarkit.Block.t list) (id : string)
   : Cmarkit.Block.t option
   =
@@ -277,23 +249,14 @@ end
 (* Walk
    ==== *)
 
-(** A block in document order, with everything needed to select it. No field is
-    derivable from another. What is derivable from [block], such as its kind or a
-    code block's info string, is a function of the block instead. *)
 type located_block =
   { block : Cmarkit.Block.t
-  ; index : int (** 1-based position in the walk, over the whole note *)
+  ; index : int
   ; attr_id : string option
-    (** a djot [ {#id} ] attribute. Unlike an [ ^id ] (see
-        {!Parse.Common.caret_id_of_block}) this is not recoverable from [block]: the walk
-        unwraps the [Ext_attributes] node that carries it. *)
-  ; heading_path : string list (** enclosing heading ids, outermost first *)
-  ; heading_text : string list (** the same headings as plain text *)
+  ; heading_path : string list
+  ; heading_text : string list
   }
 
-(** The block's kind, as a stable name for [-kind] and for JSON. A callout is
-    reported as [callout] rather than [block_quote]: it is a quote only in
-    representation, and an author selecting one is not asking for quotes. *)
 let kind_of_block (block : Cmarkit.Block.t) : string =
   let open Cmarkit in
   match block with
@@ -322,9 +285,8 @@ let kind_of_block (block : Cmarkit.Block.t) : string =
   | _ -> "unknown"
 ;;
 
-(** The id of the first inline [ {#id} ] attribute in [inline], if any. The
-    block-level counterpart is an [Ext_attributes] wrapper, handled in the walk
-    itself. *)
+(** The id of the first inline [ {#id} ] attribute in [inline], if any. Block
+    attributes are handled in {!walk}. *)
 let inline_attr_id (inline : Cmarkit.Inline.t) : string option =
   let open Cmarkit in
   let folder =
@@ -346,15 +308,6 @@ let inline_attr_id (inline : Cmarkit.Inline.t) : string option =
   Folder.fold_inline folder None inline
 ;;
 
-(** Every addressable block of [blocks] in document order, containers before
-    their contents.
-
-    Blank lines, [Blocks] groupings and [Ext_attributes] wrappers are not blocks
-    an author would name, so they are not reported: an attributes wrapper
-    forwards its id to the block it wraps, which is what [ {#id} ] denotes.
-
-    A list item is not reported: it has no [Cmarkit.Block.t] of its own, its
-    syntax being the marker. Its contents are walked as the blocks they are. *)
 let walk (blocks : Cmarkit.Block.t list) : located_block list =
   let open Cmarkit in
   let next_index =
@@ -383,7 +336,7 @@ let walk (blocks : Cmarkit.Block.t list) : located_block list =
     | Block.Blank_line _ | Block.Link_reference_definition _ -> headings
     | Block.Blocks (bs, _) -> siblings ~headings bs
     | Block.Ext_attributes (a, _) ->
-      (* The wrapper is not the block; its id belongs to what it wraps. *)
+      (* Report the wrapper's id on the block it wraps. *)
       let attr_id =
         match Attribute.id (Block.Attributes.attributes a) with
         | Some _ as id -> id
@@ -434,8 +387,7 @@ let walk (blocks : Cmarkit.Block.t list) : located_block list =
         ignore (siblings ~headings [ Block.List_item.block item ] : _ list));
       headings
     | block ->
-      (* A block kind this module does not know is not one an author can name.
-         Frontmatter is the case in practice: it carries no metadata at all. *)
+      (* Skip kinds this module does not know, such as frontmatter. *)
       if String.equal (kind_of_block block) "unknown"
       then headings
       else (
@@ -449,26 +401,11 @@ let walk (blocks : Cmarkit.Block.t list) : located_block list =
 (* Content
    ======= *)
 
-(** What a container holds, once its own syntax is taken off.
-
-    The two cases are not a convenience: a code block holds {e text}, which the
-    parser has already stripped of its fence and indentation, so its content is
-    exact. A block quote holds {e blocks}, whose source still carries the
-    [>] marker on every line, so the content is a markdown value, and the only
-    faithful way to write a markdown value back out is to render it. Rendering
-    normalizes (fences, list markers, wrapping), so [Markdown] content is not
-    byte-for-byte what the author typed, while [Literal] content is. *)
 type content =
   | Literal of string
   | Markdown of Cmarkit.Block.t
   | Not_a_container
 
-(** The contents of the container [located] addresses.
-
-    [Not_a_container] for a paragraph, heading, table or thematic break: they
-    hold inlines, rows, or nothing at all, so there is no single value inside to
-    ask for. A list is not a container either: its syntax lives in the item
-    markers, and its items' blocks are walked in their own right. *)
 let content_of_located_block (located : located_block) : content =
   let open Cmarkit in
   let code_lines cb =
@@ -484,8 +421,7 @@ let content_of_located_block (located : located_block) : content =
     Literal (lines |> List.map ~f:Block_line.to_string |> String.concat ~sep:"\n")
   | Block.Block_quote (bq, meta) ->
     let inner = Block.Block_quote.block bq in
-    (* A callout's [ [!note] Title ] header is the callout's own syntax, the
-         way a fence is a code block's; its contents are what follows. *)
+    (* Drop the callout's [ [!note] Title ] header line. *)
     (match Block.Callout.find meta with
      | Some _ -> Markdown (Block.Callout.strip_header inner)
      | None -> Markdown inner)
@@ -495,10 +431,6 @@ let content_of_located_block (located : located_block) : content =
   | _ -> Not_a_container
 ;;
 
-(** The contents of [located] as a string, given the document's label
-    definitions (a rendered container may hold reference links).
-
-    [Error kind] names the kind that has no contents to give. *)
 let content_string ~(defs : Cmarkit.Label.defs) (located : located_block)
   : (string, string) Result.t
   =
@@ -511,7 +443,7 @@ let content_string ~(defs : Cmarkit.Label.defs) (located : located_block)
 (* Test
    ==== *)
 
-let%test_module "Extract" =
+let%test_module "Read" =
   (module struct
     open Parse.For_test
     open For_test

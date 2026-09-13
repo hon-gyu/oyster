@@ -3,22 +3,14 @@
     Spec: {!page-"feature-hover"}, {!page-"feature-go-to-definition"}.
     Impl: {!Lsp_lib.Hover}, {!Lsp_lib.Go_to_definition}.
 
-    The two answer the same question — {i which anchor does this link name?} —
-    through different code: go-to-definition goes through
-    {!Oystermark.Vault.Index.resolve}, hover falls back to
-    {!Lsp_lib.Anchors} when resolution stops at the note.  Both now take the
-    identity of an anchor from the parser, which is what removed the drift this
-    test was written to catch — hover used to re-derive a slug from the
-    heading's text, so an authored [ \{#id\} ] previewed the wrong section.
-    The test stays because the two paths remain distinct: when they disagree
-    the symptom is a link that previews one section and jumps to another.
+    The two use different code: go-to-definition uses
+    {!Oystermark.Vault.Index.resolve}, and hover reads the note with
+    {!Oystermark.Note.read}, also when resolution stops at the note. If they
+    disagree, a link previews one section and jumps to another.
 
-    The invariant checked here: the first line of the hover body is the line
-    go-to-definition lands on, in the file it lands in.  The two are compared
-    on their letters and digits alone, since hover shows a block re-rendered
-    from the AST while the definition line is raw source: [ [key term]{#anchor} ]
-    on one side is [key term{#anchor}] on the other, and that is the same
-    anchor. *)
+    Checked invariant: the first line of the hover body is the line
+    go-to-definition lands on, in the same file. Lines are compared on letters
+    and digits only. *)
 
 open Core
 open Lsp_helper

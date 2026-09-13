@@ -1,7 +1,7 @@
-(** What a link fragment names inside one note.
+(** A location in a note that a link fragment can name.
 
-    The note itself has no address: where either is meant, an [Address.t option]
-    is [None] for the note. *)
+    Where the whole note is also possible, [Address.t option] is used, with
+    [None] for the note. *)
 
 type t =
   | Heading of string
@@ -10,6 +10,6 @@ type t =
   | Attr of string (** A djot attribute id [ {#id} ], on a block or on inlines. *)
 [@@deriving sexp, equal, compare]
 
-(** Heading identifiers, caret ids and attribute ids share one namespace per
-    note, so the id alone does not say which kind of anchor it names. *)
+(** The id without its kind. Heading, caret and attribute ids share one
+    namespace per note, so an id alone can be ambiguous. *)
 val id : t -> string

@@ -59,7 +59,7 @@ continues to see the pre-edit state.
 
 {ol
   {- Read and parse the saved file, then replace only that document
-     and its {!Oystermark.Vault.Index.Note.t} using the index's
+     and its {!Oystermark.Vault.Index.Entry.t} using the index's
      persistent update operation.}
   {- For every entry in [open_docs], read its current disk content
      and republish diagnostics.  This is what clears stale warnings

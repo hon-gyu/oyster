@@ -14,7 +14,7 @@ open Core
 
 type target =
   { path : string
-  ; address : Extract.Address.t option (** [None] is the note itself. *)
+  ; address : Note.Address.t option (** [None] is the note itself. *)
   }
 [@@deriving sexp, equal]
 

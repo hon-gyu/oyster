@@ -2,7 +2,7 @@
 
 open! Core
 open Oystermark
-module Link_ref = Vault.Link_ref
+module Link_ref = Note.Link_ref
 
 (* Extract all Link_ref.t values from a parsed document, in order. *)
 let extract_link_refs (doc : Cmarkit.Doc.t) : Link_ref.t list =

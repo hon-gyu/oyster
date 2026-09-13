@@ -1,38 +1,31 @@
-(** Where a note's anchors are, according to the parser.
+(** Anchor positions in a note, taken from the parser.
 
-    Four features need the same thing — {i is there a heading with this slug,
-    and where does its section end?}, {i what anchor is the cursor sitting
-    on?} — and each used to answer it by reading lines: count the leading
-    [#]s, slugify what follows, look for a trailing [ ^id], match a [\{#id\}]
-    line. That is a second implementation of Markdown, and it drifts from the
-    one that decides what the note actually is: it finds headings inside
-    fenced code blocks, and it derives a slug from the heading's text, so a
-    heading carrying an authored [ \{#id\} ] or a parser-deduplicated
-    [heading-1] cannot be found at all.
+    Features that need anchor positions, such as finding the anchor under the
+    cursor, use this module instead of scanning lines for [#], [ ^id] or
+    [\{#id\}]. A line scan disagrees with the parser: it finds headings inside
+    fenced code blocks, and it cannot find a heading with an authored
+    [ \{#id\} ] or a deduplicated identifier such as [heading-1].
 
-    This module is the single parser-based answer, built on the same
-    extractors the vault index uses. Nothing here inspects a character of
-    Markdown syntax.
+    Built on {!Oystermark.Note.Anchor}, the same scan the vault index uses.
 
     See {!page-"feature-index"}, and {!page-"feature-attribute-anchors"} for
-    what an anchor {e is}. *)
+    what an anchor is. *)
 
 open Core
 
 (** {1 Anchors} *)
 
-(** One located anchor.
+(** An anchor with its position.
 
-    Its {!address} is what a [#fragment] must name to reach it: for a heading
-    that is the identifier {e the parser assigned} — an authored [ \{#id\} ]
-    included, and deduplicated with [-1], [-2] — not a slug re-derived from the
-    text.
+    For a heading, {!address} uses the identifier the parser assigned: an
+    authored [ \{#id\} ], or a slug deduplicated with [-1], [-2]. It is not
+    recomputed from the heading text.
 
-    [first_line] and [last_line] are the anchor's own extent, 0-based. An
-    attribute anchor starts at the [ \{#id\} ] line and runs through the block
-    it attributes; a caret id spans its whole paragraph. *)
+    [first_line] and [last_line] are 0-based. An attribute anchor starts at its
+    [ \{#id\} ] line and ends with the block it applies to; a caret anchor
+    spans its whole paragraph. *)
 type t =
-  { value : Oystermark.Extract.Anchor.value
+  { value : Oystermark.Note.Anchor.value
   ; first_line : int
   ; last_line : int (** Inclusive. *)
   ; first_byte : int
@@ -40,13 +33,10 @@ type t =
   }
 [@@deriving sexp, equal, compare]
 
-let address (a : t) : Oystermark.Extract.Address.t =
-  Oystermark.Extract.Anchor.address a.value
-;;
+let address (a : t) : Oystermark.Note.Address.t = Oystermark.Note.Anchor.address a.value
 
-(** The line the id is {e written} on — where a rename edits and a definition
-    jump should land. For a caret id that is the paragraph's last line, since
-    the [ ^id] closes it; for the others it is where the anchor starts. *)
+(** The line the id is written on, where a rename edits and go-to-definition
+    lands: the paragraph's last line for a caret id, the first line otherwise. *)
 let write_line (a : t) : int =
   match a.value with
   | Heading _ | Attr _ -> a.first_line
@@ -64,14 +54,11 @@ let of_loc (loc : Cmarkit.Textloc.t option) : (int * int * int * int) option =
   | _ -> None
 ;;
 
-(** Every anchor of [doc], in source order.  Anchors the parser could not
-    locate are dropped: without a position there is nothing to answer with.
-    An attribute anchor's location covers its [ \{#id\} ] line as well as the
-    block it attributes: the parser spans the specifier, so nothing here has
-    to guess where it was written. *)
+(** Every anchor of [doc] in source order. Anchors without a location are
+    dropped. An attribute anchor's location includes its [ \{#id\} ] line. *)
 let of_doc (doc : Cmarkit.Doc.t) : t list =
-  Oystermark.Extract.Anchor.of_doc doc
-  |> List.filter_map ~f:(fun (anchor : Oystermark.Extract.Anchor.t) ->
+  Oystermark.Note.Anchor.of_doc doc
+  |> List.filter_map ~f:(fun (anchor : Oystermark.Note.Anchor.t) ->
     of_loc (Some anchor.loc)
     |> Option.map ~f:(fun (first_line, last_line, first_byte, last_byte) ->
       { value = anchor.value; first_line; last_line; first_byte; last_byte }))
@@ -102,7 +89,7 @@ let at_line (ts : t list) ~(line : int) : t option =
   let on_line k = List.find ts ~f:(fun a -> covers a && k a.value) in
   List.find_map
     [ (function
-        | Oystermark.Extract.Anchor.Heading _ -> true
+        | Oystermark.Note.Anchor.Heading _ -> true
         | _ -> false)
     ; (function
         | Caret _ -> true

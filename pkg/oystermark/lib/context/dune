@@ -1,7 +1,7 @@
 (library
  (name context)
  (public_name oystermark.context)
- (libraries vault parse core yaml yojson)
+ (libraries vault note parse core yaml yojson)
  (inline_tests)
  (preprocess
   (pps ppx_jane ppx_string)))

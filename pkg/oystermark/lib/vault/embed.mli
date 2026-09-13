@@ -4,22 +4,21 @@
     ai-disclosure: autonomous
     ]}
 
-    A post-resolution, pre-render transformation over a whole vault. Each
-    paragraph holding a single embed source (see {!Transclusion}) whose link
-    resolves to a note, or to an anchor in one, is replaced by a
-    {!Transclusion.transclude} of the blocks that target denotes (see
-    {!Extract.read}). Frontmatter is never embedded.
+    Runs over a whole vault, after link resolution and before rendering. A
+    paragraph with a single embed source (see {!Note.Transclusion}) is replaced
+    by a transclusion ({!Note.Transclusion.transclude}) of the blocks its link
+    target names ({!Note.read}), when the link resolves to a note or to an
+    anchor in a note. Frontmatter is never embedded.
 
-    A transcluded note is expanded first, so the embeds inside it are
-    transcluded too. A self-reference reads the note as it stands, without
-    expanding it again.
+    The target note is expanded before it is transcluded, so nested embeds are
+    expanded too. A self-reference uses the note unexpanded.
 
     An embed whose link does not resolve, or resolves to an asset, is left
-    as-is.
+    unchanged.
 
     Depth limiting: embedding is allowed up to [max_depth] levels deep.
     When [embed_depth >= max_depth] the wikilink is replaced with a plain
-    fallback link ({!Transclusion.fallback_block}) instead; image embeds are
+    fallback link ({!Note.Transclusion.fallback_block}) instead; image embeds are
     left as-is. *)
 
 (** Expand all embed wikilinks and image links in a list of resolved docs.

@@ -270,17 +270,15 @@ let truncate ~max_chars (s : string) : string =
     shown ^ "\n\n" ^ notice)
 ;;
 
-(** The text [address] names in [content], [None] when it names nothing.
+(** The source text of the blocks [address] names in [content], or [None].
 
-    The blocks are the ones embedding transcludes ({!Oystermark.Extract.read}),
-    shown as the file writes them ({!Oystermark.Extract.source_text}) rather
-    than re-rendered.  See {!page-"feature-hover"}. *)
-let read_address (address : Oystermark.Extract.Address.t) (content : string)
-  : string option
-  =
+    The blocks are chosen as for embedding ({!Oystermark.Note.read}) and shown
+    as written in the file ({!Oystermark.Note.source_text}). See
+    {!page-"feature-hover"}. *)
+let read_address (address : Oystermark.Note.Address.t) (content : string) : string option =
   let doc = Lsp_util.parse_doc content in
-  Oystermark.Extract.read [ Cmarkit.Doc.block doc ] address
-  |> Oystermark.Extract.source_text content
+  Oystermark.Note.read [ Cmarkit.Doc.block doc ] address
+  |> Oystermark.Note.source_text content
 ;;
 
 (** {2 Formatting} *)
@@ -354,18 +352,17 @@ let hover
         Some (path, Fixed (Media.describe ~label:"Binary file" file_content))
       | Some file_content ->
         let body =
+          (* The index may be older than [file_content] (for example, with unsaved
+             edits), so resolve the fragment against [file_content]. *)
           match link_ref.fragment with
-          | Some (Oystermark.Vault.Link_ref.Hash_path hs) ->
-            (* Fragment present but resolve fell back — try to find section. *)
-            let slug =
-              String.concat
-                ~sep:"-"
-                (List.map hs ~f:Oystermark.Parse.Common.heading_id_of_text)
-            in
-            Option.value (read_address (Heading slug) file_content) ~default:file_content
-          | Some (Caret_id bid) ->
-            Option.value (read_address (Caret bid) file_content) ~default:file_content
           | None -> file_content
+          | Some fragment ->
+            Oystermark.Note.Link_ref.resolve_fragment
+              (Oystermark.Note.Anchor.of_doc (Lsp_util.parse_doc file_content))
+              fragment
+            |> Option.bind ~f:(fun (anchor : Oystermark.Note.Anchor.t) ->
+              read_address (Oystermark.Note.Anchor.address anchor.value) file_content)
+            |> Option.value ~default:file_content
         in
         Some (path, Text body)
     in
@@ -388,9 +385,7 @@ let hover
          | Some file_content ->
            let body =
              Option.value
-               (read_address
-                  (Oystermark.Extract.Anchor.address anchor.value)
-                  file_content)
+               (read_address (Oystermark.Note.Anchor.address anchor.value) file_content)
                ~default:file_content
            in
            Some (path, Text body))

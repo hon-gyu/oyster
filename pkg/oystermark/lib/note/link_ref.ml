@@ -1,7 +1,6 @@
 (** Unified internal link reference extracted from both wikilinks and markdown links, abstracting away source syntax. *)
 
 open Core
-open Parse
 
 type fragment =
   | Hash_path of string list
@@ -23,9 +22,6 @@ type t =
   ; fragment : fragment option
   }
 [@@deriving sexp, equal, compare]
-
-let to_markdown_link (t : t) : Cmarkit.Inline.Link.t = failwith "TODO"
-let to_markdown_link_text (t : t) : string = failwith "TODO"
 
 let of_wikilink (w : Cmarkit.Inline.Wikilink.t) : t =
   let fragment =
@@ -88,4 +84,64 @@ let of_cmark_reference (ref : Cmarkit.Inline.Link.reference) : t option =
        (* When destination is empty, Obsidian resolves it to a file named "().md". *)
        Some { target = Some "().md"; fragment = None }
      | Some (dest, dest_meta) -> of_cmark_dest dest)
+;;
+
+let of_address ~(target : string) (address : Address.t) : t =
+  let fragment =
+    match address with
+    | Heading id | Attr id -> Hash_path [ id ]
+    | Caret id -> Caret_id id
+  in
+  { target = Some target; fragment = Some fragment }
+;;
+
+let string_of_fragment : fragment -> string = function
+  | Hash_path segments -> "#" ^ String.concat segments ~sep:"#"
+  | Caret_id id -> "#^" ^ id
+;;
+
+let resolve_fragment (anchors : Anchor.t list) (fragment : fragment) : Anchor.t option =
+  let heading_matches (h : Anchor.heading) q =
+    String.equal h.text q || String.equal h.slug (Parse.Common.heading_id_of_text q)
+  in
+  let resolve_heading query =
+    let hs =
+      List.filter_map anchors ~f:(fun (a : Anchor.t) ->
+        match a.value with
+        | Heading h -> Some (h, a)
+        | Caret _ | Attr _ -> None)
+      |> Array.of_list
+    in
+    let qs = Array.of_list query in
+    let rec search hi qi prev =
+      if hi >= Array.length hs || qi >= Array.length qs
+      then None
+      else (
+        let h, a = hs.(hi) in
+        if heading_matches h qs.(qi) && h.level > prev
+        then
+          if qi = Array.length qs - 1
+          then Some a
+          else
+            Option.first_some (search (hi + 1) (qi + 1) h.level) (search (hi + 1) qi prev)
+        else search (hi + 1) qi prev)
+    in
+    if Array.is_empty qs then None else search 0 0 0
+  in
+  match fragment with
+  | Hash_path hs ->
+    Option.first_some
+      (resolve_heading hs)
+      (match hs with
+       | [ id ] ->
+         List.find anchors ~f:(fun (a : Anchor.t) ->
+           match a.value with
+           | Attr { id = x; _ } -> String.equal x id
+           | Heading _ | Caret _ -> false)
+       | _ -> None)
+  | Caret_id id ->
+    List.find anchors ~f:(fun (a : Anchor.t) ->
+      match a.value with
+      | Caret x -> String.equal x id
+      | Heading _ | Attr _ -> false)
 ;;

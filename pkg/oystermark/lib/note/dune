@@ -1,6 +1,6 @@
 (library
- (name extract)
- (public_name oystermark.extract)
+ (name note)
+ (public_name oystermark.note)
  (libraries parse oymarkit core)
  (inline_tests)
  (preprocess
