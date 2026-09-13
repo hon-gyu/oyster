@@ -21,7 +21,7 @@
 
     Containers are searched recursively; the first match in document order
     wins. *)
-val read : Cmarkit.Block.t list -> Address.t -> Cmarkit.Block.t list
+val read : Cmarkit.Block.t list -> Anchor.Address.t -> Cmarkit.Block.t list
 
 (** The source text of [blocks]: [content] from the start of the first block to
     the end of the last, with trailing whitespace removed. [None] if no block

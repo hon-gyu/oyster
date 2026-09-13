@@ -21,7 +21,7 @@ let non_fm_blocks (doc : Cmarkit.Doc.t) : Cmarkit.Block.t list =
 
 type embed_source =
   | Wikilink_embed of Cmarkit.Inline.Wikilink.t * Cmarkit.Meta.t
-  | Image_embed of Link_ref.t
+  | Image_embed of Link.Ref.t
 
 let embed_source_of_inline (inline : Cmarkit.Inline.t) : embed_source option =
   let check_one (i : Cmarkit.Inline.t) : embed_source option =
@@ -29,7 +29,7 @@ let embed_source_of_inline (inline : Cmarkit.Inline.t) : embed_source option =
     | Cmarkit.Inline.Ext_wikilink (w, meta) when Cmarkit.Inline.Wikilink.embed w ->
       Some (Wikilink_embed (w, meta))
     | Cmarkit.Inline.Image (link, _) ->
-      Link_ref.of_cmark_reference (Cmarkit.Inline.Link.reference link)
+      Link.Ref.of_cmark_reference (Cmarkit.Inline.Link.reference link)
       |> Option.map ~f:(fun link_ref -> Image_embed link_ref)
     | _ -> None
   in

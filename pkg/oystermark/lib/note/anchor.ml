@@ -1,5 +1,17 @@
 open Core
 
+module Address = struct
+  type t =
+    | Heading of string
+    | Caret of string
+    | Attr of string
+  [@@deriving sexp, equal, compare]
+
+  let id = function
+    | Heading id | Caret id | Attr id -> id
+  ;;
+end
+
 type loc = Cmarkit.Textloc.t
 
 let sexp_of_loc = Parse.Textloc_conv.sexp_of_t

@@ -33,7 +33,9 @@ type t =
   }
 [@@deriving sexp, equal, compare]
 
-let address (a : t) : Oystermark.Note.Address.t = Oystermark.Note.Anchor.address a.value
+let address (a : t) : Oystermark.Note.Anchor.Address.t =
+  Oystermark.Note.Anchor.address a.value
+;;
 
 (** The line the id is written on, where a rename edits and go-to-definition
     lands: the paragraph's last line for a caret id, the first line otherwise. *)

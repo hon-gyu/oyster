@@ -12,7 +12,7 @@ let option f = function
 ;;
 
 let json_of_fragment = function
-  | Oystermark.Note.Link_ref.Hash_path path ->
+  | Oystermark.Note.Link.Ref.Hash_path path ->
     `Assoc
       [ "kind", `String "hash-path"
       ; "path", `List (List.map path ~f:(fun s -> `String s))
@@ -20,7 +20,7 @@ let json_of_fragment = function
   | Caret_id id -> `Assoc [ "kind", `String "caret-id"; "id", `String id ]
 ;;
 
-let json_of_reference (reference : Oystermark.Note.Link_ref.t) =
+let json_of_reference (reference : Oystermark.Note.Link.Ref.t) =
   `Assoc
     [ "target", option (fun s -> `String s) reference.target
     ; "fragment", option json_of_fragment reference.fragment

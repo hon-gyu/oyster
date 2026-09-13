@@ -1,7 +1,7 @@
 open! Core
 open Oystermark
 module Index = Vault.Index
-module Link_ref = Note.Link_ref
+module Link_ref = Note.Link.Ref
 
 (* Vault index modelled after the tt vault to cover behaviors documented in Note 1.md. *)
 let test_index : Index.t =

@@ -275,7 +275,9 @@ let truncate ~max_chars (s : string) : string =
     The blocks are chosen as for embedding ({!Oystermark.Note.read}) and shown
     as written in the file ({!Oystermark.Note.source_text}). See
     {!page-"feature-hover"}. *)
-let read_address (address : Oystermark.Note.Address.t) (content : string) : string option =
+let read_address (address : Oystermark.Note.Anchor.Address.t) (content : string)
+  : string option
+  =
   let doc = Lsp_util.parse_doc content in
   Oystermark.Note.read [ Cmarkit.Doc.block doc ] address
   |> Oystermark.Note.source_text content
@@ -357,7 +359,7 @@ let hover
           match link_ref.fragment with
           | None -> file_content
           | Some fragment ->
-            Oystermark.Note.Link_ref.resolve_fragment
+            Oystermark.Note.Link.Ref.resolve_fragment
               (Oystermark.Note.Anchor.of_doc (Lsp_util.parse_doc file_content))
               fragment
             |> Option.bind ~f:(fun (anchor : Oystermark.Note.Anchor.t) ->

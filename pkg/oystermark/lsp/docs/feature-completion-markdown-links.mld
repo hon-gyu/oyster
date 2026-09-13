@@ -107,7 +107,7 @@ brackets out of the destination it reports, so the resolver never sees them.
 
 All three encodings would in fact resolve. Backslash escapes are removed from
 the destination before it reaches us, and
-{!Oystermark.Note.Link_ref.percent_decode} runs on every Markdown
+{!Oystermark.Note.Link.Ref.percent_decode} runs on every Markdown
 destination, so [my\ note.md] and [my%20note.md] resolve as readily as the
 angle-bracketed form. The choice between them is therefore about {e reading},
 not validity: angle brackets leave the path legible in the source, and this
@@ -207,7 +207,7 @@ malformed.
      from.}
   {- {b The empty destination is a resolved link.} [\[label\]()] — the state
      this feature triggers in — is given the target [().md] by
-     {!Oystermark.Note.Link_ref.of_cmark_reference}, following Obsidian, so
+     {!Oystermark.Note.Link.Ref.of_cmark_reference}, following Obsidian, so
      diagnostics report a half-typed link as unresolved rather than ignoring
      it. Completion is unaffected; the noise belongs to
      {!page-"feature-diagnostics"} and should be settled there.}

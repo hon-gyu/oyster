@@ -2,9 +2,7 @@
     reading blocks, and transclusion. Resolving links across notes is done in
     [Vault]. *)
 
-module Address = Address
 module Anchor = Anchor
-module Link_ref = Link_ref
 module Link = Link
 module Transclusion = Transclusion
 

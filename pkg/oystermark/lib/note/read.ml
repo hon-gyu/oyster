@@ -167,7 +167,9 @@ let get_block_by_attr_id (blocks : Cmarkit.Block.t list) (id : string)
   find_in blocks
 ;;
 
-let read (blocks : Cmarkit.Block.t list) (address : Address.t) : Cmarkit.Block.t list =
+let read (blocks : Cmarkit.Block.t list) (address : Anchor.Address.t)
+  : Cmarkit.Block.t list
+  =
   match address with
   | Heading id -> get_heading_section blocks id
   | Caret id -> Option.to_list (get_block_by_caret_id blocks id)
@@ -580,7 +582,7 @@ let%test_module "Read" =
 
 let%test_module "read" =
   (module struct
-    let show content (address : Address.t) =
+    let show content (address : Anchor.Address.t) =
       let doc = Parse.of_string content in
       read [ Cmarkit.Doc.block doc ] address
       |> source_text content

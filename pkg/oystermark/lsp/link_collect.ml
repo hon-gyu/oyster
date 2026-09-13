@@ -30,7 +30,7 @@ let is_image_target target =
 type located_link =
   { source : string
   ; destination : Oystermark.Vault.Index.resolution
-  ; reference : Oystermark.Note.Link_ref.t
+  ; reference : Oystermark.Note.Link.Ref.t
   ; kind : kind
   ; first_byte : int
   ; last_byte : int
@@ -78,7 +78,7 @@ let collect_links ~(index : Vault.Index.t) ~(rel_path : string) (doc : Cmarkit.D
 (** Find the link whose byte range contains [offset].
     Returns the {!located_link} if found. *)
 let find_at_offset (links : located_link list) (offset : int)
-  : Oystermark.Note.Link_ref.t option
+  : Oystermark.Note.Link.Ref.t option
   =
   Trace_core.with_span ~__FILE__ ~__LINE__ "find_link_ref_at_offset"
   @@ fun _sp ->
@@ -109,7 +109,7 @@ let%test_module "collect_links" =
           "[%d-%d] %s\n"
           ll.first_byte
           ll.last_byte
-          (Sexp.to_string (Oystermark.Note.Link_ref.sexp_of_t ll.reference)))
+          (Sexp.to_string (Oystermark.Note.Link.Ref.sexp_of_t ll.reference)))
     ;;
 
     let%expect_test "wikilink" =
@@ -167,7 +167,7 @@ let%test_module "find_at_offset" =
     let show text offset =
       match find text offset with
       | None -> print_endline "<none>"
-      | Some lr -> print_s (Oystermark.Note.Link_ref.sexp_of_t lr)
+      | Some lr -> print_s (Oystermark.Note.Link.Ref.sexp_of_t lr)
     ;;
 
     let%expect_test "cursor on wikilink target" =

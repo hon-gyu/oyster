@@ -51,9 +51,9 @@ let json_of_string_opt : string option -> Yojson.Safe.t = function
 let line_of_loc (loc : Cmarkit.Textloc.t) : int = fst (Cmarkit.Textloc.first_line loc)
 
 (* The authored fragment, rendered back to the syntax it was written in. *)
-let json_of_fragment : Note.Link_ref.fragment option -> Yojson.Safe.t = function
+let json_of_fragment : Note.Link.Ref.fragment option -> Yojson.Safe.t = function
   | None -> `Null
-  | Some fragment -> `String (Note.Link_ref.string_of_fragment fragment)
+  | Some fragment -> `String (Note.Link.Ref.string_of_fragment fragment)
 ;;
 
 let string_of_link_kind : Index.Link.kind -> string = function

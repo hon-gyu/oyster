@@ -122,7 +122,7 @@ let compute
           Option.value_map
             ll.reference.fragment
             ~default:""
-            ~f:Oystermark.Note.Link_ref.string_of_fragment
+            ~f:Oystermark.Note.Link.Ref.string_of_fragment
         in
         let category =
           match ll.kind with

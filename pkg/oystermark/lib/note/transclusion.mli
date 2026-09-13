@@ -54,7 +54,7 @@ val non_fm_blocks : Cmarkit.Doc.t -> Cmarkit.Block.t list
 type embed_source =
   | Wikilink_embed of Cmarkit.Inline.Wikilink.t * Cmarkit.Meta.t
   (** [!\[\[NOTE\]\]], with its meta for {!fallback_block}. *)
-  | Image_embed of Link_ref.t
+  | Image_embed of Link.Ref.t
   (** [!\[alt\](note.md)]. Transcluded only if the target resolves to a note. *)
 
 (** The embed source that [inline] consists of, if it is exactly one. A

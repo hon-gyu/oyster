@@ -84,7 +84,7 @@ module Link : sig
   [@@deriving sexp, equal, compare]
 
   type t = Note.Link.t =
-    { reference : Note.Link_ref.t
+    { reference : Note.Link.Ref.t
     ; kind : kind
     ; loc : loc (** Non-none loc *)
     }
@@ -223,7 +223,7 @@ val map_paths : t -> f:(Path.t -> Path.t) -> t
     @param source
       The path of the note containing the link reference. It doesn't need to be
       present in the index. *)
-val resolve : t -> Path.t -> Note.Link_ref.t -> resolution
+val resolve : t -> Path.t -> Note.Link.Ref.t -> resolution
 
 (** The links of the note at the given path that fail to resolve, in document
     order. [ [] ] when the note is absent from the index. *)

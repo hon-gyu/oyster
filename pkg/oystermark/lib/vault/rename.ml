@@ -15,7 +15,7 @@ module Index = Index
 
 type target =
   { path : string
-  ; address : Note.Address.t option (** [None] is the note itself. *)
+  ; address : Note.Anchor.Address.t option (** [None] is the note itself. *)
   }
 [@@deriving sexp, equal]
 
@@ -68,7 +68,7 @@ let matches { path; address } ((_, _, resolution) as link) =
   match address, resolution with
   | None, Ok _ -> true
   | Some address, Ok (Index.Anchor { anchor; _ }) ->
-    Note.Address.equal address (Note.Anchor.address anchor.value)
+    Note.Anchor.Address.equal address (Note.Anchor.address anchor.value)
   | _ -> false
 ;;
 
@@ -133,7 +133,7 @@ let reference_edit ~read_file { address; _ } ~new_name (source, (link : Index.Li
     |> Option.map ~f:(fun hash ->
       let marker_length =
         match address with
-        | Some (Note.Address.Caret _) -> 1
+        | Some (Note.Anchor.Address.Caret _) -> 1
         | None | Some (Heading _ | Attr _) -> 0
       in
       { rel_path = source
@@ -268,7 +268,7 @@ let move_edit
         match style with
         | `Wikilink -> String.prefix destination target_stop
         | `Markdown ->
-          Note.Link_ref.percent_decode (String.prefix destination target_stop)
+          Note.Link.Ref.percent_decode (String.prefix destination target_stop)
       in
       if String.is_empty authored
       then None
@@ -342,11 +342,11 @@ let attr_id_offset ~(id : string) line =
 ;;
 
 let definition_edit ~index ~read_file { path; address } ~new_name =
-  Option.bind address ~f:(fun (address : Note.Address.t) ->
+  Option.bind address ~f:(fun (address : Note.Anchor.Address.t) ->
     Index.find_note index path
     |> Option.bind ~f:(fun note ->
       List.find (Index.Entry.anchors note) ~f:(fun anchor ->
-        Note.Address.equal address (Note.Anchor.address anchor.value)))
+        Note.Anchor.Address.equal address (Note.Anchor.address anchor.value)))
     |> Option.bind ~f:(fun (anchor : Index.Anchor.t) ->
       read_file path
       |> Option.bind ~f:(fun content ->
@@ -434,7 +434,8 @@ let plan ~index ~docs ~read_file ({ path; address } as target) ~new_name =
   let valid =
     match address with
     | None -> valid_note_name new_name
-    | Some (Note.Address.Heading _) -> not (String.is_empty (String.strip new_name))
+    | Some (Note.Anchor.Address.Heading _) ->
+      not (String.is_empty (String.strip new_name))
     | Some (Caret _ | Attr _) -> valid_id new_name
   in
   if not valid

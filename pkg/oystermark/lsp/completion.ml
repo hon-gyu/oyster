@@ -307,7 +307,7 @@ let target_entry
     Some (Index.Entry.of_doc_exn file_stat doc))
   else (
     let link_ref =
-      { Oystermark.Note.Link_ref.target = Some note_part; fragment = None }
+      { Oystermark.Note.Link.Ref.target = Some note_part; fragment = None }
     in
     match Oystermark.Vault.Index.resolve index rel_path link_ref with
     | Ok (Note path) -> find path

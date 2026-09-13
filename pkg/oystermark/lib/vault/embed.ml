@@ -20,7 +20,7 @@ let rec expand_doc
           (doc : Cmarkit.Doc.t)
   : Cmarkit.Doc.t
   =
-  let embed (link_ref : Note.Link_ref.t) ~(depth_fallback : Cmarkit.Block.t)
+  let embed (link_ref : Note.Link.Ref.t) ~(depth_fallback : Cmarkit.Block.t)
     : Cmarkit.Block.t option
     =
     match Index.resolve index curr_path link_ref with
@@ -74,7 +74,7 @@ let rec expand_doc
              let link_ref, depth_fallback =
                match source with
                | Wikilink_embed (wl, wl_meta) ->
-                 Note.Link_ref.of_wikilink wl, Note.Transclusion.fallback_block wl wl_meta
+                 Note.Link.Ref.of_wikilink wl, Note.Transclusion.fallback_block wl wl_meta
                | Image_embed link_ref -> link_ref, block
              in
              (match embed link_ref ~depth_fallback with

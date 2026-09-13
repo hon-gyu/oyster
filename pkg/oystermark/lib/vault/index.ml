@@ -79,7 +79,7 @@ module Link = struct
   [@@deriving sexp, equal, compare]
 
   type t = Note.Link.t =
-    { reference : Note.Link_ref.t
+    { reference : Note.Link.Ref.t
     ; kind : kind
     ; loc : loc
     }
@@ -331,9 +331,9 @@ end
 
 open Resolve_
 
-let resolve (index : t) (source : Path.t) (ref : Note.Link_ref.t) : resolution =
+let resolve (index : t) (source : Path.t) (ref : Note.Link.Ref.t) : resolution =
   let path =
-    match ref.Note.Link_ref.target with
+    match ref.Note.Link.Ref.target with
     | None -> Some source
     | Some t -> resolve_path index ~source t
   in
@@ -352,7 +352,7 @@ let resolve (index : t) (source : Path.t) (ref : Note.Link_ref.t) : resolution =
         | None -> Error (Missing_anchor p)
         | Some n ->
           Option.value_map
-            (Note.Link_ref.resolve_fragment (Entry.anchors n) f)
+            (Note.Link.Ref.resolve_fragment (Entry.anchors n) f)
             ~default:(Error (Missing_anchor p))
             ~f:(fun anchor -> Ok (Anchor { note_path = p; anchor }))))
 ;;

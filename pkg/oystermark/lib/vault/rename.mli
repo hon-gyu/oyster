@@ -14,7 +14,7 @@ open Core
 
 type target =
   { path : string
-  ; address : Note.Address.t option (** [None] is the note itself. *)
+  ; address : Note.Anchor.Address.t option (** [None] is the note itself. *)
   }
 [@@deriving sexp, equal]
 
