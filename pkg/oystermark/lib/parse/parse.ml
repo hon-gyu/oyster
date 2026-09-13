@@ -218,7 +218,9 @@ let sexp_of_block = sexp_of_.block
 let sexp_of_meta = sexp_of_.meta
 let sexp_of_doc = sexp_of_.doc
 
-(** {1:test Test} *)
+(** {1:test Test}
+====================
+*)
 
 module For_test = struct
   let make_block (s : string) : Cmarkit.Block.t =

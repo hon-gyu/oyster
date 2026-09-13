@@ -31,16 +31,6 @@
 
 open Core
 
-module type Spec = sig
-  (** Frontmatter will not be embedded: {!non_fm_blocks} strips it before
-      extraction. *)
-  val frontmatter_unembeddable : unit
-
-  (** From expanded blocks, we can restore the original embedding syntax,
-      up to the difference between wikilink and commonmark inline link. *)
-  val reverse_embed : unit
-end
-
 (** Metadata attached to the [Cmarkit.Block.Blocks] node that wraps
     transcluded content. Consumers (e.g. the HTML renderer) can use this to
     style embedded blocks differently, and {!reverse_embed_doc} uses it to
