@@ -1,0 +1,7 @@
+(library
+ (name extract)
+ (public_name oystermark.extract)
+ (libraries parse oymarkit core)
+ (inline_tests)
+ (preprocess
+  (pps ppx_jane)))

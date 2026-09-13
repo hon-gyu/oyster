@@ -19,9 +19,6 @@ module Frontmatter = Frontmatter
 module Textloc_conv = Textloc_conv
 module Struct = Struct
 
-(** Does not provide a mapper *)
-module Extract = Extract
-
 type block_id =
   | Caret of Cmarkit.Block.Block_id.t
   | Heading of string

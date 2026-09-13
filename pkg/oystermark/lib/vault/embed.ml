@@ -316,15 +316,15 @@ and expand_doc
        | Index.Anchor { anchor = { value = Heading heading; _ }; _ } ->
          apply
            ~fragment:(Some (Cmarkit.Inline.Wikilink.Heading [ heading.text ]))
-           (fun blocks -> Parse.Extract.get_heading_section blocks heading.slug)
+           (fun blocks -> Extract.get_heading_section blocks heading.slug)
        | Index.Anchor { anchor = { value = Block { id; kind = Obsidian_caret }; _ }; _ }
          ->
          apply ~fragment:(Some (Cmarkit.Inline.Wikilink.Block_ref id)) (fun blocks ->
-           Option.to_list (Parse.Extract.get_block_by_caret_id blocks id))
+           Option.to_list (Extract.get_block_by_caret_id blocks id))
        | Index.Anchor { anchor = { value = Block { id; kind = Djot_attr }; _ }; _ }
        | Index.Anchor { anchor = { value = Inline { id }; _ }; _ } ->
          apply ~fragment:None (fun blocks ->
-           Option.to_list (Parse.Extract.get_block_by_attr_id blocks id)))
+           Option.to_list (Extract.get_block_by_attr_id blocks id)))
   in
   (* The mapper acts on Paragraph blocks, checking for embed wikilinks and
      image links pointing to notes. *)

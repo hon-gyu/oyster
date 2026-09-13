@@ -1,8 +1,8 @@
-(** Utils for extracting block(s) from blocks, i.e., extracting sub-tree from the AST.
-    Mostly used in embedding. *)
+(** Read-only queries over parsed blocks: the blocks a link target denotes, used
+    by embedding and hover, and a walk over every addressable block of a note. *)
 
 (** Collect the section starting at the heading whose identifier (see
-    {!Common.heading_id}) is [heading_id], up to (but not including) the
+    {!Parse.Common.heading_id}) is [heading_id], up to (but not including) the
     next heading of equal or lesser level.  Returns [ [] ] when the heading is not
     found. *)
 val get_heading_section : Cmarkit.Block.t list -> string -> Cmarkit.Block.t list
@@ -17,7 +17,7 @@ val get_heading_section : Cmarkit.Block.t list -> string -> Cmarkit.Block.t list
     - {b Keyed}: the id is on a {!Cmarkit.Block.Ext_keyed} node, having been
       forwarded from the paragraph or list item the node supplanted. The node
       itself is the target, so the reference denotes the label {e and} everything
-      the key claimed as children -- an anchor for a whole subtree. *)
+      the key claimed as children. It anchors a whole subtree. *)
 val get_block_by_caret_id : Cmarkit.Block.t list -> string -> Cmarkit.Block.t option
 
 (** Extract the block carrying an explicit djot attribute id ([{#id}]).
@@ -33,20 +33,6 @@ val get_block_by_caret_id : Cmarkit.Block.t list -> string -> Cmarkit.Block.t op
     recursively; the first match in document order wins. *)
 val get_block_by_attr_id : Cmarkit.Block.t list -> string -> Cmarkit.Block.t option
 
-(* CR: why do we need to expose the following three functions? *)
-
-(** [Cmarkit.Block.meta] raises on a block type extension defined outside
-    [Cmarkit] -- {!Frontmatter.Frontmatter} carries no metadata at all. Such a
-    block has no location to report, which is [Meta.none]. *)
-val meta_of_block : Cmarkit.Block.t -> Cmarkit.Meta.t
-
-(** The info string of a code block: [python] for [ ```python ]. [None] for
-    non-fenced-codeblock block, or a code block with no info string. *)
-val info_string_of_block : Cmarkit.Block.t -> string option
-
-(** The Obsidian block identifier [ ^id ] carried on the block, if any. *)
-val caret_id_of_block : Cmarkit.Block.t -> string option
-
 module For_test : sig
   val example_headings : string
   val example_inline_caret_id : string
@@ -60,15 +46,15 @@ end
 
 (** {1 Walk} *)
 
-(** A block in document order, with everything needed to select it. Nothing
-    here is derivable from anything else here; what is derivable from [block] --
-    its kind, a code block's info string -- is a function of the block. *)
-type located =
+(** A block in document order, with everything needed to select it. No field is
+    derivable from another. What is derivable from [block], such as its kind or a
+    code block's info string, is a function of the block instead. *)
+type located_block =
   { block : Cmarkit.Block.t
   ; index : int (** 1-based position in the walk, over the whole note *)
   ; attr_id : string option
     (** a djot [ {#id} ] attribute. Unlike an [ ^id ] (see
-        {!caret_id_of_block}) this is not recoverable from [block]: the walk
+        {!Parse.Common.caret_id_of_block}) this is not recoverable from [block]: the walk
         unwraps the [Ext_attributes] node that carries it. *)
   ; heading_path : string list (** enclosing heading ids, outermost first *)
   ; heading_text : string list (** the same headings as plain text *)
@@ -88,7 +74,7 @@ val kind_of_block : Cmarkit.Block.t -> string
 
     A list item is not reported: it has no [Cmarkit.Block.t] of its own, its
     syntax being the marker. Its contents are walked as the blocks they are. *)
-val walk : Cmarkit.Block.t list -> located list
+val walk : Cmarkit.Block.t list -> located_block list
 
 (** {1 Content} *)
 
@@ -96,7 +82,7 @@ val walk : Cmarkit.Block.t list -> located list
 
     A code block holds {e text}, which the parser has already stripped of its
     fence and indentation, so its content is exact. A block quote holds
-    {e blocks}, whose source still carries the [>] marker on every line -- the
+    {e blocks}, whose source still carries the [>] marker on every line, so the
     content is a markdown value, written back out by rendering. Rendering
     normalizes (fences, list markers, wrapping), so [Markdown] content is not
     byte-for-byte what the author typed, while [Literal] content is. *)
@@ -111,10 +97,10 @@ type content =
     hold inlines, rows, or nothing at all, so there is no single value inside to
     ask for. A list is not a container either: its syntax lives in the item
     markers, and its items' blocks are walked in their own right. *)
-val content_of_located : located -> content
+val content_of_located_block : located_block -> content
 
 (** The contents of [located] as a string, given the document's label
     definitions (a rendered container may hold reference links).
 
     [Error kind] names the kind that has no contents to give. *)
-val content_string : defs:Cmarkit.Label.defs -> located -> (string, string) Result.t
+val content_string : defs:Cmarkit.Label.defs -> located_block -> (string, string) Result.t

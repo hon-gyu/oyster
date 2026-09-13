@@ -49,6 +49,24 @@ let inline_to_plain_text (inline : Inline.t) : string =
   String.concat ~sep:"\n" (List.map lines ~f:(String.concat ~sep:""))
 ;;
 
+(** [Cmarkit.Block.meta] raises on a block type extension defined outside
+    [Cmarkit], such as {!Frontmatter.Frontmatter}, which carries no metadata at
+    all. Such a block has no location to report, which is [Meta.none]. *)
+let meta_of_block (block : Block.t) : Meta.t = Block.meta ~ext:(fun _ -> Meta.none) block
+
+(** The info string of a code block: [python] for [ ```python ]. [None] for a
+    block that is not a fenced code block, or a code block with no info string. *)
+let info_string_of_block (block : Block.t) : string option =
+  match block with
+  | Block.Code_block (cb, _) -> Option.map (Block.Code_block.info_string cb) ~f:fst
+  | _ -> None
+;;
+
+(** The Obsidian block identifier [ ^id ] carried on the block, if any. *)
+let caret_id_of_block (block : Block.t) : string option =
+  Option.map (Block.Block_id.find (meta_of_block block)) ~f:Block.Block_id.id
+;;
+
 (** Reconstruct a fork {!Cmarkit.Block.Div.t} with a new [body], preserving its
     indent/fences/class so commonmark roundtrip is unaffected. Used by passes
     that recurse into a div's body (e.g. Struct, block attributes). *)

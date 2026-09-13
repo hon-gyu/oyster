@@ -260,7 +260,7 @@ let context_command =
 (** Query the blocks of a note.
 
     The filters are sugar over one traversal: every flag narrows the same list
-    of {!Oystermark.Parse.Extract.located} records, and [-json] prints those
+    of {!Oystermark.Extract.located_block} records, and [-json] prints those
     records so a filter this command does not implement can be written in jq.
 
     Default output is the block's source, verbatim. *)
@@ -304,8 +304,8 @@ let block_command =
          | block -> [ block ]
        in
        let matches =
-         Parse.Extract.walk blocks
-         |> List.filter ~f:(fun (located : Parse.Extract.located) ->
+         Extract.walk blocks
+         |> List.filter ~f:(fun (located : Extract.located_block) ->
            let keeps_under =
              match under with
              | None -> true
@@ -327,10 +327,10 @@ let block_command =
                 | None -> false)
            in
            keeps_under
-           && matches_option kind (Some (Parse.Extract.kind_of_block located.block))
-           && matches_option lang (Parse.Extract.info_string_of_block located.block)
+           && matches_option kind (Some (Extract.kind_of_block located.block))
+           && matches_option lang (Parse.Common.info_string_of_block located.block)
            && matches_option id located.attr_id
-           && matches_option caret_id (Parse.Extract.caret_id_of_block located.block))
+           && matches_option caret_id (Parse.Common.caret_id_of_block located.block))
        in
        let matches =
          match nth with
@@ -342,12 +342,12 @@ let block_command =
        in
        if List.is_empty matches then die "%s: no block matches" note;
        let content_of located =
-         match Parse.Extract.content_string ~defs located with
+         match Extract.content_string ~defs located with
          | Ok content -> content
          | Error kind -> die "%s: a %s has no contents to print" note kind
        in
-       let source_of (located : Parse.Extract.located) =
-         let textloc = Cmarkit.Meta.textloc (Parse.Extract.meta_of_block located.block) in
+       let source_of (located : Extract.located_block) =
+         let textloc = Cmarkit.Meta.textloc (Parse.Common.meta_of_block located.block) in
          if Cmarkit.Textloc.is_none textloc
          then die "%s: block %d has no location; parse with locations" note located.index
          else (
@@ -357,9 +357,9 @@ let block_command =
        in
        if json
        then (
-         let json_of (located : Parse.Extract.located) =
+         let json_of (located : Extract.located_block) =
            let textloc =
-             Cmarkit.Meta.textloc (Parse.Extract.meta_of_block located.block)
+             Cmarkit.Meta.textloc (Parse.Common.meta_of_block located.block)
            in
            let string_or_null = function
              | Some s -> `String s
@@ -367,10 +367,10 @@ let block_command =
            in
            `Assoc
              [ "index", `Int located.index
-             ; "kind", `String (Parse.Extract.kind_of_block located.block)
-             ; "info", string_or_null (Parse.Extract.info_string_of_block located.block)
+             ; "kind", `String (Extract.kind_of_block located.block)
+             ; "info", string_or_null (Parse.Common.info_string_of_block located.block)
              ; "attr_id", string_or_null located.attr_id
-             ; "caret_id", string_or_null (Parse.Extract.caret_id_of_block located.block)
+             ; "caret_id", string_or_null (Parse.Common.caret_id_of_block located.block)
              ; ( "heading_path"
                , `List (List.map located.heading_path ~f:(fun s -> `String s)) )
              ; ( "heading_text"
@@ -384,7 +384,7 @@ let block_command =
                    ] )
              ; "text", `String (source_of located)
              ; ( "content"
-               , match Parse.Extract.content_string ~defs located with
+               , match Extract.content_string ~defs located with
                  | Ok content -> `String content
                  | Error _ -> `Null )
              ]

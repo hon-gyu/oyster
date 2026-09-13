@@ -94,7 +94,7 @@ Subsections are encouraged if needed.
   {!page-"feature-go-to-definition".target_position}.
 - Diagnostics: duplicate anchor ids are reported (see the
   {{!page-"feature-diagnostics".duplicate_ids}diagnostics spec}).
-- Section extraction: {!Oystermark.Parse.Extract.get_block_by_attr_id}
+- Section extraction: {!Oystermark.Extract.get_block_by_attr_id}
   feeds both embed ([![[note#id]]]) and hover, so an attribute anchor
   previews/embeds its containing block instead of the whole file.
 - Frontmatter positions: {!Oystermark.Parse.Frontmatter.blank_frontmatter}

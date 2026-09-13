@@ -1,6 +1,5 @@
-(** Utils for extracting block(s) from blocks, i.e., extracting sub-tree from the AST
-    Mostly used in embedding
-*)
+(** Read-only queries over parsed blocks: the blocks a link target denotes, used
+    by embedding and hover, and a walk over every addressable block of a note. *)
 open Core
 
 (** Flatten a block list by splicing any top-level [Blocks] nodes into a flat
@@ -13,7 +12,7 @@ let rec flatten (blocks : Cmarkit.Block.t list) : Cmarkit.Block.t list =
 ;;
 
 (** Collect the section starting at the heading whose identifier (see
-    {!Common.heading_id}) is [heading_id], up to (but not including) the
+    {!Parse.Common.heading_id}) is [heading_id], up to (but not including) the
     next heading of equal or lesser level.  Returns [] when the heading is not
     found. *)
 let get_heading_section (blocks : Cmarkit.Block.t list) (heading_id : string)
@@ -29,7 +28,7 @@ let get_heading_section (blocks : Cmarkit.Block.t list) (heading_id : string)
     | block :: rest ->
       (match block with
        | Block.Heading (h, _meta) ->
-         (match Common.heading_id h with
+         (match Parse.Common.heading_id h with
           | Some id when String.equal id heading_id ->
             Some (block, Block.Heading.level h, rest)
           | _ -> find_heading rest)
@@ -60,7 +59,7 @@ let get_heading_section (blocks : Cmarkit.Block.t list) (heading_id : string)
     - {b Keyed}: the id is on a {!Cmarkit.Block.Ext_keyed} node, having been
       forwarded from the paragraph or list item the node supplanted. The node
       itself is the target, so the reference denotes the label {e and} everything
-      the key claimed as children -- an anchor for a whole subtree. *)
+      the key claimed as children. It anchors a whole subtree. *)
 let get_block_by_caret_id (blocks : Cmarkit.Block.t list) (id : string)
   : Cmarkit.Block.t option
   =
@@ -71,7 +70,7 @@ let get_block_by_caret_id (blocks : Cmarkit.Block.t list) (id : string)
     | None -> false
   in
   (* A standalone [^id] paragraph is one whose entire inline content is just
-     the block identifier — a single [Text] node starting with [^]. *)
+     the block identifier: a single [Text] node starting with [^]. *)
   let is_standalone_id_paragraph (p : Block.Paragraph.t) : bool =
     match Block.Paragraph.inline p with
     | Inline.Text (s, _meta) -> String.is_prefix s ~prefix:"^"
@@ -123,29 +122,6 @@ let get_block_by_caret_id (blocks : Cmarkit.Block.t list) (id : string)
        | None -> search_items rest)
   in
   search None (flatten blocks)
-;;
-
-(** [Cmarkit.Block.meta] raises on a block type extension defined outside
-    [Cmarkit] -- {!Frontmatter.Frontmatter} carries no metadata at all. Such a
-    block has no location to report, which is [Meta.none]. *)
-let meta_of_block (block : Cmarkit.Block.t) : Cmarkit.Meta.t =
-  Cmarkit.Block.meta ~ext:(fun _ -> Cmarkit.Meta.none) block
-;;
-
-(** The info string of a code block: [python] for [ ```python ]. [None] for
-    another block, or a code block with no info string. *)
-let info_string_of_block (block : Cmarkit.Block.t) : string option =
-  match block with
-  | Cmarkit.Block.Code_block (cb, _) ->
-    Option.map (Cmarkit.Block.Code_block.info_string cb) ~f:fst
-  | _ -> None
-;;
-
-(** The Obsidian block identifier [ ^id ] carried on the block, if any. *)
-let caret_id_of_block (block : Cmarkit.Block.t) : string option =
-  Option.map
-    (Cmarkit.Block.Block_id.find (meta_of_block block))
-    ~f:Cmarkit.Block.Block_id.id
 ;;
 
 (** Extract the block carrying an explicit djot attribute id ([{#id}]).
@@ -263,15 +239,15 @@ end
 (* Walk
    ==== *)
 
-(** A block in document order, with everything needed to select it. Nothing
-    here is derivable from anything else here; what is derivable from [block] --
-    its kind, a code block's info string -- is a function of the block. *)
-type located =
+(** A block in document order, with everything needed to select it. No field is
+    derivable from another. What is derivable from [block], such as its kind or a
+    code block's info string, is a function of the block instead. *)
+type located_block =
   { block : Cmarkit.Block.t
   ; index : int (** 1-based position in the walk, over the whole note *)
   ; attr_id : string option
     (** a djot [ {#id} ] attribute. Unlike an [ ^id ] (see
-        {!caret_id_of_block}) this is not recoverable from [block]: the walk
+        {!Parse.Common.caret_id_of_block}) this is not recoverable from [block]: the walk
         unwraps the [Ext_attributes] node that carries it. *)
   ; heading_path : string list (** enclosing heading ids, outermost first *)
   ; heading_text : string list (** the same headings as plain text *)
@@ -341,7 +317,7 @@ let inline_attr_id (inline : Cmarkit.Inline.t) : string option =
 
     A list item is not reported: it has no [Cmarkit.Block.t] of its own, its
     syntax being the marker. Its contents are walked as the blocks they are. *)
-let walk (blocks : Cmarkit.Block.t list) : located list =
+let walk (blocks : Cmarkit.Block.t list) : located_block list =
   let open Cmarkit in
   let next_index =
     let count = ref 0 in
@@ -387,8 +363,8 @@ let walk (blocks : Cmarkit.Block.t list) : located list =
         | None -> inline_attr_id (Block.Heading.inline h)
       in
       push (emit ~headings ~attr_id block);
-      let id = Option.value (Common.heading_id h) ~default:"" in
-      let text = Common.inline_to_plain_text (Block.Heading.inline h) in
+      let id = Option.value (Parse.Common.heading_id h) ~default:"" in
+      let text = Parse.Common.inline_to_plain_text (Block.Heading.inline h) in
       (level, id, text) :: headings
     | Block.Paragraph (p, _) ->
       let attr_id =
@@ -440,7 +416,7 @@ let walk (blocks : Cmarkit.Block.t list) : located list =
     The two cases are not a convenience: a code block holds {e text}, which the
     parser has already stripped of its fence and indentation, so its content is
     exact. A block quote holds {e blocks}, whose source still carries the
-    [>] marker on every line -- the content is a markdown value, and the only
+    [>] marker on every line, so the content is a markdown value, and the only
     faithful way to write a markdown value back out is to render it. Rendering
     normalizes (fences, list markers, wrapping), so [Markdown] content is not
     byte-for-byte what the author typed, while [Literal] content is. *)
@@ -455,7 +431,7 @@ type content =
     hold inlines, rows, or nothing at all, so there is no single value inside to
     ask for. A list is not a container either: its syntax lives in the item
     markers, and its items' blocks are walked in their own right. *)
-let content_of_located (located : located) : content =
+let content_of_located_block (located : located_block) : content =
   let open Cmarkit in
   let code_lines cb =
     Literal
@@ -485,11 +461,149 @@ let content_of_located (located : located) : content =
     definitions (a rendered container may hold reference links).
 
     [Error kind] names the kind that has no contents to give. *)
-let content_string ~(defs : Cmarkit.Label.defs) (located : located)
+let content_string ~(defs : Cmarkit.Label.defs) (located : located_block)
   : (string, string) Result.t
   =
-  match content_of_located located with
+  match content_of_located_block located with
   | Literal text -> Ok text
   | Markdown block -> Ok (Cmarkit_commonmark.of_doc (Cmarkit.Doc.make ~defs block))
   | Not_a_container -> Error (kind_of_block located.block)
+;;
+
+(* Test
+   ==== *)
+
+let%test_module "Extract" =
+  (module struct
+    open Parse.For_test
+    open For_test
+
+    let of_string = Parse.of_string
+    let commonmark_of_doc = Parse.commonmark_of_doc
+
+    let pp_section (ppf : Format.formatter) (blocks : Cmarkit.Block.t list) : unit =
+      Format.fprintf
+        ppf
+        "%s@\n"
+        (commonmark_of_doc
+           (Cmarkit.Doc.make (Cmarkit.Block.Blocks (blocks, Cmarkit.Meta.none))))
+    ;;
+
+    let pp_block_opt (ppf : Format.formatter) (block : Cmarkit.Block.t option) : unit =
+      match block with
+      | None -> Format.fprintf ppf "<none>@\n"
+      | Some b -> Format.fprintf ppf "%s@\n" (commonmark_of_doc (Cmarkit.Doc.make b))
+    ;;
+
+    let%expect_test "get_heading_section: heading-1" =
+      let block = make_block example_headings in
+      Format.printf "%a%!" pp_section (get_heading_section [ block ] "heading-1");
+      [%expect
+        {|
+    # Heading 1
+    ## Heading 2
+    ### Heading 3
+    #### Heading 4
+    ##### Heading 5
+    ###### Heading 6
+    |}]
+    ;;
+
+    let%expect_test "get_heading_section: heading-8" =
+      let block = make_block example_headings in
+      Format.printf "%a%!" pp_section (get_heading_section [ block ] "heading-8");
+      [%expect
+        {|
+    ## Heading 8
+    ### Heading 9
+    |}]
+    ;;
+
+    let%expect_test "get_block_by_caret_id: inline" =
+      let doc = of_string example_inline_caret_id in
+      Format.printf
+        "%a%!"
+        pp_block_opt
+        (get_block_by_caret_id [ Cmarkit.Doc.block doc ] "abc123");
+      [%expect {| Second paragraph text ^abc123 |}]
+    ;;
+
+    let%expect_test "get_block_by_caret_id: standalone blockquote" =
+      let doc = of_string example_blockquote_caret_id in
+      Format.printf
+        "%a%!"
+        pp_block_opt
+        (get_block_by_caret_id [ Cmarkit.Doc.block doc ] "bq001");
+      [%expect {| > A blockquote here. |}]
+    ;;
+
+    let%expect_test "get_block_by_caret_id: not found" =
+      let doc = of_string example_not_found in
+      Format.printf
+        "%a%!"
+        pp_block_opt
+        (get_block_by_caret_id [ Cmarkit.Doc.block doc ] "nope");
+      [%expect {| <none> |}]
+    ;;
+
+    let%expect_test "get_block_by_caret_id: standalone list" =
+      let doc = of_string example_list_caret_id in
+      Format.printf
+        "%a%!"
+        pp_block_opt
+        (get_block_by_caret_id [ Cmarkit.Doc.block doc ] "lst001");
+      [%expect
+        {|
+    - Item one
+    - Item two
+    |}]
+    ;;
+
+    let%expect_test "get_block_by_caret_id: nested list" =
+      let doc = of_string example_nested_list_caret_id in
+      Format.printf
+        "%a%!"
+        pp_block_opt
+        (get_block_by_caret_id [ Cmarkit.Doc.block doc ] "firstline");
+      [%expect {| a nested list ^firstline |}];
+      Format.printf
+        "%a%!"
+        pp_block_opt
+        (get_block_by_caret_id [ Cmarkit.Doc.block doc ] "inneritem");
+      [%expect
+        {|
+    item
+    ^inneritem
+    |}]
+    ;;
+
+    (* get_block_by_attr_id. See {!page-"feature-attribute-anchors"}. *)
+
+    let%expect_test "get_block_by_attr_id: inline attribute → containing paragraph" =
+      let doc = of_string "# H\n\nThe [key term]{#kt} is here.\n" in
+      Format.printf
+        "%a%!"
+        pp_block_opt
+        (get_block_by_attr_id [ Cmarkit.Doc.block doc ] "kt");
+      [%expect {| The key term{#kt} is here. |}]
+    ;;
+
+    let%expect_test "get_block_by_attr_id: block attribute → wrapped block" =
+      let doc = of_string "# H\n\n{#aside}\n> An aside block.\n" in
+      Format.printf
+        "%a%!"
+        pp_block_opt
+        (get_block_by_attr_id [ Cmarkit.Doc.block doc ] "aside");
+      [%expect {| > An aside block. |}]
+    ;;
+
+    let%expect_test "get_block_by_attr_id: not found" =
+      let doc = of_string "# H\n\nPlain paragraph.\n" in
+      Format.printf
+        "%a%!"
+        pp_block_opt
+        (get_block_by_attr_id [ Cmarkit.Doc.block doc ] "missing");
+      [%expect {| <none> |}]
+    ;;
+  end)
 ;;

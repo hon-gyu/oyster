@@ -1,7 +1,7 @@
 (library
  (name vault)
  (public_name oystermark.vault)
- (libraries parse oymarkit core)
+ (libraries parse extract oymarkit core)
  (inline_tests)
  (preprocess
   (pps ppx_jane ppx_string ppx_quick_test)))

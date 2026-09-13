@@ -296,11 +296,11 @@ let extract_block ~(block_id : string) (content : string) : string option =
 
 (** Extract the block carrying attribute id [{#id}] from [content] and render it
     back to CommonMark.  Content-based (robust to unsaved edits), reusing
-    {!Oystermark.Parse.Extract.get_block_by_attr_id}.  [None] if not found.
+    {!Oystermark.Extract.get_block_by_attr_id}.  [None] if not found.
     See {!page-"feature-attribute-anchors"}. *)
 let extract_attr_block ~(id : string) (content : string) : string option =
   let doc = Lsp_util.parse_doc content in
-  Oystermark.Parse.Extract.get_block_by_attr_id [ Cmarkit.Doc.block doc ] id
+  Oystermark.Extract.get_block_by_attr_id [ Cmarkit.Doc.block doc ] id
   |> Option.map ~f:(fun b ->
     Oystermark.Parse.commonmark_of_doc (Cmarkit.Doc.make b) |> String.strip)
 ;;

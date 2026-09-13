@@ -1,13 +1,14 @@
 (** Querying the blocks of a note: the walk, its filters, and the contents of a
-    container. Impl: {!Oystermark.Parse.Extract.walk} and
-    {!Oystermark.Parse.Extract.content_string}.
+    container. Impl: {!Oystermark.Extract.walk} and
+    {!Oystermark.Extract.content_string}.
 
     This is what [oyster block] is built on. The command's flags are filters
-    over the records {!Oystermark.Parse.Extract.walk} produces, so the tests
+    over the records {!Oystermark.Extract.walk} produces, so the tests
     below run the same query the command runs. *)
 
 open Core
-module Extract = Oystermark.Parse.Extract
+module Extract = Oystermark.Extract
+module Common = Oystermark.Parse.Common
 
 let doc_of_string (s : string) : Cmarkit.Doc.t = Oystermark.Parse.of_string ~locs:true s
 
@@ -21,12 +22,12 @@ let blocks_of_doc (doc : Cmarkit.Doc.t) : Cmarkit.Block.t list =
     enclosing headings -- the fields the filters select on. *)
 let survey (s : string) =
   Extract.walk (blocks_of_doc (doc_of_string s))
-  |> List.iter ~f:(fun (located : Extract.located) ->
+  |> List.iter ~f:(fun (located : Extract.located_block) ->
     printf
       "%d\t%s\t%s\t%s\n"
       located.index
       (Extract.kind_of_block located.block)
-      (Option.value (Extract.info_string_of_block located.block) ~default:"-")
+      (Option.value (Common.info_string_of_block located.block) ~default:"-")
       (match located.heading_path with
        | [] -> "-"
        | path -> String.concat path ~sep:"/"))
@@ -47,14 +48,14 @@ let query ?under ?kind ?lang ?id ?caret_id ?nth ?(content = false) (s : string) 
   in
   let matches =
     Extract.walk (blocks_of_doc doc)
-    |> List.filter ~f:(fun (located : Extract.located) ->
+    |> List.filter ~f:(fun (located : Extract.located_block) ->
       (match under with
        | None -> true
        | Some wanted -> List.mem located.heading_path wanted ~equal:String.equal)
       && matches_option kind (Some (Extract.kind_of_block located.block))
-      && matches_option lang (Extract.info_string_of_block located.block)
+      && matches_option lang (Common.info_string_of_block located.block)
       && matches_option id located.attr_id
-      && matches_option caret_id (Extract.caret_id_of_block located.block))
+      && matches_option caret_id (Common.caret_id_of_block located.block))
   in
   let matches =
     match nth with
@@ -71,7 +72,7 @@ let query ?under ?kind ?lang ?id ?caret_id ?nth ?(content = false) (s : string) 
         | Ok content -> printf "%s\n" content
         | Error kind -> printf "<a %s has no contents to print>\n" kind)
       else (
-        let textloc = Cmarkit.Meta.textloc (Extract.meta_of_block located.block) in
+        let textloc = Cmarkit.Meta.textloc (Common.meta_of_block located.block) in
         let first = Cmarkit.Textloc.first_byte textloc in
         let last = Cmarkit.Textloc.last_byte textloc in
         printf "%s\n" (String.sub s ~pos:first ~len:(last - first + 1))))

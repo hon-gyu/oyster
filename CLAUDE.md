@@ -36,6 +36,13 @@ Pre-resolution file-level parsing: frontmatter, wikilinks, block IDs, and callou
 
 See {!Oystermark.Parse}.
 
+{2 Extract}
+
+Read-only queries over parsed blocks: the blocks a link target denotes, and a
+walk over every addressable block of a note.
+
+See {!Oystermark.Extract}.
+
 {2 Vault}
 
 Vault-level operations: directory indexing, link resolution, and embed expansion.
