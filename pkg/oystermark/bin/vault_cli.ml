@@ -1,7 +1,9 @@
 (** Command-line client for vault queries and renames. *)
 
 open Core
+module Node = Oystermark.Note.Node
 module Query = Oystermark.Note.Query
+module Query_flags = Oystermark.Note.Query_flags
 module Parse = Oystermark.Parse
 module Vault = Oystermark.Vault
 
@@ -260,14 +262,15 @@ let context_command =
 
 (** Query the blocks of a note.
 
-    Each flag adds steps to one {!Oystermark.Note.Query.t}; see
-    {!Oystermark.Note.Query.of_flags}. [-json] prints each match with its path,
-    names and enclosing headings, which can be used to write the next query.
+    The flags are one syntax for a {!Oystermark.Note.Query.t}; see
+    {!Oystermark.Note.Query_flags}. [-json] prints each match with its path,
+    properties, names and enclosing headings, which can be used to write the
+    next query.
 
     Default output is the block's source, verbatim. *)
 let block_command =
   Command.basic
-    ~summary:"Print blocks of a note, filtered by heading, kind, id or position"
+    ~summary:"Print blocks of a note, filtered by heading, kind, id, key or position"
     (let%map_open.Command note = anon ("NOTE" %: string)
      and under =
        flag
@@ -288,6 +291,8 @@ let block_command =
          "-caret-id"
          (optional string)
          ~doc:"ID only the block a link to #^ID names (^ID)"
+     and key =
+       flag "-key" (optional string) ~doc:"KEY only keyed nodes and list items with KEY"
      and nth = flag "-nth" (optional int) ~doc:"N keep only the Nth match, 1-based"
      and content =
        flag "-content" no_arg ~doc:" print what the container holds, not its source"
@@ -300,14 +305,19 @@ let block_command =
               exit 1)
            fmt
        in
+       let query =
+         match
+           Query_flags.to_query
+             { under; direct; kind; lang; attr_id = id; caret_id; key; nth }
+         with
+         | Ok query -> query
+         | Error message -> die "%s" message
+       in
        let source = In_channel.read_all note in
        let doc = Parse.of_string ~locs:true source in
-       let result =
-         Query.run
-           (Query.of_flags { under; direct; kind; lang; attr_id = id; caret_id; nth })
-           (Query.top doc)
-       in
+       let result = Query.run query (Query.top doc) in
        Option.iter (Query.why_empty result) ~f:(fun why -> die "%s: %s" note why);
+       let kind_name cursor = Node.kind (Query.node cursor) in
        let content_of cursor =
          match Query.content_string cursor with
          | Ok content -> content
@@ -316,12 +326,7 @@ let block_command =
        let source_of cursor =
          let textloc = Cmarkit.Meta.textloc (Query.meta cursor) in
          if Cmarkit.Textloc.is_none textloc
-         then
-           die
-             "%s: the %s at %s has no location"
-             note
-             (Query.kind cursor)
-             (String.concat ~sep:"." (List.map (Query.path cursor) ~f:Int.to_string))
+         then Query.markdown cursor
          else (
            let first = Cmarkit.Textloc.first_byte textloc in
            let last = Cmarkit.Textloc.last_byte textloc in
@@ -344,13 +349,20 @@ let block_command =
              `Assoc
                [ "id", `String h.slug; "text", `String h.text; "level", `Int h.level ]
            in
+           let props =
+             List.map
+               (Node.props (Query.node cursor))
+               ~f:(fun (name, (value : Node.value)) ->
+                 ( name
+                 , match value with
+                   | Int n -> `Int n
+                   | String s -> `String s
+                   | Bool b -> `Bool b ))
+           in
            `Assoc
              [ "path", `List (List.map (Query.path cursor) ~f:(fun i -> `Int i))
-             ; "kind", `String (Query.kind cursor)
-             ; ( "info"
-               , match Query.info_string cursor with
-                 | Some info -> `String info
-                 | None -> `Null )
+             ; "kind", `String (kind_name cursor)
+             ; "props", `Assoc props
              ; "names", `List (List.map (Query.names cursor) ~f:name)
              ; "headings", `List (List.map (Query.headings cursor) ~f:heading)
              ; ( "loc"

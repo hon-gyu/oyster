@@ -15,9 +15,13 @@ type cursor =
   ; parent : cursor option
   }
 
-let view cursor = cursor.view
+let node (cursor : cursor) : Node.t =
+  match cursor.view with
+  | Block block -> Option.value_exn (Node.of_block block)
+  | Item item -> Node.of_item item
+;;
 
-let path cursor =
+let path (cursor : cursor) : int list =
   let rec up cursor acc =
     let acc = cursor.index :: acc in
     match cursor.parent with
@@ -25,33 +29,6 @@ let path cursor =
     | Some parent -> up parent acc
   in
   up cursor []
-;;
-
-let kind_of_block (block : B.t) : string =
-  match block with
-  | B.Blank_line _ -> "blank_line"
-  | B.Block_quote (_, meta) ->
-    (match B.Callout.find meta with
-     | Some _ -> "callout"
-     | None -> "block_quote")
-  | B.Blocks _ -> "blocks"
-  | B.Code_block _ -> "code_block"
-  | B.Heading _ -> "heading"
-  | B.Html_block _ -> "html_block"
-  | B.Link_reference_definition _ -> "link_reference_definition"
-  | B.List _ -> "list"
-  | B.Paragraph _ -> "paragraph"
-  | B.Thematic_break _ -> "thematic_break"
-  | B.Ext_attributes _ -> "attributes"
-  | B.Ext_definition_list _ -> "definition_list"
-  | B.Ext_div _ -> "div"
-  | B.Ext_footnote_definition _ -> "footnote_definition"
-  | B.Ext_jsx_block _ -> "jsx_block"
-  | B.Ext_keyed _ -> "keyed"
-  | B.Ext_math_block _ -> "math_block"
-  | B.Ext_raw_block _ -> "raw_block"
-  | B.Ext_table _ -> "table"
-  | _ -> "unknown"
 ;;
 
 let rec unwrap_attributes (block : B.t) : B.t =
@@ -64,15 +41,18 @@ let rec blocks_of (block : B.t) : B.t list =
   match block with
   | B.Blocks (blocks, _) -> List.concat_map blocks ~f:blocks_of
   | B.Ext_attributes (a, _) -> blocks_of (B.Attributes.block a)
-  | B.Blank_line _ | B.Link_reference_definition _ -> []
-  | block -> if String.equal (kind_of_block block) "unknown" then [] else [ block ]
+  | block -> if Option.is_some (Node.of_block block) then [ block ] else []
 ;;
 
 let child_views (view : view) : view list =
   let blocks block = List.map (blocks_of block) ~f:(fun block -> Block block) in
   match view with
   | Item (item, _) -> blocks (B.List_item.block item)
-  | Block (B.Block_quote (bq, _)) -> blocks (B.Block_quote.block bq)
+  | Block (B.Block_quote (bq, meta)) ->
+    let body = B.Block_quote.block bq in
+    (match B.Callout.find meta with
+     | Some _ -> blocks (B.Callout.strip_header body)
+     | None -> blocks body)
   | Block (B.Ext_div (d, _)) -> blocks (B.Div.block d)
   | Block (B.Ext_keyed ((_label, body), _)) -> blocks body
   | Block (B.Ext_footnote_definition (fn, _)) -> blocks (B.Footnote.block fn)
@@ -80,25 +60,21 @@ let child_views (view : view) : view list =
   | Block _ -> []
 ;;
 
-let top doc =
+let top (doc : Cmarkit.Doc.t) : cursor list =
   List.mapi
     (blocks_of (Cmarkit.Doc.block doc))
     ~f:(fun index block -> { doc; view = Block block; index; parent = None })
 ;;
 
-let children cursor =
+let children (cursor : cursor) : cursor list =
   List.mapi (child_views cursor.view) ~f:(fun index view ->
     { cursor with view; index; parent = Some cursor })
 ;;
 
-let siblings cursor =
+let siblings (cursor : cursor) : cursor list =
   match cursor.parent with
   | None -> top cursor.doc
   | Some parent -> children parent
-;;
-
-let rec descendants cursor =
-  List.concat_map (children cursor) ~f:(fun child -> child :: descendants child)
 ;;
 
 let heading_level (view : view) : int option =
@@ -107,7 +83,7 @@ let heading_level (view : view) : int option =
   | Block _ | Item _ -> None
 ;;
 
-let section ~nested cursor =
+let section ~nested (cursor : cursor) : cursor list =
   match heading_level cursor.view with
   | Some level ->
     List.drop (siblings cursor) (cursor.index + 1)
@@ -121,32 +97,13 @@ let section ~nested cursor =
 (* Metadata
    -------- *)
 
-let kind cursor =
-  match cursor.view with
-  | Item _ -> "list_item"
-  | Block block -> kind_of_block block
-;;
-
-let meta cursor =
+let meta (cursor : cursor) : Cmarkit.Meta.t =
   match cursor.view with
   | Block block -> Parse.Common.meta_of_block block
   | Item (_, meta) -> meta
 ;;
 
-let info_string cursor =
-  match cursor.view with
-  | Block block -> Parse.Common.info_string_of_block block
-  | Item _ -> None
-;;
-
-let heading_of (h : B.Heading.t) : Anchor.heading =
-  { text = Parse.Common.inline_to_plain_text (B.Heading.inline h)
-  ; level = B.Heading.level h
-  ; slug = Option.value (Parse.Common.heading_id h) ~default:""
-  }
-;;
-
-let headings cursor =
+let headings (cursor : cursor) : Anchor.heading list =
   (* Scan the siblings before [cursor] from nearest to farthest: a heading
      encloses [cursor] if its level is lower than every heading seen so far,
      [cursor] included. Then do the same for the parent. *)
@@ -157,9 +114,9 @@ let headings cursor =
       |> List.fold
            ~init:(Option.value (heading_level cursor.view) ~default:Int.max_value, [])
            ~f:(fun (lowest, acc) sibling ->
-             match sibling.view with
-             | Block (B.Heading (h, _)) when B.Heading.level h < lowest ->
-               B.Heading.level h, heading_of h :: acc
+             match node sibling with
+             | Heading { level; id; text } when level < lowest ->
+               level, ({ level; slug = id; text } : Anchor.heading) :: acc
              | _ -> lowest, acc)
     in
     match cursor.parent with
@@ -169,8 +126,8 @@ let headings cursor =
   enclosing cursor
 ;;
 
-(** Each address of [doc] with the block {!Read.read} resolves it to. The walk
-    looks through [Ext_attributes] wrappers, so the block is unwrapped to match.
+(** Each address of [doc] with the block {!Read.read} resolves it to. Cursors
+    look through [Ext_attributes] wrappers, so the block is unwrapped to match.
     The last result is kept, since every cursor of a run shares one note. *)
 let resolved : Cmarkit.Doc.t -> (B.t * Anchor.Address.t) list =
   let last = ref None in
@@ -190,7 +147,7 @@ let resolved : Cmarkit.Doc.t -> (B.t * Anchor.Address.t) list =
       table
 ;;
 
-let names cursor =
+let names (cursor : cursor) : Anchor.Address.t list =
   match cursor.view with
   | Item _ -> []
   | Block block ->
@@ -203,20 +160,182 @@ let names cursor =
 (* Query
    ===== *)
 
-type pred =
-  | Kind of string
-  | Lang of string
-  | Named of Anchor.Address.t
+type cmp =
+  | Eq
+  | Ne
+  | Lt
+  | Le
+  | Gt
+  | Ge
 
-type step =
+type pred =
+  | Prop of string * cmp * Node.value
+  | Has of string
+  | Named of Anchor.Address.t
+  | Count of t * cmp * int
+  | And of pred list
+  | Or of pred list
+  | Not of pred
+  | Custom of string * (cursor -> bool)
+
+and step =
   | Children
-  | Descendants
-  | Descendants_or_self
   | Section of { nested : bool }
   | Filter of pred
   | Nth of int
+  | Each of t list
+  | Recurse of
+      { steps : t
+      ; emit : pred
+      ; descend : pred
+      }
 
-type t = step list
+and t = step list
+
+let holds_cmp (cmp : cmp) (order : int) : bool =
+  match cmp with
+  | Eq -> order = 0
+  | Ne -> order <> 0
+  | Lt -> order < 0
+  | Le -> order <= 0
+  | Gt -> order > 0
+  | Ge -> order >= 0
+;;
+
+let compare_values (a : Node.value) (b : Node.value) : int option =
+  match a, b with
+  | Int a, Int b -> Some (Int.compare a b)
+  | String a, String b -> Some (String.compare a b)
+  | Bool a, Bool b -> Some (Bool.compare a b)
+  | (Int _ | String _ | Bool _), _ -> None
+;;
+
+let rec holds (pred : pred) (cursor : cursor) : bool =
+  match pred with
+  | Prop (prop, cmp, wanted) ->
+    (match Node.prop prop (node cursor) with
+     | None -> false
+     | Some actual ->
+       Option.value_map (compare_values actual wanted) ~default:false ~f:(holds_cmp cmp))
+  | Has prop -> Option.is_some (Node.prop prop (node cursor))
+  | Named address -> List.mem (names cursor) address ~equal:Anchor.Address.equal
+  | Count (query, cmp, n) ->
+    holds_cmp cmp (Int.compare (List.length (eval query [ cursor ])) n)
+  | And preds -> List.for_all preds ~f:(fun pred -> holds pred cursor)
+  | Or preds -> List.exists preds ~f:(fun pred -> holds pred cursor)
+  | Not pred -> not (holds pred cursor)
+  | Custom (_, f) -> f cursor
+
+and apply (step : step) (input : cursor list) : cursor list =
+  match step with
+  | Children -> List.concat_map input ~f:children
+  | Section { nested } -> List.concat_map input ~f:(section ~nested)
+  | Filter pred -> List.filter input ~f:(holds pred)
+  | Nth n -> Option.to_list (List.nth input (n - 1))
+  | Each queries ->
+    List.concat_map input ~f:(fun cursor ->
+      List.concat_map queries ~f:(fun query -> eval query [ cursor ]))
+  | Recurse { steps; emit; descend } ->
+    let rec expand cursor =
+      List.concat_map (eval steps [ cursor ]) ~f:(fun found ->
+        (if holds emit found then [ found ] else [])
+        @ if holds descend found then expand found else [])
+    in
+    List.concat_map input ~f:expand
+
+and eval (query : t) (input : cursor list) : cursor list =
+  List.fold query ~init:input ~f:(fun input step -> apply step input)
+;;
+
+module Sugar = struct
+  let is (kind : string) : pred = Prop ("kind", Eq, String kind)
+  let recurse (steps : t) : t = [ Recurse { steps; emit = And []; descend = And [] } ]
+
+  let until (steps : t) (pred : pred) : t =
+    [ Recurse { steps; emit = pred; descend = Not pred } ]
+  ;;
+
+  let descendants : t = recurse [ Children ]
+  let descendants_or_self : t = [ Each [ []; descendants ] ]
+  let times (n : int) (query : t) : t = List.concat (List.init n ~f:(fun _ -> query))
+  let exists (query : t) (pred : pred) : pred = Count (query @ [ Filter pred ], Gt, 0)
+
+  let for_all (query : t) (pred : pred) : pred =
+    Count (query @ [ Filter (Not pred) ], Eq, 0)
+  ;;
+
+  let value : t =
+    [ Each
+        [ [ Filter (is "keyed"); Children ]
+        ; [ Filter (And [ is "list_item"; Has "key" ]); Children; Children ]
+        ]
+    ]
+  ;;
+
+  let field (key : string) : t =
+    [ Each [ []; [ Children ] ]; Filter (Prop ("key", Eq, String key)) ] @ value
+  ;;
+end
+
+(* Printing
+   -------- *)
+
+let cmp_to_string : cmp -> string = function
+  | Eq -> "="
+  | Ne -> "!="
+  | Lt -> "<"
+  | Le -> "<="
+  | Gt -> ">"
+  | Ge -> ">="
+;;
+
+let address_to_string : Anchor.Address.t -> string = function
+  | Heading id -> "#" ^ id
+  | Attr id -> "{#" ^ id ^ "}"
+  | Caret id -> "^" ^ id
+;;
+
+let rec pred_to_string : pred -> string = function
+  | Prop (prop, cmp, value) ->
+    sprintf "%s %s %s" prop (cmp_to_string cmp) (Node.value_to_string value)
+  | Has prop -> "has " ^ prop
+  | Named address -> "named " ^ address_to_string address
+  | Count (query, cmp, n) ->
+    sprintf "count(%s) %s %d" (to_string query) (cmp_to_string cmp) n
+  | And [] -> "true"
+  | Or [] -> "false"
+  | And preds -> String.concat ~sep:" and " (List.map preds ~f:grouped)
+  | Or preds -> String.concat ~sep:" or " (List.map preds ~f:grouped)
+  | Not pred -> "not " ^ grouped pred
+  | Custom (label, _) -> label
+
+and grouped (pred : pred) : string =
+  match pred with
+  | And _ | Or _ -> "(" ^ pred_to_string pred ^ ")"
+  | _ -> pred_to_string pred
+
+and step_to_string : step -> string = function
+  | Children -> "children"
+  | Section { nested = true } -> "section"
+  | Section { nested = false } -> "section(direct)"
+  | Filter pred -> "filter(" ^ pred_to_string pred ^ ")"
+  | Nth n -> sprintf "nth(%d)" n
+  | Each queries ->
+    "each(" ^ String.concat ~sep:"; " (List.map queries ~f:to_string) ^ ")"
+  | Recurse { steps; emit; descend } ->
+    sprintf
+      "recurse(%s; emit %s; descend %s)"
+      (to_string steps)
+      (pred_to_string emit)
+      (pred_to_string descend)
+
+and to_string : t -> string = function
+  | [] -> "self"
+  | query -> String.concat ~sep:" | " (List.map query ~f:step_to_string)
+;;
+
+(* Run
+   --- *)
 
 type stage =
   { step : step
@@ -229,24 +348,7 @@ type result =
   ; stages : stage list
   }
 
-let holds pred cursor =
-  match pred with
-  | Kind wanted -> String.equal (kind cursor) wanted
-  | Lang wanted -> Option.equal String.equal (info_string cursor) (Some wanted)
-  | Named address -> List.mem (names cursor) address ~equal:Anchor.Address.equal
-;;
-
-let apply step input =
-  match step with
-  | Children -> List.concat_map input ~f:children
-  | Descendants -> List.concat_map input ~f:descendants
-  | Descendants_or_self -> List.concat_map input ~f:(fun c -> c :: descendants c)
-  | Section { nested } -> List.concat_map input ~f:(section ~nested)
-  | Filter pred -> List.filter input ~f:(holds pred)
-  | Nth n -> Option.to_list (List.nth input (n - 1))
-;;
-
-let run query start =
+let run (query : t) (start : cursor list) : result =
   let matches, stages =
     List.fold_map query ~init:start ~f:(fun input step ->
       let output = apply step input in
@@ -255,46 +357,56 @@ let run query start =
   { matches; stages }
 ;;
 
-let explain { step; input; output = _ } =
-  let listing values =
-    List.fold values ~init:[] ~f:(fun seen v ->
-      if List.mem seen v ~equal:String.equal then seen else v :: seen)
-    |> List.rev
-    |> function
-    | [] -> "none"
-    | values -> String.concat values ~sep:", "
-  in
-  let heading_slugs () =
+let listing (values : string list) : string =
+  List.fold values ~init:[] ~f:(fun seen v ->
+    if List.mem seen v ~equal:String.equal then seen else v :: seen)
+  |> List.rev
+  |> function
+  | [] -> "none"
+  | values -> String.concat values ~sep:", "
+;;
+
+let explain ({ step; input; output = _ } : stage) : string =
+  let kinds () = listing (List.map input ~f:(fun cursor -> Node.kind (node cursor))) in
+  let heading_ids () =
     List.filter_map input ~f:(fun cursor ->
-      match cursor.view with
-      | Block (B.Heading (h, _)) -> Some (heading_of h).slug
+      match node cursor with
+      | Heading { id; _ } -> Some id
       | _ -> None)
   in
   let ids select =
-    listing (List.concat_map input ~f:(fun c -> List.filter_map (names c) ~f:select))
+    listing
+      (List.concat_map input ~f:(fun cursor -> List.filter_map (names cursor) ~f:select))
   in
   match step with
-  | Children | Descendants | Descendants_or_self ->
-    sprintf "nothing inside the selected blocks (%s)" (listing (List.map input ~f:kind))
+  | Children | Recurse { emit = And []; _ } ->
+    sprintf "nothing inside the selected blocks (%s)" (kinds ())
+  | Recurse { emit; _ } ->
+    sprintf
+      "no block where %s inside the selected blocks (%s)"
+      (pred_to_string emit)
+      (kinds ())
+  | Each _ -> sprintf "%s returned nothing from: %s" (step_to_string step) (kinds ())
   | Section _ ->
-    (match heading_slugs () with
+    (match heading_ids () with
+     | [] -> sprintf "only a heading has a section; selected: %s" (kinds ())
+     | ids -> sprintf "the section of %s is empty" (listing ids))
+  | Filter (Prop (prop, _, _) as pred) ->
+    (match List.filter_map input ~f:(fun cursor -> Node.prop prop (node cursor)) with
      | [] ->
        sprintf
-         "only a heading has a section; selected: %s"
-         (listing (List.map input ~f:kind))
-     | slugs -> sprintf "the section of %s is empty" (listing slugs))
-  | Filter (Kind wanted) ->
-    sprintf
-      "no block of kind %s; kinds here: %s"
-      wanted
-      (listing (List.map input ~f:kind))
-  | Filter (Lang wanted) ->
-    sprintf
-      "no code block with info string %s; info strings here: %s"
-      wanted
-      (listing (List.filter_map input ~f:info_string))
+         "no block where %s; none here has %s (kinds here: %s)"
+         (pred_to_string pred)
+         prop
+         (kinds ())
+     | values ->
+       sprintf
+         "no block where %s; %s here: %s"
+         (pred_to_string pred)
+         prop
+         (listing (List.map values ~f:Node.value_to_string)))
   | Filter (Named (Heading id)) ->
-    sprintf "no heading #%s; headings here: %s" id (listing (heading_slugs ()))
+    sprintf "no heading #%s; headings here: %s" id (listing (heading_ids ()))
   | Filter (Named (Attr id)) ->
     sprintf
       "no block named {#%s}; attribute ids here: %s"
@@ -309,10 +421,12 @@ let explain { step; input; output = _ } =
       (ids (function
          | Caret id -> Some id
          | Heading _ | Attr _ -> None))
+  | Filter pred ->
+    sprintf "no block where %s; kinds here: %s" (pred_to_string pred) (kinds ())
   | Nth n -> sprintf "no match number %d; %d matched before it" n (List.length input)
 ;;
 
-let why_empty result =
+let why_empty (result : result) : string option =
   if not (List.is_empty result.matches)
   then None
   else (
@@ -321,92 +435,38 @@ let why_empty result =
     | Some { input = []; _ } | None -> Some "the note has no blocks")
 ;;
 
-(* Flags
-   ----- *)
-
-type flags =
-  { under : string option
-  ; direct : bool
-  ; kind : string option
-  ; lang : string option
-  ; attr_id : string option
-  ; caret_id : string option
-  ; nth : int option
-  }
-
-let of_flags (flags : flags) : t =
-  let scope =
-    match flags.under with
-    | None -> [ Descendants_or_self ]
-    | Some heading ->
-      [ Descendants_or_self
-      ; Filter (Named (Heading (Parse.Common.heading_id_of_text heading)))
-      ; Section { nested = not flags.direct }
-      ; Descendants_or_self
-      ]
-  in
-  let filter make value = Option.map value ~f:(fun v -> Filter (make v)) in
-  scope
-  @ List.filter_opt
-      [ filter (fun k -> Kind k) flags.kind
-      ; filter (fun l -> Lang l) flags.lang
-      ; filter (fun id -> Named (Attr id)) flags.attr_id
-      ; filter (fun id -> Named (Caret id)) flags.caret_id
-      ; Option.map flags.nth ~f:(fun n -> Nth n)
-      ]
-;;
-
 (* Content
    ======= *)
 
-type content =
-  | Literal of string
-  | Markdown of B.t
-  | Not_a_container
-
-let content cursor =
-  let code_lines cb =
-    Literal
-      (B.Code_block.code cb
-       |> List.map ~f:Cmarkit.Block_line.to_string
-       |> String.concat ~sep:"\n")
+let render (cursor : cursor) (cursors : cursor list) : string =
+  let blocks =
+    List.filter_map cursors ~f:(fun cursor ->
+      match cursor.view with
+      | Block block -> Some block
+      | Item _ -> None)
   in
-  match cursor.view with
-  | Item (item, _) -> Markdown (B.List_item.block item)
-  | Block block ->
-    (match block with
-     | B.Code_block (cb, _) | B.Ext_math_block (cb, _) -> code_lines cb
-     | B.Ext_raw_block (rb, _) -> code_lines (B.Raw_block.code_block rb)
-     | B.Html_block (lines, _) ->
-       Literal
-         (lines |> List.map ~f:Cmarkit.Block_line.to_string |> String.concat ~sep:"\n")
-     | B.Block_quote (bq, meta) ->
-       let inner = B.Block_quote.block bq in
-       (* Drop the callout's [ [!note] Title ] header line. *)
-       (match B.Callout.find meta with
-        | Some _ -> Markdown (B.Callout.strip_header inner)
-        | None -> Markdown inner)
-     | B.Ext_div (d, _) -> Markdown (B.Div.block d)
-     | B.Ext_keyed ((_label, body), _) -> Markdown body
-     | B.Ext_footnote_definition (fn, _) -> Markdown (B.Footnote.block fn)
-     | B.Heading _ ->
-       let blocks =
-         List.filter_map (section ~nested:true cursor) ~f:(fun sibling ->
-           match sibling.view with
-           | Block block -> Some block
-           | Item _ -> None)
-       in
-       let blank = B.Blank_line ("", Cmarkit.Meta.none) in
-       Markdown (B.Blocks (List.intersperse blocks ~sep:blank, Cmarkit.Meta.none))
-     | _ -> Not_a_container)
+  let blank = B.Blank_line ("", Cmarkit.Meta.none) in
+  Parse.commonmark_of_doc
+    (Cmarkit.Doc.make
+       ~defs:(Cmarkit.Doc.defs cursor.doc)
+       (B.Blocks (List.intersperse blocks ~sep:blank, Cmarkit.Meta.none)))
 ;;
 
-let content_string cursor =
-  match content cursor with
-  | Literal text -> Ok text
-  | Markdown block ->
-    Ok
-      (Parse.commonmark_of_doc
-         (Cmarkit.Doc.make ~defs:(Cmarkit.Doc.defs cursor.doc) block))
-  | Not_a_container -> Error (kind cursor)
+let content_string (cursor : cursor) : (string, string) Result.t =
+  match node cursor with
+  | Code_block { text; _ }
+  | Math_block { text }
+  | Html_block { text }
+  | Raw_block { text; _ } -> Ok text
+  | Heading _ -> Ok (render cursor (section ~nested:true cursor))
+  | Callout _ | Block_quote | Div _ | Keyed _ | Footnote_definition _ | List_item _ ->
+    Ok (render cursor (children cursor))
+  | (Paragraph | List _ | Table | Definition_list | Thematic_break) as node ->
+    Error (Node.kind node)
+;;
+
+let markdown (cursor : cursor) : string =
+  match cursor.view with
+  | Block _ -> render cursor [ cursor ]
+  | Item _ -> render cursor (children cursor)
 ;;

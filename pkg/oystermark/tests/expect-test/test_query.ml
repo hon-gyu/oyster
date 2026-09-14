@@ -1,28 +1,34 @@
-(** Querying the blocks of a note: cursors, the steps a query is composed of,
-    and the contents of a container. Impl: {!Oystermark.Note.Query}.
+(** Querying the blocks of a note: cursors, nodes, the steps a query is
+    composed of, and the contents of a container. Impl:
+    {!Oystermark.Note.Query} and {!Oystermark.Note.Node}.
 
     This is what [oyster block] is built on. The command's flags are translated
-    to steps by {!Oystermark.Note.Query.of_flags}, so the tests below run the
-    same query the command runs. *)
+    to steps by {!Oystermark.Note.Query_flags.to_query}, so the tests below run
+    the same query the command runs. *)
 
 open Core
+module Node = Oystermark.Note.Node
 module Query = Oystermark.Note.Query
+module Query_flags = Oystermark.Note.Query_flags
+open Query.Sugar
 
 let doc_of_string (s : string) : Cmarkit.Doc.t = Oystermark.Parse.of_string ~locs:true s
 
 (** Print every cursor of [s], indented by depth: its path, kind, info string and
     enclosing heading ids. *)
 let survey (s : string) =
-  Query.top (doc_of_string s)
-  |> List.concat_map ~f:(fun cursor -> cursor :: Query.descendants cursor)
+  (Query.run descendants_or_self (Query.top (doc_of_string s))).matches
   |> List.iter ~f:(fun cursor ->
     let path = Query.path cursor in
+    let node = Query.node cursor in
     printf
       "%s%s\t%s\t%s\t%s\n"
       (String.make (2 * (List.length path - 1)) ' ')
       (String.concat ~sep:"." (List.map path ~f:Int.to_string))
-      (Query.kind cursor)
-      (Option.value (Query.info_string cursor) ~default:"-")
+      (Node.kind node)
+      (match Node.prop "info" node with
+       | Some (String info) -> info
+       | _ -> "-")
       (match Query.headings cursor with
        | [] -> "-"
        | headings ->
@@ -45,17 +51,32 @@ let print_result ?(content = false) (s : string) (result : Query.result) =
         | Error kind -> printf "<a %s has no contents to print>\n" kind)
       else (
         let textloc = Cmarkit.Meta.textloc (Query.meta cursor) in
-        let first = Cmarkit.Textloc.first_byte textloc in
-        let last = Cmarkit.Textloc.last_byte textloc in
-        printf "%s\n" (String.sub s ~pos:first ~len:(last - first + 1))))
+        if Cmarkit.Textloc.is_none textloc
+        then printf "%s\n" (Query.markdown cursor)
+        else (
+          let first = Cmarkit.Textloc.first_byte textloc in
+          let last = Cmarkit.Textloc.last_byte textloc in
+          printf "%s\n" (String.sub s ~pos:first ~len:(last - first + 1)))))
 ;;
 
 (** Run the flags of [oyster block] over [s]. *)
-let query ?under ?(direct = false) ?kind ?lang ?id ?caret_id ?nth ?content (s : string) =
-  Query.run
-    (Query.of_flags { under; direct; kind; lang; attr_id = id; caret_id; nth })
-    (Query.top (doc_of_string s))
-  |> print_result ?content s
+let query
+      ?under
+      ?(direct = false)
+      ?kind
+      ?lang
+      ?id
+      ?caret_id
+      ?key
+      ?nth
+      ?content
+      (s : string)
+  =
+  match
+    Query_flags.to_query { under; direct; kind; lang; attr_id = id; caret_id; key; nth }
+  with
+  | Error message -> printf "<%s>\n" message
+  | Ok steps -> Query.run steps (Query.top (doc_of_string s)) |> print_result ?content s
 ;;
 
 (** Run [steps] over [s]. *)
@@ -227,7 +248,7 @@ some text
   [%expect
     {|
     some text
-    <no code block with info string python; info strings here: none>
+    <no block where info = "python"; none here has info (kinds here: code_block)>
     |}]
 ;;
 
@@ -315,7 +336,7 @@ The [a]{#x} and [b]{#y} terms.
 
 let%expect_test "steps compose: the second item of a list" =
   steps
-    [ Descendants_or_self; Filter (Kind "list"); Children; Nth 2 ]
+    (descendants_or_self @ [ Filter (is "list"); Children; Nth 2 ])
     {|
 - one
 - two
@@ -370,16 +391,172 @@ let%expect_test "an empty result names the step that found nothing" =
   query mixed_note ~under:"other" ~lang:"sh";
   query mixed_note ~kind:"code_block" ~nth:9;
   query mixed_note ~id:"nope";
-  steps [ Descendants; Filter (Kind "paragraph"); Section { nested = true } ] mixed_note;
+  steps (descendants @ [ Filter (is "paragraph"); Section { nested = true } ]) mixed_note;
+  query mixed_note ~kind:"tabel";
   query "";
   [%expect
     {|
     <no heading #setp; headings here: top, setup, other>
-    <no block of kind table; kinds here: heading, code_block, callout, paragraph, list, list_item>
-    <no code block with info string sh; info strings here: python>
+    <no block where kind = "table"; kind here: "heading", "code_block", "callout", "paragraph", "list", "list_item">
+    <no block where info = "sh"; info here: "python">
     <no match number 9; 3 matched before it>
     <no block named {#nope}; attribute ids here: none>
     <only a heading has a section; selected: paragraph>
+    <unknown kind tabel; kinds: heading, paragraph, code_block, math_block, html_block, raw_block, callout, block_quote, list, list_item, keyed, div, footnote_definition, table, definition_list, thematic_break>
     <the note has no blocks>
     |}]
+;;
+
+let%expect_test "a filter can test a property of a node" =
+  let doc =
+    {|
+# One
+
+## Two
+
+### Three
+
+> [!tip] Short
+> body
+
+- a
+- b
+- c
+|}
+  in
+  steps (descendants_or_self @ [ Filter (Prop ("level", Lt, Int 3)) ]) doc;
+  steps (descendants_or_self @ [ Filter (Prop ("type", Eq, String "tip")) ]) doc;
+  steps (descendants_or_self @ [ Filter (Prop ("length", Ge, Int 3)) ]) doc;
+  steps (descendants_or_self @ [ Filter (Prop ("level", Eq, String "1")) ]) doc;
+  steps (descendants_or_self @ [ Filter (Prop ("title", Eq, String "Long")) ]) doc;
+  [%expect
+    {|
+    # One
+    ## Two
+    > [!tip] Short
+    > body
+    - a
+    - b
+    - c
+    <no block where level = "1"; level here: 1, 2, 3>
+    <no block where title = "Long"; title here: "Short">
+    |}]
+;;
+
+let%expect_test "a filter can run a query from each node" =
+  let doc =
+    {|
+> [!note] Flat
+> # A
+> # B
+> # C
+
+> [!note] Nested
+> # A
+> ## B
+> # C
+
+> [!warning] Flat
+> # A
+> # B
+> # C
+|}
+  in
+  let headings = descendants @ [ Filter (is "heading") ] in
+  steps
+    (descendants_or_self
+     @ [ Filter
+           (And
+              [ is "callout"
+              ; Prop ("type", Eq, String "note")
+              ; Count (headings, Eq, 3)
+              ; for_all headings (Prop ("level", Lt, Int 2))
+              ])
+       ])
+    doc;
+  [%expect
+    {|
+    > [!note] Flat
+    > # A
+    > # B
+    > # C
+    |}]
+;;
+
+let%expect_test "until unwraps containers until a condition holds" =
+  let doc =
+    {|
+> [!note]
+> ::: warning
+> ```sh
+> echo deep
+> ```
+> :::
+
+```sh
+echo top
+```
+|}
+  in
+  steps ~content:true (until [ Children ] (is "code_block")) doc;
+  [%expect {| echo deep |}]
+;;
+
+let%expect_test "a keyed list reads as fields" =
+  let doc =
+    {|
+- name: oyster
+- deps:
+  - cmarkit
+  - core
+|}
+  in
+  steps (field "name") doc;
+  steps (field "deps" @ [ Children ]) doc;
+  steps (field "deps" @ field "missing") doc;
+  query doc ~kind:"list_item" ~key:"deps";
+  [%expect
+    {|
+    oyster
+    - cmarkit
+    - core
+    <no block where key = "missing"; none here has key (kinds here: list, list_item)>
+    - deps:
+      - cmarkit
+      - core
+    |}]
+;;
+
+let%expect_test "each runs its query from one cursor at a time" =
+  let doc =
+    {|
+- a1
+- a2
+
+* b1
+* b2
+|}
+  in
+  steps [ Children; Nth 1 ] doc;
+  steps [ Each [ [ Children; Nth 1 ] ] ] doc;
+  [%expect
+    {|
+    - a1
+    - a1
+    * b1
+    |}]
+;;
+
+let%expect_test "recurse can stop descending" =
+  let doc =
+    {|
+> quoted paragraph
+>
+> - item paragraph
+|}
+  in
+  steps
+    [ Recurse { steps = [ Children ]; emit = is "paragraph"; descend = Not (is "list") } ]
+    doc;
+  [%expect {| quoted paragraph |}]
 ;;

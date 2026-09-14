@@ -1,27 +1,20 @@
 (** Querying the blocks of a note by composing small steps.
 
     A query is a list of {!step}s run from a list of cursors, usually {!top}.
-    Each step maps the cursors it receives to new cursors. The flags of
-    [oyster block] are sugar: {!of_flags} translates them to steps. *)
+    Each step maps the cursors it receives to new cursors. There are few
+    primitive steps; {!Sugar} builds common queries from them. [oyster block]'s
+    flags are one syntax for queries, see {!Query_flags}. *)
 
 (** {1 Cursor} *)
 
-(** What a cursor points at. *)
-type view =
-  | Block of Cmarkit.Block.t
-  (** Never [Blocks], [Ext_attributes], [Blank_line] or
-        [Link_reference_definition]: groupings and attribute wrappers are looked
-        through, and blank lines and label definitions are skipped. *)
-  | Item of Cmarkit.Block.List_item.t Cmarkit.node
-  (** A list item, which is not a [Cmarkit.Block.t]. *)
-
-(** A view and where it is in the note. *)
+(** A block or list item of a note, and where it is. *)
 type cursor
 
 (** The cursors of the blocks at the top level of [doc]. *)
 val top : Cmarkit.Doc.t -> cursor list
 
-val view : cursor -> view
+(** What [cursor] points at. *)
+val node : cursor -> Node.t
 
 (** The position of [cursor]: its index among its siblings at each level,
     outermost first. From {!top}, running [Nth (i + 1)] for the first index,
@@ -30,19 +23,17 @@ val path : cursor -> int list
 
 (** The cursors directly inside [cursor], in document order.
 
-    - A block quote or callout, a div, a keyed block, a footnote
-      definition and a list item: the blocks they hold.
+    - A block quote, a div, a footnote definition and a list item: the blocks
+      they hold.
+    - A callout: the blocks of its body, without the [ [!type] title ] header.
+    - A keyed node: the blocks of its value, without the label.
     - A list: its items.
-    - Any other block: none.
+    - Any other node: none.
 
-    Blocks of a kind {!kind} does not name, such as frontmatter, are skipped. A
-    heading has no children; its section is a run of its siblings, see
-    {!section}. *)
+    Blank lines, link reference definitions and block attributes are not nodes,
+    see {!Node.of_block}. A heading has no children; its section is a run of its
+    siblings, see {!section}. *)
 val children : cursor -> cursor list
-
-(** The cursors below [cursor] in document order, containers before their
-    contents. [cursor] itself is not included. *)
-val descendants : cursor -> cursor list
 
 (** The section of a heading: the siblings after it, up to the next heading of
     the same or a higher level, or the end of its container. With
@@ -55,16 +46,9 @@ val section : nested:bool -> cursor -> cursor list
 
 (** {2 Metadata} *)
 
-(** A stable name for the kind of [cursor]: [list_item], or the kind of its
-    block, such as [code_block] or [heading]. A callout is named [callout], not
-    [block_quote]. *)
-val kind : cursor -> string
-
-(** The metadata of the view: its location, and ids such as a caret id. *)
+(** The metadata of what [cursor] points at: its location, and ids such as a
+    caret id. *)
 val meta : cursor -> Cmarkit.Meta.t
-
-(** The info string of a fenced code block: [python] for [ ```python ]. *)
-val info_string : cursor -> string option
 
 (** The headings whose sections contain [cursor], outermost first. Sections are
     those of {!section}, so a heading inside a container does not enclose the
@@ -80,20 +64,98 @@ val names : cursor -> Anchor.Address.t list
 
 (** {1 Query} *)
 
-type pred =
-  | Kind of string (** {!kind} is this. *)
-  | Lang of string (** {!info_string} is exactly this. *)
-  | Named of Anchor.Address.t (** {!names} contains this address. *)
+type cmp =
+  | Eq
+  | Ne
+  | Lt
+  | Le
+  | Gt
+  | Ge
 
-type step =
+type pred =
+  | Prop of string * cmp * Node.value
+  (** The node's value of the named property, see {!Node.props}, compares to
+        the given value. Does not hold if the node does not have the property,
+        or if its value is of another type. *)
+  | Has of string (** The node has the named property. *)
+  | Named of Anchor.Address.t (** {!names} contains the address. *)
+  | Count of t * cmp * int
+  (** The number of cursors the query returns, run from the cursor alone,
+        compares to the given number. *)
+  | And of pred list
+  | Or of pred list
+  | Not of pred
+  | Custom of string * (cursor -> bool)
+  (** Any OCaml predicate. The string names it in {!why_empty}. *)
+
+and step =
   | Children (** {!children} of each cursor. *)
-  | Descendants (** {!descendants} of each cursor. *)
-  | Descendants_or_self (** Each cursor, followed by its {!descendants}. *)
   | Section of { nested : bool } (** {!section} of each heading. *)
   | Filter of pred (** The cursors for which the predicate holds. *)
   | Nth of int (** The [n]th cursor, 1-based. *)
+  | Each of t list
+  (** A map: for each cursor, what each query returns when run from that
+        cursor alone, concatenated in order. Steps inside see one cursor at a
+        time, so [Each [ [ Children; Nth 1 ] ]] is the first child of each
+        cursor, where [Children; Nth 1] is the first child of all of them. The
+        empty query returns its input, so [Each [ []; q ]] keeps each cursor and
+        adds what [q] returns from it. *)
+  | Recurse of
+      { steps : t
+      ; emit : pred (** Return a result for which this holds. *)
+      ; descend : pred (** Run [steps] again from a result for which this holds. *)
+      }
+  (** For each cursor, depth first: run [steps] from it, then for each result,
+        return it if [emit] holds and recurse into it if [descend] holds.
+        [emit] and [descend] are tested on results, not on the cursors the step
+        starts from. [And []] always holds. [steps] must eventually return
+        nothing, as [Children] does, unless [descend] stops the recursion. *)
 
-type t = step list
+and t = step list
+
+(** Common queries, built from the primitive steps. *)
+module Sugar : sig
+  (** [Prop ("kind", Eq, String kind)]: the node is of this kind, see
+      {!Node.kinds}. *)
+  val is : string -> pred
+
+  (** [ [Recurse { steps; emit = And []; descend = And [] }] ]: every result, at
+      any depth. *)
+  val recurse : t -> t
+
+  (** [ [Recurse { steps; emit = pred; descend = Not pred }] ]: on each branch,
+      the first results for which [pred] holds, without looking inside them. *)
+  val until : t -> pred -> t
+
+  (** [recurse [ Children ]]: every cursor below. *)
+  val descendants : t
+
+  (** [ [Each [ []; descendants ]] ]: each cursor, then every cursor below it. *)
+  val descendants_or_self : t
+
+  (** [query], [n] times in a row. *)
+  val times : int -> t -> t
+
+  (** [Count (query @ [Filter pred], Gt, 0)]. *)
+  val exists : t -> pred -> pred
+
+  (** [Count (query @ [Filter (Not pred)], Eq, 0)]: true when [query] returns
+      nothing. *)
+  val for_all : t -> pred -> pred
+
+  (** The value of a keyed node, or of a list item with a key: the keyed node's
+      children. *)
+  val value : t
+
+  (** The value under [key], from a keyed node or list item with that key, or
+      from a container of those such as a list:
+      [Each [ []; [Children] ]; Filter (Prop ("key", Eq, String key))] then
+      {!value}. *)
+  val field : string -> t
+end
+
+val to_string : t -> string
+val pred_to_string : pred -> string
 
 (** One step of a run: what reached the step and what it returned. *)
 type stage =
@@ -112,52 +174,20 @@ type result =
 val run : t -> cursor list -> result
 
 (** Why [result] has no matches: the first stage that returned nothing, and
-    what it could have matched instead, such as the headings or kinds among its
-    input, or that the query started from no blocks. [None] when there are
-    matches. *)
+    what its input had instead, such as the kinds or the values of a property;
+    or that the query started from no blocks. [None] when there are matches. *)
 val why_empty : result -> string option
-
-(** {2 Flags} *)
-
-(** The flags of [oyster block]. *)
-type flags =
-  { under : string option
-    (** Only blocks in the section of the heading with this id or text. The
-        value is converted to an id with {!Parse.Common.heading_id_of_text}. *)
-  ; direct : bool (** With [under], stop the section at the first subheading. *)
-  ; kind : string option
-  ; lang : string option
-  ; attr_id : string option (** Only the block a link to [ #id ] names. *)
-  ; caret_id : string option (** Only the block a link to [ #^id ] names. *)
-  ; nth : int option (** Of the blocks the other flags keep, only the [n]th. *)
-  }
-
-(** The steps [flags] stand for:
-    - the scope: [Descendants_or_self], or with [under h]
-      [Descendants_or_self; Filter (Named (Heading h)); Section { nested }; Descendants_or_self]
-      where [nested] is [not direct];
-    - then [Filter] for each of [kind], [lang], [attr_id] and [caret_id];
-    - then [Nth] for [nth]. *)
-val of_flags : flags -> t
 
 (** {1 Content} *)
 
-(** The contents of a container, without the container's own syntax.
-
-    [Literal] is text whose fence and indentation the parser already removed,
-    exactly as written. [Markdown] is the inner blocks of a container such as a
-    block quote; {!content_string} renders them, so the result can differ from
-    the source in formatting (fences, list markers, wrapping). *)
-type content =
-  | Literal of string
-  | Markdown of Cmarkit.Block.t
-  | Not_a_container
-
-(** The contents of [cursor]. A heading's contents are its section, with
-    subsections. [Not_a_container] for paragraphs, tables, thematic breaks and
-    lists. *)
-val content : cursor -> content
-
-(** The contents of [cursor] as a string, rendered with the note's label
-    definitions. [Error kind] when it is not a container. *)
+(** What [cursor] holds, without its own syntax: the text of a code, math, HTML
+    or raw block, exactly as written; the rendered {!children} of a container;
+    the rendered section of a heading. Rendered Markdown can differ from the
+    source in formatting (fences, list markers, wrapping). [Error kind] for a
+    node that holds nothing to print, such as a paragraph or a list. *)
 val content_string : cursor -> (string, string) Result.t
+
+(** [cursor] rendered as Markdown, for a node without source text of its own,
+    such as the value [oyster] of [- name: oyster]. A list item is rendered as
+    its blocks, without the marker. *)
+val markdown : cursor -> string
