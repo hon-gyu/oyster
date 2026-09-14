@@ -1,13 +1,12 @@
 (** Querying the blocks of a note: the walk, its filters, and the contents of a
-    container. Impl: {!Oystermark.Note.walk} and
-    {!Oystermark.Note.content_string}.
+    container. Impl: {!Oystermark.Note.Query}.
 
-    This is what [oyster block] is built on. The command's flags are filters
-    over the records {!Oystermark.Note.walk} produces, so the tests
-    below run the same query the command runs. *)
+    This is what [oyster block] is built on. The command's flags are the fields
+    of {!Oystermark.Note.Query.t}, so the tests below run the same query
+    the command runs. *)
 
 open Core
-module Note = Oystermark.Note
+module Block_query = Oystermark.Note.Query
 module Common = Oystermark.Parse.Common
 
 let doc_of_string (s : string) : Cmarkit.Doc.t = Oystermark.Parse.of_string ~locs:true s
@@ -21,12 +20,12 @@ let blocks_of_doc (doc : Cmarkit.Doc.t) : Cmarkit.Block.t list =
 (** Print one line per block of [s]: its position, kind, info string and
     enclosing headings -- the fields the filters select on. *)
 let survey (s : string) =
-  Note.walk (blocks_of_doc (doc_of_string s))
-  |> List.iter ~f:(fun (located : Note.located_block) ->
+  Block_query.walk (blocks_of_doc (doc_of_string s))
+  |> List.iter ~f:(fun (located : Block_query.located_block) ->
     printf
       "%d\t%s\t%s\t%s\n"
       located.index
-      (Note.kind_of_block located.block)
+      (Block_query.kind_of_block located.block)
       (Option.value (Common.info_string_of_block located.block) ~default:"-")
       (match located.heading_path with
        | [] -> "-"
@@ -35,40 +34,30 @@ let survey (s : string) =
 
 (** Run a query over [s] and print what [oyster block] would print: each match's
     source, or with [~content] what the container holds. *)
-let query ?under ?kind ?lang ?id ?caret_id ?nth ?(content = false) (s : string) =
+let query
+      ?under
+      ?(direct = false)
+      ?kind
+      ?lang
+      ?id
+      ?caret_id
+      ?nth
+      ?(content = false)
+      (s : string)
+  =
   let doc = doc_of_string s in
   let defs = Cmarkit.Doc.defs doc in
-  let matches_option option actual =
-    match option with
-    | None -> true
-    | Some wanted ->
-      (match actual with
-       | Some actual -> String.equal actual wanted
-       | None -> false)
-  in
-  let matches =
-    Note.walk (blocks_of_doc doc)
-    |> List.filter ~f:(fun (located : Note.located_block) ->
-      (match under with
-       | None -> true
-       | Some wanted -> List.mem located.heading_path wanted ~equal:String.equal)
-      && matches_option kind (Some (Note.kind_of_block located.block))
-      && matches_option lang (Common.info_string_of_block located.block)
-      && matches_option id located.attr_id
-      && matches_option caret_id (Common.caret_id_of_block located.block))
-  in
-  let matches =
-    match nth with
-    | None -> matches
-    | Some n -> List.nth matches (n - 1) |> Option.to_list
-  in
-  match matches with
+  match
+    Block_query.run
+      { under; direct; kind; lang; attr_id = id; caret_id; nth }
+      (blocks_of_doc doc)
+  with
   | [] -> printf "<no block matches>\n"
   | matches ->
     List.iter matches ~f:(fun located ->
       if content
       then (
-        match Note.content_string ~defs located with
+        match Block_query.content_string ~defs located with
         | Ok content -> printf "%s\n" content
         | Error kind -> printf "<a %s has no contents to print>\n" kind)
       else (
@@ -274,5 +263,52 @@ let%expect_test "a list item is not a block; its contents are walked" =
     1	list	-	-
     2	paragraph	-	-
     3	paragraph	-	-
+    |}]
+;;
+
+let%expect_test "a direct query excludes nested subsections" =
+  let doc =
+    {|
+## Setup
+
+```sh
+echo direct
+```
+
+### Details
+
+```sh
+echo nested
+```
+|}
+  in
+  query doc ~under:"Setup" ~lang:"sh" ~content:true;
+  query doc ~under:"Setup" ~direct:true ~lang:"sh" ~content:true;
+  [%expect
+    {|
+    echo direct
+    echo nested
+    echo direct
+    |}]
+;;
+
+let%expect_test "an id selects the block a link to it resolves to" =
+  let doc =
+    {|
+The [a]{#x} and [b]{#y} terms.
+
+> A quote.
+
+^q1
+|}
+  in
+  query doc ~id:"x";
+  query doc ~id:"y";
+  query doc ~caret_id:"q1";
+  [%expect
+    {|
+    The [a]{#x} and [b]{#y} terms.
+    The [a]{#x} and [b]{#y} terms.
+    > A quote.
     |}]
 ;;

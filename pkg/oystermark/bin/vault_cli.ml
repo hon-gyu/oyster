@@ -1,6 +1,7 @@
 (** Command-line client for vault queries and renames. *)
 
 open Core
+module Block_query = Oystermark.Note.Query
 module Parse = Oystermark.Parse
 module Vault = Oystermark.Vault
 
@@ -260,7 +261,7 @@ let context_command =
 (** Query the blocks of a note.
 
     The filters are sugar over one traversal: every flag narrows the same list
-    of {!Oystermark.Note.located_block} records, and [-json] prints those
+    of {!Oystermark.Note.Query.located_block} records, and [-json] prints those
     records so a filter this command does not implement can be written in jq.
 
     Default output is the block's source, verbatim. *)
@@ -280,9 +281,13 @@ let block_command =
          "-lang"
          (optional string)
          ~doc:"INFO only code blocks whose info string is exactly INFO"
-     and id = flag "-id" (optional string) ~doc:"ID only the block with this {#id}"
+     and id =
+       flag "-id" (optional string) ~doc:"ID only the block a link to #ID names ({#ID})"
      and caret_id =
-       flag "-caret-id" (optional string) ~doc:"ID only the block with this ^id"
+       flag
+         "-caret-id"
+         (optional string)
+         ~doc:"ID only the block a link to #^ID names (^ID)"
      and nth = flag "-nth" (optional int) ~doc:"N keep only the Nth match, 1-based"
      and content =
        flag "-content" no_arg ~doc:" print what the container holds, not its source"
@@ -304,49 +309,15 @@ let block_command =
          | block -> [ block ]
        in
        let matches =
-         Note.walk blocks
-         |> List.filter ~f:(fun (located : Note.located_block) ->
-           let keeps_under =
-             match under with
-             | None -> true
-             | Some wanted ->
-               let wanted = Parse.Common.heading_id_of_text wanted in
-               if direct
-               then (
-                 match List.last located.heading_path with
-                 | Some innermost -> String.equal innermost wanted
-                 | None -> false)
-               else List.mem located.heading_path wanted ~equal:String.equal
-           in
-           let matches_option option actual =
-             match option with
-             | None -> true
-             | Some wanted ->
-               (match actual with
-                | Some actual -> String.equal actual wanted
-                | None -> false)
-           in
-           keeps_under
-           && matches_option kind (Some (Note.kind_of_block located.block))
-           && matches_option lang (Parse.Common.info_string_of_block located.block)
-           && matches_option id located.attr_id
-           && matches_option caret_id (Parse.Common.caret_id_of_block located.block))
-       in
-       let matches =
-         match nth with
-         | None -> matches
-         | Some n ->
-           (match List.nth matches (n - 1) with
-            | Some located -> [ located ]
-            | None -> [])
+         Block_query.run { under; direct; kind; lang; attr_id = id; caret_id; nth } blocks
        in
        if List.is_empty matches then die "%s: no block matches" note;
        let content_of located =
-         match Note.content_string ~defs located with
+         match Block_query.content_string ~defs located with
          | Ok content -> content
          | Error kind -> die "%s: a %s has no contents to print" note kind
        in
-       let source_of (located : Note.located_block) =
+       let source_of (located : Block_query.located_block) =
          let textloc = Cmarkit.Meta.textloc (Parse.Common.meta_of_block located.block) in
          if Cmarkit.Textloc.is_none textloc
          then die "%s: block %d has no location; parse with locations" note located.index
@@ -357,7 +328,7 @@ let block_command =
        in
        if json
        then (
-         let json_of (located : Note.located_block) =
+         let json_of (located : Block_query.located_block) =
            let textloc =
              Cmarkit.Meta.textloc (Parse.Common.meta_of_block located.block)
            in
@@ -367,10 +338,18 @@ let block_command =
            in
            `Assoc
              [ "index", `Int located.index
-             ; "kind", `String (Note.kind_of_block located.block)
+             ; "kind", `String (Block_query.kind_of_block located.block)
              ; "info", string_or_null (Parse.Common.info_string_of_block located.block)
-             ; "attr_id", string_or_null located.attr_id
-             ; "caret_id", string_or_null (Parse.Common.caret_id_of_block located.block)
+             ; ( "attr_ids"
+               , `List
+                   (List.filter_map located.addresses ~f:(function
+                      | Attr id -> Some (`String id)
+                      | Heading _ | Caret _ -> None)) )
+             ; ( "caret_ids"
+               , `List
+                   (List.filter_map located.addresses ~f:(function
+                      | Caret id -> Some (`String id)
+                      | Heading _ | Attr _ -> None)) )
              ; ( "heading_path"
                , `List (List.map located.heading_path ~f:(fun s -> `String s)) )
              ; ( "heading_text"
@@ -384,7 +363,7 @@ let block_command =
                    ] )
              ; "text", `String (source_of located)
              ; ( "content"
-               , match Note.content_string ~defs located with
+               , match Block_query.content_string ~defs located with
                  | Ok content -> `String content
                  | Error _ -> `Null )
              ]
