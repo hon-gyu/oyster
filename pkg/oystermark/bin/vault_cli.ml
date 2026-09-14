@@ -1,7 +1,7 @@
 (** Command-line client for vault queries and renames. *)
 
 open Core
-module Block_query = Oystermark.Note.Query
+module Query = Oystermark.Note.Query
 module Parse = Oystermark.Parse
 module Vault = Oystermark.Vault
 
@@ -260,9 +260,9 @@ let context_command =
 
 (** Query the blocks of a note.
 
-    The filters are sugar over one traversal: every flag narrows the same list
-    of {!Oystermark.Note.Query.located_block} records, and [-json] prints those
-    records so a filter this command does not implement can be written in jq.
+    Each flag adds steps to one {!Oystermark.Note.Query.t}; see
+    {!Oystermark.Note.Query.of_flags}. [-json] prints each match with its path,
+    names and enclosing headings, which can be used to write the next query.
 
     Default output is the block's source, verbatim. *)
 let block_command =
@@ -273,8 +273,8 @@ let block_command =
        flag
          "-under"
          (optional string)
-         ~doc:"SLUG only blocks under the heading with this id or text"
-     and direct = flag "-direct" no_arg ~doc:" with -under, exclude nested subsections"
+         ~doc:"SLUG only blocks in the section of the heading with this id or text"
+     and direct = flag "-direct" no_arg ~doc:" with -under, stop at the first subheading"
      and kind = flag "-kind" (optional string) ~doc:"KIND only blocks of this kind"
      and lang =
        flag
@@ -302,25 +302,26 @@ let block_command =
        in
        let source = In_channel.read_all note in
        let doc = Parse.of_string ~locs:true source in
-       let defs = Cmarkit.Doc.defs doc in
-       let blocks =
-         match Cmarkit.Doc.block doc with
-         | Cmarkit.Block.Blocks (blocks, _) -> blocks
-         | block -> [ block ]
+       let result =
+         Query.run
+           (Query.of_flags { under; direct; kind; lang; attr_id = id; caret_id; nth })
+           (Query.top doc)
        in
-       let matches =
-         Block_query.run { under; direct; kind; lang; attr_id = id; caret_id; nth } blocks
-       in
-       if List.is_empty matches then die "%s: no block matches" note;
-       let content_of located =
-         match Block_query.content_string ~defs located with
+       Option.iter (Query.why_empty result) ~f:(fun why -> die "%s: %s" note why);
+       let content_of cursor =
+         match Query.content_string cursor with
          | Ok content -> content
          | Error kind -> die "%s: a %s has no contents to print" note kind
        in
-       let source_of (located : Block_query.located_block) =
-         let textloc = Cmarkit.Meta.textloc (Parse.Common.meta_of_block located.block) in
+       let source_of cursor =
+         let textloc = Cmarkit.Meta.textloc (Query.meta cursor) in
          if Cmarkit.Textloc.is_none textloc
-         then die "%s: block %d has no location; parse with locations" note located.index
+         then
+           die
+             "%s: the %s at %s has no location"
+             note
+             (Query.kind cursor)
+             (String.concat ~sep:"." (List.map (Query.path cursor) ~f:Int.to_string))
          else (
            let first = Cmarkit.Textloc.first_byte textloc in
            let last = Cmarkit.Textloc.last_byte textloc in
@@ -328,32 +329,30 @@ let block_command =
        in
        if json
        then (
-         let json_of (located : Block_query.located_block) =
-           let textloc =
-             Cmarkit.Meta.textloc (Parse.Common.meta_of_block located.block)
+         let json_of cursor =
+           let textloc = Cmarkit.Meta.textloc (Query.meta cursor) in
+           let name (address : Oystermark.Note.Anchor.Address.t) =
+             let kind, id =
+               match address with
+               | Heading id -> "heading", id
+               | Caret id -> "caret", id
+               | Attr id -> "attr", id
+             in
+             `Assoc [ "kind", `String kind; "id", `String id ]
            in
-           let string_or_null = function
-             | Some s -> `String s
-             | None -> `Null
+           let heading (h : Oystermark.Note.Anchor.heading) =
+             `Assoc
+               [ "id", `String h.slug; "text", `String h.text; "level", `Int h.level ]
            in
            `Assoc
-             [ "index", `Int located.index
-             ; "kind", `String (Block_query.kind_of_block located.block)
-             ; "info", string_or_null (Parse.Common.info_string_of_block located.block)
-             ; ( "attr_ids"
-               , `List
-                   (List.filter_map located.addresses ~f:(function
-                      | Attr id -> Some (`String id)
-                      | Heading _ | Caret _ -> None)) )
-             ; ( "caret_ids"
-               , `List
-                   (List.filter_map located.addresses ~f:(function
-                      | Caret id -> Some (`String id)
-                      | Heading _ | Attr _ -> None)) )
-             ; ( "heading_path"
-               , `List (List.map located.heading_path ~f:(fun s -> `String s)) )
-             ; ( "heading_text"
-               , `List (List.map located.heading_text ~f:(fun s -> `String s)) )
+             [ "path", `List (List.map (Query.path cursor) ~f:(fun i -> `Int i))
+             ; "kind", `String (Query.kind cursor)
+             ; ( "info"
+               , match Query.info_string cursor with
+                 | Some info -> `String info
+                 | None -> `Null )
+             ; "names", `List (List.map (Query.names cursor) ~f:name)
+             ; "headings", `List (List.map (Query.headings cursor) ~f:heading)
              ; ( "loc"
                , `Assoc
                    [ "first_line", `Int (fst (Cmarkit.Textloc.first_line textloc))
@@ -361,18 +360,18 @@ let block_command =
                    ; "first_byte", `Int (Cmarkit.Textloc.first_byte textloc)
                    ; "last_byte", `Int (Cmarkit.Textloc.last_byte textloc)
                    ] )
-             ; "text", `String (source_of located)
+             ; "text", `String (source_of cursor)
              ; ( "content"
-               , match Block_query.content_string ~defs located with
+               , match Query.content_string cursor with
                  | Ok content -> `String content
                  | Error _ -> `Null )
              ]
          in
          print_endline
-           (Yojson.Safe.pretty_to_string (`List (List.map matches ~f:json_of))))
+           (Yojson.Safe.pretty_to_string (`List (List.map result.matches ~f:json_of))))
        else
-         List.map matches ~f:(fun located ->
-           if content then content_of located else source_of located)
+         List.map result.matches ~f:(fun cursor ->
+           if content then content_of cursor else source_of cursor)
          |> String.concat ~sep:"\n\n"
          |> print_endline)
 ;;

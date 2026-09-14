@@ -1,70 +1,66 @@
-(** Querying the blocks of a note: the walk, its filters, and the contents of a
-    container. Impl: {!Oystermark.Note.Query}.
+(** Querying the blocks of a note: cursors, the steps a query is composed of,
+    and the contents of a container. Impl: {!Oystermark.Note.Query}.
 
-    This is what [oyster block] is built on. The command's flags are the fields
-    of {!Oystermark.Note.Query.t}, so the tests below run the same query
-    the command runs. *)
+    This is what [oyster block] is built on. The command's flags are translated
+    to steps by {!Oystermark.Note.Query.of_flags}, so the tests below run the
+    same query the command runs. *)
 
 open Core
-module Block_query = Oystermark.Note.Query
-module Common = Oystermark.Parse.Common
+module Query = Oystermark.Note.Query
 
 let doc_of_string (s : string) : Cmarkit.Doc.t = Oystermark.Parse.of_string ~locs:true s
 
-let blocks_of_doc (doc : Cmarkit.Doc.t) : Cmarkit.Block.t list =
-  match Cmarkit.Doc.block doc with
-  | Cmarkit.Block.Blocks (blocks, _) -> blocks
-  | block -> [ block ]
-;;
-
-(** Print one line per block of [s]: its position, kind, info string and
-    enclosing headings -- the fields the filters select on. *)
+(** Print every cursor of [s], indented by depth: its path, kind, info string and
+    enclosing heading ids. *)
 let survey (s : string) =
-  Block_query.walk (blocks_of_doc (doc_of_string s))
-  |> List.iter ~f:(fun (located : Block_query.located_block) ->
+  Query.top (doc_of_string s)
+  |> List.concat_map ~f:(fun cursor -> cursor :: Query.descendants cursor)
+  |> List.iter ~f:(fun cursor ->
+    let path = Query.path cursor in
     printf
-      "%d\t%s\t%s\t%s\n"
-      located.index
-      (Block_query.kind_of_block located.block)
-      (Option.value (Common.info_string_of_block located.block) ~default:"-")
-      (match located.heading_path with
+      "%s%s\t%s\t%s\t%s\n"
+      (String.make (2 * (List.length path - 1)) ' ')
+      (String.concat ~sep:"." (List.map path ~f:Int.to_string))
+      (Query.kind cursor)
+      (Option.value (Query.info_string cursor) ~default:"-")
+      (match Query.headings cursor with
        | [] -> "-"
-       | path -> String.concat path ~sep:"/"))
+       | headings ->
+         String.concat
+           ~sep:"/"
+           (List.map headings ~f:(fun (h : Oystermark.Note.Anchor.heading) -> h.slug))))
 ;;
 
-(** Run a query over [s] and print what [oyster block] would print: each match's
-    source, or with [~content] what the container holds. *)
-let query
-      ?under
-      ?(direct = false)
-      ?kind
-      ?lang
-      ?id
-      ?caret_id
-      ?nth
-      ?(content = false)
-      (s : string)
-  =
-  let doc = doc_of_string s in
-  let defs = Cmarkit.Doc.defs doc in
-  match
-    Block_query.run
-      { under; direct; kind; lang; attr_id = id; caret_id; nth }
-      (blocks_of_doc doc)
-  with
-  | [] -> printf "<no block matches>\n"
-  | matches ->
-    List.iter matches ~f:(fun located ->
+(** Print what [oyster block] would print for [result]: each match's source, or
+    with [~content] what the container holds, or why nothing matched. *)
+let print_result ?(content = false) (s : string) (result : Query.result) =
+  match Query.why_empty result with
+  | Some why -> printf "<%s>\n" why
+  | None ->
+    List.iter result.matches ~f:(fun cursor ->
       if content
       then (
-        match Block_query.content_string ~defs located with
+        match Query.content_string cursor with
         | Ok content -> printf "%s\n" content
         | Error kind -> printf "<a %s has no contents to print>\n" kind)
       else (
-        let textloc = Cmarkit.Meta.textloc (Common.meta_of_block located.block) in
+        let textloc = Cmarkit.Meta.textloc (Query.meta cursor) in
         let first = Cmarkit.Textloc.first_byte textloc in
         let last = Cmarkit.Textloc.last_byte textloc in
         printf "%s\n" (String.sub s ~pos:first ~len:(last - first + 1))))
+;;
+
+(** Run the flags of [oyster block] over [s]. *)
+let query ?under ?(direct = false) ?kind ?lang ?id ?caret_id ?nth ?content (s : string) =
+  Query.run
+    (Query.of_flags { under; direct; kind; lang; attr_id = id; caret_id; nth })
+    (Query.top (doc_of_string s))
+  |> print_result ?content s
+;;
+
+(** Run [steps] over [s]. *)
+let steps ?content (steps : Query.t) (s : string) =
+  Query.run steps (Query.top (doc_of_string s)) |> print_result ?content s
 ;;
 
 let mixed_note =
@@ -95,21 +91,23 @@ print("b")
 |}
 ;;
 
-let%expect_test "the walk reports every addressable block, containers included" =
+let%expect_test "descendants are in document order, containers before their contents" =
   survey mixed_note;
   [%expect
     {|
-    1	heading	-	-
-    2	heading	-	top
-    3	code_block	sh	top/setup
-    4	code_block	python	top/setup
-    5	callout	-	top/setup
-    6	paragraph	-	top/setup
-    7	list	-	top/setup
-    8	paragraph	-	top/setup
-    9	paragraph	-	top/setup
-    10	heading	-	top
-    11	code_block	python	top/other
+    0	heading	-	-
+    1	heading	-	top
+    2	code_block	sh	top/setup
+    3	code_block	python	top/setup
+    4	callout	-	top/setup
+      4.0	paragraph	-	top/setup
+    5	list	-	top/setup
+      5.0	list_item	-	top/setup
+        5.0.0	paragraph	-	top/setup
+      5.1	list_item	-	top/setup
+        5.1.0	paragraph	-	top/setup
+    6	heading	-	top
+    7	code_block	python	top/other
     |}]
 ;;
 
@@ -131,7 +129,7 @@ let%expect_test "a section scopes the query" =
     ```python
     print("b")
     ```
-    <no block matches>
+    <no heading #missing; headings here: top, setup, other>
     |}]
 ;;
 
@@ -209,7 +207,7 @@ echo hi
   query doc ~id:"code" ~content:true;
   [%expect
     {|
-    <no block matches>
+    <no block named {#missing}; attribute ids here: prose, code>
     <a paragraph has no contents to print>
     echo hi
     |}]
@@ -229,7 +227,7 @@ some text
   [%expect
     {|
     some text
-    <no block matches>
+    <no code block with info string python; info strings here: none>
     |}]
 ;;
 
@@ -252,7 +250,7 @@ Second para.
     |}]
 ;;
 
-let%expect_test "a list item is not a block; its contents are walked" =
+let%expect_test "a list item is a cursor of its own" =
   survey
     {|
 - item one
@@ -260,9 +258,11 @@ let%expect_test "a list item is not a block; its contents are walked" =
 |};
   [%expect
     {|
-    1	list	-	-
-    2	paragraph	-	-
-    3	paragraph	-	-
+    0	list	-	-
+      0.0	list_item	-	-
+        0.0.0	paragraph	-	-
+      0.1	list_item	-	-
+        0.1.0	paragraph	-	-
     |}]
 ;;
 
@@ -310,5 +310,76 @@ The [a]{#x} and [b]{#y} terms.
     The [a]{#x} and [b]{#y} terms.
     The [a]{#x} and [b]{#y} terms.
     > A quote.
+    |}]
+;;
+
+let%expect_test "steps compose: the second item of a list" =
+  steps
+    [ Descendants_or_self; Filter (Kind "list"); Children; Nth 2 ]
+    {|
+- one
+- two
+  continued
+- three
+|};
+  [%expect
+    {|
+    - two
+      continued
+    |}]
+;;
+
+let%expect_test "a heading's section ends with its container" =
+  query
+    ~under:"inside"
+    {|
+# Top
+
+> [!note]
+> ## Inside
+> in the callout
+
+after the callout
+|};
+  [%expect {| in the callout |}]
+;;
+
+let%expect_test "a heading's contents are its section" =
+  query mixed_note ~kind:"heading" ~nth:2 ~content:true;
+  [%expect
+    {|
+    ```sh
+    echo one
+    ```
+
+    ```python
+    print("a")
+    ```
+
+    > \[!note\] A callout
+    > Body line.
+
+    - item one
+    - item two
+    |}]
+;;
+
+let%expect_test "an empty result names the step that found nothing" =
+  query mixed_note ~under:"setp";
+  query mixed_note ~kind:"table";
+  query mixed_note ~under:"other" ~lang:"sh";
+  query mixed_note ~kind:"code_block" ~nth:9;
+  query mixed_note ~id:"nope";
+  steps [ Descendants; Filter (Kind "paragraph"); Section { nested = true } ] mixed_note;
+  query "";
+  [%expect
+    {|
+    <no heading #setp; headings here: top, setup, other>
+    <no block of kind table; kinds here: heading, code_block, callout, paragraph, list, list_item>
+    <no code block with info string sh; info strings here: python>
+    <no match number 9; 3 matched before it>
+    <no block named {#nope}; attribute ids here: none>
+    <only a heading has a section; selected: paragraph>
+    <the note has no blocks>
     |}]
 ;;
