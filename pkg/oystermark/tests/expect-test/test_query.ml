@@ -1,14 +1,13 @@
-(** Querying the blocks of a note: nodes, the steps a query is composed of, and the contents of a container. Impl:
-    {!Oystermark.Note.Query} and {!Oystermark.Note.Node}.
+(** Querying the blocks of a note: nodes, the steps a query is composed of, and
+    the contents of a container. Impl: {!Oystermark.Note.Query} and
+    {!Oystermark.Note.Node}.
 
-    This is what [oyster block] is built on. The command's flags are translated
-    to steps by {!Oystermark.Note.Query_flags.to_query}, so the tests below run
-    the same query the command runs. *)
+    This is what [oyster block] is built on; its flags are one syntax for the
+    queries written out here, tested in {!Test_query_flags}. *)
 
 open Core
 module Node = Oystermark.Note.Node
 module Query = Oystermark.Note.Query
-module Query_flags = Oystermark.Note.Query_flags
 open Query.Sugar
 
 let doc_of_string (s : string) : Cmarkit.Doc.t = Oystermark.Parse.of_string ~locs:true s
@@ -34,8 +33,8 @@ let survey (s : string) =
            (List.map headings ~f:(fun (h : Oystermark.Note.Anchor.heading) -> h.slug))))
 ;;
 
-(** Print what [oyster block] would print for [result]: each match's source, or
-    with [~content] what the container holds, or why nothing matched. *)
+(** Print each match of [result] the way [oyster block] does: its source, or
+    with [~content] what it holds, or why nothing matched. *)
 let print_result ?(content = false) (s : string) (result : Query.result) =
   match Query.why_empty result with
   | Some why -> printf "<%s>\n" why
@@ -53,30 +52,24 @@ let print_result ?(content = false) (s : string) (result : Query.result) =
           printf "%s\n" (String.sub s ~pos:first_byte ~len:(last_byte - first_byte + 1))))
 ;;
 
-(** Run the flags of [oyster block] over [s]. *)
-let query
-      ?under
-      ?(direct = false)
-      ?kind
-      ?lang
-      ?id
-      ?caret_id
-      ?key
-      ?nth
-      ?content
-      (s : string)
-  =
-  match
-    Query_flags.to_query { under; direct; kind; lang; attr_id = id; caret_id; key; nth }
-  with
-  | Error message -> printf "<%s>\n" message
-  | Ok steps -> Query.run steps (doc_of_string s) |> print_result ?content s
-;;
-
 (** Run [steps] over [s]. *)
 let steps ?content (steps : Query.t) (s : string) =
   Query.run steps (doc_of_string s) |> print_result ?content s
 ;;
+
+(** Everything in the section of the heading with this id, at any depth. With
+    [~nested:false] the section stops at the first subheading. *)
+let under ?(nested = true) (slug : string) : Query.t =
+  descendants_or_self
+  @ [ Query.Filter (Named (Heading slug)); Query.Section { nested } ]
+  @ descendants_or_self
+;;
+
+(** Only code blocks whose info string is exactly [info]. *)
+let lang (info : string) : Query.step = Filter (Prop ("info", Eq, String info))
+
+(** Only the block a link to [ #id ] names. *)
+let attr (id : string) : Query.step = Filter (Named (Attr id))
 
 let mixed_note =
   {|
@@ -127,7 +120,7 @@ let%expect_test "descendants are in document order, containers before their cont
 ;;
 
 let%expect_test "position addresses a block that carries no id" =
-  query mixed_note ~under:"top" ~lang:"python" ~nth:2;
+  steps (under "top" @ [ lang "python"; Nth 2 ]) mixed_note;
   [%expect
     {|
     ```python
@@ -137,8 +130,8 @@ let%expect_test "position addresses a block that carries no id" =
 ;;
 
 let%expect_test "a section scopes the query" =
-  query mixed_note ~under:"other" ~kind:"code_block";
-  query mixed_note ~under:"missing" ~kind:"code_block";
+  steps (under "other" @ [ Filter (is "code_block") ]) mixed_note;
+  steps (under "missing" @ [ Filter (is "code_block") ]) mixed_note;
   [%expect
     {|
     ```python
@@ -149,7 +142,7 @@ let%expect_test "a section scopes the query" =
 ;;
 
 let%expect_test "the default output is the block's source, verbatim" =
-  query mixed_note ~kind:"callout";
+  steps (descendants_or_self @ [ Filter (is "callout") ]) mixed_note;
   [%expect
     {|
     > [!note] A callout
@@ -158,14 +151,14 @@ let%expect_test "the default output is the block's source, verbatim" =
 ;;
 
 let%expect_test "a callout's contents drop the marker its syntax owns" =
-  query mixed_note ~kind:"callout" ~content:true;
+  steps ~content:true (descendants_or_self @ [ Filter (is "callout") ]) mixed_note;
   [%expect {| Body line. |}]
 ;;
 
 let%expect_test "the id selects the block, not its position" =
-  query
-    ~id:"wanted"
+  steps
     ~content:true
+    (descendants_or_self @ [ attr "wanted" ])
     {|
 ```python
 print("first")
@@ -184,9 +177,9 @@ print("third")
 ;;
 
 let%expect_test "a code block keeps its indentation and blank lines" =
-  query
-    ~id:"script"
+  steps
     ~content:true
+    (descendants_or_self @ [ attr "script" ])
     {|
 {#script}
 ```python
@@ -217,9 +210,9 @@ echo hi
 ```
 |}
   in
-  query doc ~id:"missing" ~content:true;
-  query doc ~id:"prose" ~content:true;
-  query doc ~id:"code" ~content:true;
+  steps ~content:true (descendants_or_self @ [ attr "missing" ]) doc;
+  steps ~content:true (descendants_or_self @ [ attr "prose" ]) doc;
+  steps ~content:true (descendants_or_self @ [ attr "code" ]) doc;
   [%expect
     {|
     <no block named {#missing}; attribute ids here: prose, code>
@@ -237,8 +230,8 @@ some text
 ```
 |}
   in
-  query doc ~id:"bare" ~content:true;
-  query doc ~lang:"python";
+  steps ~content:true (descendants_or_self @ [ attr "bare" ]) doc;
+  steps (descendants_or_self @ [ lang "python" ]) doc;
   [%expect
     {|
     some text
@@ -247,9 +240,9 @@ some text
 ;;
 
 let%expect_test "a div's contents are its body, re-rendered" =
-  query
-    ~kind:"div"
+  steps
     ~content:true
+    (descendants_or_self @ [ Filter (is "div") ])
     {|
 ::: warning
 Inside the div.
@@ -265,7 +258,7 @@ Second para.
     |}]
 ;;
 
-let%expect_test "a list item is a cursor of its own" =
+let%expect_test "a list item is a node of its own" =
   survey
     {|
 - item one
@@ -297,8 +290,8 @@ echo nested
 ```
 |}
   in
-  query doc ~under:"Setup" ~lang:"sh" ~content:true;
-  query doc ~under:"Setup" ~direct:true ~lang:"sh" ~content:true;
+  steps ~content:true (under "setup" @ [ lang "sh" ]) doc;
+  steps ~content:true (under ~nested:false "setup" @ [ lang "sh" ]) doc;
   [%expect
     {|
     echo direct
@@ -317,9 +310,9 @@ The [a]{#x} and [b]{#y} terms.
 ^q1
 |}
   in
-  query doc ~id:"x";
-  query doc ~id:"y";
-  query doc ~caret_id:"q1";
+  steps (descendants_or_self @ [ attr "x" ]) doc;
+  steps (descendants_or_self @ [ attr "y" ]) doc;
+  steps (descendants_or_self @ [ Filter (Named (Caret "q1")) ]) doc;
   [%expect
     {|
     The [a]{#x} and [b]{#y} terms.
@@ -345,8 +338,8 @@ let%expect_test "steps compose: the second item of a list" =
 ;;
 
 let%expect_test "a heading's section ends with its container" =
-  query
-    ~under:"inside"
+  steps
+    (under "inside")
     {|
 # Top
 
@@ -360,7 +353,10 @@ after the callout
 ;;
 
 let%expect_test "a heading's contents are its section" =
-  query mixed_note ~kind:"heading" ~nth:2 ~content:true;
+  steps
+    ~content:true
+    (descendants_or_self @ [ Filter (is "heading"); Nth 2 ])
+    mixed_note;
   [%expect
     {|
     ```sh
@@ -380,14 +376,13 @@ let%expect_test "a heading's contents are its section" =
 ;;
 
 let%expect_test "an empty result names the step that found nothing" =
-  query mixed_note ~under:"setp";
-  query mixed_note ~kind:"table";
-  query mixed_note ~under:"other" ~lang:"sh";
-  query mixed_note ~kind:"code_block" ~nth:9;
-  query mixed_note ~id:"nope";
+  steps (under "setp") mixed_note;
+  steps (descendants_or_self @ [ Filter (is "table") ]) mixed_note;
+  steps (under "other" @ [ lang "sh" ]) mixed_note;
+  steps (descendants_or_self @ [ Filter (is "code_block"); Nth 9 ]) mixed_note;
+  steps (descendants_or_self @ [ attr "nope" ]) mixed_note;
   steps (descendants @ [ Filter (is "paragraph"); Section { nested = true } ]) mixed_note;
-  query mixed_note ~kind:"tabel";
-  query "";
+  steps descendants_or_self "";
   [%expect
     {|
     <no heading #setp; headings here: top, setup, other>
@@ -396,7 +391,6 @@ let%expect_test "an empty result names the step that found nothing" =
     <no match number 9; 3 matched before it>
     <no block named {#nope}; attribute ids here: none>
     <only a heading has a section; selected: paragraph>
-    <unknown kind tabel; kinds: heading, paragraph, code_block, math_block, html_block, raw_block, callout, block_quote, list, list_item, keyed, div, footnote_definition, table, definition_list, thematic_break>
     <the note has no blocks>
     |}]
 ;;
@@ -508,7 +502,10 @@ let%expect_test "a keyed list reads as fields" =
   steps (field "name") doc;
   steps (field "deps" @ [ Children ]) doc;
   steps (field "deps" @ field "missing") doc;
-  query doc ~kind:"list_item" ~key:"deps";
+  steps
+    (descendants_or_self
+     @ [ Filter (is "list_item"); Filter (Prop ("key", Eq, String "deps")) ])
+    doc;
   [%expect
     {|
     oyster
@@ -521,7 +518,7 @@ let%expect_test "a keyed list reads as fields" =
     |}]
 ;;
 
-let%expect_test "each runs its query from one cursor at a time" =
+let%expect_test "each runs its query from one node at a time" =
   let doc =
     {|
 - a1
