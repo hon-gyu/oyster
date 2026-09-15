@@ -20,24 +20,23 @@ let to_query (flags : t) : (Query.t, string) Result.t =
         (sprintf "unknown kind %s; kinds: %s" name (String.concat ~sep:", " Node.kinds))
     | kind -> Ok kind
   in
-  let scope : Query.t =
-    match flags.under with
-    | None -> Query.Sugar.descendants_or_self
-    | Some heading ->
-      Query.Sugar.descendants_or_self
-      @ [ Query.Filter (Named (Heading (Parse.Common.heading_id_of_text heading)))
-        ; Query.Section { nested = not flags.direct }
-        ]
-      @ Query.Sugar.descendants_or_self
-  in
-  let filter make value = Option.map value ~f:(fun v -> Query.Filter (make v)) in
-  scope
-  @ List.filter_opt
-      [ filter Query.Sugar.is kind
-      ; filter (fun lang -> Query.Prop ("info", Eq, String lang)) flags.lang
-      ; filter (fun id -> Query.Named (Attr id)) flags.attr_id
-      ; filter (fun id -> Query.Named (Caret id)) flags.caret_id
-      ; filter (fun key -> Query.Prop ("key", Eq, String key)) flags.key
-      ; Option.map flags.nth ~f:(fun n -> Query.Nth n)
+  (* Attribute and caret identifiers share the [id] property. *)
+  let id = Option.first_some flags.attr_id flags.caret_id in
+  let where =
+    List.filter_opt
+      [ Option.map kind ~f:Query.is
+      ; Option.map flags.lang ~f:(fun lang -> Query.Prop ("lang", Eq, String lang))
+      ; Option.map id ~f:(fun id -> Query.Prop ("id", Eq, String id))
+      ; Option.map flags.key ~f:(fun key -> Query.Prop ("key", Eq, String key))
       ]
+  in
+  (* The flag is 1-based, the step is 0-based. *)
+  let nth = Option.map flags.nth ~f:(fun n -> n - 1) in
+  let scope =
+    match flags.under with
+    | None -> Query.empty
+    | Some heading -> Query.section ~exact:false [ heading ] Query.empty
+  in
+  (* [direct] keeps the search to what the scope holds itself. *)
+  if flags.direct then Query.child ~where ?nth scope else Query.descend ~where ?nth scope
 ;;

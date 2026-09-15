@@ -1,7 +1,4 @@
-(** A block or list item of a note: its kind and its properties.
-
-    A node does not hold its children; the [Children] step of {!Query} moves
-    to them. *)
+(** A node  *)
 
 type task =
   [ `Unchecked
@@ -11,12 +8,21 @@ type task =
   ]
 
 type t =
+  | Root
   | Heading of
       { level : int
       ; id : string (** See {!Parse.Common.heading_id}. *)
       ; text : string (** As plain text. *)
       }
+  | Section of
+      { heading : t
+      ; children : t list
+      }
+  (** A section never crosses a container boundary, so a heading inside
+    a block quote or list item sections  that container's blocks only
+    *)
   | Paragraph
+  | Keyed_paragraph of { key : string }
   | Code_block of
       { info : string option (** [python] for [ ```python ]. *)
       ; text : string (** Without the fence. *)
@@ -42,13 +48,19 @@ type t =
         (** The key of the item's keyed node, when that node is the item's only
             block: [name] for [- name: oyster]. *)
       }
-  | Keyed of { key : string (** The label as plain text, without the colon. *) }
   | Div of { class_ : string option }
   | Footnote_definition of { label : string }
   | Table
   | Definition_list
   | Thematic_break
   | Html_block of { text : string }
+
+type span =
+  { first_line : int
+  ; last_line : int
+  ; first_byte : int
+  ; last_byte : int
+  }
 
 (** The name of the node's kind in lower snake case, such as [heading],
     [code_block] or [list_item]. It is also the node's [kind] property. *)
@@ -61,12 +73,75 @@ val kinds : string list
     block attribute such as [ {#id} ] on its own line (it belongs to the block
     after it), and syntax whose kind is not in {!kinds}, such as frontmatter.
 
-    @raise Invalid_argument on a JSX block, which is not supported. *)
+    @raise Invalid_argument on a JSX block *)
 val of_block : Cmarkit.Block.t -> t option
 
 val of_item : Cmarkit.Block.List_item.t Cmarkit.node -> t
 
-(** {1 Properties} *)
+(** A node in context. *)
+type found_t =
+  { node : t (** What the query selected. *)
+  ; path : int list
+    (** Its position, from {!Root}: its index among its siblings at each level,
+            outermost first. A child step taking that index at each level, in
+            order, reaches it again. Sections are levels of their own, since
+            they are nodes. *)
+  ; names : Anchor.Address.t list
+    (** The addresses that name it, see {!Anchor.Address}. A [ ^id ] on a line
+            of its own names the previous block, not the paragraph it is written
+            in. Sorted, without duplicates. *)
+  ; headings : Anchor.heading list
+    (** The headings whose sections contain it, outermost first. Sections are
+            those of {!Section}, so a heading inside a container encloses that
+            container's blocks only. *)
+  ; span : span option (** [None] unless the note was parsed with [~locs:true]. *)
+  ; markdown : string
+    (** The node rendered as Markdown, including its own syntax: a callout
+            renders with its [ [!type] title ] header, a section with its
+            heading. For what is inside without that syntax, query the node's
+            children. Rendering can differ from the source in formatting
+            (fences, list markers, wrapping); use [span] to quote the source
+            instead. A node without source text of its own, such as the value
+            [oyster] of [- name: oyster], has only this. *)
+  }
+
+(** {1 Properties}
+
+    A node carries the properties below. [id] and [class] are not among them: a
+    node cannot know what is written around it, so {!Query} adds them from the
+    djot attribute or the caret marker on the node, under those names. A
+    predicate sees both sets, and a name can repeat when a node carries more
+    than one identifier or class.
+
+- all nodes:
+  - [kind : string]
+  - [is_container: bool]
+- heading:
+  - [level : int]
+  - [text : string]
+- section: same as [heading]
+- code block:
+  - [lang : string option]
+  - [text : string]
+- math and HTML block: [text]
+- raw block:
+  - [format : string]
+  - [text : string]
+- callout:
+  - [type : string]
+  - [title : string option]
+- list:
+  - [ordered : bool]
+  - [tight : bool]
+  - [length : int]
+- paragraph:
+  - [key : string option]
+- list item:
+  - [task : string option]: [unchecked], [checked] or [cancelled] if it is a task
+  - [key : string option]
+- footnote definition:
+  - [label : string]
+ *)
 
 type value =
   | Int of int
@@ -75,21 +150,8 @@ type value =
 
 val value_to_string : value -> string
 
-(** The properties of [node] as name/value pairs, in this order:
-    - every node: [kind] first, see {!kind};
-    - heading: [level], [id], [text];
-    - code block: [info] if it has an info string, then [text];
-    - math and HTML block: [text];
-    - raw block: [format], [text];
-    - callout: [type], then [title] if it has one;
-    - list: [ordered], [tight], [length] (the number of items);
-    - list item: [task] ([unchecked], [checked] or [cancelled]) if it is a task,
-      then [key] if it has one;
-    - keyed node: [key];
-    - div: [class] if it has one;
-    - footnote definition: [label];
-    - any other node: none. *)
-val props : t -> (string * value) list
-
 (** The value of the property named [name] on [node], if it has one. *)
 val prop : string -> t -> value option
+
+(** Non-null key/value pairs *)
+val props : t -> (string * value) list

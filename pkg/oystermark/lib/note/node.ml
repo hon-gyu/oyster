@@ -1,4 +1,9 @@
+(** AST for a note. It differs from Cmarkit's AST in that
+  - excludes non-content nodes (breaks)
+  - nicer "equality"
+*)
 open Core
+
 module B = Cmarkit.Block
 
 type task =
@@ -9,12 +14,18 @@ type task =
   ]
 
 type t =
+  | Root
   | Heading of
       { level : int
       ; id : string
       ; text : string
       }
+  | Section of
+      { heading : t
+      ; children : t list
+      }
   | Paragraph
+  | Keyed_paragraph of { key : string }
   | Code_block of
       { info : string option
       ; text : string
@@ -38,7 +49,6 @@ type t =
       { task : task option
       ; key : string option
       }
-  | Keyed of { key : string }
   | Div of { class_ : string option }
   | Footnote_definition of { label : string }
   | Table
@@ -46,9 +56,19 @@ type t =
   | Thematic_break
   | Html_block of { text : string }
 
+type span =
+  { first_line : int
+  ; last_line : int
+  ; first_byte : int
+  ; last_byte : int
+  }
+
 let kind : t -> string = function
+  | Root -> "root"
   | Heading _ -> "heading"
+  | Section _ -> "section"
   | Paragraph -> "paragraph"
+  | Keyed_paragraph _ -> "keyed_paragraph"
   | Code_block _ -> "code_block"
   | Math_block _ -> "math_block"
   | Html_block _ -> "html_block"
@@ -57,7 +77,6 @@ let kind : t -> string = function
   | Block_quote -> "block_quote"
   | List _ -> "list"
   | List_item _ -> "list_item"
-  | Keyed _ -> "keyed"
   | Div _ -> "div"
   | Footnote_definition _ -> "footnote_definition"
   | Table -> "table"
@@ -66,8 +85,11 @@ let kind : t -> string = function
 ;;
 
 let kinds =
-  [ "heading"
+  [ "root"
+  ; "heading"
+  ; "section"
   ; "paragraph"
+  ; "keyed_paragraph"
   ; "code_block"
   ; "math_block"
   ; "html_block"
@@ -76,13 +98,35 @@ let kinds =
   ; "block_quote"
   ; "list"
   ; "list_item"
-  ; "keyed"
   ; "div"
   ; "footnote_definition"
   ; "table"
   ; "definition_list"
   ; "thematic_break"
   ]
+;;
+
+(** Whether the node can hold others, so that a child step can move into it. A
+    heading cannot: its section holds the blocks under it. *)
+let is_container : t -> bool = function
+  | Root
+  | Section _
+  | Keyed_paragraph _
+  | Callout _
+  | Block_quote
+  | List _
+  | List_item _
+  | Div _
+  | Footnote_definition _ -> true
+  | Heading _
+  | Paragraph
+  | Code_block _
+  | Math_block _
+  | Html_block _
+  | Raw_block _
+  | Table
+  | Definition_list
+  | Thematic_break -> false
 ;;
 
 let lines_text lines =
@@ -139,7 +183,7 @@ let of_block (block : B.t) : t option =
          ; tight = B.List'.tight l
          ; length = List.length (B.List'.items l)
          })
-  | B.Ext_keyed ((label, _body), _) -> Some (Keyed { key = key_of_label label })
+  | B.Ext_keyed ((label, _body), _) -> Some (Keyed_paragraph { key = key_of_label label })
   | B.Ext_div (d, _) -> Some (Div { class_ = Option.map (B.Div.class' d) ~f:fst })
   | B.Ext_footnote_definition (fn, _) ->
     Some (Footnote_definition { label = Cmarkit.Label.key (B.Footnote.label fn) })
@@ -169,6 +213,15 @@ let of_item ((item, _meta) : B.List_item.t Cmarkit.node) : t =
     }
 ;;
 
+type found_t =
+  { node : t
+  ; path : int list
+  ; names : Anchor.Address.t list
+  ; headings : Anchor.heading list
+  ; span : span option
+  ; markdown : string
+  }
+
 (* Properties
    ========== *)
 
@@ -190,14 +243,14 @@ let task_to_string : task -> string = function
   | `Other u -> sprintf "U+%04X" (Stdlib.Uchar.to_int u)
 ;;
 
-let fields (node : t) : (string * value) list =
+let rec fields (node : t) : (string * value) list =
   let optional name value = Option.map value ~f:(fun value -> name, value) in
   match node with
-  | Heading { level; id; text } ->
-    [ "level", Int level; "id", String id; "text", String text ]
+  | Heading { level; id = _; text } -> [ "level", Int level; "text", String text ]
+  | Section { heading; children = _ } -> fields heading
   | Code_block { info; text } ->
     List.filter_opt
-      [ optional "info" (Option.map info ~f:(fun info -> String info))
+      [ optional "lang" (Option.map info ~f:(fun info -> String info))
       ; Some ("text", String text)
       ]
   | Math_block { text } | Html_block { text } -> [ "text", String text ]
@@ -214,14 +267,18 @@ let fields (node : t) : (string * value) list =
       [ optional "task" (Option.map task ~f:(fun task -> String (task_to_string task)))
       ; optional "key" (Option.map key ~f:(fun key -> String key))
       ]
-  | Keyed { key } -> [ "key", String key ]
+  | Keyed_paragraph { key } -> [ "key", String key ]
   | Div { class_ } ->
     Option.to_list (optional "class" (Option.map class_ ~f:(fun c -> String c)))
   | Footnote_definition { label } -> [ "label", String label ]
-  | Paragraph | Block_quote | Table | Definition_list | Thematic_break -> []
+  | Root | Paragraph | Block_quote | Table | Definition_list | Thematic_break -> []
 ;;
 
-let props (node : t) : (string * value) list = ("kind", String (kind node)) :: fields node
+let props (node : t) : (string * value) list =
+  ("kind", String (kind node))
+  :: ("is_container", Bool (is_container node))
+  :: fields node
+;;
 
 let prop (name : string) (node : t) : value option =
   List.Assoc.find (props node) name ~equal:String.equal
