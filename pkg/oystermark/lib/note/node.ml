@@ -20,7 +20,6 @@ type t =
       ; text : string
       }
   | Math_block of { text : string }
-  | Html_block of { text : string }
   | Raw_block of
       { format : string
       ; text : string
@@ -45,6 +44,7 @@ type t =
   | Table
   | Definition_list
   | Thematic_break
+  | Html_block of { text : string }
 
 let kind : t -> string = function
   | Heading _ -> "heading"

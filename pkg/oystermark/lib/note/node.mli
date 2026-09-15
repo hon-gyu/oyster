@@ -1,6 +1,7 @@
 (** A block or list item of a note: its kind and its properties.
 
-    A node does not hold its children; see {!Query.children}. *)
+    A node does not hold its children; the [Children] step of {!Query} moves
+    to them. *)
 
 type task =
   [ `Unchecked
@@ -21,7 +22,6 @@ type t =
       ; text : string (** Without the fence. *)
       }
   | Math_block of { text : string }
-  | Html_block of { text : string }
   | Raw_block of
       { format : string
       ; text : string
@@ -48,6 +48,7 @@ type t =
   | Table
   | Definition_list
   | Thematic_break
+  | Html_block of { text : string }
 
 (** The name of the node's kind in lower snake case, such as [heading],
     [code_block] or [list_item]. It is also the node's [kind] property. *)

@@ -176,7 +176,7 @@ type pred =
   | And of pred list
   | Or of pred list
   | Not of pred
-  | Custom of string * (cursor -> bool)
+  | Custom of string * (Node.t -> bool)
 
 and step =
   | Children
@@ -224,7 +224,7 @@ let rec holds (pred : pred) (cursor : cursor) : bool =
   | And preds -> List.for_all preds ~f:(fun pred -> holds pred cursor)
   | Or preds -> List.exists preds ~f:(fun pred -> holds pred cursor)
   | Not pred -> not (holds pred cursor)
-  | Custom (_, f) -> f cursor
+  | Custom (_, f) -> f (node cursor)
 
 and apply (step : step) (input : cursor list) : cursor list =
   match step with
@@ -334,8 +334,85 @@ and to_string : t -> string = function
   | query -> String.concat ~sep:" | " (List.map query ~f:step_to_string)
 ;;
 
+(* Content
+   ======= *)
+
+let render (cursor : cursor) (cursors : cursor list) : string =
+  let blocks =
+    List.filter_map cursors ~f:(fun cursor ->
+      match cursor.view with
+      | Block block -> Some block
+      | Item _ -> None)
+  in
+  let blank = B.Blank_line ("", Cmarkit.Meta.none) in
+  Parse.commonmark_of_doc
+    (Cmarkit.Doc.make
+       ~defs:(Cmarkit.Doc.defs cursor.doc)
+       (B.Blocks (List.intersperse blocks ~sep:blank, Cmarkit.Meta.none)))
+;;
+
+let content_string (cursor : cursor) : (string, string) Result.t =
+  match node cursor with
+  | Code_block { text; _ }
+  | Math_block { text }
+  | Html_block { text }
+  | Raw_block { text; _ } -> Ok text
+  | Heading _ -> Ok (render cursor (section ~nested:true cursor))
+  | Callout _ | Block_quote | Div _ | Keyed _ | Footnote_definition _ | List_item _ ->
+    Ok (render cursor (children cursor))
+  | (Paragraph | List _ | Table | Definition_list | Thematic_break) as node ->
+    Error (Node.kind node)
+;;
+
+let markdown (cursor : cursor) : string =
+  match cursor.view with
+  | Block _ -> render cursor [ cursor ]
+  | Item _ -> render cursor (children cursor)
+;;
+
 (* Run
-   --- *)
+   === *)
+
+type span =
+  { first_line : int
+  ; last_line : int
+  ; first_byte : int
+  ; last_byte : int
+  }
+
+type found =
+  { node : Node.t
+  ; path : int list
+  ; names : Anchor.Address.t list
+  ; headings : Anchor.heading list
+  ; span : span option
+  ; content : (string, string) Result.t
+  ; markdown : string
+  }
+
+let span (cursor : cursor) : span option =
+  let textloc = Cmarkit.Meta.textloc (meta cursor) in
+  if Cmarkit.Textloc.is_none textloc
+  then None
+  else
+    Some
+      { first_line = fst (Cmarkit.Textloc.first_line textloc)
+      ; last_line = fst (Cmarkit.Textloc.last_line textloc)
+      ; first_byte = Cmarkit.Textloc.first_byte textloc
+      ; last_byte = Cmarkit.Textloc.last_byte textloc
+      }
+;;
+
+let found_of_cursor (cursor : cursor) : found =
+  { node = node cursor
+  ; path = path cursor
+  ; names = names cursor
+  ; headings = headings cursor
+  ; span = span cursor
+  ; content = content_string cursor
+  ; markdown = markdown cursor
+  }
+;;
 
 type stage =
   { step : step
@@ -344,18 +421,20 @@ type stage =
   }
 
 type result =
-  { matches : cursor list
+  { matches : found list
   ; stages : stage list
   }
 
-let run (query : t) (start : cursor list) : result =
-  let matches, stages =
-    List.fold_map query ~init:start ~f:(fun input step ->
+let run (query : t) (doc : Cmarkit.Doc.t) : result =
+  let last, stages =
+    List.fold_map query ~init:(top doc) ~f:(fun input step ->
       let output = apply step input in
       output, { step; input; output })
   in
-  { matches; stages }
+  { matches = List.map last ~f:found_of_cursor; stages }
 ;;
+
+let matches (result : result) : found list = result.matches
 
 let listing (values : string list) : string =
   List.fold values ~init:[] ~f:(fun seen v ->
@@ -433,40 +512,4 @@ let why_empty (result : result) : string option =
     match List.find result.stages ~f:(fun stage -> List.is_empty stage.output) with
     | Some ({ input = _ :: _; _ } as stage) -> Some (explain stage)
     | Some { input = []; _ } | None -> Some "the note has no blocks")
-;;
-
-(* Content
-   ======= *)
-
-let render (cursor : cursor) (cursors : cursor list) : string =
-  let blocks =
-    List.filter_map cursors ~f:(fun cursor ->
-      match cursor.view with
-      | Block block -> Some block
-      | Item _ -> None)
-  in
-  let blank = B.Blank_line ("", Cmarkit.Meta.none) in
-  Parse.commonmark_of_doc
-    (Cmarkit.Doc.make
-       ~defs:(Cmarkit.Doc.defs cursor.doc)
-       (B.Blocks (List.intersperse blocks ~sep:blank, Cmarkit.Meta.none)))
-;;
-
-let content_string (cursor : cursor) : (string, string) Result.t =
-  match node cursor with
-  | Code_block { text; _ }
-  | Math_block { text }
-  | Html_block { text }
-  | Raw_block { text; _ } -> Ok text
-  | Heading _ -> Ok (render cursor (section ~nested:true cursor))
-  | Callout _ | Block_quote | Div _ | Keyed _ | Footnote_definition _ | List_item _ ->
-    Ok (render cursor (children cursor))
-  | (Paragraph | List _ | Table | Definition_list | Thematic_break) as node ->
-    Error (Node.kind node)
-;;
-
-let markdown (cursor : cursor) : string =
-  match cursor.view with
-  | Block _ -> render cursor [ cursor ]
-  | Item _ -> render cursor (children cursor)
 ;;

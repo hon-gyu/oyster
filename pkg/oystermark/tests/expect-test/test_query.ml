@@ -1,5 +1,4 @@
-(** Querying the blocks of a note: cursors, nodes, the steps a query is
-    composed of, and the contents of a container. Impl:
+(** Querying the blocks of a note: nodes, the steps a query is composed of, and the contents of a container. Impl:
     {!Oystermark.Note.Query} and {!Oystermark.Note.Node}.
 
     This is what [oyster block] is built on. The command's flags are translated
@@ -14,22 +13,20 @@ open Query.Sugar
 
 let doc_of_string (s : string) : Cmarkit.Doc.t = Oystermark.Parse.of_string ~locs:true s
 
-(** Print every cursor of [s], indented by depth: its path, kind, info string and
+(** Print every node of [s], indented by depth: its path, kind, info string and
     enclosing heading ids. *)
 let survey (s : string) =
-  (Query.run descendants_or_self (Query.top (doc_of_string s))).matches
-  |> List.iter ~f:(fun cursor ->
-    let path = Query.path cursor in
-    let node = Query.node cursor in
+  Query.matches (Query.run descendants_or_self (doc_of_string s))
+  |> List.iter ~f:(fun (found : Query.found) ->
     printf
       "%s%s\t%s\t%s\t%s\n"
-      (String.make (2 * (List.length path - 1)) ' ')
-      (String.concat ~sep:"." (List.map path ~f:Int.to_string))
-      (Node.kind node)
-      (match Node.prop "info" node with
+      (String.make (2 * (List.length found.path - 1)) ' ')
+      (String.concat ~sep:"." (List.map found.path ~f:Int.to_string))
+      (Node.kind found.node)
+      (match Node.prop "info" found.node with
        | Some (String info) -> info
        | _ -> "-")
-      (match Query.headings cursor with
+      (match found.headings with
        | [] -> "-"
        | headings ->
          String.concat
@@ -43,20 +40,17 @@ let print_result ?(content = false) (s : string) (result : Query.result) =
   match Query.why_empty result with
   | Some why -> printf "<%s>\n" why
   | None ->
-    List.iter result.matches ~f:(fun cursor ->
+    List.iter (Query.matches result) ~f:(fun (found : Query.found) ->
       if content
       then (
-        match Query.content_string cursor with
+        match found.content with
         | Ok content -> printf "%s\n" content
         | Error kind -> printf "<a %s has no contents to print>\n" kind)
       else (
-        let textloc = Cmarkit.Meta.textloc (Query.meta cursor) in
-        if Cmarkit.Textloc.is_none textloc
-        then printf "%s\n" (Query.markdown cursor)
-        else (
-          let first = Cmarkit.Textloc.first_byte textloc in
-          let last = Cmarkit.Textloc.last_byte textloc in
-          printf "%s\n" (String.sub s ~pos:first ~len:(last - first + 1)))))
+        match found.span with
+        | None -> printf "%s\n" found.markdown
+        | Some { first_byte; last_byte; _ } ->
+          printf "%s\n" (String.sub s ~pos:first_byte ~len:(last_byte - first_byte + 1))))
 ;;
 
 (** Run the flags of [oyster block] over [s]. *)
@@ -76,12 +70,12 @@ let query
     Query_flags.to_query { under; direct; kind; lang; attr_id = id; caret_id; key; nth }
   with
   | Error message -> printf "<%s>\n" message
-  | Ok steps -> Query.run steps (Query.top (doc_of_string s)) |> print_result ?content s
+  | Ok steps -> Query.run steps (doc_of_string s) |> print_result ?content s
 ;;
 
 (** Run [steps] over [s]. *)
 let steps ?content (steps : Query.t) (s : string) =
-  Query.run steps (Query.top (doc_of_string s)) |> print_result ?content s
+  Query.run steps (doc_of_string s) |> print_result ?content s
 ;;
 
 let mixed_note =

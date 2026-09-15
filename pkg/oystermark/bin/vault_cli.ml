@@ -315,27 +315,22 @@ let block_command =
        in
        let source = In_channel.read_all note in
        let doc = Parse.of_string ~locs:true source in
-       let result = Query.run query (Query.top doc) in
+       let result = Query.run query doc in
        Option.iter (Query.why_empty result) ~f:(fun why -> die "%s: %s" note why);
-       let kind_name cursor = Node.kind (Query.node cursor) in
-       let content_of cursor =
-         match Query.content_string cursor with
+       let content_of (found : Query.found) =
+         match found.content with
          | Ok content -> content
          | Error kind -> die "%s: a %s has no contents to print" note kind
        in
-       let source_of cursor =
-         let textloc = Cmarkit.Meta.textloc (Query.meta cursor) in
-         if Cmarkit.Textloc.is_none textloc
-         then Query.markdown cursor
-         else (
-           let first = Cmarkit.Textloc.first_byte textloc in
-           let last = Cmarkit.Textloc.last_byte textloc in
-           String.sub source ~pos:first ~len:(last - first + 1))
+       let source_of (found : Query.found) =
+         match found.span with
+         | None -> found.markdown
+         | Some { first_byte; last_byte; _ } ->
+           String.sub source ~pos:first_byte ~len:(last_byte - first_byte + 1)
        in
        if json
        then (
-         let json_of cursor =
-           let textloc = Cmarkit.Meta.textloc (Query.meta cursor) in
+         let json_of (found : Query.found) =
            let name (address : Oystermark.Note.Anchor.Address.t) =
              let kind, id =
                match address with
@@ -350,40 +345,42 @@ let block_command =
                [ "id", `String h.slug; "text", `String h.text; "level", `Int h.level ]
            in
            let props =
-             List.map
-               (Node.props (Query.node cursor))
-               ~f:(fun (name, (value : Node.value)) ->
-                 ( name
-                 , match value with
-                   | Int n -> `Int n
-                   | String s -> `String s
-                   | Bool b -> `Bool b ))
+             List.map (Node.props found.node) ~f:(fun (name, (value : Node.value)) ->
+               ( name
+               , match value with
+                 | Int n -> `Int n
+                 | String s -> `String s
+                 | Bool b -> `Bool b ))
            in
            `Assoc
-             [ "path", `List (List.map (Query.path cursor) ~f:(fun i -> `Int i))
-             ; "kind", `String (kind_name cursor)
+             [ "path", `List (List.map found.path ~f:(fun i -> `Int i))
+             ; "kind", `String (Node.kind found.node)
              ; "props", `Assoc props
-             ; "names", `List (List.map (Query.names cursor) ~f:name)
-             ; "headings", `List (List.map (Query.headings cursor) ~f:heading)
+             ; "names", `List (List.map found.names ~f:name)
+             ; "headings", `List (List.map found.headings ~f:heading)
              ; ( "loc"
-               , `Assoc
-                   [ "first_line", `Int (fst (Cmarkit.Textloc.first_line textloc))
-                   ; "last_line", `Int (fst (Cmarkit.Textloc.last_line textloc))
-                   ; "first_byte", `Int (Cmarkit.Textloc.first_byte textloc)
-                   ; "last_byte", `Int (Cmarkit.Textloc.last_byte textloc)
-                   ] )
-             ; "text", `String (source_of cursor)
+               , match found.span with
+                 | None -> `Null
+                 | Some { first_line; last_line; first_byte; last_byte } ->
+                   `Assoc
+                     [ "first_line", `Int first_line
+                     ; "last_line", `Int last_line
+                     ; "first_byte", `Int first_byte
+                     ; "last_byte", `Int last_byte
+                     ] )
+             ; "text", `String (source_of found)
              ; ( "content"
-               , match Query.content_string cursor with
+               , match found.content with
                  | Ok content -> `String content
                  | Error _ -> `Null )
              ]
          in
          print_endline
-           (Yojson.Safe.pretty_to_string (`List (List.map result.matches ~f:json_of))))
+           (Yojson.Safe.pretty_to_string
+              (`List (List.map (Query.matches result) ~f:json_of))))
        else
-         List.map result.matches ~f:(fun cursor ->
-           if content then content_of cursor else source_of cursor)
+         List.map (Query.matches result) ~f:(fun found ->
+           if content then content_of found else source_of found)
          |> String.concat ~sep:"\n\n"
          |> print_endline)
 ;;
