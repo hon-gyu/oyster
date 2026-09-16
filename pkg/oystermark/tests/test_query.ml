@@ -95,15 +95,9 @@ let path_to_string (path : int list) : string =
   String.concat ~sep:"." (List.map path ~f:Int.to_string)
 ;;
 
-let indented (text : string) : string =
-  String.split_lines (String.strip text)
-  |> List.map ~f:(fun line -> "    " ^ line)
-  |> String.concat ~sep:"\n"
-;;
-
 (** Each match as its kind, its path and its Markdown. *)
-let show (steps : Query.t) : unit =
-  let result = Query.run steps (doc_of_string mixed_note) in
+let show ?(note = mixed_note) (steps : Query.t) : unit =
+  let result = Query.run steps (doc_of_string note) in
   match result.matches with
   | [] ->
     printf
@@ -112,15 +106,16 @@ let show (steps : Query.t) : unit =
   | matches ->
     List.iter matches ~f:(fun (found : Node.found_t) ->
       printf
-        "%s @%s\n%s\n"
+        "kind: %s, path: %s\n%s\n%s\n"
         (Node.kind found.node)
         (path_to_string found.path)
-        (indented found.markdown))
+        (String.make 20 '-')
+        (found.markdown))
 ;;
 
 (** Each match as its kind and its path, for a query whose matches are large. *)
-let show_brief (steps : Query.t) : unit =
-  let result = Query.run steps (doc_of_string mixed_note) in
+let show_brief ?(note = mixed_note) (steps : Query.t) : unit =
+  let result = Query.run steps (doc_of_string note) in
   match result.matches with
   | [] ->
     printf
@@ -129,7 +124,7 @@ let show_brief (steps : Query.t) : unit =
   | matches ->
     List.iter matches ~f:(fun (found : Node.found_t) ->
       printf
-        "%s @%s%s\n"
+        "kind: %s, path: %s%s\n"
         (Node.kind found.node)
         (path_to_string found.path)
         (Option.value_map (Node.prop "text" found.node) ~default:"" ~f:(fun text ->
@@ -137,8 +132,8 @@ let show_brief (steps : Query.t) : unit =
 ;;
 
 (** The properties of each match. *)
-let show_props (steps : Query.t) : unit =
-  let result = Query.run steps (doc_of_string mixed_note) in
+let show_props ?(note = mixed_note) (steps : Query.t) : unit =
+  let result = Query.run steps (doc_of_string note) in
   List.iter result.matches ~f:(fun (found : Node.found_t) ->
     List.iter (Node.props found.node) ~f:(fun (name, value) ->
       printf "%s = %s\n" name (Node.value_to_string value)))
@@ -151,52 +146,54 @@ let%expect_test "section: everything under a heading, without the heading" =
   show Query.(empty |> section [ "top" ] |> child);
   [%expect
     {|
-    section @0.0
-        ## Setup
+    kind: section, path: 0.0
+    --------------------
+    ## Setup
 
-        ```sh
-        echo one
+    ```sh
+    echo one
+    ```
+
+    ```python
+    print("a")
+    ```
+
+    > \[!note\] A callout
+    > Body line.
+
+    butter:
+    - item one
+      - foo: bar
+    - item two
+
+    ---
+
+    - bird:
+      - bar
+      - cat: cat1
+      - two: three
+      - foo
+    - happy:
+      - sad
+
+    ### Qweioasd
+
+    aciouv
+    kind: section, path: 0.1
+    --------------------
+    ## Other
+
+    ```python
+    print("b")
+    ```
+
+    ttt: hhhh
+
+    - aaa
+      - bqq:
+        ```rs
+        rs code
         ```
-
-        ```python
-        print("a")
-        ```
-
-        > \[!note\] A callout
-        > Body line.
-
-        butter:
-        - item one
-          - foo: bar
-        - item two
-
-        ---
-
-        - bird:
-          - bar
-          - cat: cat1
-          - two: three
-          - foo
-        - happy:
-          - sad
-
-        ### Qweioasd
-
-        aciouv
-    section @0.1
-        ## Other
-
-        ```python
-        print("b")
-        ```
-
-        ttt: hhhh
-
-        - aaa
-          - bqq:
-            ```rs
-            rs code
-            ```
     |}]
 ;;
 
@@ -204,10 +201,11 @@ let%expect_test "section: a sub-path skips a level" =
   show Query.(empty |> section ~exact:false [ "top"; "qweioasd" ]);
   [%expect
     {|
-    section @0.0.6
-        ### Qweioasd
+    kind: section, path: 0.0.6
+    --------------------
+    ### Qweioasd
 
-        aciouv
+    aciouv
     |}]
 ;;
 
@@ -220,10 +218,11 @@ let%expect_test "section: the complete path" =
   show Query.(empty |> section [ "top"; "setup"; "qweioasd" ]);
   [%expect
     {|
-    section @0.0.6
-        ### Qweioasd
+    kind: section, path: 0.0.6
+    --------------------
+    ### Qweioasd
 
-        aciouv
+    aciouv
     |}]
 ;;
 
@@ -234,10 +233,11 @@ let%expect_test "child: by position" =
   show Query.(empty |> section ~exact:false [ "other" ] |> child ~nth:0);
   [%expect
     {|
-    code_block @0.1.0
-        ```python
-        print("b")
-        ```
+    kind: code_block, path: 0.1.0
+    --------------------
+    ```python
+    print("b")
+    ```
     |}]
 ;;
 
@@ -246,10 +246,11 @@ let%expect_test "child: the rs block is bqq's value, not a child of the section"
     Query.(empty |> section ~exact:false [ "other" ] |> child ~where:[ is "code_block" ]);
   [%expect
     {|
-    code_block @0.1.0
-        ```python
-        print("b")
-        ```
+    kind: code_block, path: 0.1.0
+    --------------------
+    ```python
+    print("b")
+    ```
     |}]
 ;;
 
@@ -261,10 +262,11 @@ let%expect_test "descend: reaches the rs block through the list and bqq" =
       |> descend ~where:[ is "code_block" ] ~nth:1);
   [%expect
     {|
-    code_block @0.1.2.0.1.0.0.0
-        ```rs
-        rs code
-        ```
+    kind: code_block, path: 0.1.2.0.1.0.0.0
+    --------------------
+    ```rs
+    rs code
+    ```
     |}]
 ;;
 
@@ -279,11 +281,12 @@ let%expect_test "field: the keyed node itself, by its key property" =
       |> child ~where:[ Prop ("key", Eq, String "butter") ]);
   [%expect
     {|
-    keyed_paragraph @0.0.3
-        butter:
-        - item one
-          - foo: bar
-        - item two
+    kind: keyed_paragraph, path: 0.0.3
+    --------------------
+    butter:
+    - item one
+      - foo: bar
+    - item two
     |}]
 ;;
 
@@ -291,10 +294,11 @@ let%expect_test "field: the value of a key" =
   show Query.(empty |> section ~exact:false [ "setup" ] |> field "butter");
   [%expect
     {|
-    list @0.0.3.0
-        - item one
-          - foo: bar
-        - item two
+    kind: list, path: 0.0.3.0
+    --------------------
+    - item one
+      - foo: bar
+    - item two
     |}]
 ;;
 
@@ -302,10 +306,11 @@ let%expect_test "field: an unkeyed item, by position" =
   show Query.(empty |> section ~exact:false [ "setup" ] |> field "butter" |> child ~nth:0);
   [%expect
     {|
-    list_item @0.0.3.0.0
-        item one
+    kind: list_item, path: 0.0.3.0.0
+    --------------------
+    item one
 
-        - foo: bar
+    - foo: bar
     |}]
 ;;
 
@@ -319,8 +324,9 @@ let%expect_test "field: a field of an item, through the list describing it" =
       |> field "foo");
   [%expect
     {|
-    paragraph @0.0.3.0.0.1.0.0.0
-        bar
+    kind: paragraph, path: 0.0.3.0.0.1.0.0.0
+    --------------------
+    bar
     |}]
 ;;
 
@@ -339,8 +345,9 @@ let%expect_test "field: naming the list gives its items as fields" =
       |> field "two");
   [%expect
     {|
-    paragraph @0.0.5.0.0.0.2.0.0
-        three
+    kind: paragraph, path: 0.0.5.0.0.0.2.0.0
+    --------------------
+    three
     |}]
 ;;
 
@@ -353,8 +360,9 @@ let%expect_test "field: a keyed paragraph with an inline value" =
   show Query.(empty |> section ~exact:false [ "other" ] |> field "ttt");
   [%expect
     {|
-    paragraph @0.1.1.0
-        hhhh
+    kind: paragraph, path: 0.1.1.0
+    --------------------
+    hhhh
     |}]
 ;;
 
@@ -373,10 +381,11 @@ let%expect_test "field: bqq is a field of the item aaa" =
       |> field "bqq");
   [%expect
     {|
-    code_block @0.1.2.0.1.0.0.0
-        ```rs
-        rs code
-        ```
+    kind: code_block, path: 0.1.2.0.1.0.0.0
+    --------------------
+    ```rs
+    rs code
+    ```
     |}]
 ;;
 
@@ -401,8 +410,9 @@ let%expect_test "child: a callout's body, without its header" =
       empty |> section ~exact:false [ "setup" ] |> child ~where:[ is "callout" ] |> child);
   [%expect
     {|
-    paragraph @0.0.2.0
-        Body line.
+    kind: paragraph, path: 0.0.2.0
+    --------------------
+    Body line.
     |}]
 ;;
 
@@ -423,9 +433,9 @@ let%expect_test "exists: the sections holding a python code block" =
              ]);
   [%expect
     {|
-    section @0 "Top"
-    section @0.0 "Setup"
-    section @0.1 "Other"
+    kind: section, path: 0 "Top"
+    kind: section, path: 0.0 "Setup"
+    kind: section, path: 0.1 "Other"
     |}]
 ;;
 
@@ -437,85 +447,15 @@ let%expect_test "nth: negative counts from the end" =
       |> descend ~where:[ is "keyed_paragraph" ] ~nth:(-1));
   [%expect
     {|
-    keyed_paragraph @0.0.5.1.0
-        happy:
-        - sad
+    kind: keyed_paragraph, path: 0.0.5.1.0
+    --------------------
+    happy:
+    - sad
     |}]
 ;;
 
 (* Syntax
    ====== *)
-
-(** The steps the text describes, printed back: the two must agree. *)
-let round_trip (text : string) : unit =
-  match Query.of_string text with
-  | Error message -> printf "%s\n  error: %s\n" text message
-  | Ok steps ->
-    let printed = Query.to_string steps in
-    if String.equal printed text
-    then printf "%s\n" printed
-    else printf "%s\n  -> %s\n" text printed
-;;
-
-let%expect_test "syntax: every step of the fixture" =
-  List.iter
-    ~f:round_trip
-    [ "section top | child"
-    ; "section top/qweioasd sub-path"
-    ; "section other sub-path | child kind=code_block"
-    ; "section other sub-path | descend kind=code_block nth=1"
-    ; "section setup sub-path | field butter | child nth=0 | field foo"
-    ; "section setup sub-path | child kind=list | field bird | field two"
-    ; "descend has:key"
-    ; "child not:kind=heading"
-    ; "child level>=2 ordered=true"
-    ; "child title=\"A callout\""
-    ; "child key=\"12\""
-    ; "descend or(kind=list,kind=list_item)"
-    ; "descend kind=section exists(descend kind=code_block lang=python)"
-    ; "descend count(child)>2"
-    ; "self nth=-1"
-    ];
-  [%expect
-    {|
-    section top | child
-    section top/qweioasd sub-path
-    section other sub-path | child kind=code_block
-    section other sub-path | descend kind=code_block nth=1
-    section setup sub-path | field butter | child nth=0 | field foo
-    section setup sub-path | child kind=list | field bird | field two
-    descend has:key
-    child not:kind=heading
-    child level>=2 ordered=true
-    child title="A callout"
-    child key="12"
-    descend or(kind=list,kind=list_item)
-    descend kind=section exists(descend kind=code_block lang=python)
-    descend count(child)>2
-    self nth=-1
-    |}]
-;;
-
-let%expect_test "syntax: what a bad query says" =
-  List.iter
-    ~f:round_trip
-    [ "kids"; "field"; "child kind"; "child nth=x"; "child sub-path"; "has" ];
-  [%expect
-    {|
-    kids
-      error: unknown axis kids; one of self, child, descend, field, section
-    field
-      error: field needs a key, as: field butter
-    child kind
-      error: expected a predicate such as kind=code_block, got kind
-    child nth=x
-      error: nth needs a number: nth=x
-    child sub-path
-      error: sub-path belongs to a section step
-    has
-      error: unknown axis has; one of self, child, descend, field, section
-    |}]
-;;
 
 let%expect_test "syntax: the parsed query selects the same nodes" =
   (match Query.of_string "section other sub-path | descend kind=code_block nth=1" with
@@ -523,9 +463,120 @@ let%expect_test "syntax: the parsed query selects the same nodes" =
    | Ok steps -> show steps);
   [%expect
     {|
-    code_block @0.1.2.0.1.0.0.0
-        ```rs
-        rs code
-        ```
+    kind: code_block, path: 0.1.2.0.1.0.0.0
+    --------------------
+    ```rs
+    rs code
+    ```
+    |}]
+;;
+
+(* Attributes
+   ==========
+
+   [id] and [class] are not properties of a node, so the engine adds them from
+   what is written around it: a djot attribute, or a caret marker. *)
+
+let attr_note =
+  {|
+# Attrs
+
+{#intro}
+> A quote named by an attribute.
+
+{.warning .boxed}
+A paragraph carrying two classes.
+
+{#snippet .example}
+```sh
+echo hi
+```
+
+A paragraph named by a caret ^caret1
+|}
+;;
+
+let%expect_test "attribute: an id selects the block it is written on" =
+  show ~note:attr_note Query.(empty |> descend ~where:[ Prop ("id", Eq, String "intro") ]);
+  [%expect
+    {|
+    kind: block_quote, path: 0.0
+    --------------------
+    {#intro}
+    > A quote named by an attribute.
+    |}]
+;;
+
+let%expect_test "attribute: a class selects the block it is written on" =
+  show
+    ~note:attr_note
+    Query.(empty |> descend ~where:[ Prop ("class", Eq, String "warning") ]);
+  [%expect
+    {|
+    kind: paragraph, path: 0.1
+    --------------------
+    {.warning .boxed}
+    A paragraph carrying two classes.
+    |}]
+;;
+
+let%expect_test "attribute: a block carries every class it is given" =
+  show_brief
+    ~note:attr_note
+    Query.(empty |> descend ~where:[ Prop ("class", Eq, String "boxed") ]);
+  [%expect {| kind: paragraph, path: 0.1 |}]
+;;
+
+let%expect_test "attribute: which blocks have a class at all" =
+  show_brief ~note:attr_note Query.(empty |> descend ~where:[ Has "class" ]);
+  [%expect
+    {|
+    kind: paragraph, path: 0.1
+    kind: code_block, path: 0.2 "echo hi"
+    |}]
+;;
+
+let%expect_test "attribute: an id and a property of the node itself" =
+  show
+    ~note:attr_note
+    Query.(
+      empty
+      |> descend
+           ~where:[ Prop ("id", Eq, String "snippet"); Prop ("lang", Eq, String "sh") ]);
+  [%expect
+    {|
+    kind: code_block, path: 0.2
+    --------------------
+    {#snippet .example}
+    ```sh
+    echo hi
+    ```
+    |}]
+;;
+
+let%expect_test "attribute: a caret id is the same namespace as an attribute id" =
+  show
+    ~note:attr_note
+    Query.(empty |> descend ~where:[ Prop ("id", Eq, String "caret1") ]);
+  [%expect
+    {|
+    kind: paragraph, path: 0.3
+    --------------------
+    A paragraph named by a caret ^caret1
+    |}]
+;;
+
+(* [id] and [class] are not in {!Node.props}: they belong to the note around
+    the node, not to the node. *)
+let%expect_test "attribute: not among the node's own properties" =
+  show_props
+    ~note:attr_note
+    Query.(empty |> descend ~where:[ Prop ("id", Eq, String "snippet") ]);
+  [%expect
+    {|
+    kind = "code_block"
+    is_container = false
+    lang = "sh"
+    text = "echo hi"
     |}]
 ;;

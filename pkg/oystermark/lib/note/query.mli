@@ -124,7 +124,7 @@ val child : ?where:pred list -> ?nth:int -> steps -> steps
 val descend : ?where:pred list -> ?nth:int -> steps -> steps
 val field : ?where:pred list -> ?nth:int -> string -> steps -> steps
 
-(** [exact] defaults to [true]. *)
+(** @param exact if [false], sub-path (ordered) can be matched against; defaults to [true]. *)
 val section : ?exact:bool -> ?where:pred list -> ?nth:int -> string list -> steps -> steps
 
 type t = steps
