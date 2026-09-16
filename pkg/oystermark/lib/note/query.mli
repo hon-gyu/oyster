@@ -129,7 +129,37 @@ val section : ?exact:bool -> ?where:pred list -> ?nth:int -> string list -> step
 
 type t = steps
 
+(** {2 Syntax}
+
+    One syntax, written by {!to_string} and read by {!of_string}: a step is an
+    axis and what modifies it, and [|] starts the next step.
+
+    {v
+    query    := step ('|' step)*
+    step     := axis modifier*
+    axis     := self | child | descend | field KEY | section PATH
+    modifier := pred | nth=INT | sub-path        (sub-path after a section)
+    pred     := NAME OP VALUE | has:NAME | not:PRED
+              | and(PRED,...) | or(PRED,...)
+              | exists(QUERY) | count(QUERY) OP INT
+    OP       := = | != | < | <= | > | >=
+    v}
+
+    A section [PATH] is its names joined by [/], as [top/setup], and a step is
+    exact unless it says [sub-path]. [has] and [not] may be written with a
+    space instead of a colon. A value is a number, [true], [false], or a
+    string, which is quoted when it would read as one of those or holds a
+    space; [str:] and [int:] say which is meant.
+
+    {[
+      section other sub-path | descend kind=code_block nth=1
+    ]} *)
+
 val to_string : t -> string
+
+(** The steps [text] describes, or why it cannot be read. *)
+val of_string : string -> (t, string) Result.t
+
 val step_to_string : step -> string
 val pred_to_string : pred -> string
 

@@ -3,7 +3,6 @@
 open Core
 module Node = Oystermark.Note.Node
 module Query = Oystermark.Note.Query
-module Query_flags = Oystermark.Note.Query_flags
 module Parse = Oystermark.Parse
 module Vault = Oystermark.Vault
 
@@ -260,129 +259,96 @@ let context_command =
           else Yojson.Safe.pretty_to_string json))
 ;;
 
-(** Query the blocks of a note.
+(** Query the nodes of a note.
 
-    The flags are one syntax for a {!Oystermark.Note.Query.t}; see
-    {!Oystermark.Note.Query_flags}. [-json] prints each match with its path,
-    properties, names and enclosing headings, which can be used to write the
-    next query.
+    QUERY is the syntax {!Oystermark.Note.Query.of_string} reads: a step is an
+    axis and what modifies it, and [|] starts the next step.
 
-    Default output is the block's source, verbatim. *)
+    The exit status answers on its own: [0] when something matched, [1] when
+    nothing did, [2] when the query or the note could not be read. A query that
+    matches nothing says on stderr which step stopped it. *)
 let block_command =
   Command.basic
-    ~summary:"Print blocks of a note, filtered by heading, kind, id, key or position"
+    ~summary:"Print the nodes of a note that a query selects"
     (let%map_open.Command note = anon ("NOTE" %: string)
-     and under =
+     and query_text = anon ("QUERY" %: string)
+     and print =
        flag
-         "-under"
-         (optional string)
-         ~doc:"SLUG only blocks in the section of the heading with this id or text"
-     and direct = flag "-direct" no_arg ~doc:" with -under, stop at the first subheading"
-     and kind = flag "-kind" (optional string) ~doc:"KIND only blocks of this kind"
-     and lang =
-       flag
-         "-lang"
-         (optional string)
-         ~doc:"INFO only code blocks whose info string is exactly INFO"
-     and id =
-       flag "-id" (optional string) ~doc:"ID only the block a link to #ID names ({#ID})"
-     and caret_id =
-       flag
-         "-caret-id"
-         (optional string)
-         ~doc:"ID only the block a link to #^ID names (^ID)"
-     and key =
-       flag "-key" (optional string) ~doc:"KEY only keyed nodes and list items with KEY"
-     and nth = flag "-nth" (optional int) ~doc:"N keep only the Nth match, 1-based"
-     and content =
-       flag "-content" no_arg ~doc:" print what the container holds, not its source"
-     and json = flag "-json" no_arg ~doc:" print the matching blocks as JSON" in
+         "-print"
+         (listed string)
+         ~doc:
+           "FIELD what to print of each match: markdown (the default), source, path, \
+            kind, line, file or prop:NAME; repeat for several, separated by tabs"
+     and count = flag "-count" no_arg ~doc:" print how many nodes matched"
+     and quiet =
+       flag "-quiet" no_arg ~doc:" print nothing; the exit status is the answer"
+     in
      fun () ->
-       let die fmt =
+       let die code fmt =
          ksprintf
-           (fun s ->
-              prerr_endline s;
-              exit 1)
+           (fun message ->
+              prerr_endline message;
+              exit code)
            fmt
        in
        let query =
-         match
-           Query_flags.to_query
-             { under; direct; kind; lang; attr_id = id; caret_id; key; nth }
-         with
+         match Query.of_string query_text with
          | Ok query -> query
-         | Error message -> die "%s" message
+         | Error message -> die 2 "%s" message
        in
-       let source = In_channel.read_all note in
-       let doc = Parse.of_string ~locs:true source in
-       let result = Query.run query doc in
-       Option.iter (Query.why_empty result) ~f:(fun why -> die "%s: %s" note why);
-       let content_of (found : Query.found) =
-         match found.content with
-         | Ok content -> content
-         | Error kind -> die "%s: a %s has no contents to print" note kind
+       let source =
+         try In_channel.read_all note with
+         | _ -> die 2 "cannot read %s" note
        in
-       let source_of (found : Query.found) =
-         match found.span with
-         | None -> found.markdown
-         | Some { first_byte; last_byte; _ } ->
-           String.sub source ~pos:first_byte ~len:(last_byte - first_byte + 1)
-       in
-       if json
-       then (
-         let json_of (found : Query.found) =
-           let name (address : Oystermark.Note.Anchor.Address.t) =
-             let kind, id =
-               match address with
-               | Heading id -> "heading", id
-               | Caret id -> "caret", id
-               | Attr id -> "attr", id
-             in
-             `Assoc [ "kind", `String kind; "id", `String id ]
+       let result = Query.run query (Parse.of_string ~locs:true source) in
+       match result.matches with
+       | [] ->
+         if not quiet
+         then
+           Option.iter result.why_empty ~f:(fun why ->
+             eprintf "%s: %s\n" note (Query.no_match_to_string why));
+         exit 1
+       | matches ->
+         if quiet then exit 0;
+         if count
+         then printf "%d\n" (List.length matches)
+         else (
+           let text (value : Node.value) =
+             match value with
+             | String s -> s
+             | Int n -> Int.to_string n
+             | Bool b -> Bool.to_string b
            in
-           let heading (h : Oystermark.Note.Anchor.heading) =
-             `Assoc
-               [ "id", `String h.slug; "text", `String h.text; "level", `Int h.level ]
+           let field (found : Node.found_t) name =
+             match name with
+             | "markdown" -> String.strip found.markdown
+             | "source" ->
+               (match found.span with
+                | Some { first_byte; last_byte; _ } ->
+                  String.sub source ~pos:first_byte ~len:(last_byte - first_byte + 1)
+                | None -> String.strip found.markdown)
+             | "path" -> String.concat ~sep:"." (List.map found.path ~f:Int.to_string)
+             | "kind" -> Node.kind found.node
+             | "line" ->
+               Option.value_map found.span ~default:"" ~f:(fun span ->
+                 Int.to_string (span.first_line + 1))
+             | "file" -> note
+             | name when String.is_prefix name ~prefix:"prop:" ->
+               Option.value_map
+                 (Node.prop (String.drop_prefix name 5) found.node)
+                 ~default:""
+                 ~f:text
+             | other -> die 2 "unknown -print field %s" other
            in
-           let props =
-             List.map (Node.props found.node) ~f:(fun (name, (value : Node.value)) ->
-               ( name
-               , match value with
-                 | Int n -> `Int n
-                 | String s -> `String s
-                 | Bool b -> `Bool b ))
+           let fields = if List.is_empty print then [ "markdown" ] else print in
+           let whole =
+             List.exists fields ~f:(fun field ->
+               String.equal field "markdown" || String.equal field "source")
            in
-           `Assoc
-             [ "path", `List (List.map found.path ~f:(fun i -> `Int i))
-             ; "kind", `String (Node.kind found.node)
-             ; "props", `Assoc props
-             ; "names", `List (List.map found.names ~f:name)
-             ; "headings", `List (List.map found.headings ~f:heading)
-             ; ( "loc"
-               , match found.span with
-                 | None -> `Null
-                 | Some { first_line; last_line; first_byte; last_byte } ->
-                   `Assoc
-                     [ "first_line", `Int first_line
-                     ; "last_line", `Int last_line
-                     ; "first_byte", `Int first_byte
-                     ; "last_byte", `Int last_byte
-                     ] )
-             ; "text", `String (source_of found)
-             ; ( "content"
-               , match found.content with
-                 | Ok content -> `String content
-                 | Error _ -> `Null )
-             ]
-         in
-         print_endline
-           (Yojson.Safe.pretty_to_string
-              (`List (List.map (Query.matches result) ~f:json_of))))
-       else
-         List.map (Query.matches result) ~f:(fun found ->
-           if content then content_of found else source_of found)
-         |> String.concat ~sep:"\n\n"
-         |> print_endline)
+           List.map matches ~f:(fun found ->
+             String.concat ~sep:"\t" (List.map fields ~f:(field found)))
+           |> String.concat ~sep:(if whole then "\n\n" else "\n")
+           |> print_endline))
 ;;
 
 let command =

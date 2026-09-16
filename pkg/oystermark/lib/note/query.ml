@@ -484,51 +484,273 @@ let cmp_to_string : cmp -> string = function
   | Ge -> ">="
 ;;
 
+(** Whether a string would read as something else, so it has to be quoted. *)
+let needs_quotes (s : string) : bool =
+  String.is_empty s
+  || String.exists s ~f:(fun c -> Char.is_whitespace c || String.mem "|(),\"" c)
+  || Option.is_some (Int.of_string_opt s)
+  || String.equal s "true"
+  || String.equal s "false"
+;;
+
+let quoted (s : string) : string = if needs_quotes s then sprintf "%S" s else s
+
+let value_to_syntax : Node.value -> string = function
+  | Int n -> Int.to_string n
+  | Bool b -> Bool.to_string b
+  | String s -> quoted s
+;;
+
 let rec pred_to_string : pred -> string = function
-  | Prop (name, cmp, value) ->
-    sprintf "%s %s %s" name (cmp_to_string cmp) (Node.value_to_string value)
-  | Has name -> "has " ^ name
+  | Prop (name, cmp, value) -> name ^ cmp_to_string cmp ^ value_to_syntax value
+  | Has name -> "has:" ^ name
+  | Not pred -> "not:" ^ pred_to_string pred
+  | And preds ->
+    sprintf "and(%s)" (String.concat ~sep:"," (List.map preds ~f:pred_to_string))
+  | Or preds ->
+    sprintf "or(%s)" (String.concat ~sep:"," (List.map preds ~f:pred_to_string))
   | Exists steps -> sprintf "exists(%s)" (to_string steps)
   | Count (steps, cmp, n) ->
-    sprintf "count(%s) %s %d" (to_string steps) (cmp_to_string cmp) n
-  | And [] -> "true"
-  | Or [] -> "false"
-  | And preds -> String.concat ~sep:" and " (List.map preds ~f:grouped)
-  | Or preds -> String.concat ~sep:" or " (List.map preds ~f:grouped)
-  | Not pred -> "not " ^ grouped pred
-
-and grouped (pred : pred) : string =
-  match pred with
-  | And _ | Or _ -> "(" ^ pred_to_string pred ^ ")"
-  | _ -> pred_to_string pred
+    sprintf "count(%s)%s%d" (to_string steps) (cmp_to_string cmp) n
 
 and axis_to_string : axis -> string = function
   | Self -> "self"
   | Child -> "child"
   | Descendant -> "descend"
-  | Field key -> sprintf "field(%s)" key
+  | Field key -> "field " ^ quoted key
   | Section { path; exact } ->
-    sprintf
-      "section(%s%s)"
-      (String.concat ~sep:"/" path)
-      (if exact then "" else ", sub-path")
+    "section " ^ quoted (String.concat ~sep:"/" path) ^ if exact then "" else " sub-path"
 
 and step_to_string (step : step) : string =
-  let where =
-    match step.where with
-    | [] -> ""
-    | preds -> sprintf "[%s]" (String.concat ~sep:" and " (List.map preds ~f:grouped))
-  in
-  let nth =
-    match step.nth with
-    | None -> ""
-    | Some n -> sprintf "(%d)" n
-  in
-  axis_to_string step.axis ^ where ^ nth
+  String.concat
+    ~sep:" "
+    ((axis_to_string step.axis :: List.map step.where ~f:pred_to_string)
+     @ Option.to_list (Option.map step.nth ~f:(sprintf "nth=%d")))
 
-and to_string : t -> string = function
-  | [] -> "self"
-  | steps -> String.concat ~sep:" | " (List.map steps ~f:step_to_string)
+and to_string (steps : t) : string =
+  String.concat ~sep:" | " (List.map steps ~f:step_to_string)
+;;
+
+(* Reading the syntax back
+   ---------------------- *)
+
+exception Parse_error of string
+
+let fail fmt = ksprintf (fun message -> raise (Parse_error message)) fmt
+
+(** Split [s] where [break] holds, outside quotes and parentheses, dropping
+    empty parts. *)
+let split_outside (s : string) ~(break : char -> bool) : string list =
+  let parts = ref []
+  and buf = Buffer.create 16 in
+  let depth = ref 0
+  and quoting = ref false
+  and escaped = ref false in
+  let flush () =
+    if Buffer.length buf > 0 then parts := Buffer.contents buf :: !parts;
+    Buffer.clear buf
+  in
+  String.iter s ~f:(fun c ->
+    if !escaped
+    then (
+      Buffer.add_char buf c;
+      escaped := false)
+    else if !quoting
+    then (
+      Buffer.add_char buf c;
+      if Char.equal c '\\'
+      then escaped := true
+      else if Char.equal c '"'
+      then quoting := false)
+    else (
+      match c with
+      | '"' ->
+        Buffer.add_char buf c;
+        quoting := true
+      | '(' ->
+        Int.incr depth;
+        Buffer.add_char buf c
+      | ')' ->
+        Int.decr depth;
+        Buffer.add_char buf c
+      | c when !depth = 0 && break c -> flush ()
+      | c -> Buffer.add_char buf c));
+  flush ();
+  List.rev !parts
+;;
+
+let unquote (token : string) : string =
+  if String.is_prefix token ~prefix:"\""
+  then (
+    try Stdlib.Scanf.sscanf token "%S%!" Fn.id with
+    | _ -> fail "unterminated quotes: %s" token)
+  else token
+;;
+
+let parse_value (token : string) : Node.value =
+  if String.is_prefix token ~prefix:"\""
+  then String (unquote token)
+  else if String.is_prefix token ~prefix:"str:"
+  then String (String.drop_prefix token 4)
+  else if String.is_prefix token ~prefix:"int:"
+  then (
+    match Int.of_string_opt (String.drop_prefix token 4) with
+    | Some n -> Int n
+    | None -> fail "not a number: %s" token)
+  else (
+    match Int.of_string_opt token with
+    | Some n -> Int n
+    | None ->
+      if String.equal token "true"
+      then Bool true
+      else if String.equal token "false"
+      then Bool false
+      else String token)
+;;
+
+(** The comparison in [token], outside quotes and parentheses: where it starts,
+    how long it is, and which one it is. *)
+let find_cmp (token : string) : (int * int * cmp) option =
+  let length = String.length token in
+  let two i = i + 1 < length in
+  let rec go i depth quoting =
+    if i >= length
+    then None
+    else if quoting
+    then go (i + 1) depth (not (Char.equal token.[i] '"'))
+    else (
+      match token.[i] with
+      | '"' -> go (i + 1) depth true
+      | '(' -> go (i + 1) (depth + 1) false
+      | ')' -> go (i + 1) (depth - 1) false
+      | _ when depth > 0 -> go (i + 1) depth false
+      | '!' when two i && Char.equal token.[i + 1] '=' -> Some (i, 2, Ne)
+      | '<' when two i && Char.equal token.[i + 1] '=' -> Some (i, 2, Le)
+      | '>' when two i && Char.equal token.[i + 1] '=' -> Some (i, 2, Ge)
+      | '=' -> Some (i, 1, Eq)
+      | '<' -> Some (i, 1, Lt)
+      | '>' -> Some (i, 1, Gt)
+      | _ -> go (i + 1) depth false)
+  in
+  go 0 0 false
+;;
+
+(** What [prefix ... )] holds, for [and(], [exists(] and the like. *)
+let inside (token : string) ~(prefix : string) : string option =
+  if String.is_prefix token ~prefix && String.is_suffix token ~suffix:")"
+  then (
+    let start = String.length prefix in
+    Some (String.sub token ~pos:start ~len:(String.length token - start - 1)))
+  else None
+;;
+
+let rec parse_pred (token : string) : pred =
+  match
+    ( inside token ~prefix:"and("
+    , inside token ~prefix:"or("
+    , inside token ~prefix:"exists(" )
+  with
+  | Some preds, _, _ -> And (List.map (split_commas preds) ~f:parse_pred)
+  | _, Some preds, _ -> Or (List.map (split_commas preds) ~f:parse_pred)
+  | _, _, Some steps -> Exists (parse_steps steps)
+  | None, None, None ->
+    if String.is_prefix token ~prefix:"has:"
+    then Has (String.drop_prefix token 4)
+    else if String.is_prefix token ~prefix:"not:"
+    then Not (parse_pred (String.drop_prefix token 4))
+    else if String.is_prefix token ~prefix:"count("
+    then parse_count token
+    else (
+      match find_cmp token with
+      | None -> fail "expected a predicate such as kind=code_block, got %s" token
+      | Some (start, length, cmp) ->
+        let name = String.sub token ~pos:0 ~len:start in
+        if String.is_empty name then fail "a predicate needs a property name: %s" token;
+        Prop (name, cmp, parse_value (String.drop_prefix token (start + length))))
+
+and split_commas (s : string) : string list =
+  split_outside s ~break:(fun c -> Char.equal c ',')
+
+(** [count(QUERY)OP N]. *)
+and parse_count (token : string) : pred =
+  let rec closing i depth =
+    if i >= String.length token
+    then fail "unbalanced parentheses: %s" token
+    else (
+      match token.[i] with
+      | '(' -> closing (i + 1) (depth + 1)
+      | ')' when depth = 1 -> i
+      | ')' -> closing (i + 1) (depth - 1)
+      | _ -> closing (i + 1) depth)
+  in
+  let close = closing 5 0 in
+  let steps = String.sub token ~pos:6 ~len:(close - 6) in
+  let rest = String.drop_prefix token (close + 1) in
+  match find_cmp rest with
+  | Some (0, length, cmp) ->
+    (match Int.of_string_opt (String.drop_prefix rest length) with
+     | Some n -> Count (parse_steps steps, cmp, n)
+     | None -> fail "count needs a number, as count(child)>0")
+  | _ -> fail "count needs a comparison, as count(child)>0"
+
+(** [has NAME] and [not PRED] may be written with a space; every other
+    predicate is one word. *)
+and join_words (tokens : string list) : string list =
+  match tokens with
+  | ("has" | "not") :: [] -> fail "%s needs what follows it" (List.hd_exn tokens)
+  | (("has" | "not") as word) :: next :: rest -> join_words ((word ^ ":" ^ next) :: rest)
+  | token :: rest -> token :: join_words rest
+  | [] -> []
+
+and parse_step (tokens : string list) : step =
+  let axis, rest =
+    match tokens with
+    | [] -> fail "a step needs an axis"
+    | "self" :: rest -> Self, rest
+    | "child" :: rest -> Child, rest
+    | "descend" :: rest -> Descendant, rest
+    | "field" :: key :: rest -> Field (unquote key), rest
+    | [ "field" ] -> fail "field needs a key, as: field butter"
+    | "section" :: path :: rest ->
+      Section { path = String.split (unquote path) ~on:'/'; exact = true }, rest
+    | [ "section" ] -> fail "section needs a path, as: section top/setup"
+    | word :: _ ->
+      fail "unknown axis %s; one of self, child, descend, field, section" word
+  in
+  let where, nth, exact =
+    List.fold
+      (join_words rest)
+      ~init:([], None, true)
+      ~f:(fun (where, nth, exact) token ->
+        if String.equal token "sub-path"
+        then where, nth, false
+        else if String.is_prefix token ~prefix:"nth="
+        then (
+          match Int.of_string_opt (String.drop_prefix token 4) with
+          | Some n -> where, Some n, exact
+          | None -> fail "nth needs a number: %s" token)
+        else parse_pred token :: where, nth, exact)
+  in
+  let axis =
+    match axis, exact with
+    | Section { path; exact = _ }, exact -> Section { path; exact }
+    | axis, true -> axis
+    | _, false -> fail "sub-path belongs to a section step"
+  in
+  { axis; where = List.rev where; nth }
+
+and parse_steps (text : string) : t =
+  match
+    split_outside text ~break:(fun c -> Char.equal c '|')
+    |> List.map ~f:(fun step -> split_outside step ~break:Char.is_whitespace)
+  with
+  | [] -> []
+  | steps -> List.map steps ~f:parse_step
+;;
+
+let of_string (text : string) : (t, string) Result.t =
+  try Ok (parse_steps text) with
+  | Parse_error message -> Error message
 ;;
 
 (* Run

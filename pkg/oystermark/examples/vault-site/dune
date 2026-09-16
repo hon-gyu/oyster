@@ -65,11 +65,9 @@
      %{bin:oyster}
      block
      sourdough.md
-     -id
-     hydration
-     -lang
-     python
-     -content)
+     "descend kind=code_block id=hydration lang=python"
+     -print
+     prop:text)
     (run uv run -)))))
 
 (rule
