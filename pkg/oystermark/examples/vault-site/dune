@@ -65,7 +65,7 @@
      %{bin:oyster}
      block
      sourdough.md
-     "descend kind=code_block id=hydration lang=python"
+     "[Descendant(where=[Is(code_block), Prop(id, =, hydration), Prop(lang, =, python)])]"
      -print
      prop:text)
     (run uv run -)))))

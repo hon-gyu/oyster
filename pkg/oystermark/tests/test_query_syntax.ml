@@ -18,101 +18,119 @@ let round_trip (text : string) : unit =
 let%expect_test "every step of the fixture" =
   List.iter
     ~f:round_trip
-    [ "section top | child"
-    ; "section top/qweioasd sub-path"
-    ; "section other sub-path | child kind=code_block"
-    ; "section other sub-path | descend kind=code_block nth=1"
-    ; "section setup sub-path | field butter | child nth=0 | field foo"
-    ; "section setup sub-path | child kind=list | field bird | field two"
-    ; "descend has:key"
-    ; "child not:kind=heading"
-    ; "child level>=2 ordered=true"
-    ; "child title=\"A callout\""
-    ; "child key=\"12\""
-    ; "descend or(kind=list,kind=list_item)"
-    ; "descend kind=section exists(descend kind=code_block lang=python)"
-    ; "descend count(child)>2"
-    ; "self nth=-1"
+    [ "[Section([top]), Child]"
+    ; "[Section([top, qweioasd], exact=false)]"
+    ; "[Section([other], exact=false), Child(where=[Is(code_block)])]"
+    ; "[Section([other], exact=false), Descendant(where=[Is(code_block)], nth=1)]"
+    ; "[Section([setup], exact=false), Field(butter), Child(nth=0), Field(foo)]"
+    ; "[Section([setup], exact=false), Child(where=[Is(list)]), Field(bird), \
+       Field(two)]"
+    ; "[Descendant(where=[Has(key)])]"
+    ; "[Child(where=[Not(Is(heading))])]"
+    ; "[Child(where=[Prop(level, >=, 2), Prop(ordered, =, true)])]"
+    ; "[Child(where=[Prop(title, =, \"A callout\")])]"
+    ; "[Child(where=[Prop(key, =, \"12\")])]"
+    ; "[Descendant(where=[Or([Is(list), Is(list_item)])])]"
+    ; "[Descendant(where=[Is(section), Exists([Descendant(where=[Is(code_block), \
+       Prop(lang, =, python)])])])]"
+    ; "[Descendant(where=[Count([Child], >, 2)])]"
+    ; "[Self(nth=-1)]"
+    ; "[]"
     ];
   [%expect
     {|
-    section top | child
-    section top/qweioasd sub-path
-    section other sub-path | child kind=code_block
-    section other sub-path | descend kind=code_block nth=1
-    section setup sub-path | field butter | child nth=0 | field foo
-    section setup sub-path | child kind=list | field bird | field two
-    descend has:key
-    child not:kind=heading
-    child level>=2 ordered=true
-    child title="A callout"
-    child key="12"
-    descend or(kind=list,kind=list_item)
-    descend kind=section exists(descend kind=code_block lang=python)
-    descend count(child)>2
-    self nth=-1
+    [Section([top]), Child]
+    [Section([top, qweioasd], exact=false)]
+    [Section([other], exact=false), Child(where=[Is(code_block)])]
+    [Section([other], exact=false), Descendant(where=[Is(code_block)], nth=1)]
+    [Section([setup], exact=false), Field(butter), Child(nth=0), Field(foo)]
+    [Section([setup], exact=false), Child(where=[Is(list)]), Field(bird), Field(two)]
+    [Descendant(where=[Has(key)])]
+    [Child(where=[Not(Is(heading))])]
+    [Child(where=[Prop(level, >=, 2), Prop(ordered, =, true)])]
+    [Child(where=[Prop(title, =, "A callout")])]
+    [Child(where=[Prop(key, =, "12")])]
+    [Descendant(where=[Or([Is(list), Is(list_item)])])]
+    [Descendant(where=[Is(section), Exists([Descendant(where=[Is(code_block), Prop(lang, =, python)])])])]
+    [Descendant(where=[Count([Child], >, 2)])]
+    [Self(nth=-1)]
+    []
     |}]
 ;;
 
-(* A space instead of a colon, and [str:] and [int:] where the kind of a value
-    matters: read the same, printed one way. *)
+(* Empty parentheses, [Prop] on [kind], quotes and spacing: read the same,
+   printed one way. *)
 let%expect_test "what is read but not written" =
   List.iter
     ~f:round_trip
-    [ "descend has key"
-    ; "child not kind=heading"
-    ; "child key=str:12"
-    ; "child level=int:2"
-    ; "child kind!=paragraph"
-    ; "section top"
+    [ "[Child()]"
+    ; "[Child(where=[Prop(kind, =, paragraph)])]"
+    ; "[Child(where=[Prop(kind, !=, paragraph)])]"
+    ; "[Field(\"butter\")]"
+    ; "[ Section( [ top ] , exact = true ) ]"
+    ; "[Child(where=[Prop(level, <, 2)])]"
     ];
   [%expect
     {|
-    descend has key
-      -> descend has:key
-    child not kind=heading
-      -> child not:kind=heading
-    child key=str:12
-      -> child key="12"
-    child level=int:2
-      -> child level=2
-    child kind!=paragraph
-    section top
+    [Child()]
+      -> [Child]
+    [Child(where=[Prop(kind, =, paragraph)])]
+      -> [Child(where=[Is(paragraph)])]
+    [Child(where=[Prop(kind, !=, paragraph)])]
+    [Field("butter")]
+      -> [Field(butter)]
+    [ Section( [ top ] , exact = true ) ]
+      -> [Section([top])]
+    [Child(where=[Prop(level, <, 2)])]
     |}]
 ;;
 
 let%expect_test "what a bad query says" =
   List.iter
     ~f:round_trip
-    [ "kids"
-    ; "field"
-    ; "section"
-    ; "child kind"
-    ; "child =paragraph"
-    ; "child nth=x"
-    ; "child sub-path"
-    ; "has"
-    ; "descend count(child)"
+    [ "Child"
+    ; "[Kids]"
+    ; "[Field]"
+    ; "[Child(butter)]"
+    ; "[Child(exact=false)]"
+    ; "[Child(where=Is(heading))]"
+    ; "[Child(where=[Is])]"
+    ; "[Child(where=[Prop(level, ~, 2)])]"
+    ; "[Child(nth=x)]"
+    ; "[Descendant(where=[Count([Child])])]"
+    ; "[Child(where=[Kind(heading)])]"
+    ; "[Child"
+    ; "[Field(\"butter)]"
+    ; "[Child] [Self]"
     ];
-  [%expect
-    {|
-    kids
-      error: unknown axis kids; one of self, child, descend, field, section
-    field
-      error: field needs a key, as: field butter
-    section
-      error: section needs a path, as: section top/setup
-    child kind
-      error: expected a predicate such as kind=code_block, got kind
-    child =paragraph
-      error: a predicate needs a property name: =paragraph
-    child nth=x
-      error: nth needs a number: nth=x
-    child sub-path
-      error: sub-path belongs to a section step
-    has
-      error: unknown axis has; one of self, child, descend, field, section
-    descend count(child)
-      error: count needs a comparison, as count(child)>0
+  [%expect {|
+    Child
+      error: expected a list [...], got Child
+    [Kids]
+      error: unknown Kids; one of Self, Child, Descendant, Field, Section
+    [Field]
+      error: expected Field(KEY, where=..., nth=...), got Field
+    [Child(butter)]
+      error: expected Child(where=..., nth=...), got Child(butter)
+    [Child(exact=false)]
+      error: expected Child(where=..., nth=...), got Child(exact=false)
+    [Child(where=Is(heading))]
+      error: expected a list [...], got Is(heading)
+    [Child(where=[Is])]
+      error: expected Is(KIND), got Is
+    [Child(where=[Prop(level, ~, 2)])]
+      error: expected one of = != < <= > >=, got ~
+    [Child(nth=x)]
+      error: expected a number, got x
+    [Descendant(where=[Count([Child])])]
+      error: expected Count([STEP, ...], OP, INT), got Count([Child])
+    [Child(where=[Kind(heading)])]
+      error: unknown Kind; one of Is, Prop, Has, Not, And, Or, Exists, Count
+    [Child
+      error: expected , or ], got the end
+    [Field("butter)]
+      error: unterminated string at 7
+    [Child] [Self]
+      error: unexpected [ at 8 after the query
     |}]
 ;;

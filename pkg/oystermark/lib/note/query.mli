@@ -131,28 +131,28 @@ type t = steps
 
 (** {2 Syntax}
 
-    One syntax, written by {!to_string} and read by {!of_string}: a step is an
-    axis and what modifies it, and [|] starts the next step.
+    One syntax, written by {!to_string} and read by {!of_string}. A query is a
+    list of steps, and each step and predicate is written as its constructor
+    called with its arguments:
 
     {v
-    query    := step ('|' step)*
-    step     := axis modifier*
-    axis     := self | child | descend | field KEY | section PATH
-    modifier := pred | nth=INT | sub-path        (sub-path after a section)
-    pred     := NAME OP VALUE | has:NAME | not:PRED
-              | and(PRED,...) | or(PRED,...)
-              | exists(QUERY) | count(QUERY) OP INT
-    OP       := = | != | < | <= | > | >=
+    query := [STEP, ...]
+    STEP  := Self | Child | Descendant | Field(KEY) | Section([NAME, ...])
+             each optionally with where=[PRED, ...], nth=INT,
+             and a section with exact=false
+    PRED  := Is(KIND) | Prop(NAME, OP, VALUE) | Has(NAME) | Not(PRED)
+           | And([PRED, ...]) | Or([PRED, ...])
+           | Exists(query) | Count(query, OP, INT)
+    OP    := = | != | < | <= | > | >=
     v}
 
-    A section [PATH] is its names joined by [/], as [top/setup], and a step is
-    exact unless it says [sub-path]. [has] and [not] may be written with a
-    space instead of a colon. A value is a number, [true], [false], or a
-    string, which is quoted when it would read as one of those or holds a
-    space; [str:] and [int:] say which is meant.
+    [Is(KIND)] is [Prop(kind, =, KIND)]. A step without arguments may be
+    written [Child()] as well as [Child]. A word that reads as an integer is an
+    [Int], [true] and [false] are a [Bool], and anything else is a [String]; a
+    string in double quotes is always a [String], as [Prop(key, =, "12")].
 
     {[
-      section other sub-path | descend kind=code_block nth=1
+      [Section([other], exact=false), Descendant(where=[Is(code_block)], nth=1)]
     ]} *)
 
 val to_string : t -> string
@@ -170,7 +170,7 @@ val pred_to_string : pred -> string
     many there were to index. *)
 type stage =
   | No_candidate (** The axis returned nothing from the nodes that reached it. *)
-  | Filtered_out of Node.found_t list
+  | Filtered_out of Node.t list
   (** What the axis returned, all of which [where] rejected. Their kinds, or
         their values of the property a predicate tested, are what a caller
         reports. *)
@@ -183,7 +183,7 @@ type stage =
 type no_match =
   { index : int
   ; step : step
-  ; reached : Node.found_t list (** The nodes that arrived at the step. *)
+  ; reached : Node.t list (** The nodes that arrived at the step. *)
   ; stage : stage
   }
 

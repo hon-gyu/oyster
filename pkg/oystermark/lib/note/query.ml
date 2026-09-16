@@ -21,6 +21,8 @@ type view =
 
 type cursor =
   { doc : Cmarkit.Doc.t
+  ; named : (B.t * Anchor.Address.t) list
+    (** Each address of [doc] with the block it names, from {!named_blocks}. *)
   ; view : view
   ; index : int
   ; parent : cursor option
@@ -175,29 +177,19 @@ let headings (cursor : cursor) : Anchor.heading list =
 ;;
 
 (** Each address of [doc] with the block {!Read.read} resolves it to. Cursors
-    look through [Ext_attributes] wrappers, so the block is unwrapped to match.
-    The last result is kept, since every cursor of a run shares one note. *)
-let resolved : Cmarkit.Doc.t -> (B.t * Anchor.Address.t) list =
-  let last = ref None in
-  fun doc ->
-    match !last with
-    | Some (last_doc, table) when phys_equal last_doc doc -> table
-    | _ ->
-      let blocks = [ Cmarkit.Doc.block doc ] in
-      let table =
-        Anchor.of_doc doc
-        |> List.filter_map ~f:(fun (anchor : Anchor.t) ->
-          let address = Anchor.address anchor.value in
-          List.hd (Read.read blocks address)
-          |> Option.map ~f:(fun block -> unwrap_attributes block, address))
-      in
-      last := Some (doc, table);
-      table
+    look through [Ext_attributes] wrappers, so the block is unwrapped to match. *)
+let named_blocks (doc : Cmarkit.Doc.t) : (B.t * Anchor.Address.t) list =
+  let blocks = [ Cmarkit.Doc.block doc ] in
+  Anchor.of_doc doc
+  |> List.filter_map ~f:(fun (anchor : Anchor.t) ->
+    let address = Anchor.address anchor.value in
+    List.hd (Read.read blocks address)
+    |> Option.map ~f:(fun block -> unwrap_attributes block, address))
 ;;
 
 let names (cursor : cursor) : Anchor.Address.t list =
   let named_by block =
-    resolved cursor.doc
+    cursor.named
     |> List.filter_map ~f:(fun (named, address) ->
       Option.some_if (phys_equal named (unwrap_attributes block)) address)
     |> List.dedup_and_sort ~compare:Anchor.Address.compare
@@ -472,8 +464,56 @@ let section ?(exact = true) ?(where = []) ?nth (path : string list) (steps : ste
   add steps (Section { path; exact }) ~where ~nth
 ;;
 
+(* Syntax
+   ======
+
+   Text is read in two passes: {!tokenize} and {!parse} build a generic [expr]
+   of calls, lists and atoms, and elaboration checks each call's name and
+   arguments. Printing builds the same [expr] and writes it out, so the two
+   directions share one shape. *)
+
+type expr =
+  | Atom of
+      { text : string
+      ; quoted : bool
+      }
+  | List of expr list
+  | Call of
+      { name : string
+      ; args : (string option * expr) list (** A label for [key=value]. *)
+      }
+
 (* Printing
    -------- *)
+
+let rec expr_to_string : expr -> string = function
+  | Atom { text; quoted } -> if quoted then sprintf "%S" text else text
+  | List items ->
+    sprintf "[%s]" (String.concat ~sep:", " (List.map items ~f:expr_to_string))
+  | Call { name; args = [] } -> name
+  | Call { name; args } ->
+    let arg (label, expr) =
+      match label with
+      | None -> expr_to_string expr
+      | Some label -> label ^ "=" ^ expr_to_string expr
+    in
+    sprintf "%s(%s)" name (String.concat ~sep:", " (List.map args ~f:arg))
+;;
+
+let word (text : string) : expr = Atom { text; quoted = false }
+
+(** A string, quoted when it would read as a number, a boolean, or several
+    tokens. *)
+let string (s : string) : expr =
+  let quoted =
+    String.is_empty s
+    || String.exists s ~f:(fun c -> Char.is_whitespace c || String.mem "()[],=\"" c)
+    || Option.is_some (Int.of_string_opt s)
+    || String.equal s "true"
+    || String.equal s "false"
+  in
+  Atom { text = s; quoted }
+;;
 
 let cmp_to_string : cmp -> string = function
   | Eq -> "="
@@ -484,272 +524,286 @@ let cmp_to_string : cmp -> string = function
   | Ge -> ">="
 ;;
 
-(** Whether a string would read as something else, so it has to be quoted. *)
-let needs_quotes (s : string) : bool =
-  String.is_empty s
-  || String.exists s ~f:(fun c -> Char.is_whitespace c || String.mem "|(),\"" c)
-  || Option.is_some (Int.of_string_opt s)
-  || String.equal s "true"
-  || String.equal s "false"
-;;
+let call name args = Call { name; args = List.map args ~f:(fun arg -> None, arg) }
 
-let quoted (s : string) : string = if needs_quotes s then sprintf "%S" s else s
-
-let value_to_syntax : Node.value -> string = function
-  | Int n -> Int.to_string n
-  | Bool b -> Bool.to_string b
-  | String s -> quoted s
-;;
-
-let rec pred_to_string : pred -> string = function
-  | Prop (name, cmp, value) -> name ^ cmp_to_string cmp ^ value_to_syntax value
-  | Has name -> "has:" ^ name
-  | Not pred -> "not:" ^ pred_to_string pred
-  | And preds ->
-    sprintf "and(%s)" (String.concat ~sep:"," (List.map preds ~f:pred_to_string))
-  | Or preds ->
-    sprintf "or(%s)" (String.concat ~sep:"," (List.map preds ~f:pred_to_string))
-  | Exists steps -> sprintf "exists(%s)" (to_string steps)
+let rec pred_to_expr : pred -> expr = function
+  | Prop ("kind", Eq, String kind) -> call "Is" [ string kind ]
+  | Prop (name, cmp, value) ->
+    let value =
+      match value with
+      | Int n -> word (Int.to_string n)
+      | Bool b -> word (Bool.to_string b)
+      | String s -> string s
+    in
+    call "Prop" [ string name; word (cmp_to_string cmp); value ]
+  | Has name -> call "Has" [ string name ]
+  | Not pred -> call "Not" [ pred_to_expr pred ]
+  | And preds -> call "And" [ List (List.map preds ~f:pred_to_expr) ]
+  | Or preds -> call "Or" [ List (List.map preds ~f:pred_to_expr) ]
+  | Exists steps -> call "Exists" [ steps_to_expr steps ]
   | Count (steps, cmp, n) ->
-    sprintf "count(%s)%s%d" (to_string steps) (cmp_to_string cmp) n
+    call "Count" [ steps_to_expr steps; word (cmp_to_string cmp); word (Int.to_string n) ]
 
-and axis_to_string : axis -> string = function
-  | Self -> "self"
-  | Child -> "child"
-  | Descendant -> "descend"
-  | Field key -> "field " ^ quoted key
-  | Section { path; exact } ->
-    "section " ^ quoted (String.concat ~sep:"/" path) ^ if exact then "" else " sub-path"
+and step_to_expr ({ axis; where; nth } : step) : expr =
+  let name, args =
+    match axis with
+    | Self -> "Self", []
+    | Child -> "Child", []
+    | Descendant -> "Descendant", []
+    | Field key -> "Field", [ None, string key ]
+    | Section { path; exact } ->
+      ( "Section"
+      , (None, List (List.map path ~f:string))
+        :: (if exact then [] else [ Some "exact", word "false" ]) )
+  in
+  let where =
+    if List.is_empty where then [] else [ Some "where", List (List.map where ~f:pred_to_expr) ]
+  in
+  let nth = Option.to_list (Option.map nth ~f:(fun n -> Some "nth", word (Int.to_string n))) in
+  Call { name; args = args @ where @ nth }
 
-and step_to_string (step : step) : string =
-  String.concat
-    ~sep:" "
-    ((axis_to_string step.axis :: List.map step.where ~f:pred_to_string)
-     @ Option.to_list (Option.map step.nth ~f:(sprintf "nth=%d")))
+and steps_to_expr (steps : steps) : expr = List (List.map steps ~f:step_to_expr)
 
-and to_string (steps : t) : string =
-  String.concat ~sep:" | " (List.map steps ~f:step_to_string)
-;;
+let to_string (steps : t) : string = expr_to_string (steps_to_expr steps)
+let step_to_string (step : step) : string = expr_to_string (step_to_expr step)
+let pred_to_string (pred : pred) : string = expr_to_string (pred_to_expr pred)
 
-(* Reading the syntax back
-   ---------------------- *)
+(* Reading
+   ------- *)
 
 exception Parse_error of string
 
 let fail fmt = ksprintf (fun message -> raise (Parse_error message)) fmt
 
-(** Split [s] where [break] holds, outside quotes and parentheses, dropping
-    empty parts. *)
-let split_outside (s : string) ~(break : char -> bool) : string list =
-  let parts = ref []
-  and buf = Buffer.create 16 in
-  let depth = ref 0
-  and quoting = ref false
-  and escaped = ref false in
-  let flush () =
-    if Buffer.length buf > 0 then parts := Buffer.contents buf :: !parts;
-    Buffer.clear buf
+(** A word runs up to whitespace or punctuation, except that [<=], [>=] and
+    [!=] are one word. *)
+let parse (text : string) : expr =
+  let length = String.length text in
+  let pos = ref 0 in
+  let peek () =
+    while !pos < length && Char.is_whitespace text.[!pos] do
+      Int.incr pos
+    done;
+    if !pos < length then Some text.[!pos] else None
   in
-  String.iter s ~f:(fun c ->
-    if !escaped
-    then (
-      Buffer.add_char buf c;
-      escaped := false)
-    else if !quoting
-    then (
-      Buffer.add_char buf c;
-      if Char.equal c '\\'
-      then escaped := true
-      else if Char.equal c '"'
-      then quoting := false)
-    else (
-      match c with
-      | '"' ->
-        Buffer.add_char buf c;
-        quoting := true
-      | '(' ->
-        Int.incr depth;
-        Buffer.add_char buf c
-      | ')' ->
-        Int.decr depth;
-        Buffer.add_char buf c
-      | c when !depth = 0 && break c -> flush ()
-      | c -> Buffer.add_char buf c));
-  flush ();
-  List.rev !parts
-;;
-
-let unquote (token : string) : string =
-  if String.is_prefix token ~prefix:"\""
-  then (
-    try Stdlib.Scanf.sscanf token "%S%!" Fn.id with
-    | _ -> fail "unterminated quotes: %s" token)
-  else token
-;;
-
-let parse_value (token : string) : Node.value =
-  if String.is_prefix token ~prefix:"\""
-  then String (unquote token)
-  else if String.is_prefix token ~prefix:"str:"
-  then String (String.drop_prefix token 4)
-  else if String.is_prefix token ~prefix:"int:"
-  then (
-    match Int.of_string_opt (String.drop_prefix token 4) with
-    | Some n -> Int n
-    | None -> fail "not a number: %s" token)
-  else (
-    match Int.of_string_opt token with
-    | Some n -> Int n
-    | None ->
-      if String.equal token "true"
-      then Bool true
-      else if String.equal token "false"
-      then Bool false
-      else String token)
-;;
-
-(** The comparison in [token], outside quotes and parentheses: where it starts,
-    how long it is, and which one it is. *)
-let find_cmp (token : string) : (int * int * cmp) option =
-  let length = String.length token in
-  let two i = i + 1 < length in
-  let rec go i depth quoting =
-    if i >= length
-    then None
-    else if quoting
-    then go (i + 1) depth (not (Char.equal token.[i] '"'))
-    else (
-      match token.[i] with
-      | '"' -> go (i + 1) depth true
-      | '(' -> go (i + 1) (depth + 1) false
-      | ')' -> go (i + 1) (depth - 1) false
-      | _ when depth > 0 -> go (i + 1) depth false
-      | '!' when two i && Char.equal token.[i + 1] '=' -> Some (i, 2, Ne)
-      | '<' when two i && Char.equal token.[i + 1] '=' -> Some (i, 2, Le)
-      | '>' when two i && Char.equal token.[i + 1] '=' -> Some (i, 2, Ge)
-      | '=' -> Some (i, 1, Eq)
-      | '<' -> Some (i, 1, Lt)
-      | '>' -> Some (i, 1, Gt)
-      | _ -> go (i + 1) depth false)
+  let at c = Option.equal Char.equal (peek ()) (Some c) in
+  let describe = function
+    | Some c -> sprintf "%c at %d" c !pos
+    | None -> "the end"
   in
-  go 0 0 false
+  let read_word () =
+    let start = !pos in
+    while
+      !pos < length
+      && not (Char.is_whitespace text.[!pos] || String.mem "()[],=\"" text.[!pos])
+    do
+      Int.incr pos
+    done;
+    if !pos = start + 1 && at '=' && String.mem "<>!" text.[start] then Int.incr pos;
+    String.sub text ~pos:start ~len:(!pos - start)
+  in
+  (* Items separated by commas, after the opening bracket, up to [close]. *)
+  let sequence close item =
+    let rec more acc =
+      let acc = item () :: acc in
+      if at ','
+      then (
+        Int.incr pos;
+        more acc)
+      else if at close
+      then (
+        Int.incr pos;
+        List.rev acc)
+      else fail "expected , or %c, got %s" close (describe (peek ()))
+    in
+    if at close
+    then (
+      Int.incr pos;
+      [])
+    else more []
+  in
+  let rec expr () =
+    match peek () with
+    | Some '[' ->
+      Int.incr pos;
+      List (sequence ']' expr)
+    | Some '"' ->
+      let s, consumed =
+        try Stdlib.Scanf.sscanf (String.drop_prefix text !pos) "%S%n" (fun s n -> s, n) with
+        | _ -> fail "unterminated string at %d" !pos
+      in
+      pos := !pos + consumed;
+      Atom { text = s; quoted = true }
+    (* The operator [=]; a label's [=] is taken by [arg]. *)
+    | Some '=' ->
+      Int.incr pos;
+      word "="
+    | Some c when not (String.mem "()],\"" c) ->
+      let name = read_word () in
+      if at '('
+      then (
+        Int.incr pos;
+        Call { name; args = sequence ')' arg })
+      else Atom { text = name; quoted = false }
+    | next -> fail "unexpected %s" (describe next)
+  and arg () =
+    match expr () with
+    | Atom { text; quoted = false } when at '=' ->
+      Int.incr pos;
+      Some text, expr ()
+    | expr -> None, expr
+  in
+  let query = expr () in
+  if Option.is_some (peek ())
+  then fail "unexpected %s after the query" (describe (peek ()));
+  query
 ;;
 
-(** What [prefix ... )] holds, for [and(], [exists(] and the like. *)
-let inside (token : string) ~(prefix : string) : string option =
-  if String.is_prefix token ~prefix && String.is_suffix token ~suffix:")"
-  then (
-    let start = String.length prefix in
-    Some (String.sub token ~pos:start ~len:(String.length token - start - 1)))
-  else None
+(* Elaboration
+   ----------- *)
+
+let expected (what : string) (expr : expr) =
+  fail "expected %s, got %s" what (expr_to_string expr)
 ;;
 
-let rec parse_pred (token : string) : pred =
+let text_of : expr -> string = function
+  | Atom { text; _ } -> text
+  | expr -> expected "a word or a string" expr
+;;
+
+let list_of : expr -> expr list = function
+  | List items -> items
+  | expr -> expected "a list [...]" expr
+;;
+
+let value_of : expr -> Node.value option = function
+  | Atom { text; quoted = true } -> Some (String text)
+  | Atom { text; quoted = false } ->
+    (match Int.of_string_opt text, text with
+     | Some n, _ -> Some (Int n)
+     | None, ("true" | "false") -> Some (Bool (Bool.of_string text))
+     | None, _ -> Some (String text))
+  | List _ | Call _ -> None
+;;
+
+let int_of (expr : expr) : int =
+  match value_of expr with
+  | Some (Int n) -> n
+  | _ -> expected "a number" expr
+;;
+
+let bool_of (expr : expr) : bool =
+  match value_of expr with
+  | Some (Bool b) -> b
+  | _ -> expected "true or false" expr
+;;
+
+let cmp_of (expr : expr) : cmp =
   match
-    ( inside token ~prefix:"and("
-    , inside token ~prefix:"or("
-    , inside token ~prefix:"exists(" )
+    List.find [ Eq; Ne; Lt; Le; Gt; Ge ] ~f:(fun cmp ->
+      match expr with
+      | Atom { text; quoted = false } -> String.equal text (cmp_to_string cmp)
+      | _ -> false)
   with
-  | Some preds, _, _ -> And (List.map (split_commas preds) ~f:parse_pred)
-  | _, Some preds, _ -> Or (List.map (split_commas preds) ~f:parse_pred)
-  | _, _, Some steps -> Exists (parse_steps steps)
-  | None, None, None ->
-    if String.is_prefix token ~prefix:"has:"
-    then Has (String.drop_prefix token 4)
-    else if String.is_prefix token ~prefix:"not:"
-    then Not (parse_pred (String.drop_prefix token 4))
-    else if String.is_prefix token ~prefix:"count("
-    then parse_count token
-    else (
-      match find_cmp token with
-      | None -> fail "expected a predicate such as kind=code_block, got %s" token
-      | Some (start, length, cmp) ->
-        let name = String.sub token ~pos:0 ~len:start in
-        if String.is_empty name then fail "a predicate needs a property name: %s" token;
-        Prop (name, cmp, parse_value (String.drop_prefix token (start + length))))
+  | Some cmp -> cmp
+  | None -> expected "one of = != < <= > >=" expr
+;;
 
-and split_commas (s : string) : string list =
-  split_outside s ~break:(fun c -> Char.equal c ',')
+(** A call's name, positional arguments and labelled arguments, rejecting any
+    label not in [labels]. A bare word is a call without arguments. *)
+let call_of (expr : expr) ~(labels : string list)
+  : string * expr list * (string -> expr option)
+  =
+  match expr with
+  | Atom { text = name; quoted = false } -> name, [], fun _ -> None
+  | Call { name; args } ->
+    let positional, labelled =
+      List.partition_map args ~f:(function
+        | None, arg -> First arg
+        | Some label, arg -> Second (label, arg))
+    in
+    List.iter labelled ~f:(fun (label, _) ->
+      if not (List.mem labels label ~equal:String.equal)
+      then fail "%s takes no argument %s" name label);
+    name, positional, List.Assoc.find labelled ~equal:String.equal
+  | expr -> expected "a call such as Child" expr
+;;
 
-(** [count(QUERY)OP N]. *)
-and parse_count (token : string) : pred =
-  let rec closing i depth =
-    if i >= String.length token
-    then fail "unbalanced parentheses: %s" token
-    else (
-      match token.[i] with
-      | '(' -> closing (i + 1) (depth + 1)
-      | ')' when depth = 1 -> i
-      | ')' -> closing (i + 1) (depth - 1)
-      | _ -> closing (i + 1) depth)
-  in
-  let close = closing 5 0 in
-  let steps = String.sub token ~pos:6 ~len:(close - 6) in
-  let rest = String.drop_prefix token (close + 1) in
-  match find_cmp rest with
-  | Some (0, length, cmp) ->
-    (match Int.of_string_opt (String.drop_prefix rest length) with
-     | Some n -> Count (parse_steps steps, cmp, n)
-     | None -> fail "count needs a number, as count(child)>0")
-  | _ -> fail "count needs a comparison, as count(child)>0"
+(** The error for a call of a known name with the wrong arguments, or of an
+    unknown one. [forms] is each name with how it is called. *)
+let misused ~(forms : (string * string) list) (name : string) (expr : expr) =
+  match List.Assoc.find forms name ~equal:String.equal with
+  | Some form -> expected form expr
+  | None ->
+    fail "unknown %s; one of %s" name (String.concat ~sep:", " (List.map forms ~f:fst))
+;;
 
-(** [has NAME] and [not PRED] may be written with a space; every other
-    predicate is one word. *)
-and join_words (tokens : string list) : string list =
-  match tokens with
-  | ("has" | "not") :: [] -> fail "%s needs what follows it" (List.hd_exn tokens)
-  | (("has" | "not") as word) :: next :: rest -> join_words ((word ^ ":" ^ next) :: rest)
-  | token :: rest -> token :: join_words rest
-  | [] -> []
+let rec pred_of (expr : expr) : pred =
+  match call_of expr ~labels:[] with
+  | "Is", [ kind ], _ -> is (text_of kind)
+  | "Prop", [ name; cmp; value ], _ ->
+    Prop
+      ( text_of name
+      , cmp_of cmp
+      , Option.value_or_thunk (value_of value) ~default:(fun () ->
+          expected "a value" value) )
+  | "Has", [ name ], _ -> Has (text_of name)
+  | "Not", [ pred ], _ -> Not (pred_of pred)
+  | "And", [ preds ], _ -> And (List.map (list_of preds) ~f:pred_of)
+  | "Or", [ preds ], _ -> Or (List.map (list_of preds) ~f:pred_of)
+  | "Exists", [ steps ], _ -> Exists (steps_of steps)
+  | "Count", [ steps; cmp; n ], _ -> Count (steps_of steps, cmp_of cmp, int_of n)
+  | name, _, _ ->
+    misused
+      name
+      expr
+      ~forms:
+        [ "Is", "Is(KIND)"
+        ; "Prop", "Prop(NAME, OP, VALUE)"
+        ; "Has", "Has(NAME)"
+        ; "Not", "Not(PRED)"
+        ; "And", "And([PRED, ...])"
+        ; "Or", "Or([PRED, ...])"
+        ; "Exists", "Exists([STEP, ...])"
+        ; "Count", "Count([STEP, ...], OP, INT)"
+        ]
 
-and parse_step (tokens : string list) : step =
-  let axis, rest =
-    match tokens with
-    | [] -> fail "a step needs an axis"
-    | "self" :: rest -> Self, rest
-    | "child" :: rest -> Child, rest
-    | "descend" :: rest -> Descendant, rest
-    | "field" :: key :: rest -> Field (unquote key), rest
-    | [ "field" ] -> fail "field needs a key, as: field butter"
-    | "section" :: path :: rest ->
-      Section { path = String.split (unquote path) ~on:'/'; exact = true }, rest
-    | [ "section" ] -> fail "section needs a path, as: section top/setup"
-    | word :: _ ->
-      fail "unknown axis %s; one of self, child, descend, field, section" word
-  in
-  let where, nth, exact =
-    List.fold
-      (join_words rest)
-      ~init:([], None, true)
-      ~f:(fun (where, nth, exact) token ->
-        if String.equal token "sub-path"
-        then where, nth, false
-        else if String.is_prefix token ~prefix:"nth="
-        then (
-          match Int.of_string_opt (String.drop_prefix token 4) with
-          | Some n -> where, Some n, exact
-          | None -> fail "nth needs a number: %s" token)
-        else parse_pred token :: where, nth, exact)
-  in
+and step_of (expr : expr) : step =
+  let name, positional, label = call_of expr ~labels:[ "where"; "nth"; "exact" ] in
   let axis =
-    match axis, exact with
-    | Section { path; exact = _ }, exact -> Section { path; exact }
-    | axis, true -> axis
-    | _, false -> fail "sub-path belongs to a section step"
+    match name, positional, label "exact" with
+    | "Self", [], None -> Self
+    | "Child", [], None -> Child
+    | "Descendant", [], None -> Descendant
+    | "Field", [ key ], None -> Field (text_of key)
+    | "Section", [ path ], exact ->
+      Section
+        { path = List.map (list_of path) ~f:text_of
+        ; exact = Option.value_map exact ~default:true ~f:bool_of
+        }
+    | name, _, _ ->
+      misused
+        name
+        expr
+        ~forms:
+          [ "Self", "Self(where=..., nth=...)"
+          ; "Child", "Child(where=..., nth=...)"
+          ; "Descendant", "Descendant(where=..., nth=...)"
+          ; "Field", "Field(KEY, where=..., nth=...)"
+          ; "Section", "Section([NAME, ...], exact=BOOL, where=..., nth=...)"
+          ]
   in
-  { axis; where = List.rev where; nth }
+  { axis
+  ; where =
+      Option.value_map (label "where") ~default:[] ~f:(fun preds ->
+        List.map (list_of preds) ~f:pred_of)
+  ; nth = Option.map (label "nth") ~f:int_of
+  }
 
-and parse_steps (text : string) : t =
-  match
-    split_outside text ~break:(fun c -> Char.equal c '|')
-    |> List.map ~f:(fun step -> split_outside step ~break:Char.is_whitespace)
-  with
-  | [] -> []
-  | steps -> List.map steps ~f:parse_step
-;;
+and steps_of (expr : expr) : steps = List.map (list_of expr) ~f:step_of
 
 let of_string (text : string) : (t, string) Result.t =
-  try Ok (parse_steps text) with
+  try Ok (steps_of (parse text)) with
   | Parse_error message -> Error message
 ;;
 
@@ -757,37 +811,29 @@ let of_string (text : string) : (t, string) Result.t =
    === *)
 
 let span (cursor : cursor) : Node.span option =
-  let of_textloc textloc =
-    if Cmarkit.Textloc.is_none textloc
-    then None
-    else
-      Some
-        ({ first_line = fst (Cmarkit.Textloc.first_line textloc)
-         ; last_line = fst (Cmarkit.Textloc.last_line textloc)
-         ; first_byte = Cmarkit.Textloc.first_byte textloc
-         ; last_byte = Cmarkit.Textloc.last_byte textloc
-         }
-         : Node.span)
+  let textloc_of block = Cmarkit.Meta.textloc (Parse.Common.meta_of_block block) in
+  let textloc =
+    match cursor.view with
+    | V_section { heading; body } ->
+      (* A section spans its heading and the blocks under it. *)
+      (match
+         List.filter (heading :: body) ~f:(fun block ->
+           not (Cmarkit.Textloc.is_none (textloc_of block)))
+       with
+       | [] -> Cmarkit.Textloc.none
+       | first :: _ as blocks ->
+         Cmarkit.Textloc.reloc
+           ~first:(textloc_of first)
+           ~last:(textloc_of (List.last_exn blocks)))
+    | V_root | V_block _ | V_item _ -> Cmarkit.Meta.textloc (meta cursor)
   in
-  match cursor.view with
-  | V_section { heading; body } ->
-    (* A section spans its heading and the blocks under it. *)
-    let locs =
-      List.filter_map (heading :: body) ~f:(fun block ->
-        let loc = Cmarkit.Meta.textloc (Parse.Common.meta_of_block block) in
-        Option.some_if (not (Cmarkit.Textloc.is_none loc)) loc)
-    in
-    (match List.hd locs, List.last locs with
-     | Some first, Some last ->
-       Some
-         ({ first_line = fst (Cmarkit.Textloc.first_line first)
-          ; last_line = fst (Cmarkit.Textloc.last_line last)
-          ; first_byte = Cmarkit.Textloc.first_byte first
-          ; last_byte = Cmarkit.Textloc.last_byte last
-          }
-          : Node.span)
-     | _ -> None)
-  | V_root | V_block _ | V_item _ -> of_textloc (Cmarkit.Meta.textloc (meta cursor))
+  Option.some_if (not (Cmarkit.Textloc.is_none textloc)) textloc
+  |> Option.map ~f:(fun textloc : Node.span ->
+    { first_line = fst (Cmarkit.Textloc.first_line textloc)
+    ; last_line = fst (Cmarkit.Textloc.last_line textloc)
+    ; first_byte = Cmarkit.Textloc.first_byte textloc
+    ; last_byte = Cmarkit.Textloc.last_byte textloc
+    })
 ;;
 
 let render (doc : Cmarkit.Doc.t) (blocks : B.t list) : string =
@@ -818,13 +864,13 @@ let found_of_cursor (cursor : cursor) : Node.found_t =
 
 type stage =
   | No_candidate
-  | Filtered_out of Node.found_t list
+  | Filtered_out of Node.t list
   | Out_of_range of { length : int }
 
 type no_match =
   { index : int
   ; step : step
-  ; reached : Node.found_t list
+  ; reached : Node.t list
   ; stage : stage
   }
 
@@ -834,7 +880,7 @@ type result =
   }
 
 let run (query : t) (doc : Cmarkit.Doc.t) : result =
-  let root = { doc; view = V_root; index = 0; parent = None } in
+  let root = { doc; named = named_blocks doc; view = V_root; index = 0; parent = None } in
   let rec go index input failure steps =
     match steps with
     | [] -> input, failure
@@ -849,12 +895,12 @@ let run (query : t) (doc : Cmarkit.Doc.t) : result =
             Some
               { index
               ; step
-              ; reached = List.map input ~f:found_of_cursor
+              ; reached = List.map input ~f:node
               ; stage =
                   (if List.is_empty candidates
                    then No_candidate
                    else if List.is_empty kept
-                   then Filtered_out (List.map candidates ~f:found_of_cursor)
+                   then Filtered_out (List.map candidates ~f:node)
                    else Out_of_range { length = List.length kept })
               }
           else None
@@ -868,17 +914,12 @@ let run (query : t) (doc : Cmarkit.Doc.t) : result =
 ;;
 
 let listing (values : string list) : string =
-  List.fold values ~init:[] ~f:(fun seen v ->
-    if List.mem seen v ~equal:String.equal then seen else v :: seen)
-  |> List.rev
-  |> function
+  match List.stable_dedup values ~compare:String.compare with
   | [] -> "none"
   | values -> String.concat values ~sep:", "
 ;;
 
-let kinds_of (founds : Node.found_t list) : string =
-  listing (List.map founds ~f:(fun found -> Node.kind found.node))
-;;
+let kinds_of (nodes : Node.t list) : string = listing (List.map nodes ~f:Node.kind)
 
 let no_match_to_string ({ index; step; reached; stage } : no_match) : string =
   let where = sprintf "step %d (%s)" index (step_to_string step) in
@@ -887,8 +928,8 @@ let no_match_to_string ({ index; step; reached; stage } : no_match) : string =
   | Filtered_out candidates ->
     let values =
       match step.where with
-      | [ Prop (name, _, _) ] | Prop (name, _, _) :: _ ->
-        (match List.filter_map candidates ~f:(fun found -> Node.prop name found.node) with
+      | Prop (name, _, _) :: _ ->
+        (match List.filter_map candidates ~f:(Node.prop name) with
          | [] -> sprintf "none of them has %s" name
          | values ->
            sprintf "%s here: %s" name (listing (List.map values ~f:Node.value_to_string)))

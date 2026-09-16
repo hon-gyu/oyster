@@ -211,7 +211,7 @@ let%expect_test "section: a sub-path skips a level" =
 
 let%expect_test "section: an exact path must be complete" =
   show Query.(empty |> section [ "top"; "qweioasd" ]);
-  [%expect {| <nothing> step 0 (section top/qweioasd): nothing to move to from root |}]
+  [%expect {| <nothing> step 0 (Section([top, qweioasd])): nothing to move to from root |}]
 ;;
 
 let%expect_test "section: the complete path" =
@@ -332,7 +332,7 @@ let%expect_test "field: a field of an item, through the list describing it" =
 
 let%expect_test "field: under a section a list is content, not fields" =
   show Query.(empty |> section ~exact:false [ "setup" ] |> field "bird");
-  [%expect {| <nothing> step 1 (field bird): nothing to move to from section |}]
+  [%expect {| <nothing> step 1 (Field(bird)): nothing to move to from section |}]
 ;;
 
 let%expect_test "field: naming the list gives its items as fields" =
@@ -353,7 +353,7 @@ let%expect_test "field: naming the list gives its items as fields" =
 
 let%expect_test "field: not looked for inside another field's value" =
   show Query.(empty |> section ~exact:false [ "setup" ] |> field "foo");
-  [%expect {| <nothing> step 1 (field foo): nothing to move to from section |}]
+  [%expect {| <nothing> step 1 (Field(foo)): nothing to move to from section |}]
 ;;
 
 let%expect_test "field: a keyed paragraph with an inline value" =
@@ -368,7 +368,7 @@ let%expect_test "field: a keyed paragraph with an inline value" =
 
 let%expect_test "field: the section does not adopt the items of a list it holds" =
   show Query.(empty |> section ~exact:false [ "other" ] |> field "bqq");
-  [%expect {| <nothing> step 1 (field bqq): nothing to move to from section |}]
+  [%expect {| <nothing> step 1 (Field(bqq)): nothing to move to from section |}]
 ;;
 
 let%expect_test "field: bqq is a field of the item aaa" =
@@ -458,7 +458,10 @@ let%expect_test "nth: negative counts from the end" =
    ====== *)
 
 let%expect_test "syntax: the parsed query selects the same nodes" =
-  (match Query.of_string "section other sub-path | descend kind=code_block nth=1" with
+  (match
+     Query.of_string
+       "[Section([other], exact=false), Descendant(where=[Is(code_block)], nth=1)]"
+   with
    | Error message -> printf "error: %s\n" message
    | Ok steps -> show steps);
   [%expect

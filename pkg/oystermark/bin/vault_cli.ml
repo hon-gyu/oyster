@@ -261,8 +261,9 @@ let context_command =
 
 (** Query the nodes of a note.
 
-    QUERY is the syntax {!Oystermark.Note.Query.of_string} reads: a step is an
-    axis and what modifies it, and [|] starts the next step.
+    QUERY is the syntax {!Oystermark.Note.Query.of_string} reads: a list of
+    steps, each written as its constructor, as
+    [ [Section([setup]), Descendant(where=[Is(code_block)])] ].
 
     The exit status answers on its own: [0] when something matched, [1] when
     nothing did, [2] when the query or the note could not be read. A query that
