@@ -321,7 +321,7 @@ let%expect_test "keyed_block_id" =
     │ chain                  │ foo: bar: ^x\n- baz   │ K#x(foo: ){K(bar: ){[P(baz)]}} │
     │ chain, non-empty value │ foo: bar: v ^x        │ K#x(foo: ){K(bar: ){P(v ^x)}}  │
     │ list item              │ - foo: ^x\n  - bar    │ [K#x(foo: ){[P(bar)]}]         │
-    │ list item, sibling     │ - foo: ^x\n- baz      │ [K#x(foo: ){[P(baz)]}]         │
+    │ list item, sibling     │ - foo: ^x\n- baz      │ [P#x(foo: ^x), P(baz)]         │
     │ list item, non-empty   │ - foo: bar ^x         │ [K#x(foo: ){P(bar ^x)}]        │
     │ list item, blank cont. │ - foo: ^x\n\n- bar    │ [P#x(foo: ^x), P(bar)]         │
     │ list item, no marker   │ - foo:\n\n- bar       │ [P(foo:), P(bar)]              │
@@ -368,7 +368,7 @@ let%expect_test "keyed_block_id_roundtrip" =
     │ foo: bar: ^x\n- baz   │ foo: bar: ^x\n- baz   │
     │ foo: bar: v ^x        │ foo: bar: v ^x        │
     │ - foo: ^x\n  - bar    │ - foo: ^x\n  - bar    │
-    │ - foo: ^x\n- baz      │ - foo: ^x\n  - baz    │
+    │ - foo: ^x\n- baz      │ - foo: ^x\n- baz      │
     │ - foo: bar ^x         │ - foo: bar ^x         │
     │ - foo: ^x\n\n- bar    │ - foo: ^x\n  \n- bar  │
     │ - foo:\n\n- bar       │ - foo:\n  \n- bar     │
