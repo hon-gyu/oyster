@@ -1,6 +1,7 @@
-(* Text is read in two passes: {!parse} builds a generic [expr] of calls, lists
-   and atoms, and elaboration checks each call's name and arguments. Printing
-   builds the same [expr] and writes it out, so the two directions share one
+(* Text is read in two passes:
+   - {!parse} builds a generic [expr] of calls, lists and atoms,
+   and elaboration checks each call's name and arguments.
+   - Printing builds the same [expr] and writes it out, so the two directions share one
    shape. *)
 
 open Core
