@@ -85,9 +85,7 @@ and axis =
         A section never crosses a container boundary, and this axis does not
         reach into containers: a heading inside a block quote or a list item is
         reached through {!Child} or {!Field} first. *)
-(* Upward axes, when something needs them. [found_t.headings] covers the
-   common case of naming the section a match is in.
-
+(* TODO: upward axes. [found_t.headings] covers the common case of naming the section a match is in.
    | Parent
    | Ancestor *)
 
