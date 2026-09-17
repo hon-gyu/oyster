@@ -722,6 +722,11 @@ let call_of (expr : expr) ~(labels : string list)
         | None, arg -> First arg
         | Some label, arg -> Second (label, arg))
     in
+    ignore
+      (List.fold labelled ~init:[] ~f:(fun seen (label, _) ->
+         if List.mem seen label ~equal:String.equal
+         then fail "%s has duplicate argument %s" name label;
+         label :: seen));
     List.iter labelled ~f:(fun (label, _) ->
       if not (List.mem labels label ~equal:String.equal)
       then fail "%s takes no argument %s" name label);

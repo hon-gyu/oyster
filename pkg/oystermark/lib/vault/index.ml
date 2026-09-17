@@ -245,6 +245,12 @@ type resolution_error =
 
 type resolution = (target, resolution_error) result
 
+(* TODO: we need a human-readable representation for unresolved links
+src_path, src_loc, tgt_path, tgt_fragment, reason
+
+%{src_path}:%{src_loc} -> %{tgt_path}:%{tgt_fragment} : %{reason}
+*)
+
 type backlink =
   { source : Path.t
   ; link : Link.t

@@ -97,6 +97,8 @@ let%expect_test "what a bad query says" =
     ; "[Child(where=[Is])]"
     ; "[Child(where=[Prop(level, ~, 2)])]"
     ; "[Child(nth=x)]"
+    ; "[Child(nth=0, nth=1)]"
+    ; "[Section([top], exact=true, exact=false)]"
     ; "[Descendant(where=[Count([Child])])]"
     ; "[Child(where=[Kind(heading)])]"
     ; "[Child"
@@ -122,6 +124,10 @@ let%expect_test "what a bad query says" =
       error: expected one of = != < <= > >=, got ~
     [Child(nth=x)]
       error: expected a number, got x
+    [Child(nth=0, nth=1)]
+      error: Child has duplicate argument nth
+    [Section([top], exact=true, exact=false)]
+      error: Section has duplicate argument exact
     [Descendant(where=[Count([Child])])]
       error: expected Count([STEP, ...], OP, INT), got Count([Child])
     [Child(where=[Kind(heading)])]
