@@ -111,7 +111,7 @@ let rec path (cursor : t) : int list =
   | Some parent -> path parent @ [ cursor.index ]
 ;;
 
-(** Each address of [doc] with the block {!Read.read} resolves it to. Cursors
+(** Each address of [doc] with the block {!Addressed_blocks.find} resolves it to. Cursors
     look through [Ext_attributes] wrappers, so the block is unwrapped to
     match. *)
 let root (doc : Cmarkit.Doc.t) : t =
@@ -120,7 +120,7 @@ let root (doc : Cmarkit.Doc.t) : t =
     Anchor.of_doc doc
     |> List.filter_map ~f:(fun (anchor : Anchor.t) ->
       let address = Anchor.address anchor.value in
-      List.hd (Read.read blocks address)
+      List.hd (Addressed_blocks.find blocks address)
       |> Option.map ~f:(fun block -> unwrap_attributes block, address))
   in
   { doc; named; view = V_root; index = 0; parent = None }
@@ -178,14 +178,16 @@ let attribute_values (text : string) : Node.value list =
 
 (** Every property of the node, its own first, then [id], [class] and the
     attribute's key/value pairs, which a node cannot carry on its own: they come
-    from the djot attribute or the caret marker written on it. An [id] is
-    whatever names the node, so a [ ^id ] on a line of its own belongs to the
-    block before it, and attribute and caret identifiers share one namespace. *)
+    from the heading, the djot attribute or the caret marker written on it. An
+    [id] is whatever names the node, so a [ ^id ] on a line of its own belongs to
+    the block before it, and heading, attribute and caret identifiers share one
+    namespace. *)
 let props (cursor : t) : (string * Node.value) list =
   let ids =
-    List.filter_map (names cursor) ~f:(function
-      | Anchor.Address.Attr id | Anchor.Address.Caret id -> Some ("id", Node.String id)
-      | Anchor.Address.Heading _ -> None)
+    names cursor
+    |> List.map ~f:Anchor.Address.id
+    |> List.dedup_and_sort ~compare:String.compare
+    |> List.map ~f:(fun id -> "id", Node.String id)
   in
   let attributes =
     match cursor.view with

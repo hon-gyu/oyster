@@ -234,6 +234,12 @@ type found_t =
   ; props : (string * value) list
   }
 
+let source_text (content : string) (found : found_t) : string option =
+  Option.map found.span ~f:(fun { first_byte; last_byte; _ } ->
+    let stop = Int.min (last_byte + 1) (String.length content) in
+    String.sub content ~pos:first_byte ~len:(stop - first_byte) |> String.rstrip)
+;;
+
 (* Properties
    ========== *)
 

@@ -49,7 +49,8 @@ let rec expand_doc
         match target with
         | Index.Anchor { anchor = { value; _ }; _ } ->
           ( Note.Transclusion.fragment value
-          , fun blocks -> Note.read blocks (Note.Anchor.address value) )
+          , fun blocks ->
+              Note.Private.Addressed_blocks.find blocks (Note.Anchor.address value) )
         | Note _ | Asset _ -> None, Fn.id
       in
       Option.map source ~f:(fun source ->

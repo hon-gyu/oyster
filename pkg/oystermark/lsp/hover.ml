@@ -270,17 +270,19 @@ let truncate ~max_chars (s : string) : string =
     shown ^ "\n\n" ^ notice)
 ;;
 
-(** The source text of the blocks [address] names in [content], or [None].
+(** The source text of the node [address] names in [content], or [None].
 
-    The blocks are chosen as for embedding ({!Oystermark.Note.read}) and shown
-    as written in the file ({!Oystermark.Note.source_text}). See
+    The node is found by {!Oystermark.Note.Query.of_address} and shown as
+    written in the file ({!Oystermark.Note.Node.source_text}). See
     {!page-"feature-hover"}. *)
 let read_address (address : Oystermark.Note.Anchor.Address.t) (content : string)
   : string option
   =
+  let open Oystermark.Note in
   let doc = Lsp_util.parse_doc content in
-  Oystermark.Note.read [ Cmarkit.Doc.block doc ] address
-  |> Oystermark.Note.source_text content
+  (Query.run (Query.of_address address) doc).matches
+  |> List.hd
+  |> Option.bind ~f:(Node.source_text content)
 ;;
 
 (** {2 Formatting} *)

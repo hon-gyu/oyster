@@ -41,8 +41,9 @@ by [*(empty)*].
   {- {b Resolved heading fragment} ([[[note#Heading]]]): path header,
      then the source of the matched heading's section: the heading and what
      follows it in the same container, up to (but not including) the next
-     heading of equal or higher level. These are the same blocks an embed of
-     the link includes ({!Oystermark.Note.read}).}
+     heading of equal or higher level, found by
+     {!Oystermark.Note.Query.of_address}. A block attribute written on the
+     heading, such as [{#intro}] on the line above it, is shown with it.}
   {- {b Resolved block-ID fragment} ([[[note#^blockid]]]): path header,
      then the paragraph that carries the block ID, or the block before a
      block ID written on a line of its own.}

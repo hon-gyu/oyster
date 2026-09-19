@@ -112,18 +112,28 @@ type found_t =
             [oyster] of [- name: oyster], has only this. *)
   ; props : (string * value) list
     (** Every property a predicate could have tested on it, in the order
-            {!val-props} lists them, followed by the [id] and [class] the
-            surrounding djot attribute or caret marker give it and the
-            attribute's key/value pairs. A name can repeat; the first entry is
+            {!val-props} lists them, followed by the [id] of each of its [names]
+            and the [class] and key/value pairs of the djot attribute written
+            on it. A name can repeat; the first entry is
             the one {!val-props} would have produced. *)
   }
 
+(** The source text of [found] in [content], the text its note was parsed from
+    with locations: from the start of its [span] to the end, with trailing
+    whitespace removed. [None] without a span.
+
+    The slice is taken byte for byte, so inside a container that prefixes each
+    line (a block quote's [>], a list item's indentation) every line but the
+    first keeps that prefix. *)
+val source_text : string -> found_t -> string option
+
 (** {1 Properties}
 
-    A node carries the properties below. What a djot attribute or a caret marker
-    written on it says is not among them: a node cannot know what is written
-    around it, so {!Query} adds the attribute's identifier, classes and
-    key/value pairs, under [id], [class] and their own names. A predicate sees
+    A node carries the properties below. What names it and what a djot attribute
+    written on it says are not among them: a node cannot know what is written
+    around it, so {!Query} adds the identifier of each address that names it,
+    heading, caret and attribute alike, under [id], and the attribute's classes
+    and key/value pairs under [class] and their own names. A predicate sees
     both sets, and a name can repeat, when a node carries more than one
     identifier or class, or when an attribute names a property the node already
     has.

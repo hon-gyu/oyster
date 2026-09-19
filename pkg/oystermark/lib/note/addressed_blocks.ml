@@ -9,7 +9,7 @@ let rec flatten (blocks : Cmarkit.Block.t list) : Cmarkit.Block.t list =
     | other -> [ other ])
 ;;
 
-(** The [Heading] case of {!read}. *)
+(** The [Heading] case of {!find}. *)
 let get_heading_section (blocks : Cmarkit.Block.t list) (heading_id : string)
   : Cmarkit.Block.t list
   =
@@ -56,7 +56,7 @@ let get_heading_section (blocks : Cmarkit.Block.t list) (heading_id : string)
   Option.value (in_list blocks) ~default:[]
 ;;
 
-(** The [Caret] case of {!read}. *)
+(** The [Caret] case of {!find}. *)
 let get_block_by_caret_id (blocks : Cmarkit.Block.t list) (id : string)
   : Cmarkit.Block.t option
   =
@@ -121,7 +121,7 @@ let get_block_by_caret_id (blocks : Cmarkit.Block.t list) (id : string)
   search None (flatten blocks)
 ;;
 
-(** The [Attr] case of {!read}. *)
+(** The [Attr] case of {!find}. *)
 let get_block_by_attr_id (blocks : Cmarkit.Block.t list) (id : string)
   : Cmarkit.Block.t option
   =
@@ -167,7 +167,7 @@ let get_block_by_attr_id (blocks : Cmarkit.Block.t list) (id : string)
   find_in blocks
 ;;
 
-let read (blocks : Cmarkit.Block.t list) (address : Anchor.Address.t)
+let find (blocks : Cmarkit.Block.t list) (address : Anchor.Address.t)
   : Cmarkit.Block.t list
   =
   match address with
@@ -386,11 +386,11 @@ let%test_module "Read" =
   end)
 ;;
 
-let%test_module "read" =
+let%test_module "find" =
   (module struct
     let show content (address : Anchor.Address.t) =
       let doc = Parse.of_string content in
-      read [ Cmarkit.Doc.block doc ] address
+      find [ Cmarkit.Doc.block doc ] address
       |> source_text content
       |> Option.value ~default:"<none>"
       |> print_endline

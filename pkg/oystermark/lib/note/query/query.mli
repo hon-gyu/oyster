@@ -125,6 +125,21 @@ val field : ?where:pred list -> ?nth:int -> string -> steps -> steps
 (** @param exact if [false], sub-path (ordered) can be matched against; defaults to [true]. *)
 val section : ?exact:bool -> ?where:pred list -> ?nth:int -> string list -> steps -> steps
 
+(** The node [address] names: the first node in document order whose [id] is
+    the address's, and for a heading address the first such section. Heading,
+    caret and attribute identifiers share one namespace per note, see
+    {!Anchor.Address.id}, so [Caret x] and [Attr x] find the same node.
+
+    - {b Heading}: the section of the heading, in any container. It holds the
+      blocks after the heading up to the next heading of the same or a higher
+      level, and ends with its container.
+    - {b Caret}: the block the [ ^id ] is written on, or, when the [ ^id ] is a
+      paragraph of its own, the block before it.
+    - {b Attr}: for a block attribute, the block it wraps, which is a section
+      when that block is a heading; for an inline attribute, the paragraph or
+      heading that holds it. See {!page-"feature-attribute-anchors"}. *)
+val of_address : Anchor.Address.t -> steps
+
 type t = steps
 
 (** {2 Syntax}

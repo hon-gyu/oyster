@@ -110,7 +110,7 @@ let show ?(note = mixed_note) (steps : Query.t) : unit =
         (Node.kind found.node)
         (path_to_string found.path)
         (String.make 20 '-')
-        (found.markdown))
+        found.markdown)
 ;;
 
 (** Each match as its kind and its path, for a query whose matches are large. *)
@@ -211,7 +211,8 @@ let%expect_test "section: a sub-path skips a level" =
 
 let%expect_test "section: an exact path must be complete" =
   show Query.(empty |> section [ "top"; "qweioasd" ]);
-  [%expect {| <nothing> step 0 (Section([top, qweioasd])): nothing to move to from root |}]
+  [%expect
+    {| <nothing> step 0 (Section([top, qweioasd])): nothing to move to from root |}]
 ;;
 
 let%expect_test "section: the complete path" =
@@ -582,4 +583,296 @@ let%expect_test "attribute: not among the node's own properties" =
     lang = "sh"
     text = "echo hi"
     |}]
+;;
+
+let%test_module "syntax" =
+  (module struct
+    (** The steps the text describes, printed back. the two should agree. *)
+    let parse_and_dump_then_comp (text : string) : unit =
+      match Query.of_string text with
+      | Error message -> printf "%s\n  error: %s\n" text message
+      | Ok steps ->
+        let printed = Query.to_string steps in
+        if String.equal printed text
+        then printf "Ok\n"
+        else printf "┌ pre: %s\n└ now: %s\n" text printed
+    ;;
+
+    let%expect_test "every step of the fixture" =
+      List.iter
+        ~f:parse_and_dump_then_comp
+        [ "[Section([top]), Child]"
+        ; "[Section([top, qweioasd], exact=false)]"
+        ; "[Section([other], exact=false), Child(where=[Is(code_block)])]"
+        ; "[Section([other], exact=false), Descendant(where=[Is(code_block)], nth=1)]"
+        ; "[Section([setup], exact=false), Field(butter), Child(nth=0), Field(foo)]"
+        ; "[Section([setup], exact=false), Child(where=[Is(list)]), Field(bird), \
+           Field(two)]"
+        ; "[Descendant(where=[Has(key)])]"
+        ; "[Child(where=[Not(Is(heading))])]"
+        ; "[Child(where=[Prop(level, >=, 2), Prop(ordered, =, true)])]"
+        ; "[Child(where=[Prop(title, =, \"A callout\")])]"
+        ; "[Child(where=[Prop(key, =, 12)])]"
+        ; "[Descendant(where=[Or([Is(list), Is(list_item)])])]"
+        ; "[Descendant(where=[Is(section), Exists([Descendant(where=[Is(code_block), \
+           Prop(lang, =, python)])])])]"
+        ; "[Descendant(where=[Count([Child], >, 2)])]"
+        ; "[Self(nth=-1)]"
+        ; "[]"
+        ];
+      [%expect
+        {|
+        Ok
+        Ok
+        Ok
+        Ok
+        Ok
+        Ok
+        Ok
+        Ok
+        Ok
+        Ok
+        Ok
+        Ok
+        Ok
+        Ok
+        Ok
+        Ok
+        |}]
+    ;;
+
+    (* Empty parentheses, [Prop] on [kind], quotes and spacing: read the same,
+       printed one way. *)
+    let%expect_test "what is read but not written" =
+      List.iter
+        ~f:parse_and_dump_then_comp
+        [ "[Child()]"
+        ; "[Child(where=[Prop(kind, =, paragraph)])]"
+        ; "[Child(where=[Prop(kind, !=, paragraph)])]"
+        ; "[Field(\"butter\")]"
+        ; "[ Section( [ top ] , exact = true ) ]"
+        ; "[Child(where=[Prop(level, <, 2)])]"
+        ];
+      [%expect
+        {|
+        ┌ pre: [Child()]
+        └ now: [Child]
+        ┌ pre: [Child(where=[Prop(kind, =, paragraph)])]
+        └ now: [Child(where=[Is(paragraph)])]
+        Ok
+        ┌ pre: [Field("butter")]
+        └ now: [Field(butter)]
+        ┌ pre: [ Section( [ top ] , exact = true ) ]
+        └ now: [Section([top])]
+        Ok
+        |}]
+    ;;
+
+    let%expect_test "what a bad query says" =
+      List.iter
+        ~f:parse_and_dump_then_comp
+        [ "Child"
+        ; "[Kids]"
+        ; "[Field]"
+        ; "[Child(butter)]"
+        ; "[Child(exact=false)]"
+        ; "[Child(where=Is(heading))]"
+        ; "[Child(where=[Is])]"
+        ; "[Child(where=[Prop(level, ~, 2)])]"
+        ; "[Child(nth=x)]"
+        ; "[Child(nth=0, nth=1)]"
+        ; "[Section([top], exact=true, exact=false)]"
+        ; "[Descendant(where=[Count([Child])])]"
+        ; "[Child(where=[Kind(heading)])]"
+        ; "[Child"
+        ; "[Field(\"butter)]"
+        ; "[Child] [Self]"
+        ];
+      [%expect
+        {|
+        Child
+          error: expected a list [...], got Child
+        [Kids]
+          error: unknown Kids; one of Self, Child, Descendant, Field, Section
+        [Field]
+          error: expected Field(KEY, where=..., nth=...), got Field
+        [Child(butter)]
+          error: expected Child(where=..., nth=...), got Child(butter)
+        [Child(exact=false)]
+          error: expected Child(where=..., nth=...), got Child(exact=false)
+        [Child(where=Is(heading))]
+          error: expected a list [...], got Is(heading)
+        [Child(where=[Is])]
+          error: expected Is(KIND), got Is
+        [Child(where=[Prop(level, ~, 2)])]
+          error: expected one of = != < <= > >=, got ~
+        [Child(nth=x)]
+          error: expected a number, got x
+        [Child(nth=0, nth=1)]
+          error: Child has duplicate argument nth
+        [Section([top], exact=true, exact=false)]
+          error: Section has duplicate argument exact
+        [Descendant(where=[Count([Child])])]
+          error: expected Count([STEP, ...], OP, INT), got Count([Child])
+        [Child(where=[Kind(heading)])]
+          error: unknown Kind; one of Is, Prop, Has, Not, And, Or, Exists, Count
+        [Child
+          error: expected , or ], got the end
+        [Field("butter)]
+          error: unterminated string at 7
+        [Child] [Self]
+          error: unexpected [ at 8 after the query
+        |}]
+    ;;
+  end)
+;;
+
+(* [of_address] finds what {!Oystermark.Note.Private.Addressed_blocks.find}
+   names, case for case with that module's tests; the source text is what hover
+   shows. *)
+let%test_module "of_address" =
+  (module struct
+    let show content (address : Oystermark.Note.Anchor.Address.t) =
+      let doc = doc_of_string content in
+      (Query.run (Query.of_address address) doc).matches
+      |> List.hd
+      |> Option.bind ~f:(Node.source_text content)
+      |> Option.value ~default:"<none>"
+      |> print_endline
+    ;;
+
+    let%expect_test "heading: section of a top-level heading" =
+      show "## Sec\n\nContent.\n\n## Other\n\nNot this.\n" (Heading "sec");
+      [%expect
+        {|
+        ## Sec
+
+        Content.
+        |}]
+    ;;
+
+    let%expect_test "heading: inside a div, the section ends with the div" =
+      show "# Top\n\n::: warning\n## Inside\n\nbody\n:::\n\nafter\n" (Heading "inside");
+      [%expect
+        {|
+        ## Inside
+
+        body
+        |}]
+    ;;
+
+    let%expect_test "heading: a div after the heading belongs to the section whole" =
+      show "## A\n\ntext\n\n::: note\n## B\n:::\n\nmore\n\n## C\n" (Heading "a");
+      [%expect
+        {|
+        ## A
+
+        text
+
+        ::: note
+        ## B
+        :::
+
+        more
+        |}]
+    ;;
+
+    let%expect_test "heading: inside a block quote" =
+      show "> ## Q\n> text\n\nafter\n" (Heading "q");
+      [%expect
+        {|
+        ## Q
+        > text
+        |}]
+    ;;
+
+    let%expect_test "heading: inside a list item" =
+      show "- ## L\n  text\n- other\n" (Heading "l");
+      [%expect
+        {|
+        ## L
+          text
+        |}]
+    ;;
+
+    let%expect_test "heading: an authored id starts the section at the heading" =
+      show "{#intro}\n# Introduction\n\nbody\n\n# Next\n" (Heading "intro");
+      [%expect
+        {|
+        {#intro}
+        # Introduction
+
+        body
+        |}]
+    ;;
+
+    let%expect_test "heading: a hash inside a code block does not end the section" =
+      show "# Alpha\n\n```\n# not a heading\n```\n\ntail\n\n# Beta\n" (Heading "alpha");
+      [%expect
+        {|
+        # Alpha
+
+        ```
+        # not a heading
+        ```
+
+        tail
+        |}]
+    ;;
+
+    let%expect_test "caret: the whole paragraph, marker included" =
+      show "# H\n\nFirst line\nsecond line ^abc\n\nafter\n" (Caret "abc");
+      [%expect
+        {|
+        First line
+        second line ^abc
+        |}]
+    ;;
+
+    let%expect_test "caret: on a line of its own, the previous block" =
+      show "> A quote.\n\n^q1\n" (Caret "q1");
+      [%expect {| > A quote. |}]
+    ;;
+
+    let%expect_test "caret: in a nested list item" =
+      show
+        "- a nested list ^firstline\n    - item\n      ^inneritem\n"
+        (Caret "inneritem");
+      [%expect
+        {|
+        item
+              ^inneritem
+        |}]
+    ;;
+
+    let%expect_test "attr: on inlines, the containing paragraph as written" =
+      show "The [key term]{#kt} is here.\n" (Attr "kt");
+      [%expect {| The [key term]{#kt} is here. |}]
+    ;;
+
+    let%expect_test "attr: on a block, the wrapped block" =
+      show "# H\n\n{#aside}\n> An aside block.\n" (Attr "aside");
+      [%expect
+        {|
+        {#aside}
+        > An aside block.
+        |}]
+    ;;
+
+    let%expect_test "attr: on a heading, its section" =
+      show "{#intro}\n# Introduction\n\nbody\n\n# Next\n" (Attr "intro");
+      [%expect
+        {|
+        {#intro}
+        # Introduction
+
+        body
+        |}]
+    ;;
+
+    let%expect_test "not found" =
+      show "# H\n\nPlain paragraph.\n" (Heading "missing");
+      [%expect {| <none> |}]
+    ;;
+  end)
 ;;

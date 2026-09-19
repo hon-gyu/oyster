@@ -65,3 +65,10 @@ let section ?(exact = true) ?(where = []) ?nth (path : string list) (steps : ste
   =
   add steps (Section { path; exact }) ~where ~nth
 ;;
+
+let of_address (address : Anchor.Address.t) : steps =
+  let id = Prop ("id", Eq, String (Anchor.Address.id address)) in
+  match address with
+  | Heading _ -> descend ~where:[ is "section"; id ] ~nth:0 empty
+  | Caret _ | Attr _ -> descend ~where:[ id ] ~nth:0 empty
+;;
