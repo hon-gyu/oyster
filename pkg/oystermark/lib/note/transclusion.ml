@@ -7,11 +7,77 @@ type embed_meta =
   }
 
 let embed_meta_key : embed_meta Cmarkit.Meta.key = Cmarkit.Meta.key ()
+let embed_class = "embed"
+
+(* Embed metadata as text
+   ====================== *)
+
+(** A fragment as it is written after the ['#'] of a wikilink, which is how the
+    [fragment] attribute stores it. Parsing goes back through
+    {!Cmarkit.Inline.Wikilink}, so the attribute and the wikilink cannot drift
+    apart: a heading whose text contains a ['#'] is split by both alike. *)
+let fragment_to_string : Cmarkit.Inline.Wikilink.fragment -> string = function
+  | Heading path -> String.concat ~sep:"#" path
+  | Block_ref id -> "^" ^ id
+;;
+
+let fragment_of_string (text : string) : Cmarkit.Inline.Wikilink.fragment option =
+  Cmarkit.Inline.Wikilink.fragment
+    (Cmarkit.Inline.Wikilink.make ~embed:false ("#" ^ text))
+;;
+
+let attribute_of_embed_meta ({ depth; source_path; fragment } : embed_meta)
+  : Cmarkit.Attribute.t
+  =
+  Cmarkit.Attribute.of_bindings
+    ([ `Key_value ("source", source_path) ]
+     @ Option.value_map fragment ~default:[] ~f:(fun fragment ->
+       [ `Key_value ("fragment", fragment_to_string fragment) ])
+     @ [ `Key_value ("depth", Int.to_string depth) ])
+;;
+
+let embed_meta_of_attribute (attribute : Cmarkit.Attribute.t) : embed_meta option =
+  let key_values = Cmarkit.Attribute.key_values attribute in
+  let find name = List.Assoc.find key_values name ~equal:String.equal in
+  Option.map (find "source") ~f:(fun source_path ->
+    { depth = Option.value_map (find "depth") ~default:1 ~f:Int.of_string
+    ; source_path
+    ; fragment = Option.bind (find "fragment") ~f:fragment_of_string
+    })
+;;
+
+(** The transclusion [block] is, from the meta a same-process expansion left on
+    it or, failing that, from the attribute written on it, which is all a
+    document read back from text has. *)
+let embed_meta_of_block (block : Cmarkit.Block.t) : embed_meta option =
+  let rec go (block : Cmarkit.Block.t) (attribute : Cmarkit.Attribute.t option) =
+    match block with
+    | Cmarkit.Block.Ext_attributes (a, _) ->
+      let attributes = Cmarkit.Block.Attributes.attributes a in
+      go
+        (Cmarkit.Block.Attributes.block a)
+        (Some
+           (Option.value_map attribute ~default:attributes ~f:(fun attribute ->
+              Cmarkit.Attribute.merge attribute attributes)))
+    | Cmarkit.Block.Ext_div (d, meta) ->
+      let is_embed =
+        Option.value_map (Cmarkit.Block.Div.class' d) ~default:false ~f:(fun (c, _) ->
+          String.equal c embed_class)
+      in
+      if not is_embed
+      then None
+      else (
+        match Cmarkit.Meta.find embed_meta_key meta with
+        | Some meta -> Some meta
+        | None -> Option.bind attribute ~f:embed_meta_of_attribute)
+    | _ -> None
+  in
+  go block None
+;;
 
 let non_fm_blocks (doc : Cmarkit.Doc.t) : Cmarkit.Block.t list =
   match Cmarkit.Doc.block doc with
-  | Cmarkit.Block.Blocks (_, meta) as b
-    when Option.is_some (Cmarkit.Meta.find embed_meta_key meta) -> [ b ]
+  | block when Option.is_some (embed_meta_of_block block) -> [ block ]
   | Cmarkit.Block.Blocks (bs, _) ->
     (match bs with
      | Parse.Frontmatter.Frontmatter _ :: rest -> rest
@@ -78,10 +144,21 @@ let fragment : Anchor.value -> Cmarkit.Inline.Wikilink.fragment option = functio
 let transclude ~depth ~source_path ~fragment (blocks : Cmarkit.Block.t list)
   : Cmarkit.Block.t
   =
-  Cmarkit.Block.Blocks
-    ( blocks
-    , Cmarkit.Meta.add embed_meta_key { depth; source_path; fragment } Cmarkit.Meta.none
-    )
+  let embed_meta = { depth; source_path; fragment } in
+  let div =
+    Cmarkit.Block.Div.make
+      ~class':(embed_class, Cmarkit.Meta.none)
+      (Cmarkit.Block.Blocks (blocks, Cmarkit.Meta.none))
+  in
+  (* The meta is what the same-process consumers read; the attribute is the
+     same thing in text, for whoever only gets the rendered note back. *)
+  let div =
+    Cmarkit.Block.Ext_div
+      (div, Cmarkit.Meta.add embed_meta_key embed_meta Cmarkit.Meta.none)
+  in
+  Cmarkit.Block.Ext_attributes
+    ( Cmarkit.Block.Attributes.make ~specs:[ attribute_of_embed_meta embed_meta ] div
+    , Cmarkit.Meta.none )
 ;;
 
 let reverse_embed_doc (doc : Cmarkit.Doc.t) : Cmarkit.Doc.t =
@@ -96,8 +173,8 @@ let reverse_embed_doc (doc : Cmarkit.Doc.t) : Cmarkit.Doc.t =
       ~inline_ext_default:(fun _m i -> Some i)
       ~block:(fun _mapper block ->
         match block with
-        | Cmarkit.Block.Blocks (_, meta) ->
-          (match Cmarkit.Meta.find embed_meta_key meta with
+        | Cmarkit.Block.Ext_attributes _ | Cmarkit.Block.Ext_div _ ->
+          (match embed_meta_of_block block with
            | None -> Cmarkit.Mapper.default
            | Some { source_path; fragment; _ } ->
              let target =

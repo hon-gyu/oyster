@@ -1,26 +1,16 @@
 (** Integration tests for note embedding ([!\[\[NOTE\]\]]).
 
-    Tests the core pipeline: parse -> resolve -> expand.  The expanded document
-    is printed as CommonMark, with explicit markers for the transclusion
-    boundaries carried by {!Note.Transclusion.embed_meta_key}. *)
+    Tests the core pipeline: parse -> resolve -> expand. The expanded document
+    is printed as CommonMark; the transclusion boundaries need no markers of
+    their own, since {!Note.Transclusion.transclude} writes them into the text
+    as a div and its attribute. *)
 
 open! Core
 open Oystermark
 
 (** Print an expanded document without depending on a rendering package. *)
 let print_expanded_doc (doc : Cmarkit.Doc.t) : unit =
-  let rec print_block = function
-    | Cmarkit.Block.Blocks (blocks, meta) ->
-      (match Cmarkit.Meta.find Note.Transclusion.embed_meta_key meta with
-       | Some { depth; source_path; fragment = _ } ->
-         printf "[embed depth=%d source=%s]\n" depth source_path;
-         List.iter blocks ~f:print_block;
-         print_endline "[/embed]"
-       | None -> List.iter blocks ~f:print_block)
-    | block ->
-      Cmarkit.Doc.make block |> Parse.commonmark_of_doc |> String.rstrip |> print_endline
-  in
-  print_block (Cmarkit.Doc.block doc)
+  print_string (Parse.commonmark_of_doc doc)
 ;;
 
 (** Build a mini-vault, run the core pipeline, and print [target].
@@ -37,11 +27,12 @@ let%expect_test "full note" =
   render [ "a.md", "![[b]]"; "b.md", "Hello.\n\nWorld." ] "a.md";
   [%expect
     {|
-    [embed depth=1 source=b.md]
+    {source="b.md" depth=1}
+    ::: embed
     Hello.
 
     World.
-    [/embed]
+    :::
     |}]
 ;;
 
@@ -53,12 +44,13 @@ let%expect_test "heading section" =
     "a.md";
   [%expect
     {|
-    [embed depth=1 source=b.md]
+    {source="b.md" fragment=Sec depth=1}
+    ::: embed
     ## Sec
 
     Content.
 
-    [/embed]
+    :::
     |}]
 ;;
 
@@ -68,9 +60,10 @@ let%expect_test "block ref" =
     "a.md";
   [%expect
     {|
-    [embed depth=1 source=b.md]
+    {source="b.md" fragment="^myblock" depth=1}
+    ::: embed
     Target. ^myblock
-    [/embed]
+    :::
     |}]
 ;;
 
@@ -82,9 +75,10 @@ let%expect_test "attribute anchor: block" =
     "a.md";
   [%expect
     {|
-    [embed depth=1 source=b.md]
+    {source="b.md" depth=1}
+    ::: embed
     > An aside.
-    [/embed]
+    :::
     |}]
 ;;
 
@@ -95,9 +89,10 @@ let%expect_test "attribute anchor: inline span" =
     "a.md";
   [%expect
     {|
-    [embed depth=1 source=b.md]
+    {source="b.md" depth=1}
+    ::: embed
     The key term{#kt} matters.
-    [/embed]
+    :::
     |}]
 ;;
 
@@ -113,11 +108,12 @@ let%expect_test "max_depth=1: inner embed becomes link" =
     "a.md";
   [%expect
     {|
-    [embed depth=1 source=b.md]
+    {source="b.md" depth=1}
+    ::: embed
     B content.
 
     [[c]]
-    [/embed]
+    :::
     |}]
 ;;
 
@@ -125,11 +121,13 @@ let%expect_test "self-embed: terminates at max_depth" =
   render ~max_depth:2 [ "a.md", "![[a]]" ] "a.md";
   [%expect
     {|
-    [embed depth=1 source=a.md]
-    [embed depth=2 source=a.md]
+    {source="a.md" depth=1}
+    ::: embed
+    {source="a.md" depth=2}
+    ::: embed
     [[a]]
-    [/embed]
-    [/embed]
+    :::
+    :::
     |}]
 ;;
 
@@ -137,11 +135,13 @@ let%expect_test "mutual cycle A↔B: terminates at max_depth" =
   render ~max_depth:2 [ "a.md", "![[b]]"; "b.md", "![[a]]" ] "a.md";
   [%expect
     {|
-    [embed depth=1 source=b.md]
-    [embed depth=2 source=a.md]
+    {source="b.md" depth=1}
+    ::: embed
+    {source="a.md" depth=2}
+    ::: embed
     [[b]]
-    [/embed]
-    [/embed]
+    :::
+    :::
     |}]
 ;;
 
@@ -180,12 +180,13 @@ let%expect_test "self-reference: embed current heading" =
 
     Content.
 
-    [embed depth=1 source=a.md]
+    {source="a.md" fragment=Intro depth=1}
+    ::: embed
     ## Intro
 
     Some text.
 
-    [/embed]
+    :::
     |}]
 ;;
 
@@ -200,9 +201,10 @@ let%expect_test "self-reference: embed current block" =
 
     Other text.
 
-    [embed depth=1 source=a.md]
+    {source="a.md" fragment="^myid" depth=1}
+    ::: embed
     Target paragraph. ^myid
-    [/embed]
+    :::
     |}]
 ;;
 
@@ -212,11 +214,12 @@ let%expect_test "self-reference: embed current file" =
     {|
     Hello.
 
-    [embed depth=1 source=a.md]
+    {source="a.md" depth=1}
+    ::: embed
     Hello.
 
     ![[]]
-    [/embed]
+    :::
     |}]
 ;;
 
@@ -226,11 +229,12 @@ let%expect_test "image embed: full note via ![](b.md)" =
   render [ "a.md", "![](b.md)"; "b.md", "Hello.\n\nWorld." ] "a.md";
   [%expect
     {|
-    [embed depth=1 source=b.md]
+    {source="b.md" depth=1}
+    ::: embed
     Hello.
 
     World.
-    [/embed]
+    :::
     |}]
 ;;
 
@@ -242,12 +246,13 @@ let%expect_test "image embed: heading section via ![](b.md#Sec)" =
     "a.md";
   [%expect
     {|
-    [embed depth=1 source=b.md]
+    {source="b.md" fragment=Sec depth=1}
+    ::: embed
     ## Sec
 
     Content.
 
-    [/embed]
+    :::
     |}]
 ;;
 
@@ -257,9 +262,10 @@ let%expect_test "image embed: block ref via ![](b.md#^myblock)" =
     "a.md";
   [%expect
     {|
-    [embed depth=1 source=b.md]
+    {source="b.md" fragment="^myblock" depth=1}
+    ::: embed
     Target. ^myblock
-    [/embed]
+    :::
     |}]
 ;;
 
@@ -277,11 +283,13 @@ let%expect_test "image embed: nested — image inside wikilink embed" =
   render [ "a.md", "![[b]]"; "b.md", "![](c.md)"; "c.md", "Inner content." ] "a.md";
   [%expect
     {|
-    [embed depth=1 source=b.md]
-    [embed depth=2 source=c.md]
+    {source="b.md" depth=1}
+    ::: embed
+    {source="c.md" depth=2}
+    ::: embed
     Inner content.
-    [/embed]
-    [/embed]
+    :::
+    :::
     |}]
 ;;
 
@@ -355,11 +363,12 @@ let%expect_test "block ref: keyed subtree" =
     "a.md";
   [%expect
     {|
-    [embed depth=1 source=b.md]
+    {source="b.md" fragment="^k" depth=1}
+    ::: embed
     topic: ^k
     - one
     - two
-    [/embed]
+    :::
     |}]
 ;;
 
@@ -367,11 +376,12 @@ let%expect_test "block ref: keyed list item" =
   render [ "a.md", "![[b#^k]]"; "b.md", "- other\n- topic: ^k\n  - one\n  - two" ] "a.md";
   [%expect
     {|
-    [embed depth=1 source=b.md]
+    {source="b.md" fragment="^k" depth=1}
+    ::: embed
     topic: ^k
     - one
     - two
-    [/embed]
+    :::
     |}]
 ;;
 
@@ -381,9 +391,146 @@ let%expect_test "block ref: keyed chain" =
   render [ "a.md", "![[b#^k]]"; "b.md", "outer: inner: ^k\n- leaf" ] "a.md";
   [%expect
     {|
-    [embed depth=1 source=b.md]
+    {source="b.md" fragment="^k" depth=1}
+    ::: embed
     outer: inner: ^k
     - leaf
-    [/embed]
+    :::
+    |}]
+;;
+
+(* Round trip through text
+   ======================= *)
+
+(** Expand, render to Markdown, parse the Markdown back, and report the
+    transclusions the reparsed document still knows about. Nothing carries over
+    in memory, so whatever is printed came from the text alone. *)
+let round_trip ?(max_depth = 5) (files : (string * string) list) (target : string) : unit =
+  let docs = List.map files ~f:(fun (path, content) -> path, Parse.of_string content) in
+  let index = Vault.build_index ~md_docs:docs ~other_files:[] () in
+  let expanded = Vault.Embed.expand_docs ~max_depth ~index docs in
+  let text =
+    Parse.commonmark_of_doc (List.Assoc.find_exn expanded ~equal:String.equal target)
+  in
+  print_endline (String.rstrip text);
+  print_endline "--- read back out of the text ---";
+  let reparsed = Parse.of_string text in
+  let rec walk (block : Cmarkit.Block.t) : unit =
+    (match Note.Transclusion.embed_meta_of_block block with
+     | None -> ()
+     | Some { depth; source_path; fragment } ->
+       printf
+         "depth=%d source=%s fragment=%s\n"
+         depth
+         source_path
+         (match fragment with
+          | None -> "-"
+          | Some (Heading path) -> String.concat ~sep:"#" path
+          | Some (Block_ref id) -> "^" ^ id));
+    match block with
+    | Cmarkit.Block.Blocks (bs, _) -> List.iter bs ~f:walk
+    | Cmarkit.Block.Ext_attributes (a, _) -> walk (Cmarkit.Block.Attributes.block a)
+    | Cmarkit.Block.Ext_div (d, _) -> walk (Cmarkit.Block.Div.block d)
+    | _ -> ()
+  in
+  walk (Cmarkit.Doc.block reparsed);
+  print_endline "--- reversed from text alone ---";
+  print_string (Parse.commonmark_of_doc (Note.Transclusion.reverse_embed_doc reparsed))
+;;
+
+let%expect_test "round trip: full note" =
+  round_trip [ "a.md", "![[b]]"; "b.md", "Hello.\n\nWorld." ] "a.md";
+  [%expect
+    {|
+    {source="b.md" depth=1}
+    ::: embed
+    Hello.
+
+    World.
+    :::
+    --- read back out of the text ---
+    depth=1 source=b.md fragment=-
+    --- reversed from text alone ---
+    ![[b]]
+    |}]
+;;
+
+let%expect_test "round trip: heading fragment" =
+  round_trip [ "a.md", "![[b#Sec]]"; "b.md", "## Sec\n\nContent." ] "a.md";
+  [%expect
+    {|
+    {source="b.md" fragment=Sec depth=1}
+    ::: embed
+    ## Sec
+
+    Content.
+    :::
+    --- read back out of the text ---
+    depth=1 source=b.md fragment=Sec
+    --- reversed from text alone ---
+    ![[b#Sec]]
+    |}]
+;;
+
+let%expect_test "round trip: block ref fragment" =
+  round_trip [ "a.md", "![[b#^myblock]]"; "b.md", "Target. ^myblock" ] "a.md";
+  [%expect
+    {|
+    {source="b.md" fragment="^myblock" depth=1}
+    ::: embed
+    Target. ^myblock
+    :::
+    --- read back out of the text ---
+    depth=1 source=b.md fragment=^myblock
+    --- reversed from text alone ---
+    ![[b#^myblock]]
+    |}]
+;;
+
+let%expect_test "round trip: nested" =
+  round_trip
+    ~max_depth:2
+    [ "a.md", "![[b]]"; "b.md", "B.\n\n![[c]]"; "c.md", "C." ]
+    "a.md";
+  [%expect
+    {|
+    {source="b.md" depth=1}
+    ::: embed
+    B.
+
+    {source="c.md" depth=2}
+    ::: embed
+    C.
+    :::
+    :::
+    --- read back out of the text ---
+    depth=1 source=b.md fragment=-
+    depth=2 source=c.md fragment=-
+    --- reversed from text alone ---
+    ![[b]]
+    |}]
+;;
+
+(* A path and a heading that the djot attribute cannot write bare: both hold
+   spaces, and the heading holds the quote and backslash the attribute escapes.
+   Everything below came back out of the text. *)
+let%expect_test "round trip: values needing escaping" =
+  round_trip
+    [ "a.md", "![[my notes/a note#It's \"quoted\", \\ tricky]]"
+    ; "my notes/a note.md", "## It's \"quoted\", \\ tricky\n\nBody."
+    ]
+    "a.md";
+  [%expect
+    {|
+    {source="my notes/a note.md" fragment="It’s “quoted”, \\ tricky" depth=1}
+    ::: embed
+    ## It's "quoted", \\ tricky
+
+    Body.
+    :::
+    --- read back out of the text ---
+    depth=1 source=my notes/a note.md fragment=It’s “quoted”, \ tricky
+    --- reversed from text alone ---
+    ![[my notes/a note#It’s “quoted”, \ tricky]]
     |}]
 ;;

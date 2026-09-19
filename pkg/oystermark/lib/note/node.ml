@@ -1,6 +1,6 @@
-(** AST for a note. It differs from Cmarkit's AST in that
-  - excludes non-content nodes (breaks)
-  - nicer "equality"
+(** AST for a note. It builds on top of Cmarkit's AST and differs
+    from it by attaching more semantics and excluding some non-content
+    structures (breaks)
 *)
 open Core
 
@@ -213,18 +213,6 @@ let of_item ((item, _meta) : B.List_item.t Cmarkit.node) : t =
     }
 ;;
 
-type found_t =
-  { node : t
-  ; path : int list
-  ; names : Anchor.Address.t list
-  ; headings : Anchor.heading list
-  ; span : span option
-  ; markdown : string
-  }
-
-(* Properties
-   ========== *)
-
 type value =
   | Int of int
   | String of string
@@ -235,6 +223,19 @@ let value_to_string = function
   | String s -> sprintf "%S" s
   | Bool b -> Bool.to_string b
 ;;
+
+type found_t =
+  { node : t
+  ; path : int list
+  ; names : Anchor.Address.t list
+  ; headings : Anchor.heading list
+  ; span : span option
+  ; markdown : string
+  ; props : (string * value) list
+  }
+
+(* Properties
+   ========== *)
 
 let task_to_string : task -> string = function
   | `Unchecked -> "unchecked"

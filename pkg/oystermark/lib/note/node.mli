@@ -78,6 +78,13 @@ val of_block : Cmarkit.Block.t -> t option
 
 val of_item : Cmarkit.Block.List_item.t Cmarkit.node -> t
 
+type value =
+  | Int of int
+  | String of string
+  | Bool of bool
+
+val value_to_string : value -> string
+
 (** A node in context. *)
 type found_t =
   { node : t (** What the query selected. *)
@@ -103,15 +110,27 @@ type found_t =
             (fences, list markers, wrapping); use [span] to quote the source
             instead. A node without source text of its own, such as the value
             [oyster] of [- name: oyster], has only this. *)
+  ; props : (string * value) list
+    (** Every property a predicate could have tested on it, in the order
+            {!val-props} lists them, followed by the [id] and [class] the
+            surrounding djot attribute or caret marker give it and the
+            attribute's key/value pairs. A name can repeat; the first entry is
+            the one {!val-props} would have produced. *)
   }
 
 (** {1 Properties}
 
-    A node carries the properties below. [id] and [class] are not among them: a
-    node cannot know what is written around it, so {!Query} adds them from the
-    djot attribute or the caret marker on the node, under those names. A
-    predicate sees both sets, and a name can repeat when a node carries more
-    than one identifier or class.
+    A node carries the properties below. What a djot attribute or a caret marker
+    written on it says is not among them: a node cannot know what is written
+    around it, so {!Query} adds the attribute's identifier, classes and
+    key/value pairs, under [id], [class] and their own names. A predicate sees
+    both sets, and a name can repeat, when a node carries more than one
+    identifier or class, or when an attribute names a property the node already
+    has.
+
+    An attribute value is written without a type, so it is offered both as the
+    text and as the number or boolean it spells, and a predicate is satisfied by
+    either reading.
 
 - all nodes:
   - [kind : string]
@@ -142,13 +161,6 @@ type found_t =
 - footnote definition:
   - [label : string]
  *)
-
-type value =
-  | Int of int
-  | String of string
-  | Bool of bool
-
-val value_to_string : value -> string
 
 (** The value of the property named [name] on [node], if it has one. *)
 val prop : string -> t -> value option

@@ -118,3 +118,33 @@ A query that cannot be read, a note that cannot be read, and an unknown
   $ oyster query n.md '[Child]' -print lang
   unknown -print field lang
   [2]
+
+A djot attribute is part of the node it is written on: its identifier, its
+classes and its key/value pairs are all properties, so a query can test them
+and [-print] can print them. This is the shape [oyster] writes for an expanded
+embed.
+
+  $ cat > n3.md <<'EOF'
+  > {source="notes/a.md" fragment=Intro depth=1}
+  > ::: embed
+  > Transcluded body.
+  > :::
+  > EOF
+
+  $ oyster query n3.md '[Descendant(where=[Is(div)])]' -print prop:class -print prop:source -print prop:fragment -print prop:depth
+  embed	notes/a.md	Intro	1
+
+An attribute value is written without a type, so it is offered as the text and
+as the number it spells; both comparisons hold.
+
+  $ oyster query n3.md '[Descendant(where=[Prop(depth, =, 1)])]' -print kind
+  div
+  $ oyster query n3.md '[Descendant(where=[Prop(depth, =, "1")])]' -print kind
+  div
+  $ oyster query n3.md '[Descendant(where=[Has(source)])]' -print kind
+  div
+
+The div is a node of its own, so the transcluded blocks are its children.
+
+  $ oyster query n3.md '[Descendant(where=[Is(div)]), Child]' -print kind -print path
+  paragraph	0.0

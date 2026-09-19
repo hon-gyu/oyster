@@ -161,25 +161,47 @@ let names (cursor : t) : Anchor.Address.t list =
   | V_section { heading; _ } -> named_by heading
 ;;
 
-(** Every property of the node, its own first, then [id] and [class], which a
-    node cannot carry on its own: they come from the djot attribute or the
-    caret marker written on it. An [id] is whatever names the node, so a [ ^id ]
-    on a line of its own belongs to the block before it, and attribute and
-    caret identifiers share one namespace. *)
+(** A djot attribute value is written without a type, so it is offered under
+    both readings: the text as written, then the number or boolean it spells,
+    if it spells one. A name may therefore carry two values, which
+    {!prop_values} returns both of and a predicate is satisfied by either, so
+    [Prop(depth, =, 1)] and [Prop(depth, =, "1")] both hold for [depth=1]. The
+    text comes first, so printing a property shows what the source says. *)
+let attribute_values (text : string) : Node.value list =
+  Node.String text
+  ::
+  (match Int.of_string_opt text, text with
+   | Some n, _ -> [ Node.Int n ]
+   | None, ("true" | "false") -> [ Node.Bool (Bool.of_string text) ]
+   | None, _ -> [])
+;;
+
+(** Every property of the node, its own first, then [id], [class] and the
+    attribute's key/value pairs, which a node cannot carry on its own: they come
+    from the djot attribute or the caret marker written on it. An [id] is
+    whatever names the node, so a [ ^id ] on a line of its own belongs to the
+    block before it, and attribute and caret identifiers share one namespace. *)
 let props (cursor : t) : (string * Node.value) list =
   let ids =
     List.filter_map (names cursor) ~f:(function
       | Anchor.Address.Attr id | Anchor.Address.Caret id -> Some ("id", Node.String id)
       | Anchor.Address.Heading _ -> None)
   in
-  let classes =
+  let attributes =
     match cursor.view with
     | V_root | V_item _ -> []
-    | V_block block | V_section { heading = block; _ } ->
-      List.concat_map (attributes_of block) ~f:Cmarkit.Attribute.classes
-      |> List.map ~f:(fun c -> "class", Node.String c)
+    | V_block block | V_section { heading = block; _ } -> attributes_of block
   in
-  Node.props (shallow_node cursor) @ ids @ classes
+  let classes =
+    List.concat_map attributes ~f:Cmarkit.Attribute.classes
+    |> List.map ~f:(fun c -> "class", Node.String c)
+  in
+  let key_values =
+    List.concat_map attributes ~f:Cmarkit.Attribute.key_values
+    |> List.concat_map ~f:(fun (name, text) ->
+      List.map (attribute_values text) ~f:(fun value -> name, value))
+  in
+  Node.props (shallow_node cursor) @ ids @ classes @ key_values
 ;;
 
 let prop_values (name : string) (cursor : t) : Node.value list =
@@ -261,5 +283,6 @@ let found (cursor : t) : Node.found_t =
   ; headings = headings cursor
   ; span = span cursor
   ; markdown = markdown cursor
+  ; props = props cursor
   }
 ;;

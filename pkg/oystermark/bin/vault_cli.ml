@@ -84,7 +84,10 @@ let query_command =
              | "file" -> note
              | name when String.is_prefix name ~prefix:"prop:" ->
                Option.value_map
-                 (Node.prop (String.drop_prefix name 5) found.node)
+                 (List.Assoc.find
+                    found.props
+                    (String.drop_prefix name 5)
+                    ~equal:String.equal)
                  ~default:""
                  ~f:text
              | other -> die 2 "unknown -print field %s" other
