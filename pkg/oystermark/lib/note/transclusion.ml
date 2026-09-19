@@ -198,7 +198,7 @@ let reverse_embed_doc (doc : Cmarkit.Doc.t) : Cmarkit.Doc.t =
 (* Test
    ==== *)
 
-module For_test = struct
+module For_testing = struct
   let parse_blocks (md : string) : Cmarkit.Block.t list =
     non_fm_blocks (Parse.of_string md)
   ;;
@@ -214,7 +214,7 @@ module For_test = struct
 end
 
 let%expect_test "is_expandable_embed_paragraph: sole embed paragraph" =
-  let blocks = For_test.parse_blocks "![[target]]" in
+  let blocks = For_testing.parse_blocks "![[target]]" in
   let block = List.hd_exn blocks in
   let result = is_expandable_embed_paragraph block ~siblings:blocks in
   printf "%b\n" (Option.is_some result);
@@ -222,7 +222,7 @@ let%expect_test "is_expandable_embed_paragraph: sole embed paragraph" =
 ;;
 
 let%expect_test "is_expandable_embed_paragraph: embed mixed with text" =
-  let blocks = For_test.parse_blocks "See ![[target]] here." in
+  let blocks = For_testing.parse_blocks "See ![[target]] here." in
   let block = List.hd_exn blocks in
   let result = is_expandable_embed_paragraph block ~siblings:blocks in
   printf "%b\n" (Option.is_some result);
@@ -230,7 +230,7 @@ let%expect_test "is_expandable_embed_paragraph: embed mixed with text" =
 ;;
 
 let%expect_test "is_expandable_embed_paragraph: embed with blank siblings only" =
-  let blocks = For_test.parse_blocks "\n![[target]]\n" in
+  let blocks = For_testing.parse_blocks "\n![[target]]\n" in
   let block =
     List.find_exn blocks ~f:(fun b ->
       match b with
@@ -243,7 +243,7 @@ let%expect_test "is_expandable_embed_paragraph: embed with blank siblings only" 
 ;;
 
 let%expect_test "is_expandable_embed_paragraph: non-embed wikilink" =
-  let blocks = For_test.parse_blocks "[[target]]" in
+  let blocks = For_testing.parse_blocks "[[target]]" in
   let block = List.hd_exn blocks in
   let result = is_expandable_embed_paragraph block ~siblings:blocks in
   printf "%b\n" (Option.is_some result);
@@ -251,7 +251,7 @@ let%expect_test "is_expandable_embed_paragraph: non-embed wikilink" =
 ;;
 
 let%expect_test "is_expandable_embed_paragraph: embed among other blocks" =
-  let blocks = For_test.parse_blocks "Some text.\n\n![[target]]\n\nMore text." in
+  let blocks = For_testing.parse_blocks "Some text.\n\n![[target]]\n\nMore text." in
   let embed_block = List.nth_exn blocks 1 in
   let result = is_expandable_embed_paragraph embed_block ~siblings:blocks in
   printf "%b\n" (Option.is_some result);

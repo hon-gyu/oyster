@@ -1,7 +1,9 @@
-(** A link in a note: its {!Ref.t}, how it uses its target, and its
-    location.
+(** Link representation (normalized from markdown link and wikilink),
+    containing link reference itself and the location of the link in the note.
 
-    External destinations (HTTP, mail) are not included. *)
+    This is the "source" part of a resolved edge.
+
+    External links (HTTP, mail) are excluded. *)
 
 (** A link reference before resolution, from a wikilink or a markdown link. *)
 module Ref : sig
@@ -35,7 +37,7 @@ module Ref : sig
   val of_cmark_reference : Cmarkit.Inline.Link.reference -> t option
 
   (** A reference to [address] in the note at [target]. *)
-  val of_address : target:string -> Anchor.Address.t -> t
+  val of_target_address : target:string -> Anchor.Address.t -> t
 
   (** [fragment] in wikilink syntax: [#a#b] or [#^id]. *)
   val string_of_fragment : fragment -> string

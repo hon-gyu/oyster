@@ -102,7 +102,7 @@ type found_t =
             those of {!Section}, so a heading inside a container encloses that
             container's blocks only. *)
   ; span : span option (** [None] unless the note was parsed with [~locs:true]. *)
-  ; markdown : string
+  ; markdown : string (* CR: v this is too verbose. The first sentence might be enough *)
     (** The node rendered as Markdown, including its own syntax: a callout
             renders with its [ [!type] title ] header, a section with its
             heading. For what is inside without that syntax, query the node's

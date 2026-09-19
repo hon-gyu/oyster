@@ -85,7 +85,7 @@ module Ref = struct
        | Some (dest, dest_meta) -> of_cmark_dest dest)
   ;;
 
-  let of_address ~(target : string) (address : Anchor.Address.t) : t =
+  let of_target_address ~(target : string) (address : Anchor.Address.t) : t =
     let fragment =
       match address with
       | Heading id | Attr id -> Hash_path [ id ]

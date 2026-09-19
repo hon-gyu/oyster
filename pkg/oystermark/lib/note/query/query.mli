@@ -1,15 +1,12 @@
-(** Querying the nodes of a note.
+(** Path-like query for nodes of a note.
 
-    A query is a list of {!step}s, run over a document by {!val-run}. Each step
-    moves along an {!axis} from the nodes it receives, keeps those its
-    predicates hold for, and optionally takes one of them; the query starts from
-    {!Node.Root}.
+    A query is composed from {!step}s, run over a document by {!val-run}, starting
+    from {!Node.Root}.
 
-    A query selects blocks and list items; what it can select and what it can
-    ask about them is {!Node.t}, whose properties are also what a predicate
-    tests and what a caller reads off a match. Where a node is and how to reach
-    the nodes inside it are internal to this module: a query returns a
-    {!Node.found_t}, not a position to navigate from. *)
+    Each step moves along an {!type-axis} from the nodes it receives, keeps those its
+    predicates hold for, and optionally takes one of them. *)
+
+(* ai-disclousure: ai-generated *)
 
 (** {1 Predicates} *)
 
@@ -23,9 +20,7 @@ type cmp =
 
 type pred =
   | Prop of string * cmp * Node.value
-  (** The node's value of the named property, see {!Node.props}, compares to
-        the given value. Does not hold if the node does not have the property,
-        or if its value is of another type. *)
+  (** Compare a named property's value with a given value. *)
   | Has of string (** The node has the named property. *)
   | Exists of steps
   (** The sub-query, run from the node alone, returns something: a section
@@ -204,6 +199,7 @@ type result =
   { matches : Node.found_t list (** In document order, without duplicates. *)
   ; why_empty : no_match option (** [Some] exactly when [matches] is empty. *)
   }
+(* CR: I don't like the name "why_empty" *)
 
 (** Run [query] over [doc], from {!Node.Root}. A step that returns nothing is
     not an error: the steps after it run on [ [] ], and the result says which
