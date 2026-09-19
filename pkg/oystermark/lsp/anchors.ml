@@ -25,7 +25,7 @@ open Core
     [ \{#id\} ] line and ends with the block it applies to; a caret anchor
     spans its whole paragraph. *)
 type t =
-  { value : Oystermark.Note.Anchor.value
+  { value : Oystermark.Note.Anchor.definition
   ; first_line : int
   ; last_line : int (** Inclusive. *)
   ; first_byte : int
@@ -63,7 +63,7 @@ let of_doc (doc : Cmarkit.Doc.t) : t list =
   |> List.filter_map ~f:(fun (anchor : Oystermark.Note.Anchor.t) ->
     of_loc (Some anchor.loc)
     |> Option.map ~f:(fun (first_line, last_line, first_byte, last_byte) ->
-      { value = anchor.value; first_line; last_line; first_byte; last_byte }))
+      { value = anchor.definition; first_line; last_line; first_byte; last_byte }))
 ;;
 
 let of_content (content : string) : t list = of_doc (Lsp_util.parse_doc content)

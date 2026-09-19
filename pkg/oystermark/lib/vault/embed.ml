@@ -47,10 +47,10 @@ let rec expand_doc
       in
       let fragment, select =
         match target with
-        | Index.Anchor { anchor = { value; _ }; _ } ->
-          ( Note.Transclusion.fragment value
+        | Index.Anchor { anchor = { definition; _ }; _ } ->
+          ( Note.Transclusion.fragment definition
           , fun blocks ->
-              Note.Private.Addressed_blocks.find blocks (Note.Anchor.address value) )
+              Note.Private.Address_utils.find blocks (Note.Anchor.address definition) )
         | Note _ | Asset _ -> None, Fn.id
       in
       Option.map source ~f:(fun source ->

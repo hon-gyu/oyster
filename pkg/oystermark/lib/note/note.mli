@@ -9,5 +9,5 @@ module Node = Node
 module Query = Query
 
 module Private : sig
-  module Addressed_blocks = Addressed_blocks
+  module Address_utils = Address_utils
 end

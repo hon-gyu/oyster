@@ -25,7 +25,9 @@ type heading =
   }
 [@@deriving sexp, equal, compare]
 
-type value =
+(** An anchor as its note defines it. Its {!address} is the name a link resolves
+    to it by. *)
+type definition =
   | Heading of heading
   | Caret of string (** [ ^id ] on a paragraph or a keyed block. *)
   | Attr of
@@ -35,13 +37,13 @@ type value =
 [@@deriving sexp, equal, compare]
 
 type t =
-  { value : value
+  { definition : definition
   ; loc : Cmarkit.Textloc.t
     (** [Cmarkit.Textloc.none] when the document was parsed without locations. *)
   }
 [@@deriving sexp, equal, compare]
 
-val address : value -> Address.t
+val address : definition -> Address.t
 
 (** Every anchor of [doc] in document order, duplicates included.
 

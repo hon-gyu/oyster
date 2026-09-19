@@ -68,7 +68,7 @@ let matches { path; address } ((_, _, resolution) as link) =
   match address, resolution with
   | None, Ok _ -> true
   | Some address, Ok (Index.Anchor { anchor; _ }) ->
-    Note.Anchor.Address.equal address (Note.Anchor.address anchor.value)
+    Note.Anchor.Address.equal address (Note.Anchor.address anchor.definition)
   | _ -> false
 ;;
 
@@ -346,7 +346,7 @@ let definition_edit ~index ~read_file { path; address } ~new_name =
     Index.find_note index path
     |> Option.bind ~f:(fun note ->
       List.find (Index.Entry.anchors note) ~f:(fun anchor ->
-        Note.Anchor.Address.equal address (Note.Anchor.address anchor.value)))
+        Note.Anchor.Address.equal address (Note.Anchor.address anchor.definition)))
     |> Option.bind ~f:(fun (anchor : Index.Anchor.t) ->
       read_file path
       |> Option.bind ~f:(fun content ->

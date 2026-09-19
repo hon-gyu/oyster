@@ -56,7 +56,7 @@ let collect_anchor_occurrences (doc : Cmarkit.Doc.t) : (string * (int * int)) li
   |> Index.Entry.anchors
   |> List.filter_map ~f:(fun anchor ->
     let id =
-      match anchor.value with
+      match anchor.definition with
       | Index.Heading h when Set.mem mirrored h.slug -> None
       | Index.Heading h -> Some h.slug
       | Index.Caret id | Index.Attr { id; _ } -> Some id

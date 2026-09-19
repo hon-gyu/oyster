@@ -55,7 +55,7 @@ type file_stat =
   ; mtime : (int * int * int) option
   }
 
-type anchor_value = Note.Anchor.value =
+type anchor_definition = Note.Anchor.definition =
   | Heading of heading
   | Caret of string
   | Attr of
@@ -66,7 +66,7 @@ type anchor_value = Note.Anchor.value =
 
 module Anchor = struct
   type t = Note.Anchor.t =
-    { value : anchor_value
+    { definition : anchor_definition
     ; loc : loc
     }
   [@@deriving sexp, equal, compare]
@@ -193,7 +193,7 @@ module Entry = struct
   let title (note : t) : string =
     let from_heading () =
       List.find_map note.anchors ~f:(fun a ->
-        match a.Anchor.value with
+        match a.Anchor.definition with
         | Heading h when h.level = 1 -> Some h.text
         | _ -> None)
     in
@@ -215,7 +215,7 @@ module Entry = struct
   let headings (note : t) : (heading * loc) list =
     anchors note
     |> List.filter_map ~f:(fun anchor ->
-      match anchor.value with
+      match anchor.definition with
       | Heading heading -> Some (heading, anchor.loc)
       | Caret _ | Attr _ -> None)
   ;;

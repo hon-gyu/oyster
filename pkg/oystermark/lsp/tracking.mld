@@ -94,7 +94,7 @@ Subsections are encouraged if needed.
   {!page-"feature-go-to-definition".target_position}.
 - Diagnostics: duplicate anchor ids are reported (see the
   {{!page-"feature-diagnostics".duplicate_ids}diagnostics spec}).
-- Section extraction: {!Oystermark.Note.Private.Addressed_blocks.find}
+- Section extraction: {!Oystermark.Note.Private.Address_utils.find}
   feeds embed ([![[note#id]]]) and, through {!Oystermark.Note.Query.of_address},
   hover, so an attribute anchor
   previews/embeds its containing block instead of the whole file.

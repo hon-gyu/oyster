@@ -321,7 +321,7 @@ let fragment_items (entry : Oystermark.Vault.Index.Entry.t) : item list =
   let module Index = Oystermark.Vault.Index in
   Index.Entry.anchors entry
   |> List.map ~f:(fun anchor ->
-    match anchor.value with
+    match anchor.definition with
     | Index.Heading h ->
       { label = h.text
       ; detail = None

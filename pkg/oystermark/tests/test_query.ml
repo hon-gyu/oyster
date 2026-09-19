@@ -727,7 +727,7 @@ let%test_module "syntax" =
   end)
 ;;
 
-(* [of_address] finds what {!Oystermark.Note.Private.Addressed_blocks.find}
+(* [of_address] finds what {!Oystermark.Note.Private.Address_utils.find}
    names, case for case with that module's tests; the source text is what hover
    shows. *)
 let%test_module "of_address" =

@@ -135,7 +135,7 @@ let fallback_block (wl : Cmarkit.Inline.Wikilink.t) (meta : Cmarkit.Meta.t)
   Cmarkit.Block.Paragraph (p, Cmarkit.Meta.none)
 ;;
 
-let fragment : Anchor.value -> Cmarkit.Inline.Wikilink.fragment option = function
+let fragment : Anchor.definition -> Cmarkit.Inline.Wikilink.fragment option = function
   | Heading heading -> Some (Heading [ heading.text ])
   | Caret id -> Some (Block_ref id)
   | Attr _ -> None

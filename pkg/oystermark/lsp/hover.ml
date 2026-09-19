@@ -365,7 +365,7 @@ let hover
               (Oystermark.Note.Anchor.of_doc (Lsp_util.parse_doc file_content))
               fragment
             |> Option.bind ~f:(fun (anchor : Oystermark.Note.Anchor.t) ->
-              read_address (Oystermark.Note.Anchor.address anchor.value) file_content)
+              read_address (Oystermark.Note.Anchor.address anchor.definition) file_content)
             |> Option.value ~default:file_content
         in
         Some (path, Text body)
@@ -389,7 +389,9 @@ let hover
          | Some file_content ->
            let body =
              Option.value
-               (read_address (Oystermark.Note.Anchor.address anchor.value) file_content)
+               (read_address
+                  (Oystermark.Note.Anchor.address anchor.definition)
+                  file_content)
                ~default:file_content
            in
            Some (path, Text body))

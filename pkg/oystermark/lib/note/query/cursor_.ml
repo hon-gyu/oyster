@@ -111,7 +111,7 @@ let rec path (cursor : t) : int list =
   | Some parent -> path parent @ [ cursor.index ]
 ;;
 
-(** Each address of [doc] with the block {!Addressed_blocks.find} resolves it to. Cursors
+(** Each address of [doc] with the block {!Address_utils.find} resolves it to. Cursors
     look through [Ext_attributes] wrappers, so the block is unwrapped to
     match. *)
 let root (doc : Cmarkit.Doc.t) : t =
@@ -119,8 +119,8 @@ let root (doc : Cmarkit.Doc.t) : t =
   let named =
     Anchor.of_doc doc
     |> List.filter_map ~f:(fun (anchor : Anchor.t) ->
-      let address = Anchor.address anchor.value in
-      List.hd (Addressed_blocks.find blocks address)
+      let address = Anchor.address anchor.definition in
+      List.hd (Address_utils.find blocks address)
       |> Option.map ~f:(fun block -> unwrap_attributes block, address))
   in
   { doc; named; view = V_root; index = 0; parent = None }

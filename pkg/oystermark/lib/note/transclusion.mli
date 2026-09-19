@@ -84,7 +84,7 @@ val fallback_block : Cmarkit.Inline.Wikilink.t -> Cmarkit.Meta.t -> Cmarkit.Bloc
 
 (** The fragment stored in {!embed_meta} for a transclusion of [anchor]. [None]
     for an attribute anchor. *)
-val fragment : Anchor.value -> Cmarkit.Inline.Wikilink.fragment option
+val fragment : Anchor.definition -> Cmarkit.Inline.Wikilink.fragment option
 
 (** [blocks] wrapped in a div of {!embed_class} carrying {!embed_meta}, both on
     the div's meta and as the djot attribute written above its opening fence:

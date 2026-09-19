@@ -56,8 +56,8 @@ type file_stat =
   ; mtime : (int * int * int) option (** modified date YYYY/MM/DD, when available *)
   }
 
-(** See {!Note.Anchor.value}. *)
-type anchor_value = Note.Anchor.value =
+(** See {!Note.Anchor.definition}. *)
+type anchor_definition = Note.Anchor.definition =
   | Heading of heading
   | Caret of string
   | Attr of
@@ -68,7 +68,7 @@ type anchor_value = Note.Anchor.value =
 
 module Anchor : sig
   type t = Note.Anchor.t =
-    { value : anchor_value
+    { definition : anchor_definition
     ; loc : loc (** non-none loc *)
     }
   [@@deriving sexp, equal, compare]

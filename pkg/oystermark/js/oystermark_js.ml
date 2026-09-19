@@ -34,7 +34,7 @@ let json_of_loc loc =
     ]
 ;;
 
-let json_of_anchor_value = function
+let json_of_anchor_definition = function
   | Index.Heading { text; level; slug } ->
     `Assoc
       [ "kind", `String "heading"
@@ -51,7 +51,9 @@ let json_of_anchor_value = function
 
 let json_of_anchor (anchor : Index.Anchor.t) =
   `Assoc
-    [ "value", json_of_anchor_value anchor.value; "location", json_of_loc anchor.loc ]
+    [ "value", json_of_anchor_definition anchor.definition
+    ; "location", json_of_loc anchor.loc
+    ]
 ;;
 
 let json_of_resolution = function

@@ -63,7 +63,7 @@ let detect_target
      | Ok (Anchor { note_path; anchor }) ->
        Some
          { path = note_path
-         ; address = Some (Oystermark.Note.Anchor.address anchor.value)
+         ; address = Some (Oystermark.Note.Anchor.address anchor.definition)
          })
   | None ->
     (* Not on a link — is the cursor on an anchor?  The anchors come from the
@@ -90,7 +90,7 @@ let resolved_matches (ref_target : target) (resolved : Oystermark.Vault.Index.ta
     String.equal path note_path
     && Oystermark.Note.Anchor.Address.equal
          address
-         (Oystermark.Note.Anchor.address anchor.value)
+         (Oystermark.Note.Anchor.address anchor.definition)
   | _ -> false
 ;;
 
