@@ -1,4 +1,4 @@
-open Query_common_
+open Common_
 
 val to_string : t -> string
 

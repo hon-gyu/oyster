@@ -1,9 +1,9 @@
 (* The language and its combinators, its text syntax, and running it over a
-   document. The cursor the run walks with is {!Query_cursor_}. *)
+   document. The cursor the run walks with is {!Cursor_}. *)
 
-include Query_common_
-include Query_syntax_
-include Query_eval_
+include Common_
+include Syntax_
+include Eval_
 open Core
 
 let%test_module "syntax" =

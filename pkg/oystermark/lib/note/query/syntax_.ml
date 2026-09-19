@@ -5,7 +5,7 @@
    shape. *)
 
 open Core
-open Query_common_
+open Common_
 
 type expr =
   | Atom of

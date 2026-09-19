@@ -1,5 +1,5 @@
 (* The query language itself: what a query is, and how one is built. Reading,
-   printing and running it are {!Query_syntax_} and {!Query_eval_}. The
+   printing and running it are {!Syntax_} and {!Eval_}. The
    documentation of these types is {!Query}. *)
 
 open Core

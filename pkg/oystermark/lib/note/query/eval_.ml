@@ -1,7 +1,7 @@
 open Core
-open Query_common_
+open Common_
 module B = Cmarkit.Block
-module Cursor = Query_cursor_
+module Cursor = Cursor_
 
 (* Axes
    ==== *)
@@ -229,7 +229,7 @@ let no_match_to_string ({ index; step; reached; stage } : no_match) : string =
     | values -> String.concat values ~sep:", "
   in
   let kinds_of nodes = listing (List.map nodes ~f:Node.kind) in
-  let where = sprintf "step %d (%s)" index (Query_syntax_.step_to_string step) in
+  let where = sprintf "step %d (%s)" index (Syntax_.step_to_string step) in
   match stage with
   | No_candidate -> sprintf "%s: nothing to move to from %s" where (kinds_of reached)
   | Filtered_out candidates ->
