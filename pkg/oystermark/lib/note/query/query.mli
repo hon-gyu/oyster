@@ -208,4 +208,16 @@ type result =
     Raises when a heading has no identifier; parse with {!Parse.of_string}. *)
 val run : t -> Cmarkit.Doc.t -> result
 
+(** The document whose root holds what [query] matches in [doc]: the blocks of
+    a section without its heading, of a list item, of a block quote, callout
+    (without its header), div, keyed node (without its label) or footnote
+    definition, and any other block itself. Matches are separated by a blank
+    line. [doc]'s link reference definitions are kept.
+
+    For a single match that is the root, a section, a list item or one of those
+    containers, running a query on the result is running it from the match:
+    [run b (extract a doc)] matches the nodes [run (a @ b) doc] does, with
+    [path] and [headings] counted from the match. *)
+val extract : t -> Cmarkit.Doc.t -> Cmarkit.Doc.t
+
 val no_match_to_string : no_match -> string

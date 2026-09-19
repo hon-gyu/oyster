@@ -222,6 +222,23 @@ let run (query : t) (doc : Cmarkit.Doc.t) : result =
   }
 ;;
 
+let extract (query : t) (doc : Cmarkit.Doc.t) : Cmarkit.Doc.t =
+  let blank = B.Blank_line ("", Cmarkit.Meta.none) in
+  let block =
+    match
+      eval query [ Cursor.root doc ]
+      |> List.map ~f:Cursor.contents
+      |> List.concat_map ~f:(fun blocks -> [ blank ] :: List.map blocks ~f:List.return)
+      |> List.tl
+      |> Option.value_map ~default:[] ~f:(fun blocks ->
+        List.concat (List.intersperse blocks ~sep:[ blank ]))
+    with
+    | [ block ] -> block
+    | blocks -> B.Blocks (blocks, Cmarkit.Meta.none)
+  in
+  Cmarkit.Doc.make ~defs:(Cmarkit.Doc.defs doc) block
+;;
+
 let no_match_to_string ({ index; step; reached; stage } : no_match) : string =
   let listing values =
     match List.stable_dedup values ~compare:String.compare with

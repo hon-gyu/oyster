@@ -73,24 +73,37 @@ let group_sections (blocks : B.t list) : view list =
   go [] blocks
 ;;
 
-let child_views (doc : Cmarkit.Doc.t) (view : view) : view list =
-  let grouped block = group_sections (blocks_of block) in
+(** The blocks inside a node: what its children are grouped from. [None] for a
+    list, whose children are its items, and for a node with no children. *)
+let inner_blocks (doc : Cmarkit.Doc.t) (view : view) : B.t list option =
   match view with
-  | V_root -> grouped (Cmarkit.Doc.block doc)
-  | V_section { body; _ } -> group_sections body
-  | V_item (item, _) -> grouped (B.List_item.block item)
+  | V_root -> Some [ Cmarkit.Doc.block doc ]
+  | V_section { body; _ } -> Some body
+  | V_item (item, _) -> Some [ B.List_item.block item ]
   | V_block block ->
     (match unwrap_attributes block with
      | B.Block_quote (bq, meta) ->
        let body = B.Block_quote.block bq in
        (match B.Callout.find meta with
-        | Some _ -> grouped (B.Callout.strip_header body)
-        | None -> grouped body)
-     | B.Ext_div (d, _) -> grouped (B.Div.block d)
-     | B.Ext_keyed ((_label, body), _) -> grouped body
-     | B.Ext_footnote_definition (fn, _) -> grouped (B.Footnote.block fn)
-     | B.List (l, _) -> List.map (B.List'.items l) ~f:(fun item -> V_item item)
-     | _ -> [])
+        | Some _ -> Some [ B.Callout.strip_header body ]
+        | None -> Some [ body ])
+     | B.Ext_div (d, _) -> Some [ B.Div.block d ]
+     | B.Ext_keyed ((_label, body), _) -> Some [ body ]
+     | B.Ext_footnote_definition (fn, _) -> Some [ B.Footnote.block fn ]
+     | _ -> None)
+;;
+
+let child_views (doc : Cmarkit.Doc.t) (view : view) : view list =
+  match view with
+  | V_section { body; _ } -> group_sections body
+  | V_block block ->
+    (match unwrap_attributes block, inner_blocks doc view with
+     | B.List (l, _), _ -> List.map (B.List'.items l) ~f:(fun item -> V_item item)
+     | _, Some blocks -> group_sections (List.concat_map blocks ~f:blocks_of)
+     | _, None -> [])
+  | V_root | V_item _ ->
+    group_sections
+      (List.concat_map (Option.value_exn (inner_blocks doc view)) ~f:blocks_of)
 ;;
 
 let children (cursor : t) : t list =
@@ -276,6 +289,15 @@ let markdown (cursor : t) : string =
   | V_block block -> render [ block ]
   | V_item (item, _) -> render (blocks_of (B.List_item.block item))
   | V_section { heading; body } -> render (heading :: body)
+;;
+
+(** The blocks a note rooted at the cursor holds: its {!inner_blocks}, or the
+    block itself for a list or a node with no children. *)
+let contents (cursor : t) : B.t list =
+  match inner_blocks cursor.doc cursor.view, cursor.view with
+  | Some blocks, _ -> blocks
+  | None, V_block block -> [ block ]
+  | None, (V_root | V_section _ | V_item _) -> []
 ;;
 
 let found (cursor : t) : Node.found_t =

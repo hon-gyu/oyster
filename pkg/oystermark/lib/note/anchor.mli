@@ -25,7 +25,7 @@ type heading =
   }
 [@@deriving sexp, equal, compare]
 
-(** An anchor as its note defines it. Its {!address} is the name a link resolves
+(** An anchor as its note defines it. Its {!val-address} is the name a link resolves
     to it by. *)
 type definition =
   | Heading of heading
