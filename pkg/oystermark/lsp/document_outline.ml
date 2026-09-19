@@ -51,7 +51,7 @@ let events (entry : Oystermark.Vault.Index.Entry.t) =
   let headings, blocks, attrs =
     Index.Entry.anchors entry
     |> List.fold ~init:([], [], []) ~f:(fun (headings, blocks, attrs) anchor ->
-      match anchor.value with
+      match anchor.definition with
       | Index.Heading h ->
         ( Option.to_list
             (event_of_loc ~name:h.text ~kind:(Heading h.level) (Some anchor.loc))

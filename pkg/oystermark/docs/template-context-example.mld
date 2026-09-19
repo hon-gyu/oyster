@@ -229,10 +229,11 @@ whether the whole [tags] list is an element of [\["bread"\]]. Sorting on
 
 {1 Executing a code block}
 
-A note can own a computation as well as prose. [oyster block] queries the blocks
-of a note and writes what it finds to stdout; with [-content] it writes what a
-container holds rather than its source, so a code block arrives without its
-fence and the build system can pipe it wherever it belongs — here, into [uv]:
+A note can own a computation as well as prose. [oyster block] queries the nodes
+of a note and writes what it finds to stdout. Here the query selects the code
+block carrying the [hydration] id and asserts its language at the same time;
+[-print prop:text] writes the code without its fence, so the build system can
+pipe it wherever it belongs — here, into [uv]:
 
 {v
 {#hydration}
@@ -245,14 +246,16 @@ print(json.dumps({"hydration": {"flour": flour, "water": water, ...}}))
 v}
 
 {v
-oyster block NOTE -id ID [-lang INFO] -content
+oyster block NOTE \
+  '[Descendant(where=[Is(code_block), Prop(id, =, ID), Prop(lang, =, INFO)])]' \
+  -print prop:text
 v}
 
-[-lang] asserts rather than selects: it fails if the block's info string is not
-[INFO], so a rule cannot quietly feed a shell script to a Python interpreter. A
-query that matches nothing is an error too, so a rule fails rather than feeding
-an interpreter an empty string. Blocks can also be addressed by heading,
-kind and position, and printed as JSON.
+The language predicate is part of the selection: if the named block is not an
+[INFO] code block, the query matches nothing. A query that matches nothing is
+an error, so a rule fails rather than feeding an interpreter an empty string.
+Nodes can also be addressed by heading, field, kind and position; repeated
+[-print] flags can write their source, path, kind, line, file or properties.
 
 Three rules: extract and run, snapshot the context, render the two together.
 [minijinja-cli] accepts several data files and merges them, so the script's
@@ -266,7 +269,13 @@ output arrives as ordinary template variables:
   (with-stdout-to
    hydration.json
    (pipe-stdout
-    (run %{bin:oyster} block sourdough.md -id hydration -lang python -content)
+    (run
+     %{bin:oyster}
+     block
+     sourdough.md
+     "[Descendant(where=[Is(code_block), Prop(id, =, hydration), Prop(lang, =, python)])]"
+     -print
+     prop:text)
     (run uv run -)))))
 
 (rule

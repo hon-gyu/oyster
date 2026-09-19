@@ -26,7 +26,7 @@ type heading =
   }
 [@@deriving sexp, equal, compare]
 
-type value =
+type definition =
   | Heading of heading
   | Caret of string
   | Attr of
@@ -36,12 +36,12 @@ type value =
 [@@deriving sexp, equal, compare]
 
 type t =
-  { value : value
+  { definition : definition
   ; loc : loc
   }
 [@@deriving sexp, equal, compare]
 
-let address : value -> Address.t = function
+let address : definition -> Address.t = function
   | Heading h -> Heading h.slug
   | Caret id -> Caret id
   | Attr { id; _ } -> Attr id
@@ -50,7 +50,9 @@ let address : value -> Address.t = function
 let of_doc (doc : Cmarkit.Doc.t) : t list =
   let open Cmarkit in
   let anchors = ref [] in
-  let add value meta = anchors := { value; loc = Meta.textloc meta } :: !anchors in
+  let add definition meta =
+    anchors := { definition; loc = Meta.textloc meta } :: !anchors
+  in
   let add_caret meta =
     Option.iter (Block.Block_id.find meta) ~f:(fun id ->
       add (Caret (Block.Block_id.id id)) meta)

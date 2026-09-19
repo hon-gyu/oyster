@@ -1,412 +1,121 @@
 (** Command-line client for vault queries and renames. *)
+(* TODO(refa): split out each subcommand as modules *)
+(* TODO(feat): add transclusion as subcommand *)
+(* TODO(refa): unify / group rename related commands *)
 
 open Core
-module Node = Oystermark.Note.Node
-module Query = Oystermark.Note.Query
-module Query_flags = Oystermark.Note.Query_flags
-module Parse = Oystermark.Parse
-module Vault = Oystermark.Vault
+open Common_
 
-let load root = Vault_fs.of_root_path ~skip_expand:true root
+(** Query the nodes of a note.
 
-let is_image_target target =
-  let target = String.lowercase target in
-  List.exists [ ".png"; ".jpg"; ".jpeg"; ".gif"; ".svg"; ".webp" ] ~f:(fun ext ->
-    String.is_suffix target ~suffix:ext)
-;;
+    QUERY is the syntax {!Oystermark.Note.Query.of_string} reads: a list of
+    steps, each written as its constructor, as
+    [ [Section([setup]), Descendant(where=[Is(code_block)])] ].
 
-let links index =
-  Vault.Index.notes index
-  |> List.concat_map ~f:(fun note ->
-    let source = Vault.Index.Entry.path note in
-    Vault.Index.Entry.links note
-    |> List.map ~f:(fun link ->
-      source, link, Vault.Index.resolve index source link.reference))
-;;
-
-let kind_name (_, (link : Vault.Index.Link.t), resolution) =
-  match link.kind, resolution with
-  | Vault.Index.Link.Link, _ -> "link"
-  | Embed, Ok (Vault.Index.Note _ | Anchor _) -> "embed"
-  | Embed, Ok (Vault.Index.Asset _) -> "image"
-  | Embed, Error _ ->
-    (match link.reference.target with
-     | Some target when is_image_target target -> "image"
-     | _ -> "embed")
-;;
-
-let destination_name (_, _, resolution) =
-  match resolution with
-  | Ok target -> Vault.Index.target_path target
-  | Error _ -> "<unresolved>"
-;;
-
-let line_number (_, (link : Vault.Index.Link.t), _) =
-  fst (Cmarkit.Textloc.first_line link.loc)
-;;
-
-let print_link ((source, _, _) as occurrence) =
-  printf
-    "%s:%d\t%s\t%s\n"
-    source
-    (line_number occurrence)
-    (kind_name occurrence)
-    (destination_name occurrence)
-;;
-
-let (vault_param : string Command.Param.t) = Command.Param.(anon ("vault" %: string))
-
-let unresolved_command =
+    exit status:
+    - [0] when something matched
+    - [1] when nothing matched
+    - [2] when the query or the note could not be read. Check stderr *)
+let query_command =
   Command.basic
-    ~summary:"List unresolved links, embeds, and images"
-    (let%map_open.Command root = vault_param in
-     fun () ->
-       let vault = load root in
-       links vault.index
-       |> List.filter ~f:(fun (_, _, resolution) -> Result.is_error resolution)
-       |> List.iter ~f:print_link)
-;;
-
-type stats =
-  { nodes : int
-  ; edges : int
-  ; self_links : int
-  ; unresolved_links : int
-  }
-
-let stats (vault : Vault.t) =
-  let links = links vault.index in
-  let edges, self_links, unresolved_links =
-    List.fold
-      links
-      ~init:(0, 0, 0)
-      ~f:(fun (edges, self_links, unresolved) (source, _, resolution) ->
-        match resolution with
-        | Error _ -> edges, self_links, unresolved + 1
-        | Ok target ->
-          let destination = Vault.Index.target_path target in
-          ( edges + 1
-          , self_links + Bool.to_int (String.equal source destination)
-          , unresolved ))
-  in
-  { nodes = List.length (Vault.Index.notes vault.index)
-  ; edges
-  ; self_links
-  ; unresolved_links
-  }
-;;
-
-let stats_command =
-  Command.basic
-    ~summary:"Show vault graph statistics"
-    (let%map_open.Command root = vault_param in
-     fun () ->
-       let stats = stats (load root) in
-       printf "nodes\t%d\n" stats.nodes;
-       printf "edges\t%d\n" stats.edges;
-       printf "self links\t%d\n" stats.self_links;
-       printf "unresolved links\t%d\n" stats.unresolved_links)
-;;
-
-let resolve_note (vault : Vault.t) note =
-  match
-    Vault.Index.resolve vault.index "__cli__.md" { target = Some note; fragment = None }
-  with
-  | Ok (Vault.Index.Note path) -> path
-  | _ -> failwithf "note not found: %s" note ()
-;;
-
-let apply_edits content edits =
-  List.sort edits ~compare:(fun (a : Vault.Rename.edit) b ->
-    Int.descending a.first_byte b.first_byte)
-  |> List.fold ~init:content ~f:(fun content edit ->
-    String.prefix content edit.first_byte
-    ^ edit.new_text
-    ^ String.drop_prefix content edit.last_byte)
-;;
-
-let apply_change root (change : Vault.Rename.change) =
-  List.iter change.moves ~f:(fun (_, dst) ->
-    let dst = Filename.concat root dst in
-    match Sys_unix.file_exists dst with
-    | `No -> ()
-    | `Yes | `Unknown -> failwithf "refusing to overwrite %s" dst ());
-  List.group change.edits ~break:(fun a b -> not (String.equal a.rel_path b.rel_path))
-  |> List.iter ~f:(fun edits ->
-    let rel_path = (List.hd_exn edits).rel_path in
-    let path = Filename.concat root rel_path in
-    let content = In_channel.read_all path in
-    Out_channel.write_all path ~data:(apply_edits content edits));
-  List.iter change.moves ~f:(fun (src, dst) ->
-    let dst = Filename.concat root dst in
-    Core_unix.mkdir_p (Filename.dirname dst);
-    Core_unix.rename ~src:(Filename.concat root src) ~dst)
-;;
-
-let print_change (change : Vault.Rename.change) =
-  List.iter change.edits ~f:(fun edit ->
-    printf "%s:%d-%d -> %S\n" edit.rel_path edit.first_byte edit.last_byte edit.new_text);
-  List.iter change.moves ~f:(fun (src, dst) -> printf "move %s -> %s\n" src dst)
-;;
-
-let apply_flag =
-  Command.Param.flag
-    "--apply"
-    Command.Param.no_arg
-    ~doc:" Apply the displayed change to disk"
-;;
-
-let read_file root rel_path =
-  try Some (In_channel.read_all (Filename.concat root rel_path)) with
-  | _ -> None
-;;
-
-let finish_change root ~apply = function
-  | Error message ->
-    eprintf "%s\n" message;
-    exit 1
-  | Ok change ->
-    print_change change;
-    if apply then apply_change root change else printf "dry run; pass --apply to write\n"
-;;
-
-let rename_command target_name summary make_target =
-  Command.basic
-    ~summary
-    (let%map_open.Command root = vault_param
-     and note = anon ("note" %: string)
-     and target = anon (target_name %: string)
-     and new_name = anon ("new-name" %: string)
-     and apply = apply_flag in
-     fun () ->
-       let vault = load root in
-       let path = resolve_note vault note in
-       Vault.Rename.plan
-         ~index:vault.index
-         ~docs:(Vault.docs vault)
-         ~read_file:(read_file root)
-         (make_target vault path target)
-         ~new_name
-       |> finish_change root ~apply)
-;;
-
-let rename_note_command =
-  Command.basic
-    ~summary:"Rename a note and its incoming references"
-    (let%map_open.Command root = vault_param
-     and note = anon ("note" %: string)
-     and new_name = anon ("new-name" %: string)
-     and apply = apply_flag in
-     fun () ->
-       let vault = load root in
-       let path = resolve_note vault note in
-       Vault.Rename.plan
-         ~index:vault.index
-         ~docs:(Vault.docs vault)
-         ~read_file:(read_file root)
-         ({ path; address = None } : Vault.Rename.target)
-         ~new_name
-       |> finish_change root ~apply)
-;;
-
-let move_command =
-  Command.basic
-    ~summary:"Move a note, asset, or directory and rewrite the links it would break"
-    (let%map_open.Command root = vault_param
-     and src = anon ("path" %: string)
-     and dst = anon ("new-path" %: string)
-     and apply = apply_flag in
-     fun () ->
-       let vault = load root in
-       let vault_path p = String.rstrip p ~drop:(Char.equal '/') in
-       Vault.Rename.plan_moves
-         ~index:vault.index
-         ~read_file:(read_file root)
-         [ vault_path src, vault_path dst ]
-       |> finish_change root ~apply)
-;;
-
-let heading_target (vault : Vault.t) path heading =
-  let entry =
-    Vault.Index.find_note vault.index path
-    |> Option.value_exn ~message:(sprintf "note not found: %s" path)
-  in
-  let heading =
-    Vault.Index.Entry.headings entry
-    |> List.map ~f:fst
-    |> List.find ~f:(fun h -> String.equal h.text heading || String.equal h.slug heading)
-    |> Option.value_exn ~message:(sprintf "heading not found in %s: %s" path heading)
-  in
-  ({ path; address = Some (Heading heading.slug) } : Vault.Rename.target)
-;;
-
-(** Emit the vault as a Jinja template context on stdout.
-
-    Rendering is left to a Jinja engine invoked by the build system, so that
-    this executable stays a pure query over a snapshot and gains no runtime
-    dependency on a template binary. See {!page-"template-context"}. *)
-let context_command =
-  Command.basic
-    ~summary:"Print the vault as a JSON template context"
-    (let%map_open.Command root = vault_param
-     and compact =
-       flag "-compact" no_arg ~doc:" emit one line instead of indented JSON"
+    ~summary:"Print the nodes of a note that a query selects"
+    (let%map_open.Command (note : string) = anon ("NOTE" %: string)
+     and (query_text : string) = anon ("QUERY" %: string)
+     and (print : string list) =
+       flag
+         "-print"
+         (listed string)
+         ~doc:
+           "FIELD what to print of each match: markdown (the default), source, path, \
+            kind, line, file or prop:NAME; repeat for several, separated by tabs"
+     and (count : bool) = flag "-count" no_arg ~doc:" print how many nodes matched"
+     and (quiet : bool) =
+       flag "-quiet" no_arg ~doc:" print nothing; check exit status for matches"
      in
      fun () ->
-       let json = Oystermark.Context.of_vault (load root) in
-       print_endline
-         (if compact
-          then Yojson.Safe.to_string json
-          else Yojson.Safe.pretty_to_string json))
-;;
-
-(** Query the blocks of a note.
-
-    The flags are one syntax for a {!Oystermark.Note.Query.t}; see
-    {!Oystermark.Note.Query_flags}. [-json] prints each match with its path,
-    properties, names and enclosing headings, which can be used to write the
-    next query.
-
-    Default output is the block's source, verbatim. *)
-let block_command =
-  Command.basic
-    ~summary:"Print blocks of a note, filtered by heading, kind, id, key or position"
-    (let%map_open.Command note = anon ("NOTE" %: string)
-     and under =
-       flag
-         "-under"
-         (optional string)
-         ~doc:"SLUG only blocks in the section of the heading with this id or text"
-     and direct = flag "-direct" no_arg ~doc:" with -under, stop at the first subheading"
-     and kind = flag "-kind" (optional string) ~doc:"KIND only blocks of this kind"
-     and lang =
-       flag
-         "-lang"
-         (optional string)
-         ~doc:"INFO only code blocks whose info string is exactly INFO"
-     and id =
-       flag "-id" (optional string) ~doc:"ID only the block a link to #ID names ({#ID})"
-     and caret_id =
-       flag
-         "-caret-id"
-         (optional string)
-         ~doc:"ID only the block a link to #^ID names (^ID)"
-     and key =
-       flag "-key" (optional string) ~doc:"KEY only keyed nodes and list items with KEY"
-     and nth = flag "-nth" (optional int) ~doc:"N keep only the Nth match, 1-based"
-     and content =
-       flag "-content" no_arg ~doc:" print what the container holds, not its source"
-     and json = flag "-json" no_arg ~doc:" print the matching blocks as JSON" in
-     fun () ->
-       let die fmt =
+       let die (code : int) fmt =
          ksprintf
-           (fun s ->
-              prerr_endline s;
-              exit 1)
+           (fun message ->
+              prerr_endline message;
+              exit code)
            fmt
        in
-       let query =
-         match
-           Query_flags.to_query
-             { under; direct; kind; lang; attr_id = id; caret_id; key; nth }
-         with
+       let (query : Query.steps) =
+         match Query.of_string query_text with
          | Ok query -> query
-         | Error message -> die "%s" message
+         | Error message -> die 2 "%s" message
        in
-       let source = In_channel.read_all note in
-       let doc = Parse.of_string ~locs:true source in
-       let result = Query.run query (Query.top doc) in
-       Option.iter (Query.why_empty result) ~f:(fun why -> die "%s: %s" note why);
-       let kind_name cursor = Node.kind (Query.node cursor) in
-       let content_of cursor =
-         match Query.content_string cursor with
-         | Ok content -> content
-         | Error kind -> die "%s: a %s has no contents to print" note kind
+       let (source : string) =
+         try In_channel.read_all note with
+         | _ -> die 2 "cannot read %s" note
        in
-       let source_of cursor =
-         let textloc = Cmarkit.Meta.textloc (Query.meta cursor) in
-         if Cmarkit.Textloc.is_none textloc
-         then Query.markdown cursor
+       let result = Query.run query (Parse.of_string ~locs:true source) in
+       match result.matches with
+       | [] ->
+         if not quiet
+         then
+           Option.iter result.why_empty ~f:(fun why ->
+             eprintf "%s: %s\n" note (Query.no_match_to_string why));
+         exit 1
+       | matches ->
+         if quiet then exit 0;
+         if count
+         then printf "%d\n" (List.length matches)
          else (
-           let first = Cmarkit.Textloc.first_byte textloc in
-           let last = Cmarkit.Textloc.last_byte textloc in
-           String.sub source ~pos:first ~len:(last - first + 1))
-       in
-       if json
-       then (
-         let json_of cursor =
-           let textloc = Cmarkit.Meta.textloc (Query.meta cursor) in
-           let name (address : Oystermark.Note.Anchor.Address.t) =
-             let kind, id =
-               match address with
-               | Heading id -> "heading", id
-               | Caret id -> "caret", id
-               | Attr id -> "attr", id
-             in
-             `Assoc [ "kind", `String kind; "id", `String id ]
+           let text (value : Node.value) =
+             match value with
+             | String s -> s
+             | Int n -> Int.to_string n
+             | Bool b -> Bool.to_string b
            in
-           let heading (h : Oystermark.Note.Anchor.heading) =
-             `Assoc
-               [ "id", `String h.slug; "text", `String h.text; "level", `Int h.level ]
+           let field (found : Node.found_t) name =
+             match name with
+             | "markdown" -> String.strip found.markdown
+             | "source" ->
+               (match found.span with
+                | Some { first_byte; last_byte; _ } ->
+                  String.sub source ~pos:first_byte ~len:(last_byte - first_byte + 1)
+                | None -> String.strip found.markdown)
+             | "path" -> String.concat ~sep:"." (List.map found.path ~f:Int.to_string)
+             | "kind" -> Node.kind found.node
+             | "line" ->
+               Option.value_map found.span ~default:"" ~f:(fun span ->
+                 Int.to_string (span.first_line + 1))
+             | "file" -> note
+             | name when String.is_prefix name ~prefix:"prop:" ->
+               Option.value_map
+                 (List.Assoc.find
+                    found.props
+                    (String.drop_prefix name 5)
+                    ~equal:String.equal)
+                 ~default:""
+                 ~f:text
+             | other -> die 2 "unknown -print field %s" other
            in
-           let props =
-             List.map
-               (Node.props (Query.node cursor))
-               ~f:(fun (name, (value : Node.value)) ->
-                 ( name
-                 , match value with
-                   | Int n -> `Int n
-                   | String s -> `String s
-                   | Bool b -> `Bool b ))
+           let fields = if List.is_empty print then [ "markdown" ] else print in
+           let whole =
+             List.exists fields ~f:(fun field ->
+               String.equal field "markdown" || String.equal field "source")
            in
-           `Assoc
-             [ "path", `List (List.map (Query.path cursor) ~f:(fun i -> `Int i))
-             ; "kind", `String (kind_name cursor)
-             ; "props", `Assoc props
-             ; "names", `List (List.map (Query.names cursor) ~f:name)
-             ; "headings", `List (List.map (Query.headings cursor) ~f:heading)
-             ; ( "loc"
-               , `Assoc
-                   [ "first_line", `Int (fst (Cmarkit.Textloc.first_line textloc))
-                   ; "last_line", `Int (fst (Cmarkit.Textloc.last_line textloc))
-                   ; "first_byte", `Int (Cmarkit.Textloc.first_byte textloc)
-                   ; "last_byte", `Int (Cmarkit.Textloc.last_byte textloc)
-                   ] )
-             ; "text", `String (source_of cursor)
-             ; ( "content"
-               , match Query.content_string cursor with
-                 | Ok content -> `String content
-                 | Error _ -> `Null )
-             ]
-         in
-         print_endline
-           (Yojson.Safe.pretty_to_string (`List (List.map result.matches ~f:json_of))))
-       else
-         List.map result.matches ~f:(fun cursor ->
-           if content then content_of cursor else source_of cursor)
-         |> String.concat ~sep:"\n\n"
-         |> print_endline)
+           List.map matches ~f:(fun found ->
+             String.concat ~sep:"\t" (List.map fields ~f:(field found)))
+           |> String.concat ~sep:(if whole then "\n\n" else "\n")
+           |> print_endline))
 ;;
 
 let command =
   Command.group
     ~summary:"Inspect and rename notes in an OysterMark vault"
-    [ "unresolved", unresolved_command
-    ; "stats", stats_command
-    ; "context", context_command
-    ; "block", block_command
-    ; "rename-note", rename_note_command
-    ; "move", move_command
+    [ "query", query_command
+    ; "move", List.Assoc.find_exn Upd.commands ~equal:String.equal "move"
     ; ( "rename-heading"
-      , rename_command
-          "heading"
-          "Rename a heading and its incoming references"
-          heading_target )
+      , List.Assoc.find_exn Upd.commands ~equal:String.equal "rename-heading" )
+    ; "stats", Stat.command
     ]
 ;;
 
 let () =
-  let version = Oystermark.Version.to_string () in
+  let (version : string) = Oystermark.Version.to_string () in
   (* [build_info] defaults to a placeholder sexp that [oyster version] prints
      verbatim; give it something readable instead. *)
   Command_unix.run ~version ~build_info:("oystermark " ^ version) command

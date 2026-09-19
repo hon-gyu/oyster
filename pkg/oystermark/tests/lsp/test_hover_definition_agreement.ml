@@ -5,18 +5,21 @@
 
     The two use different code: go-to-definition uses
     {!Oystermark.Vault.Index.resolve}, and hover reads the note with
-    {!Oystermark.Note.read}, also when resolution stops at the note. If they
+    {!Oystermark.Note.Query.of_address}, also when resolution stops at the note. If they
     disagree, a link previews one section and jumps to another.
 
-    Checked invariant: the first line of the hover body is the line
-    go-to-definition lands on, in the same file. Lines are compared on letters
-    and digits only. *)
+    Checked invariant: go-to-definition lands, in the same file, on the first
+    line of the hover body or, when the body starts with block attribute lines
+    such as [ {#id} ], on one of those or the line after them: a heading with an
+    authored id is previewed with its attribute, and the definition is the
+    heading. Lines are compared on letters and digits only. *)
 
 open Core
 open Lsp_helper
 
 (** The line of [path] the definition landed on, and the first non-empty line
-    of the hover body, for the link at [needle] in [rel_path]. *)
+    of the hover body, for the link at [needle] in [rel_path]; they agree as the
+    invariant above says. *)
 let check (s : Server.t) ~(vault_root : string) ~(rel_path : string) (needle : string) =
   let content = In_channel.read_all (Filename.concat vault_root rel_path) in
   let offset = Option.value_exn (String.substr_index content ~pattern:needle) + 2 in
@@ -38,11 +41,17 @@ let check (s : Server.t) ~(vault_root : string) ~(rel_path : string) (needle : s
       let rest = Option.value_exn (String.chop_prefix hover ~prefix:"*Path*:") in
       String.lsplit2_exn rest ~on:'\n'
     in
-    let hover_first_line =
+    let hover_lines =
       String.split_lines hover_body
-      |> List.find ~f:(fun l -> not (String.is_empty (String.strip l)))
-      |> Option.value ~default:""
+      |> List.filter ~f:(fun l -> not (String.is_empty (String.strip l)))
     in
+    let hover_first_line = List.hd hover_lines |> Option.value ~default:"" in
+    let is_attribute l =
+      let l = String.strip l in
+      String.is_prefix l ~prefix:"{" && String.is_suffix l ~suffix:"}"
+    in
+    let attributes, rest = List.split_while hover_lines ~f:is_attribute in
+    let candidates = attributes @ Option.to_list (List.hd rest) in
     let definition_line =
       List.nth
         (String.split_lines (In_channel.read_all (Filename.concat vault_root path)))
@@ -52,7 +61,8 @@ let check (s : Server.t) ~(vault_root : string) ~(rel_path : string) (needle : s
     let letters s = String.filter s ~f:Char.is_alphanum |> String.lowercase in
     let agree =
       String.equal path hover_path
-      && String.equal (letters definition_line) (letters hover_first_line)
+      && List.exists candidates ~f:(fun l ->
+        String.equal (letters definition_line) (letters l))
     in
     printf
       "%-24s %s %s:%d %S | hover %s %S\n"
@@ -75,13 +85,19 @@ let files =
        ## Section Two\n\
        - a list butted against the heading.\n\n\
        Cross-file [[note-b#Section One]] and [[note-b#^block1]] and [[note-b#anchor]].\n\n\
+       Attributes [[note-b#aside]] and [[note-b#intro]].\n\n\
        Whole note [[note-b]].\n\n\
        Self [[#Alpha]].\n" )
   ; ( "note-b.md"
     , "# Beta\n\n\
        ## Section One\n\n\
        Body text ^block1\n\n\
-       The [key term]{#anchor} is defined here.\n" )
+       The [key term]{#anchor} is defined here.\n\n\
+       {#aside}\n\
+       > An aside block.\n\n\
+       {#intro}\n\
+       ## Introduction\n\n\
+       body\n" )
   ]
 ;;
 
@@ -95,6 +111,8 @@ let%expect_test "hover and definition name the same anchor" =
     check "[[note-b#Section One]]";
     check "[[note-b#^block1]]";
     check "[[note-b#anchor]]";
+    check "[[note-b#aside]]";
+    check "[[note-b#intro]]";
     check "[[note-b]]");
   [%expect
     {|
@@ -103,6 +121,8 @@ let%expect_test "hover and definition name the same anchor" =
     [[note-b#Section One]]   agree    note-b.md:2 "## Section One" | hover note-b.md "## Section One"
     [[note-b#^block1]]       agree    note-b.md:4 "Body text ^block1" | hover note-b.md "Body text ^block1"
     [[note-b#anchor]]        agree    note-b.md:6 "The [key term]{#anchor} is defined here." | hover note-b.md "The [key term]{#anchor} is defined here."
+    [[note-b#aside]]         agree    note-b.md:8 "{#aside}" | hover note-b.md "{#aside}"
+    [[note-b#intro]]         agree    note-b.md:12 "## Introduction" | hover note-b.md "{#intro}"
     [[note-b]]               agree    note-b.md:0 "# Beta" | hover note-b.md "# Beta"
     |}]
 ;;

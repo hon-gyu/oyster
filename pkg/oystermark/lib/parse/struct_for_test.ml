@@ -502,14 +502,14 @@ let%test_module _ =
         - C: c
         ```
         ```debug-view
-        K(A:, List[K(B: , K(b:, List[K(C: , c)]))])
+        K(A:, List[B: b:, K(C: ,
+        c)])
         ```
         ```sexp
         (Blocks
           (Keyed (Text A:)
-            (List
-              (Keyed (Text "B: ")
-                (Keyed (Text b:) (List (Keyed (Text "C: ") (Paragraph (Text c)))))))))
+            (List (Paragraph (Text "B: b:"))
+              (Keyed (Text "C: ") (Paragraph (Text c))))))
         ```
 
         Example 5: no_body_no_following
@@ -926,14 +926,13 @@ let%test_module _ =
         List[foo, K(bar:,
         ```py
         cb
-        ```List[
-        baz])]
+        ```),
+        baz]
         ```
         ```sexp
         (Blocks
-          (List (Paragraph (Text foo))
-            (Keyed (Text bar:)
-              (Blocks (Code_block py cb) (List (Paragraph (Text baz)))))))
+          (List (Paragraph (Text foo)) (Keyed (Text bar:) (Code_block py cb))
+            (Paragraph (Text baz))))
         ```
 
         Example 33: list_continuation_cascades
@@ -954,20 +953,16 @@ let%test_module _ =
         List[a, K(b:,
         ```
         cb1
-        ```List[K(c:,
+        ```), K(c:,
         ```
         cb2
-        ```List[
-        d])])]
+        ```),
+        d]
         ```
         ```sexp
         (Blocks
-          (List (Paragraph (Text a))
-            (Keyed (Text b:)
-              (Blocks (Code_block no-info cb1)
-                (List
-                  (Keyed (Text c:)
-                    (Blocks (Code_block no-info cb2) (List (Paragraph (Text d))))))))))
+          (List (Paragraph (Text a)) (Keyed (Text b:) (Code_block no-info cb1))
+            (Keyed (Text c:) (Code_block no-info cb2)) (Paragraph (Text d))))
         ```
 
         Example 34: list_continuation_type_mismatch
@@ -982,14 +977,12 @@ let%test_module _ =
         ```debug-view
         List[K(a:, ```
         cb
-        ```List[
-        b])]
+        ```)]List[
+        b]
         ```
         ```sexp
-        (Blocks
-          (List
-            (Keyed (Text a:)
-              (Blocks (Code_block no-info cb) (List (Paragraph (Text b)))))))
+        (Blocks (List (Keyed (Text a:) (Code_block no-info cb)))
+          (List (Paragraph (Text b))))
         ```
 
         Example 35: empty_label_in_list_item

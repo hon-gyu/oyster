@@ -7,7 +7,7 @@
     Runs over a whole vault, after link resolution and before rendering. A
     paragraph with a single embed source (see {!Note.Transclusion}) is replaced
     by a transclusion ({!Note.Transclusion.transclude}) of the blocks its link
-    target names ({!Note.read}), when the link resolves to a note or to an
+    target names ({!Note.Private.Address_utils.find}), when the link resolves to a note or to an
     anchor in a note. Frontmatter is never embedded.
 
     The target note is expanded before it is transcluded, so nested embeds are

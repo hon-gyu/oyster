@@ -34,8 +34,7 @@ let ebool b = Ast_helper.Exp.construct (lident (if b then "true" else "false")) 
 
 let rec elist = function
   | [] -> Ast_helper.Exp.construct (lident "[]") None
-  | e :: es ->
-    Ast_helper.Exp.construct (lident "::") (Some (etuple [ e; elist es ]))
+  | e :: es -> Ast_helper.Exp.construct (lident "::") (Some (etuple [ e; elist es ]))
 ;;
 
 let jsx name args =
@@ -51,9 +50,7 @@ let node ?(attrs = []) tag ~children =
    [JSX.node], e.g. [# Hi] becomes [components.h1 ~children:[...]]. The default
    table renders vanilla elements, so an un-themed page is unchanged. Literal
    JSX and component calls in the page keep using {!node}/{!component_call}. *)
-let components_lident name =
-  lpath [ "Mlmdx"; "Components"; name ]
-;;
+let components_lident name = lpath [ "Mlmdx"; "Components"; name ]
 
 let md_elt tag ~children =
   Ast_helper.Exp.apply
@@ -144,7 +141,6 @@ let quote_close s quote i =
   in
   go (i + 1)
 ;;
-
 
 type attr_value =
   | Absent

@@ -3,5 +3,7 @@ module Link = Link
 module Transclusion = Transclusion
 module Node = Node
 module Query = Query
-module Query_flags = Query_flags
-include Read
+
+module Private = struct
+  module Address_utils = Address_utils
+end

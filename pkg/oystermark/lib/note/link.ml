@@ -85,7 +85,7 @@ module Ref = struct
        | Some (dest, dest_meta) -> of_cmark_dest dest)
   ;;
 
-  let of_address ~(target : string) (address : Anchor.Address.t) : t =
+  let of_target_address ~(target : string) (address : Anchor.Address.t) : t =
     let fragment =
       match address with
       | Heading id | Attr id -> Hash_path [ id ]
@@ -106,7 +106,7 @@ module Ref = struct
     let resolve_heading query =
       let hs =
         List.filter_map anchors ~f:(fun (a : Anchor.t) ->
-          match a.value with
+          match a.definition with
           | Heading h -> Some (h, a)
           | Caret _ | Attr _ -> None)
         |> Array.of_list
@@ -136,13 +136,13 @@ module Ref = struct
         (match hs with
          | [ id ] ->
            List.find anchors ~f:(fun (a : Anchor.t) ->
-             match a.value with
+             match a.definition with
              | Attr { id = x; _ } -> String.equal x id
              | Heading _ | Caret _ -> false)
          | _ -> None)
     | Caret_id id ->
       List.find anchors ~f:(fun (a : Anchor.t) ->
-        match a.value with
+        match a.definition with
         | Caret x -> String.equal x id
         | Heading _ | Attr _ -> false)
   ;;
