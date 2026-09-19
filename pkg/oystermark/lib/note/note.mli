@@ -28,7 +28,7 @@
     query for referencing nodes in a note.
 
     - {!Query.t} is composed of a sequence of {!Query.type-step}.
-    - {!Query.t} can be constructed using {!Query.step} or parsed from a string following certain syntax.
+    - {!Query.t} can be constructed from {!Query.type-step} using corresponding constructors or parsed from a string following certain syntax.
 
     *)
 

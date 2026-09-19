@@ -56,7 +56,7 @@ type file_stat =
   ; mtime : (int * int * int) option (** modified date YYYY/MM/DD, when available *)
   }
 
-(** See {!Note.Anchor.definition}. *)
+(** See {!Note.Anchor.type-definition}. *)
 type anchor_definition = Note.Anchor.definition =
   | Heading of heading
   | Caret of string

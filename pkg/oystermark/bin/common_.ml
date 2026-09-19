@@ -5,7 +5,6 @@ module Parse = Oystermark.Parse
 module Vault = Oystermark.Vault
 
 let load_vault (root : string) : Vault.t = Vault_fs.of_root_path ~skip_expand:true root
-
 let (vault_param : string Command.Param.t) = Command.Param.(anon ("vault" %: string))
 
 let links (index : Vault.Index.t) : (string * Note.Link.t * Vault.Index.resolution) list =

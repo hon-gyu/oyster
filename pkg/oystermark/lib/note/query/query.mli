@@ -1,6 +1,6 @@
 (** Path-like query for nodes of a note.
 
-    A query is composed from {!step}s, run over a document by {!val-run}, starting
+    A query is composed from {!type-step}s, run over a document by {!val-run}, starting
     from {!Node.Root}.
 
     Each step moves along an {!type-axis} from the nodes it receives, keeps those its
@@ -205,7 +205,7 @@ type result =
     not an error: the steps after it run on [ [] ], and the result says which
     step it was.
 
-    @raise when a heading has no identifier: parse with {!Parse.of_string}. *)
+    Raises when a heading has no identifier; parse with {!Parse.of_string}. *)
 val run : t -> Cmarkit.Doc.t -> result
 
 val no_match_to_string : no_match -> string

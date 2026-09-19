@@ -47,5 +47,5 @@ val address : definition -> Address.t
 
 (** Every anchor of [doc] in document order, duplicates included.
 
-    @raise when a heading has no identifier: parse with {!Parse.of_string}. *)
+    Raises when a heading has no identifier; parse with {!Parse.of_string}. *)
 val of_doc : Cmarkit.Doc.t -> t list

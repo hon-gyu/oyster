@@ -73,7 +73,7 @@ val kinds : string list
     block attribute such as [ {#id} ] on its own line (it belongs to the block
     after it), and syntax whose kind is not in {!kinds}, such as frontmatter.
 
-    @raise Invalid_argument on a JSX block *)
+    Raises [Invalid_argument] on a JSX block. *)
 val of_block : Cmarkit.Block.t -> t option
 
 val of_item : Cmarkit.Block.List_item.t Cmarkit.node -> t
