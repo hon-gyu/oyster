@@ -1,7 +1,8 @@
 {0 Diagnostics}
 
-Report unresolved links, broken embeds, broken images, and duplicate anchor
-ids as diagnostics. This makes broken destinations visible without navigating
+Report unresolved links, broken embeds, broken images, duplicate anchor
+ids, and footnote errors ({!page-"feature-footnotes".diagnostics}) as
+diagnostics. This makes broken destinations visible without navigating
 and reports ambiguous anchor targets at their source.
 
 {1 Trigger}

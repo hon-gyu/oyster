@@ -44,11 +44,71 @@ let duplicate_id_diagnostics (doc : Oystermark.Parse.t) : diagnostic list =
     else acc)
 ;;
 
-(** Compute diagnostics for unresolved links and duplicate anchor ids in
-    [content] at [rel_path] within a vault [index].
+(** Undefined footnote references and duplicate footnote definitions in
+    [doc]. Every definition of a duplicated label is reported.
+    See {!page-"feature-footnotes".diagnostics}. *)
+let footnote_diagnostics (doc : Oystermark.Parse.t) : diagnostic list =
+  let doc = doc.doc in
+  let range loc =
+    Option.some_if
+      (not (Djot.Textloc.is_none loc))
+      (Djot.Textloc.first_byte loc, Djot.Textloc.last_byte loc)
+  in
+  let defs = Djot.Doc.footnote_defs doc in
+  (* Each definition is walked once from [defs], so a definition nested in
+     another is skipped when met inside it. *)
+  let folder =
+    Djot.Folder.make
+      ~block:(fun _ acc (Node (_, _, block)) ->
+        match block with
+        | FootnoteDef _ -> Djot.Folder.ret acc
+        | _ -> Djot.Folder.default)
+      ~inline:(fun _ acc (Node (_, _, inline) as node) ->
+        match inline with
+        | FootnoteReference label when Option.is_none (Djot.Doc.footnote doc label) ->
+          (match range (Djot.Doc.textloc doc node) with
+           | Some (first_byte, last_byte) ->
+             Djot.Folder.ret
+               ({ first_byte; last_byte; message = "undefined footnote: ^" ^ label }
+                :: acc)
+           | None -> Djot.Folder.default)
+        | _ -> Djot.Folder.default)
+      ()
+  in
+  let undefined =
+    List.fold (Djot.Doc.blocks doc) ~init:[] ~f:(Djot.Folder.fold_block folder)
+    |> fun acc ->
+    List.fold defs ~init:acc ~f:(fun acc (Node (_, _, def)) ->
+      match def with
+      | FootnoteDef (_, blocks) ->
+        List.fold blocks ~init:acc ~f:(Djot.Folder.fold_block folder)
+      | _ -> acc)
+  in
+  let duplicate =
+    List.filter_map defs ~f:(fun (Node (_, _, def) as node) ->
+      match def with
+      | FootnoteDef (label, _) ->
+        Option.map
+          (range (Djot.Doc.footnote_label_loc doc node))
+          ~f:(fun r -> Djot.Kernel.Ast.normalize_label label, (label, r))
+      | _ -> None)
+    |> String.Map.of_alist_multi
+    |> Map.data
+    |> List.concat_map ~f:(function
+      | [] | [ _ ] -> []
+      | occurrences ->
+        List.map occurrences ~f:(fun (label, (first_byte, last_byte)) ->
+          { first_byte; last_byte; message = "duplicate footnote definition: ^" ^ label }))
+  in
+  undefined @ duplicate
+;;
 
-    See {!page-"feature-diagnostics".resolution_check} and
-    {!page-"feature-diagnostics".duplicate_ids}. *)
+(** Compute diagnostics for unresolved links, duplicate anchor ids and
+    footnote errors in [content] at [rel_path] within a vault [index].
+
+    See {!page-"feature-diagnostics".resolution_check},
+    {!page-"feature-diagnostics".duplicate_ids} and
+    {!page-"feature-footnotes".diagnostics}. *)
 let compute
       ?(config : Lsp_config.t = Lsp_config.default)
       ~(index : Oystermark.Vault.Index.t)
@@ -102,7 +162,7 @@ let compute
           })
       else None)
   in
-  let all = diagnostics @ duplicate_id_diagnostics doc in
+  let all = diagnostics @ duplicate_id_diagnostics doc @ footnote_diagnostics doc in
   let sorted =
     List.sort all ~compare:(fun a b ->
       match Int.compare a.first_byte b.first_byte with
@@ -263,6 +323,52 @@ let%test_module "compute" =
 
     let%expect_test "distinct ids: no diagnostic" =
       show ~rel_path:"note-a.md" ~content:"# H\n\nOne [a]{#x} two [b]{#y}.\n";
+      [%expect {| |}]
+    ;;
+
+    (* Footnotes. See {!page-"feature-footnotes".diagnostics}. *)
+
+    let%expect_test "defined footnote: no diagnostic" =
+      show ~rel_path:"note-a.md" ~content:"See[^a] and[^a].\n\n[^a]: One.\n";
+      [%expect {| |}]
+    ;;
+
+    let%expect_test "undefined footnote, case-sensitive" =
+      show ~rel_path:"note-a.md" ~content:"See[^ghost] and[^A].\n\n[^a]: One.\n";
+      [%expect {|
+        ((first_byte 3) (last_byte 10) (message "undefined footnote: ^ghost"))
+        ((first_byte 15) (last_byte 18) (message "undefined footnote: ^A"))
+        |}]
+    ;;
+
+    let%expect_test "duplicate footnote definition: every definition flagged" =
+      show ~rel_path:"note-a.md" ~content:"See[^a].\n\n[^a]: One.\n\n[^a]: Two.\n";
+      [%expect {|
+        ((first_byte 12) (last_byte 12)
+         (message "duplicate footnote definition: ^a"))
+        ((first_byte 24) (last_byte 24)
+         (message "duplicate footnote definition: ^a"))
+        |}]
+    ;;
+
+    let%expect_test "undefined reference inside a shadowed definition" =
+      show ~rel_path:"note-a.md" ~content:"See[^a].\n\n[^a]: One[^x].\n\n[^a]: Two.\n";
+      [%expect {|
+        ((first_byte 12) (last_byte 12)
+         (message "duplicate footnote definition: ^a"))
+        ((first_byte 19) (last_byte 22) (message "undefined footnote: ^x"))
+        ((first_byte 28) (last_byte 28)
+         (message "duplicate footnote definition: ^a"))
+        |}]
+    ;;
+
+    let%expect_test "unused definition: no diagnostic" =
+      show ~rel_path:"note-a.md" ~content:"Text.\n\n[^a]: One.\n";
+      [%expect {| |}]
+    ;;
+
+    let%expect_test "reference in code is not a reference" =
+      show ~rel_path:"note-a.md" ~content:"`[^x]` and \\[^y\\].\n\n```\n[^z]\n```\n";
       [%expect {| |}]
     ;;
   end)

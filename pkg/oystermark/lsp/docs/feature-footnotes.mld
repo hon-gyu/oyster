@@ -26,23 +26,22 @@ carries:
      the two features that exist for undefined labels — the
      [undefined footnote] diagnostic and the undefined-label completion item —
      are walks over the tree like the rest;}
-  {- {b definitions} in {!Djot.Doc.footnotes}, label and blocks, moved out of
-     the block tree by the document pass.}
+  {- {b definitions} in {!Djot.Doc.footnote_defs}, every one in source
+     order, a label defined twice included. {!Djot.Doc.footnote_label_loc}
+     locates a definition's label, between [\[^] and [\]].}
 }
 
-References are located like any node. What the API does not give yet is
-what this spec needs of definitions: {!Djot.Doc.footnotes} keeps one
-definition per label, so a label defined twice is not visible as two, and a
-definition's own label has no location. Both are work in djot.v's API before
-the diagnostics and rename below can be written.
+{!Djot.Doc.footnotes} is how references resolve: one definition per
+label, the last.
 
 A reference is never found by scanning text: code spans, code blocks,
 escapes and wikilinks are excluded by the parser, which is the one
 definition of what is prose.
 
-{b Label identity is the label as written.} Djot labels are case-sensitive:
+{b Label identity is djot's.} Two labels are the same when they are equal
+after djot collapses their whitespace. Labels are case-sensitive:
 [\[^KANT\]] does not resolve the definition [\[^kant\]], and is an undefined
-reference. Every rule below that says "the same label" means the same string.
+reference.
 
 {b Namespace.} Footnote labels do {e not} join the fragment namespace shared by
 heading identifiers and attribute ids
@@ -132,7 +131,7 @@ nowhere and is already diagnosed.
 The reverse is not go-to-definition: on a definition, [textDocument/references]
 is the request that answers "where is this used".
 
-{1 Diagnostics}
+{1:diagnostics Diagnostics}
 
 {!page-"feature-diagnostics"} gains two document-scoped checks, both at
 severity [Warning] with source ["oystermark"]:
@@ -141,7 +140,7 @@ severity [Warning] with source ["oystermark"]:
   | Message | Condition | Range |
   |---------|-----------|-------|
   | [undefined footnote: ^kant] | a reference whose label has no definition | the reference |
-  | [duplicate footnote definition: ^kant] | a label defined more than once | every definition of it |
+  | [duplicate footnote definition: ^kant] | a label defined more than once | the label of every definition of it |
 }
 
 Every occurrence of a duplicate is reported, matching the treatment of
