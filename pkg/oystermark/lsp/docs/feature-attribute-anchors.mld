@@ -1,10 +1,8 @@
 {0 Attribute anchors}
 
-With full djot conformance, {{!page-"design-index"}oymarkit} preserves
-{e explicit identifiers} attached to inline spans and blocks via djot
-attributes ([{#id}]). This spec defines a third {e anchor kind} — the
-explicit attribute id — alongside the two implicit kinds Oystermark
-already resolves: heading slugs and caret block IDs.
+Djot attributes ([{#id}]) attach {e explicit identifiers} to inline spans
+and blocks. This spec defines the {e attribute id} as an anchor kind
+alongside heading identifiers.
 
 This is a {b foundational} spec. It describes the anchor namespace and
 its resolution semantics; the navigation features that consume it
@@ -14,12 +12,8 @@ behavior.
 
 {1 Motivation}
 
-Before djot attributes, a fragment ([#...]) could only target:
-
-{ul
-  {- a {b heading}, matched by slug ([[[note#Section One]]]);}
-  {- a {b caret block ID}, matched by exact string ([[[note#^blockid]]]).}
-}
+Without attributes, a fragment ([#...]) could only target a {b heading},
+matched by its text or identifier ([[[note#Section One]]]).
 
 Djot attributes let {e any} inline span or block carry an explicit id:
 
@@ -35,84 +29,71 @@ The [key term]{#key-term} is defined here.
 
 A block attribute is written on {b its own line, above} the block it names —
 a heading included. Pandoc's trailing form ([## Overview \{#intro\}]) is not
-read: the braces are consumed as part of the heading's inline content, so no
-anchor is recorded {e and} the heading text keeps a trailing space, which
-breaks the by-text fragment too. An attribute line below a block attaches to
-nothing. Inline attributes are the exception, and follow their span:
+read: the braces attach to nothing, so no anchor is recorded {e and} the
+heading text keeps a trailing space. An attribute line below a block attaches
+to nothing. Inline attributes are the exception, and follow their span:
 [ [key term]\{#key-term\} ].
 
 This makes the id a first-class, author-controlled anchor. Unlike a
-heading slug (derived from text, changes when the text changes) or a
-caret id (whole-paragraph granularity), an attribute id is stable and
-can pin an {e arbitrary sub-inline} target.
+heading's text (which changes when the heading is edited), an attribute id
+is stable and can pin an {e arbitrary sub-inline} target.
 
 {1 Anchor collection}
 
-An {b attribute anchor} is any inline or block AST node carrying a djot
-attribute whose {!Oystermark.Vault.Index}-visible id is present (i.e.
-{!Cmarkit.Attribute.id} returns [Some id]).
+An {b attribute anchor} is any inline or block node whose djot attributes
+have an id ({!Djot.Attr.id} returns [Some id]). See
+{!Oystermark.Note.Anchor.of_doc}.
 
 {2 Sources}
 
 {ul
-  {- {b Block attributes}: the attribute attached to a block (paragraph,
+  {- {b Block attributes}: the attributes of a block (paragraph,
      blockquote, list, code block, ...).}
-  {- {b Inline attributes}: [Cmarkit.Inline.Ext_attributes], attaching
-     [{#id}] to a span.}
-  {- {b Heading ids}: a heading's [Cmarkit.Block.Heading.id] of the form
-     [`Id s] (an id supplied explicitly rather than derived as a slug).
-     Not collected {e again} here: the parser resolves that id from the
-     attribute line above the heading, which the first bullet already
-     saw. Collecting both would make one authored anchor look like two —
-     see {!page-"feature-diagnostics".duplicate_ids}.}
+  {- {b Inline attributes}: [[span]\{#id\}], or [\{#id\}] after any inline.}
+  {- {b Heading ids}: an id written above a heading is on its section, and
+     is the heading's identifier. It is a heading anchor, not an attribute
+     anchor as well, so one authored id is one anchor — see
+     {!page-"feature-diagnostics".duplicate_ids}.}
 }
 
 {2 Location precision}
 
-Each anchor records a [Cmarkit.Textloc] from the node it annotates:
+Each anchor records a [Djot.Textloc.t] from the node it annotates:
 
 {ul
   {- A block anchor records the {b [ \{#id\} ] line} it was written on,
-     through the block it attributes: {!Cmarkit.Block.Ext_attributes} spans
-     the specifier and its block, so navigation lands on the line the author
-     wrote the id on rather than on the block below it.}
-  {- Heading anchors record a {b line}, as the existing heading and block-ID
-     anchors do.}
+     through the block it attributes ({!Oystermark.Note.Anchor.extent}), so
+     navigation lands on the line the author wrote the id on rather than on
+     the block below it.}
+  {- Heading anchors record the heading's {b line}.}
   {- Inline anchors record a {b line and character}, because the
-     annotated span has a column-precise [textloc]. Navigation to an
+     annotated span has a column-precise location. Navigation to an
      inline anchor may therefore land on a character offset, not only the
      start of a line.}
 }
 
-This is the qualitative upgrade over the existing anchor kinds, which are
-line-granular only.
-
 {1 Resolution}
 
-Fragment resolution ([note#id] and self-reference [#id]) is extended so
-the fragment string is matched, in order, against:
+Fragment resolution ([note#id] and self-reference [#id]) matches the
+fragment string, in order, against:
 
 {ol
-  {- heading slugs (existing);}
-  {- caret block IDs — the fragment is stripped of a leading [^] for the
-     comparison (existing);}
-  {- attribute ids (new), by exact string comparison.}
+  {- headings, by identifier or by {!Oystermark.Parse.Common.heading_key}
+     of their text;}
+  {- attribute ids, by exact string comparison.}
 }
 
 The first match wins. A [note#id] wikilink or a [(#id)] markdown-link
 fragment that matches an attribute id resolves to that anchor's path and
-location. This adds a corresponding case to
-{!Oystermark.Vault.Index.resolve}: an attribute-id target (and a
-self-file [Curr_*] variant), carrying the anchor's [Cmarkit.Textloc].
+location, see {!Oystermark.Vault.Index.resolve}.
 
 {2 Namespace and precedence}
 
-Heading slugs, caret block IDs, and attribute ids share {b one} fragment
-namespace. When a fragment string could match more than one kind, the
-order above is authoritative and the first match wins. Authoring the same
-id in two kinds (e.g. a heading whose slug equals an explicit [{#id}]
-elsewhere) is a {e collision}; see {!page-"feature-diagnostics"} for
-detection.
+Heading identifiers and attribute ids share {b one} fragment namespace.
+When a fragment string could match more than one kind, the order above is
+authoritative and the first match wins. Authoring the same id in two kinds
+(e.g. a heading whose identifier equals an explicit [{#id}] elsewhere) is a
+{e collision}; see {!page-"feature-diagnostics"} for detection.
 
 {1 Uniqueness}
 
@@ -140,20 +121,19 @@ feature's own spec is authoritative; the deltas are:
   | go-to-definition   | [#id] fragment resolves to an attribute anchor; inline anchors jump to line {e and} character. |
   | find-references    | cursor on a [{#id}] anchor — the specifier line or the block it attributes, an inline span included — finds links whose fragment targets that id. |
   | diagnostics        | [#id] with no matching anchor is unresolved; duplicate ids in a file are reported. |
-  | completion         | after [#], attribute ids join headings and block IDs in the suggestion set. |
+  | completion         | after [#], attribute ids join headings in the suggestion set. |
 }
 
 {1 Edge cases}
 
 {ul
-  {- {b Empty / comment-only attribute} ([{}] or [{% ... %}]): carries no
-     id ([Cmarkit.Attribute.id] returns [None]); contributes no anchor.}
+  {- {b Empty attribute} ([{}]): carries no id; contributes no anchor.}
   {- {b Attribute with classes / key-values but no id}: contributes no
      anchor (only [id] is an anchor).}
-  {- {b Explicit heading id vs. slug}: when a heading carries an explicit
-     [{#id}], both the derived slug {e and} the explicit id resolve to
-     that heading, unless the id collides with another anchor (first
-     match wins per the order above).}
+  {- {b Explicit heading id vs. heading text}: when a heading carries an
+     explicit [{#id}], both the id and the heading's text resolve to that
+     heading, unless one collides with another anchor (first match wins
+     per the order above).}
 }
 
 {1 Assumptions and limitations}

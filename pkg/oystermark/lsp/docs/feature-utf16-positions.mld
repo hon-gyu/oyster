@@ -87,7 +87,7 @@ All conversion logic lives in [lsp_util.ml], keyed on an [encoding] type
 
 {2 Go-to-definition target column}
 
-{!Lsp_lib.Util.position_of_textloc} converts a [Cmarkit.Textloc] to a
+{!Lsp_lib.Util.position_of_textloc} converts a [Djot.Textloc.t] to a
 position for the go-to-definition {e target}
 (see {!page-"feature-go-to-definition".target_position}). Given the
 target file's content it decodes the line's bytes and returns a UTF-16

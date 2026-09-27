@@ -13,7 +13,7 @@ The cursor must fall within the byte range of a recognized link form:
 
 {ul
   {- {b Wikilinks}: [[[target]]], [[[target#heading]]],
-     [[[target#^blockid]]], [![[embed]]]}
+     [[[target#id]]], [![[embed]]]}
   {- {b Markdown links}: [[text](target)]}
   {- {b Markdown images}: [![alt](img.png)]}
 }
@@ -34,10 +34,8 @@ results are:
   | [[text](note)]            | resolved file     | line 0, char 0                |
   | [![[file.png]]]           | resolved file     | line 0, char 0                |
   | [[[note#Heading]]]        | resolved file     | position of matching heading  |
-  | [[[note#^blockid]]]       | resolved file     | position of matching block    |
   | [[[note#id]]]             | resolved file     | position of attribute anchor  |
   | [[[#Heading]]]            | current file      | position of heading           |
-  | [[[#^blockid]]]           | current file      | position of block             |
   | [[[#id]]]                 | current file      | position of attribute anchor  |
   | unresolved link           | {e None}          | —                             |
 }
@@ -45,36 +43,30 @@ results are:
 {2:heading_lookup Heading lookup}
 
 A heading fragment may be written either as the heading {e text}
-([[[note#Section One]]]) or as the heading's {e identifier} — the derived
-slug, or the explicit [{#id}] when the heading carries one
-([[[note#section-one]]]).  A fragment component matches a heading when it
-equals the heading text, or when slugifying it yields the heading's
-identifier.  Both spellings must resolve: completion inserts the
-identifier form, and hover accepts it, so go-to-definition would
-otherwise disagree with them on the same link.
+([[[note#Section One]]]) or as the heading's {e identifier} — the one djot
+derives, or the explicit [{#id}] when the heading carries one
+([[[note#Section-One]]]).  A fragment component matches a heading when it
+equals the heading's identifier, or when its
+{!Oystermark.Parse.Common.heading_key} equals the heading text's
+([[[note#section one]]] matches too).  Both spellings must resolve:
+completion inserts the identifier form, and hover accepts it, so
+go-to-definition would otherwise disagree with them on the same link.
 
-The position is read from the heading AST node's [Cmarkit.Textloc]
-metadata.
-
-{2 Block-ID lookup}
-
-Block IDs ([^id] suffix on a paragraph) are matched by exact string
-comparison on the ID.  The position is read from the paragraph AST
-node's [Cmarkit.Textloc] metadata.
+The position is read from the heading node's location.
 
 {2 Attribute-anchor lookup}
 
 A fragment naming an explicit djot attribute id ([{#id}]) resolves to the
 attributed inline span, block, or heading. See
 {!page-"feature-attribute-anchors"} for how ids are collected and how the
-fragment namespace (slug, caret id, attribute id) is searched. The
-position is read from the attributed node's [Cmarkit.Textloc]; for an
+fragment namespace (heading identifier, attribute id) is searched. The
+position is read from the attributed node's location; for an
 {e inline} anchor this is column-precise, so the jump lands mid-line.
 
 {2:target_position Target position (line and character)}
 
 Both the 0-based [line] and the 0-based [character] of the target are
-derived from the resolved node's [Cmarkit.Textloc]:
+derived from the resolved node's [Djot.Textloc.t]:
 
 {ul
   {- [line] is [fst (first_line loc) - 1] (the [Textloc] line number is

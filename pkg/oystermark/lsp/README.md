@@ -4,24 +4,26 @@ Language server for Oystermark vaults.
 
 ## Markdown flavor
 
-We use: CommonMark + Github-flavored extensions + Obsidian extensions + djot non-restrictive extensions + our own extensions (struct, etc.)
+Notes are [djot](https://djot.net), parsed by djot.v's extracted parser
+(`vendor/djot`) in its `markdown_like` profile with three extensions:
+wikilinks, keyed blocks (`label: value`) and Obsidian callouts. Markdown
+spellings that djot lacks are added: `**strong**`, setext headings, sublists
+without a blank line, and one-line ATX headings. It is not CommonMark:
 
-Extensions are additive. Djot syntax is borrowed as extensions while its
-restrictions are not adopted: where djot removes something from Markdown
-(indented code blocks, setext headings, CommonMark emphasis flanking, `___`
-thematic breaks), the CommonMark behavior is kept.
+| Markdown | In a note |
+|---|---|
+| `*a*` | plain text; write `_a_` |
+| `$x$`, `$$...$$` | text; write `` $`x` `` and `` $$`...` `` |
+| `snake_case_name` outside code | `case` is emphasized; use backticks |
+| `~~a~~` | nested subscript; write `{-a-}` |
+| indented code | a paragraph; use a fence |
+| raw HTML | text; write `` `<b>`{=html} `` |
+| two trailing spaces | nothing; use a backslash break |
+| `___` | text; write `***` or `---` |
+| `` ```lang arg=1 `` | not a code block: an info string is one word |
 
-One addition changes the meaning of text that was already valid CommonMark, so
-it is worth stating on its own: **a heading runs to the next blank line**, djot
-style, rather than ending at its own line.
-
-```markdown
-# Section
-some content
-```
-
-is one heading titled `Section some content`, not a heading followed by a
-paragraph — so `[[note#Section]]` does not find it. Leave a blank line under a
+A heading is exactly its own line. Only a heading of the document opens a
+section; one inside a block quote, div, callout or list item is a plain
 heading.
 
 ## Anchors
@@ -30,9 +32,8 @@ A `#fragment` is matched against one namespace, in this order; first match wins:
 
 | # | Kind | Written as | Referenced by | Granularity |
 |---|---|---|---|---|
-| 1 | Heading | `# My Heading` | `[[note#My Heading]]` (heading **text**, not slug) | line |
-| 2 | Caret block id | `text ^blk1` | `[[note#^blk1]]` | block |
-| 3 | Attribute id | `{#id}` / `[text]{#id}` | `[[note#id]]` | block, or **inline span** |
+| 1 | Heading | `# My Heading` | `[[note#My Heading]]` (heading **text**, or its identifier `My-Heading`) | line |
+| 2 | Attribute id | `{#id}` / `[text]{#id}` | `[[note#id]]` | block, or **inline span** |
 
 Attribute ids are author-controlled and stable, and are the only kind that can
 pin an arbitrary inline span:
@@ -49,10 +50,10 @@ The [key term]{#kt} is defined here.
 
 ```markdown
 See [[my-note#kt]] and [[my-note#aside]]; within the note, [[#My Heading]].
-A CommonMark link reaches the same anchors: [the key term](#kt), [aside](#aside).
+A markdown link reaches the same anchors: [the key term](#kt), [aside](#aside).
 ```
 
-Both link syntaxes reach all three anchor kinds — nothing in resolution is
+Both link syntaxes reach both anchor kinds — nothing in resolution is
 specific to wikilinks, and nothing is specific to headings. The full 2×3 matrix
 is pinned by the expect test *"intra-note: {wikilink, markdown link} x
 {heading, block attribute, inline attribute}"* in
@@ -60,7 +61,7 @@ is pinned by the expect test *"intra-note: {wikilink, markdown link} x
 
 Note: an explicit `{#id}` on a heading *replaces* its generated identifier. The
 heading is still reachable by its text (`[[note#My Heading]]`), but not by the
-derived slug.
+derived identifier.
 
 Anchors are collected and resolved in the core (`lib/vault/index.ml`,
 `lib/vault/resolve.ml`); the LSP consumes resolved targets and adds no anchor
@@ -72,7 +73,7 @@ logic of its own. Spec: [feature-attribute-anchors.mld](docs/feature-attribute-a
 |---|---|---|
 | Go to definition | Jumps to a link's target. Inline attribute anchors resolve to line *and* character. | [go-to-definition](docs/feature-go-to-definition.mld) |
 | Find references | From a link or an anchor, lists every link resolving to the same target. | [find-references](docs/feature-find-references.mld) |
-| Completion | Note names after `[[`; heading texts, block ids and attribute ids after `#`. | [completion](docs/feature-completion.mld) |
+| Completion | Note names after `[[`; heading texts and attribute ids after `#`. | [completion](docs/feature-completion.mld) |
 | Diagnostics | Unresolved links and fragments; duplicate ids in one file. | [diagnostics](docs/feature-diagnostics.mld) |
 | Hover | Preview of the target note or section. | [hover](docs/feature-hover.mld) |
 | Document outline | Headings and struct keys as a symbol tree. | [document-outline](docs/feature-document-outline.mld) |

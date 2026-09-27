@@ -19,7 +19,7 @@ and work down the list.
   - [[diagnostics]]
 - Code action: create the note behind an unresolved link
   - [[diagnostics]]
-- Document outline: headings, caret ids and attribute ids, as a tree
+- Document outline: headings and attribute ids, as a tree
   - [[anchors]]
 - Code lens: how many links land on a heading, and on the note
   - [[hints-and-lenses]]

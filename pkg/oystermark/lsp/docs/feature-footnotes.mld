@@ -11,99 +11,44 @@ Kantorovich relaxed the problem[^kant], and the relaxation is tight[^kant].
 v}
 
 A footnote label is an identifier with a definition and a set of references —
-the same shape as a heading slug or a block id, which the server already
+the same shape as a heading or an attribute id, which the server already
 handles — but it is {e document-scoped}: [\[^kant\]] in one note has nothing to
 do with [\[^kant\]] in another. Every rule below follows from that.
 
 {1 Parsing}
 
-Footnotes are a Cmarkit extension, enabled by [~strict:false], which
-{!Oystermark.Parse.of_string} already passes — there is no separate footnote
-knob, and no parser change is needed. The AST carries:
+Footnotes are djot syntax, on in {!Oystermark.Parse.profile}. The tree
+carries:
 
 {ul
-  {- {b definitions} as [Cmarkit.Block.Ext_footnote_definition] nodes, whose
-     label is [Cmarkit.Block.Footnote.label] and whose content is
-     [Cmarkit.Block.Footnote.block]. A label defined twice yields {e two}
-     nodes, so every occurrence of a duplicate is reachable;}
-  {- {b defined references} as inline links satisfying
-     [Cmarkit.Inline.is_footnote_reference], i.e. a label key starting with
-     [^].}
+  {- {b references} as [Djot.Inline.FootnoteReference label] nodes, defined
+     or not: djot needs no definition to read [\[^ghost\]] as a reference, so
+     the two features that exist for undefined labels — the
+     [undefined footnote] diagnostic and the undefined-label completion item —
+     are walks over the tree like the rest;}
+  {- {b definitions} in {!Djot.Doc.footnotes}, label and blocks, moved out of
+     the block tree by the document pass.}
 }
 
-{b An undefined reference is not in the AST.} A footnote reference is a
-CommonMark shortcut reference link, and a shortcut reference with no matching
-definition is not a link at all: [\[^ghost\]] survives parsing as ordinary
-[Cmarkit.Inline.Text]. The two features that exist for undefined labels — the
-[undefined footnote] diagnostic and the undefined-label completion item —
-therefore cannot be written as AST walks, and a collector that only walked the
-AST would report nothing in exactly the case worth reporting.
+References are located like any node. What the API does not give yet is
+what this spec needs of definitions: {!Djot.Doc.footnotes} keeps one
+definition per label, so a label defined twice is not visible as two, and a
+definition's own label has no location. Both are work in djot.v's API before
+the diagnostics and rename below can be written.
 
-So {b references are collected textually}, not from the AST: a scan of the
-source for [\[^label\]] outside code spans and code blocks, which finds
-defined and undefined references alike and by one rule rather than two. The
-AST is used for definitions, where it is authoritative about extent — a
-footnote body runs to a dedent, which no textual rule reconstructs.
+A reference is never found by scanning text: code spans, code blocks,
+escapes and wikilinks are excluded by the parser, which is the one
+definition of what is prose.
 
-Definitions carry [Cmarkit.Meta.textloc] under [~locs:true]; textual
-references carry the byte range the scan found them at. A shared collector —
-the footnote analogue of {!Lsp_lib.Link_collect} — returns both for a
-document, and the features below are views over it.
-
-{2:scan What the scan owes the parser}
-
-This scan is the one place in the server where a {e textual} search decides
-what exists, rather than where something already known to exist is written
-down.
-
-The difference is worth naming, because it changes what a mistake costs.
-Elsewhere — {!Lsp_lib.Rename} finding a definition line, say — the entity comes from the AST or
-the vault index, and the line search only re-locates it. A miss there points at
-the wrong line for something that genuinely exists. Here the scan {e is} the
-source of truth for references, so a false positive invents a footnote
-reference: the [undefined footnote] diagnostic then warns about it, and
-{!page-"feature-rename"} rewrites it.
-
-So the scan has to decline what the parser would have declined for us. A
-[\[^x\]] is {b not} a reference when it is:
-
-{t
-  | Context | Example |
-  |---------|---------|
-  | in a code span | [`see [^x] here`] |
-  | in a fenced or indented code block | a line inside [```] fences |
-  | escaped | [\\\[^x\]] |
-  | inside wikilink brackets | [\[\[note#^x\]\]], which is a block id |
-  | the definition's own label | [\[^x\]: body] — a definition, not a reference to itself |
-}
-
-None of these need judgement about {e footnotes}; they are all "is this
-position ordinary prose", which the parser already knows. Where the two
-disagree, the parser is right. An implementation may therefore prefer to walk
-the AST for {e text} nodes and scan only inside those — code, escapes and
-wikilinks are excluded by construction, and only the definition line then needs
-special-casing — rather than scanning raw source and re-deriving all of it.
-
-This is the part of the feature to build first and test hardest. Every other
-section here is a view over what the collector returns, so a collector that
-over-reports makes five features wrong at once, and it does so in the direction
-that edits the user's file.
-
-{b Label identity is the key, not the text.} Cmarkit's
-[case_sensitive_labels] defaults to [false] (CommonMark behavior) and
-{!Oystermark.Parse.of_string} does not override it, so [\[^KANT\]] resolves
-the definition [\[^kant\]]: [Cmarkit.Label.key] case-folds. Every rule below
-that says "the same label" means the same key. Completion offers one item per
-key; find-references from [\[^kant\]] includes [\[^KANT\]]; renaming
-rewrites both, and both come out spelled the new way. This is the parser's
-semantics, not a choice available here — a case-sensitive reading would call
-a reference undefined that renders perfectly well.
+{b Label identity is the label as written.} Djot labels are case-sensitive:
+[\[^KANT\]] does not resolve the definition [\[^kant\]], and is an undefined
+reference. Every rule below that says "the same label" means the same string.
 
 {b Namespace.} Footnote labels do {e not} join the fragment namespace shared by
-heading slugs, caret block ids, and attribute ids
+heading identifiers and attribute ids
 ({!page-"feature-diagnostics".duplicate_ids}). They are addressed by a
 different syntax, they are not link targets, and a note may legitimately have
-both a footnote [\[^kant\]] and a block id [^kant].
+both a footnote [\[^kant\]] and an attribute id [kant].
 
 {1 Completion}
 
@@ -115,10 +60,9 @@ current line: the text between it and the cursor is the prefix. The
 
 {b Precedence.} This is the third detector in {!Lsp_lib.Completion}, and it is
 tried last. Wikilink detection runs first, so [\[\[note#^<cursor>\]\]] is
-block-id fragment completion ({!page-"feature-completion".fragment_completion})
-and not this. The two are distinguished by whether an enclosing [\[\[] was
-found, not by the [^] — a caret means "block id" inside wikilink brackets and
-"footnote" outside them, and nothing else disambiguates them. Markdown
+fragment completion ({!page-"feature-completion".fragment_completion}) and not
+this. The two are distinguished by whether an enclosing [\[\[] was found, not
+by the [^]. Markdown
 destination detection ({!page-"feature-completion-markdown-links"}) runs
 second and cannot collide: a destination begins after [\](], where a [\[^]
 cannot be open.
@@ -129,9 +73,7 @@ completions are offered on a definition line.
 
 {2 Items}
 
-One item per definition {e key} in the current document (see the label
-identity rule above): two definitions differing only in case are one item,
-labelled as the first of them is spelled.
+One item per defined label in the current document.
 
 {t
   | Field      | Value |
@@ -159,13 +101,12 @@ alphabetical order would scramble.
 An {e undefined} label already referenced elsewhere in the document is also
 offered, with [detail] ["undefined"]. Referring twice to a footnote you have
 not written yet is an ordinary intermediate state, and completing the second
-reference keeps the two spellings identical. These labels come from the
-textual scan, which is the only thing that sees them at all.
+reference keeps the two spellings identical.
 
 {1 Find references}
 
 {!page-"feature-find-references"} gains a footnote activation mode, in addition
-to its link and heading/block-id modes.
+to its link and anchor modes.
 
 {ul
   {- {b Cursor on a footnote reference}: every reference to that label in this
@@ -221,26 +162,22 @@ The new name is validated as a label: non-empty, and free of [\[], [\]], and
 whitespace. An invalid new name fails the rename with a message rather than
 producing a document whose footnotes have silently stopped parsing.
 
-A new name whose {e key} is already a footnote label in the document also
-fails. Renaming [\[^a\]] to [\[^b\]] where [\[^b\]] exists would merge two
-footnotes into one — silently, and with one body lost — which no rename should
-be able to do by accident. Renaming a label to a different spelling of itself
-([\[^kant\]] to [\[^Kant\]]) is not a collision: it is the same key, and the
-rename is a re-spelling.
+A new name that is already a footnote label in the document also fails.
+Renaming [\[^a\]] to [\[^b\]] where [\[^b\]] exists would merge two footnotes
+into one — silently, and with one body lost — which no rename should be able
+to do by accident.
 
 {1 Testing}
 
 {ul
   {- Collection: an expect test over a document with a definition, two
-     references, a multi-paragraph footnote body, a label reused as a block id,
-     an {b undefined} reference, and a reference {b differing in case},
-     asserting the collected ranges and keys. The undefined and the miscased
-     reference are the two the AST alone would get wrong, so they are the two
-     the test exists for.}
-  {- Scan restraint ({!scan}): a document carrying a [\[^x\]] in a code span, in
-     a fenced block, escaped, and inside wikilink brackets, asserting that
-     {e none} of them is collected — the failure that would put a warning on
-     prose and let rename edit a code sample.}
+     references, a multi-paragraph footnote body, a label reused as an
+     attribute id, an {b undefined} reference, and a reference
+     {b differing in case}, asserting the collected ranges and labels.}
+  {- Restraint: a document carrying a [\[^x\]] in a code span, in a fenced
+     block, escaped, and inside wikilink brackets, asserting that {e none} of
+     them is collected — the failure that would put a warning on prose and let
+     rename edit a code sample.}
   {- Trigger precedence: a table over cursor positions covering
      [\[^<cursor>\]], [\[\[note#^<cursor>\]\]], a definition line, and a [^]
      in prose.}
@@ -253,7 +190,7 @@ rename is a re-spelling.
   {- Rename: the collision refusal, and {b property} — for a generated valid
      label, renaming and re-parsing yields a document whose footnote structure
      is isomorphic to the original, with every occurrence of the old label
-     replaced whatever its case.}
+     replaced.}
 }
 
 {1 Limitations}
@@ -261,8 +198,7 @@ rename is a re-spelling.
 {ul
   {- {b Document-scoped throughout}. No vault-wide footnote index; a label is
      never resolved across files. This is the semantics, not a shortcut.}
-  {- {b Inline footnotes} are not supported — Cmarkit's extension has
-     definitions only.}
+  {- {b Inline footnotes} are not supported — djot has definitions only.}
   {- {b No definition-creating quick fix} for an undefined label. It is a
      natural companion to
      {!page-"feature-codeaction-create-unresolved-link"} and is deliberately

@@ -15,7 +15,7 @@ whole of the difference:
 
 Above the top of this note sits `N backlinks`: every link in the vault that
 resolves here, whatever fragment it named. Above each heading something points
-at sits `N references`, counting only the links that land on *that heading*.
+at sits `N references`, counting only the links that land on _that heading_.
 
 This is the shape every other language server gives this — VS Code writes
 `3 references` over a TypeScript symbol, rust-analyzer and the Java server do
@@ -36,7 +36,7 @@ hides:
 
 - [[#Reference counts, as lenses]] points back up
 - [[#Where the arrows stop]] points down
-- [[#^caret-line]] points at a block, not a heading
+- [[#block-line]] points at a block, not a heading
 - [[#pivot]] points at an inline span, further down
 
 The arrow carries the direction, so the number is always a plain distance:
@@ -47,16 +47,17 @@ Two links on one line each get their own arrow, beside their own link:
 the hint sits after the link rather than at the end of the line — one arrow at
 the end of this line could belong to either.
 
-A target on the *same line* is the one case with no distance to report, so the
+A target on the _same line_ is the one case with no distance to report, so the
 arrow turns sideways instead. The line below holds a span and a link on either
 side of it:
 
 [[#pivot]] before the [pivot]{#pivot} and [[#pivot]] after it.
 
-Only an inline span can be a same-line target — a heading or a caret id owns
+Only an inline span can be a same-line target — a heading or a block owns
 its whole line.
 
-This paragraph is named by a caret instead. ^caret-line
+{#block-line}
+This paragraph is named by an attribute instead.
 
 ## Where the arrows stop
 

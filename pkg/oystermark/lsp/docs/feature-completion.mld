@@ -1,6 +1,6 @@
 {0 Completion (wikilink suggestions)}
 
-Suggest note names, headings, and block IDs as the user types inside
+Suggest note names, headings, and attribute ids as the user types inside
 wikilink brackets.
 
 {1 Activation}
@@ -14,7 +14,7 @@ Completion activates when the cursor is inside an incomplete wikilink:
 
 {ul
   {- [\[\[<cursor>\]\]] — typing the note name}
-  {- [\[\[note#<cursor>\]\]] — typing a heading or block-ID fragment}
+  {- [\[\[note#<cursor>\]\]] — typing a heading or attribute-id fragment}
   {- [!\[\[<cursor>\]\]] — embed link, same behavior}
 }
 
@@ -55,12 +55,9 @@ Suggestions come from the target file's AST:
 
 {ul
   {- {b Headings}: one item per heading.
-     [label] is the heading text, [filterText] is the slug,
+     [label] is the heading text, [filterText] is its identifier,
      [kind] is [CompletionItemKind.Reference].
-     [insertText] is the slug (e.g. [section-one]).}
-  {- {b Block IDs}: one item per block ID.
-     [label] is [^blockid], [filterText] and [insertText] are the id,
-     [kind] is [CompletionItemKind.Reference].}
+     [insertText] is the identifier (e.g. [Section-One]).}
   {- {b Attribute IDs}: one item per explicit djot attribute id
      ([{#id}]); see {!page-"feature-attribute-anchors"}.
      [label] is [#id], [detail] is ["attribute"], [filterText] and
@@ -68,8 +65,8 @@ Suggestions come from the target file's AST:
      already typed), [kind] is [CompletionItemKind.Reference].}
 }
 
-Headings, block IDs, and attribute IDs share one fragment namespace, so
-all three are offered together.
+Headings and attribute ids share one fragment namespace, so both are
+offered together.
 
 If the target note cannot be resolved, no fragment suggestions are
 returned.
@@ -79,10 +76,10 @@ returned.
 {t
   | Field      | Note name mode           | Fragment mode            |
   |------------|--------------------------|--------------------------|
-  | label      | shortest unambiguous name | heading text or [^id]    |
+  | label      | shortest unambiguous name | heading text or [#id]    |
   | detail     | full relative path       | —                        |
-  | filterText | note name                | slug or block ID         |
-  | textEdit   | note name                | slug or [^blockid]       |
+  | filterText | note name                | identifier               |
+  | textEdit   | note name                | identifier               |
   | kind       | File                     | Reference                |
 }
 

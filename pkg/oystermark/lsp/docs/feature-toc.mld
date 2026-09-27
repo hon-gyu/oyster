@@ -44,7 +44,7 @@ where a comment is invisible in both. That is the trade taken.
 
 {2:recognition Recognition is the parser's}
 
-A region is a {!Cmarkit.Block.Ext_div} whose class is exactly [toc], found by
+A region is a {!Djot.Block.Div} whose only class is [toc], found by
 folding the parsed document. There is no second reading of the text, and no
 second definition of what a fence is: the same AST that supplies the headings
 supplies the divs.
@@ -53,17 +53,15 @@ This is a requirement, not an implementation detail. Recognizing fences by
 matching lines would be a second implementation of div syntax, free to drift
 from the one that decides what the note actually is — and it does drift
 immediately: a [::: toc] inside a fenced code block is not a div, a nested
-[::: toc] is closed before its parent, and both an indented fence and one
-inside a list item are divs that a naive line scan would misplace.
+[::: toc] is content of its parent, and both an indented fence and one inside
+a list item are divs that a naive line scan would misplace.
 
 Two consequences worth stating:
 
 {ul
-  {- The document is parsed with layout on
-     ([Oystermark.Parse.of_string ~layout:true]). Without it the div is still
-     a div, but {!Cmarkit.Block.Div.opening_fence} and
-     {!Cmarkit.Block.Div.closing_fence} carry no location, and the feature
-     needs the {e delimiters}, not just the content.}
+  {- The fences' locations come from the parser too:
+     {!Djot.Doc.syntax_locs} gives a div's opening and closing fence lines,
+     and the feature needs the {e delimiters}, not just the content.}
   {- There is no {e stray closing fence} case. A lone [:::] closes some other
      div — [::: warning] and its neighbours — and never reaches this feature.
      That is the concrete advantage of a class-bearing opening fence over a
@@ -74,15 +72,14 @@ Two consequences worth stating:
 
 {ul
   {- A [::: toc] the parser closed at the end of the document rather than with
-     a fence — {!Cmarkit.Block.Div.closing_fence} is [None] — is
+     a fence — it has no {!Djot.Doc.RCloseFence} — is
      {b unterminated}. It swallows the rest of the note, which is not a span
      to rewrite silently, so no TOC is checked or updated there and it is
      reported (see {!diagnostics}).}
   {- A [::: toc] inside another one is body text, not a region of its own:
      the fold stops at the outer div. Note what the parser does with
-     [::: toc] / [::: toc] / [:::]: the lone fence closes the {e inner} div,
-     leaving the outer unterminated. A line-based scan would have paired the
-     outer fence with that [:::] and rewritten the wrong span.}
+     [::: toc] / [::: toc] / [:::]: the lone fence closes the {e outer} div,
+     and the inner one, unclosed, is its content.}
   {- A document may hold several regions. Each is checked and updated
      independently, and each holds the {e same} generated TOC — the content is
      a function of the document's headings, not of where the region sits.}

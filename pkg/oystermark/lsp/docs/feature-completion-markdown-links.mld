@@ -41,17 +41,12 @@ Detection is textual and single-line, matching {!Lsp_lib.Completion} for
 wikilinks:
 
 {ol
-  {- scan back from the cursor for the nearest [(] on the line;}
-  {- it must be immediately preceded by [\]] — otherwise this is an ordinary
-     parenthesis and there are no completions;}
-  {- the text between that [(] and the cursor is the {e prefix}. A [)] means
-     the destination is already closed, and there are no completions;}
-  {- whitespace in the prefix ends the destination — {b unless} the prefix
-     opens with [<], the angle-bracket form {!destination_escaping} writes,
-     where the destination runs to the [>]. Without this exception the
-     feature would abandon a destination the moment it inserted one, and
-     [\[a\](<my note.md>#<cursor>)] — a fragment in exactly the file the
-     escaping exists to serve — would never complete;}
+  {- scan back from the cursor for the nearest [\](] on the line — a [(]
+     not preceded by [\]] is an ordinary parenthesis;}
+  {- the text between that [(] and the cursor is the {e prefix}. It may hold
+     blanks and balanced parentheses, as a djot destination may; a [)] that
+     balances none means the destination is already closed, and there are no
+     completions;}
   {- the [!] before the [\[] of the label, if present, marks {e image
      context}.}
 }
@@ -100,23 +95,16 @@ each group, order is alphabetical by label.
 
 {2:destination_escaping Destination escaping}
 
-A path containing a space is not a well-formed Markdown destination. Such an
-item wraps the path in angle brackets — [<my note.md>] — which is the form
-CommonMark defines and the parser accepts: [Match.link_destination] keeps the
-brackets out of the destination it reports, so the resolver never sees them.
+A djot destination may hold blanks and balanced parentheses, so a path is
+offered as it is: [my note.md], [with space (and parens).md]. Only what would
+end the destination early or read as an escape is backslash-escaped: [\\],
+and parentheses when they do not balance. The parser removes the escapes
+before the resolver sees the destination.
 
-All three encodings would in fact resolve. Backslash escapes are removed from
-the destination before it reaches us, and
+[my%20note.md] would resolve as well, since
 {!Oystermark.Note.Link.Ref.percent_decode} runs on every Markdown
-destination, so [my\ note.md] and [my%20note.md] resolve as readily as the
-angle-bracketed form. The choice between them is therefore about {e reading},
-not validity: angle brackets leave the path legible in the source, and this
-text is read by people.
-
-Paths containing [<], [>], or an unbalanced parenthesis are offered with those
-characters backslash-escaped. A path that cannot be written safely at all is
-still offered, unescaped, rather than hidden — the user can see what is wrong
-where a silent omission would look like a missing file.
+destination; the plain path is offered because it is legible in the source,
+and this text is read by people.
 
 {2:fragment_completion Fragment completion}
 
@@ -125,10 +113,10 @@ the text after it is the fragment prefix. An empty destination
 ([\[label\](#<cursor>)]) means the current file.
 
 Suggestions are exactly those of
-{!page-"feature-completion".fragment_completion} — headings, caret block ids,
-and djot attribute ids, sharing one namespace — with one difference: a heading
-item's [insertText] is the slug, and the slug is used {e as written by the
-parser}, unescaped. Fragments are identifiers; they do not contain spaces.
+{!page-"feature-completion".fragment_completion} — headings and djot attribute
+ids, sharing one namespace — with one difference: a heading item's
+[insertText] is its identifier, used {e as written by the parser}, unescaped.
+Fragments are identifiers; they do not contain spaces.
 
 If the destination does not resolve, no fragment suggestions are returned.
 
@@ -137,10 +125,10 @@ If the destination does not resolve, no fragment suggestions are returned.
 {t
   | Field      | Path mode                     | Fragment mode         |
   |------------|-------------------------------|-----------------------|
-  | label      | vault-relative path with extension | heading text or [^id] |
+  | label      | vault-relative path with extension | heading text or [#id] |
   | detail     | note title, for [.md] files   | —                     |
-  | filterText | the path                      | slug or block id      |
-  | textEdit   | the path, escaped per {!destination_escaping}, replacing the whole prefix | slug or [^blockid], replacing the fragment prefix |
+  | filterText | the path                      | identifier            |
+  | textEdit   | the path, escaped per {!destination_escaping}, replacing the whole prefix | identifier, replacing the fragment prefix |
   | kind       | File                          | Reference             |
 }
 
@@ -176,8 +164,8 @@ keep a keystroke cheap, and a user has no way to know what value would.
      above, the [(] not preceded by [\]] case, a closed destination, an
      already-spaced destination, and the wikilink-precedence case.}
   {- Path mode: a fixture vault with a nested note, an asset, and a name
-     containing a space, asserting the offered set, the angle-bracket
-     insertion, and the replace range on a prefix containing a [/].}
+     containing a space, asserting the offered set, the escaping, and the
+     replace range on a prefix containing a [/].}
   {- Image context: asserting the ordering flip, not a filtered set.}
   {- Fragment mode: the same expectations as the wikilink fragment tests,
      driven through Markdown syntax.}
@@ -207,7 +195,7 @@ malformed.
      from.}
   {- {b The empty destination is a resolved link.} [\[label\]()] — the state
      this feature triggers in — is given the target [().md] by
-     {!Oystermark.Note.Link.Ref.of_cmark_reference}, following Obsidian, so
+     {!Oystermark.Note.Link.Ref.of_destination}, following Obsidian, so
      diagnostics report a half-typed link as unresolved rather than ignoring
      it. Completion is unaffected; the noise belongs to
      {!page-"feature-diagnostics"} and should be settled there.}

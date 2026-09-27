@@ -12,7 +12,6 @@ The outline is built from the file entry in {!Oystermark.Vault.Index}:
 {ul
   {- Headings are symbols named by their displayed text. They nest according
      to heading level, including skipped levels.}
-  {- Caret block IDs are key symbols named [^id].}
   {- Explicit attribute anchors are key symbols named [#id].}
 }
 

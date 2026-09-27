@@ -12,11 +12,10 @@ hover for a preview of what it lands on.
 - Whole note: [[anchors]]
 - Heading: [[anchors#Headings]]
 - Nested heading: [[anchors#A nested heading]]
-- Block id: [[anchors#^first-law]]
 - Attribute id: [[anchors#stable-id]]
 - Inline span: [[anchors#key-term]] — lands mid-line
 - Explicit heading id: [[anchors#custom-heading-id]]
-- Display text: [[anchors#Block ids|the caret form]]
+- Display text: [[anchors#Attribute ids|the attribute form]]
 
 ## Markdown links
 
@@ -26,8 +25,7 @@ The same anchors, no wikilink syntax involved: [note](notes/anchors.md),
 ## Within this note
 
 `[[#Wikilinks]]` reaches [[#Wikilinks]]; the markdown form reaches
-[this section](<#Markdown links>) — a destination with a space needs the angle
-brackets, or it is not a link at all.
+[this section](#Markdown links) — a destination may hold spaces.
 
 Both carry an inlay arrow saying which way their target is and how many lines
 away — `↑` back up this note, `↓` further down. Only intra-note links get one:
@@ -46,8 +44,8 @@ both.
 ## Completion
 
 Type `[[` on the line below for note names, then `#` for that note's anchors.
-Inside `[[anchors#` the whole anchor namespace is offered — headings, caret
-ids, attribute ids.
+Inside `[[anchors#` the whole anchor namespace is offered — headings and
+attribute ids.
 
 ## Also here
 

@@ -9,31 +9,24 @@ from them is [[links]].
 
 ## Headings
 
-Reachable by text, not slug: `[[anchors#Headings]]`.
+Reachable by its text, `[[anchors#Headings]]`, or by the identifier djot
+gives it.
 
-Every heading here has a blank line under it. A heading runs to the next blank
-line, so removing it folds this paragraph into the heading and the link above
-stops matching.
+A heading is exactly its own line. Only a heading of the note opens a
+section: one inside a block quote or a list item is a plain heading.
 
 ### A nested heading
 
 Nesting is what document outline renders as a tree.
 
-## Block ids
-
-A caret at the end of a line names that block. ^first-law
-
-Reachable as `[[anchors#^first-law]]`.
-
 ## Attribute ids
 
 {#stable-id}
 An attribute id is written on the line above the block it names, and is the
-only anchor you control: heading text changes with the prose, a caret id needs
-the end of a line.
+only anchor you control: heading text changes with the prose.
 
 The [key term]{#key-term} is an inline span — `[[anchors#key-term]]` lands on
-the phrase, at the character. The other two anchor kinds are line-granular.
+the phrase, at the character. Headings and blocks are line-granular.
 
 {#aside}
 > Any block takes an id, callouts included.

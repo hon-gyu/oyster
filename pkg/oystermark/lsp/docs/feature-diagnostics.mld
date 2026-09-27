@@ -16,7 +16,7 @@ Every recognized link form in the document is checked:
 
 {ul
   {- {b Wikilinks}: [[[target]]], [[[target#heading]]],
-     [[[target#^blockid]]], [![[embed]]]}
+     [[[target#id]]], [![[embed]]]}
   {- {b Markdown links}: [[text](target)]}
   {- {b Markdown images}: [![alt](img.png)]}
 }
@@ -40,17 +40,14 @@ Each link is resolved against the vault index via
 
 {ul
   {- The target note does not exist in the index.}
-  {- A heading fragment ([#heading]) does not match any heading in the
-     target file (slugified comparison).}
-  {- A block-ID fragment ([#^blockid]) does not match any block in the
-     target file.}
+  {- A fragment ([#heading] or [#id]) matches no heading and no attribute id
+     in the target file, see {!page-"feature-attribute-anchors"}.}
 }
 
 {1:duplicate_ids Duplicate anchor ids}
 
-Anchor ids share a single per-file namespace across the three anchor
-kinds — heading slugs, caret block ids, and explicit djot attribute ids
-([{#id}]). See {!page-"feature-attribute-anchors"}. Because djot
+Anchor ids share a single per-file namespace across the two anchor
+kinds — heading identifiers and explicit djot attribute ids ([{#id}]). See {!page-"feature-attribute-anchors"}. Because djot
 attribute merge is override (not accumulation), an id that occurs more
 than once in a file makes every [#id] reference to it ambiguous.
 
@@ -67,12 +64,8 @@ than once in a file makes every [#id] reference to it ambiguous.
      whose location is unknown ([Textloc.none]) is skipped.}
 }
 
-One id written once is not a duplicate, however many extractors see it.
-A heading whose identifier is {e written} — the [{#id}] line above it —
-is collected twice: the parser resolves the heading's slug from that
-attribute, and the attribute line is an anchor in its own right. The
-heading occurrence is dropped, keeping the attribute line, which is the
-better place to jump to.
+One id written once is not a duplicate: a heading whose identifier is
+{e written} — the [{#id}] line above it — is one heading anchor.
 
 This covers both same-kind duplicates (two [{#foo}]) and cross-kind
 collisions (a heading whose slug is {e derived} from its text and equals

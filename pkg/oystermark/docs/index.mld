@@ -4,18 +4,15 @@
 
 The entry point module: {!Oystermark}.
 
-The goal of this library is to extend CommonMark with extensions.
-
-[Cmarkit] is the core dependency. Syntax extensions are implemented as one of the following:
-{ul
-    {- [Cmarkit.Inline.t]}
-    {- [Cmarkit.Block.t]}
-    {- [Cmarkit.Meta.t] attached to [Cmarkit.Inline.t] and [Cmarkit.Block.t]}
-}
+A note is djot with a YAML frontmatter. The parser is [Djot], extracted from
+djot.v (vendored at [vendor/djot]), whose design goals are proved in Rocq. It
+parses {!Oystermark.Parse.profile}: djot with Markdown spellings, wikilinks,
+keyed blocks and callouts. Every syntax extension is a constructor of djot's
+tree; oyster adds none of its own.
 
 {2 Parse}
 
-Pre-resolution file-level parsing: frontmatter, wikilinks, block IDs, and callouts.
+Pre-resolution file-level parsing: the frontmatter, then djot.
 
 See {!Oystermark.Parse}.
 
