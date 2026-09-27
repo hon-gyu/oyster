@@ -14,7 +14,6 @@ depends: [
   "ocaml"
   "dune" {>= "3.22" & >= "3.22"}
   "djot"
-  "merlin-extend"
   "core"
   "core_unix"
   "tyxml"

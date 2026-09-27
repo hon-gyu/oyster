@@ -18,29 +18,6 @@
 
 (documentation https://url/to/documentation)
 
-; The mlx dialect: .mlx files are OCaml + JSX syntax, lowered to plain OCaml
-; parsetree (carrying [@JSX]) by mlx-pp, then [@JSX] is lowered per-library by
-; (preprocess (pps html_of_jsx.ppx)). merlin_reader points at ocamlmerlin-mlx.
-; mlmdx (pkg/mlmdx) reuses this chain to render .mlx components embedded in pages.
-(dialect
- (name mlx)
- (implementation
-  (extension mlx)
-  (merlin_reader mlx)
-  (preprocess
-   (run mlx-pp %{input-file}))))
-
-; The mlmdx dialect: .mlmdx files are prose-first Markdown pages. mlmdx-pp emits
-; a plain-OCaml parsetree (structural nodes as JSX.node calls; embedded {expr}
-; parsed with the real OCaml parser). ocamlmerlin-mlmdx shares the same codegen.
-(dialect
- (name mlmdx)
- (implementation
-  (extension mlmdx)
-  (merlin_reader mlmdx)
-  (preprocess
-   (run mlmdx-pp %{input-file}))))
-
 (package
  (name oystermark)
  (synopsis "A short synopsis")
@@ -50,7 +27,6 @@
   (dune
    (>= 3.22))
   djot
-  merlin-extend
   core
   core_unix
   tyxml
