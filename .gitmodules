@@ -7,3 +7,7 @@
 [submodule "vendor/oymarkit"]
 	path = vendor/oymarkit
 	url = git@github.com:hon-gyu/cmarkit.git
+[submodule "vendor/djot"]
+	path = vendor/djot
+	url = git@github.com:hon-gyu/djot.v.git
+	branch = ocaml
