@@ -168,23 +168,20 @@ let%expect_test "section: its children, its heading first" =
     ```
 
     > [!note] A callout
-    > Body line\.
+    > Body line.
 
     butter:
     - item one
 
-      - foo:
-        bar
+      - foo: bar
     - item two
 
     * * * *
 
     - bird:
       - bar
-      - cat:
-        cat1
-      - two:
-        three
+      - cat: cat1
+      - two: three
       - foo
     - happy:
       - sad
@@ -200,8 +197,7 @@ let%expect_test "section: its children, its heading first" =
     print("b")
     ```
 
-    ttt:
-    hhhh
+    ttt: hhhh
 
     - aaa
 
@@ -300,8 +296,7 @@ let%expect_test "field: the keyed node itself, by its key property" =
     butter:
     - item one
 
-      - foo:
-        bar
+      - foo: bar
     - item two
     |}]
 ;;
@@ -314,8 +309,7 @@ let%expect_test "field: the value of a key" =
     --------------------
     - item one
 
-      - foo:
-        bar
+      - foo: bar
     - item two
     |}]
 ;;
@@ -328,8 +322,7 @@ let%expect_test "field: an unkeyed item, by position" =
     --------------------
     item one
 
-    - foo:
-      bar
+    - foo: bar
     |}]
 ;;
 
@@ -430,7 +423,7 @@ let%expect_test "child: a callout's body, without its header" =
     {|
     kind: paragraph, path: 0.1.3.0
     --------------------
-    Body line\.
+    Body line.
     |}]
 ;;
 
@@ -522,7 +515,7 @@ let%expect_test "attribute: an id selects the block it is written on" =
     kind: block_quote, path: 0.1
     --------------------
     {#intro}
-    > A quote named by an attribute\.
+    > A quote named by an attribute.
     |}]
 ;;
 
@@ -535,7 +528,7 @@ let%expect_test "attribute: a class selects the block it is written on" =
     kind: paragraph, path: 0.2
     --------------------
     {.warning .boxed}
-    A paragraph carrying two classes\.
+    A paragraph carrying two classes.
     |}]
 ;;
 

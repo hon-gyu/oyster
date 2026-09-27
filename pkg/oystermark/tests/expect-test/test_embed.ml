@@ -26,9 +26,9 @@ let%expect_test "full note" =
     {|
     {source="b.md" depth="1"}
     ::: embed
-    Hello\.
+    Hello.
 
-    World\.
+    World.
     :::
     |}]
 ;;
@@ -45,7 +45,7 @@ let%expect_test "heading section" =
     ::: embed
     ## Sec
 
-    Content\.
+    Content.
     :::
     |}]
 ;;
@@ -59,7 +59,7 @@ let%expect_test "block ref" =
     {source="b.md" fragment="myblock" depth="1"}
     ::: embed
     {#myblock}
-    Target\.
+    Target.
     :::
     |}]
 ;;
@@ -75,7 +75,7 @@ let%expect_test "attribute anchor: block" =
     {source="b.md" fragment="note" depth="1"}
     ::: embed
     {#note}
-    > An aside\.
+    > An aside.
     :::
     |}]
 ;;
@@ -89,7 +89,7 @@ let%expect_test "attribute anchor: inline span" =
     {|
     {source="b.md" fragment="kt" depth="1"}
     ::: embed
-    The [key term]{#kt} matters\.
+    The [key term]{#kt} matters.
     :::
     |}]
 ;;
@@ -108,7 +108,7 @@ let%expect_test "max_depth=1: inner embed becomes link" =
     {|
     {source="b.md" depth="1"}
     ::: embed
-    B content\.
+    B content.
 
     [[c]]
     :::
@@ -157,7 +157,7 @@ let%expect_test "non-embed wikilink is unchanged" =
 
 let%expect_test "embed mixed with other content stays as paragraph" =
   render [ "a.md", "See ![[b]] here."; "b.md", "B text." ] "a.md";
-  [%expect {| See ![[b]] here\. |}]
+  [%expect {| See ![[b]] here. |}]
 ;;
 
 let%expect_test "self-reference: embed current heading" =
@@ -169,17 +169,17 @@ let%expect_test "self-reference: embed current heading" =
     {|
     ## Intro
 
-    Some text\.
+    Some text.
 
     ## Section
 
-    Content\.
+    Content.
 
     {source="a.md" fragment="Intro" depth="1"}
     ::: embed
     ## Intro
 
-    Some text\.
+    Some text.
     :::
     |}]
 ;;
@@ -192,14 +192,14 @@ let%expect_test "self-reference: embed current block" =
   [%expect
     {|
     {#myid}
-    Target paragraph\.
+    Target paragraph.
 
-    Other text\.
+    Other text.
 
     {source="a.md" fragment="myid" depth="1"}
     ::: embed
     {#myid}
-    Target paragraph\.
+    Target paragraph.
     :::
     |}]
 ;;
@@ -208,7 +208,7 @@ let%expect_test "self-reference: embed current file" =
   render ~max_depth:2 [ "a.md", "Hello.\n\n![[]]" ] "a.md";
   [%expect
     {|
-    Hello\.
+    Hello.
 
     \!\[\[\]\]
     |}]
@@ -222,9 +222,9 @@ let%expect_test "image embed: full note via ![](b.md)" =
     {|
     {source="b.md" depth="1"}
     ::: embed
-    Hello\.
+    Hello.
 
-    World\.
+    World.
     :::
     |}]
 ;;
@@ -241,7 +241,7 @@ let%expect_test "image embed: heading section via ![](b.md#Sec)" =
     ::: embed
     ## Sec
 
-    Content\.
+    Content.
     :::
     |}]
 ;;
@@ -255,7 +255,7 @@ let%expect_test "image embed: block ref via ![](b.md#myblock)" =
     {source="b.md" fragment="myblock" depth="1"}
     ::: embed
     {#myblock}
-    Target\.
+    Target.
     :::
     |}]
 ;;
@@ -278,7 +278,7 @@ let%expect_test "image embed: nested — image inside wikilink embed" =
     :::: embed
     {source="c.md" depth="2"}
     ::: embed
-    Inner content\.
+    Inner content.
     :::
     ::::
     |}]
@@ -323,7 +323,7 @@ let%expect_test "reverse_embed: self-reference produces explicit path" =
   render_reversed ~max_depth:2 [ "a.md", "Hello.\n\n![[]]" ] "a.md";
   [%expect
     {|
-    Hello\.
+    Hello.
 
     \!\[\[\]\]
     |}]
@@ -388,8 +388,7 @@ let%expect_test "block ref: keyed chain" =
     {source="b.md" fragment="k" depth="1"}
     ::: embed
     {#k}
-    outer:
-    inner\:
+    outer: inner\:
     :::
     |}]
 ;;
@@ -433,9 +432,9 @@ let%expect_test "round trip: full note" =
     {|
     {source="b.md" depth="1"}
     ::: embed
-    Hello\.
+    Hello.
 
-    World\.
+    World.
     :::
     --- read back out of the text ---
     depth=1 source=b.md fragment=-
@@ -452,7 +451,7 @@ let%expect_test "round trip: heading fragment" =
     ::: embed
     ## Sec
 
-    Content\.
+    Content.
     :::
     --- read back out of the text ---
     depth=1 source=b.md fragment=Sec
@@ -468,7 +467,7 @@ let%expect_test "round trip: block ref fragment" =
     {source="b.md" fragment="myblock" depth="1"}
     ::: embed
     {#myblock}
-    Target\.
+    Target.
     :::
     --- read back out of the text ---
     depth=1 source=b.md fragment=myblock
@@ -486,11 +485,11 @@ let%expect_test "round trip: nested" =
     {|
     {source="b.md" depth="1"}
     :::: embed
-    B text\.
+    B text.
 
     {source="c.md" depth="2"}
     ::: embed
-    C text\.
+    C text.
     :::
     ::::
     --- read back out of the text ---
@@ -516,7 +515,7 @@ let%expect_test "round trip: values needing escaping" =
     ::: embed
     ## It’s {"quoted"}, \ tricky
 
-    Body\.
+    Body.
     :::
     --- read back out of the text ---
     depth=1 source=my notes/a note.md fragment=It’s quoted, tricky

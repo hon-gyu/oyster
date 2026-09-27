@@ -52,13 +52,13 @@ let%expect_test "frontmatter is split from the body and put back" =
     true
     # A
 
-    Text\.
+    Text.
     ---
     title: A
     ---
     # A
 
-    Text\.
+    Text.
     |}]
 ;;
 
@@ -163,12 +163,12 @@ let%expect_test "an embed of a note and of a heading" =
     ---
     {source="b.md" depth="1"}
     ::: embed
-    From b\.
+    From b.
     :::
 
     {source="c.md" fragment="Sec" depth="1"}
     ::: embed
-    From c\.
+    From c.
     :::
     |}]
 ;;
@@ -184,7 +184,7 @@ let%expect_test "an embedded note's embeds are resolved from its own path" =
     :::: embed
     {source="sub/c.md" depth="2"}
     ::: embed
-    From sub/c\.
+    From sub/c.
     :::
     ::::
     |}]
@@ -239,10 +239,10 @@ let%expect_test "law 4: reversing the embeds gives the note back" =
   print_string (Djot.Source.of_doc (Note.Transclusion.reverse_embed_doc n.doc));
   [%expect
     {|
-    Before\.
+    Before.
 
     ![[b]]
 
-    After\.
+    After.
     |}]
 ;;
