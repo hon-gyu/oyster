@@ -15,14 +15,14 @@ let files =
   [ ( "note-a.md"
     , "# Alpha\n\n\
        ## Section One\n\n\
-       Body text ^block1\n\n\
+       [Body text]{#block1}\n\n\
        ## Section Two\n\n\
        More content.\n" )
   ; ( "note-b.md"
     , "# Beta\n\n\
        Link to [[note-a]] here.\n\n\
        See [[note-a#Section One]].\n\n\
-       Also [[note-a#^block1]].\n\n\
+       Also [[note-a#block1]].\n\n\
        Markdown [link](note-a).\n\n\
        Unresolved [[missing-note]].\n" )
   ; "subdir/nested.md", "# Nested\n\nLink to [[note-a]] from subdirectory.\n"
@@ -51,7 +51,7 @@ let%expect_test "server: wikilink to heading" =
   [%expect {| (((path note-a.md) (line 2) (character 0))) |}]
 ;;
 
-let%expect_test "server: wikilink to block id" =
+let%expect_test "server: wikilink to attribute id" =
   let s = start_server ~vault_root () in
   did_open s ~rel_path:"note-b.md";
   let result =

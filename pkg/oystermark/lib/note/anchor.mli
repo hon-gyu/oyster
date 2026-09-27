@@ -7,21 +7,20 @@
 module Address : sig
   type t =
     | Heading of string
-    (** The identifier the parser gave the heading. See {!Parse.Common.heading_id}. *)
-    | Caret of string (** An Obsidian block identifier [ ^id ]. *)
+    (** The heading's identifier: its section's [id] attribute, or its own for
+        a heading that opens no section. *)
     | Attr of string (** A djot attribute id [ {#id} ], on a block or on inlines. *)
   [@@deriving sexp, equal, compare]
 
-  (** The id without its kind. Heading, caret and attribute ids share one
-      namespace per note, so an id alone can be ambiguous. *)
+  (** The id without its kind. Heading and attribute ids share one namespace
+      per note, so an id alone can be ambiguous. *)
   val id : t -> string
 end
 
 type heading =
   { text : string (** The heading as plain text. *)
   ; level : int
-  ; slug : string
-    (** The identifier the parser gave the heading. See {!Parse.Common.heading_id}. *)
+  ; slug : string (** See {!Address.Heading}. *)
   }
 [@@deriving sexp, equal, compare]
 
@@ -29,7 +28,6 @@ type heading =
     to it by. *)
 type definition =
   | Heading of heading
-  | Caret of string (** [ ^id ] on a paragraph or a keyed block. *)
   | Attr of
       { id : string
       ; inline : bool (** Whether [ {#id} ] is on inlines rather than a block. *)
@@ -38,14 +36,19 @@ type definition =
 
 type t =
   { definition : definition
-  ; loc : Cmarkit.Textloc.t
-    (** [Cmarkit.Textloc.none] when the document was parsed without locations. *)
+  ; loc : Djot.Textloc.t
+    (** The heading's, not its section's, for a heading. For an attribute,
+        the node's with its [ \{...\} ] spec.
+        [Djot.Textloc.none] when the document was parsed without locations. *)
   }
 [@@deriving sexp, equal, compare]
 
 val address : definition -> Address.t
 
-(** Every anchor of [doc] in document order, duplicates included.
+(** The location of [node] in [doc] extended over its attribute specs
+    [ \{...\} ], which a block's precede and an inline's follow. *)
+val extent : Djot.Doc.t -> _ Djot.node -> Djot.Textloc.t
 
-    Raises when a heading has no identifier; parse with {!Parse.of_string}. *)
-val of_doc : Cmarkit.Doc.t -> t list
+(** Every anchor of [doc] in document order, duplicates included. An id on a
+    section or a heading is a heading anchor only. *)
+val of_doc : Djot.Doc.t -> t list

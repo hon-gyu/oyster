@@ -48,7 +48,7 @@ let json_of_string_opt : string option -> Yojson.Safe.t = function
 ;;
 
 (* 1-based, as an editor shows them. *)
-let line_of_loc (loc : Cmarkit.Textloc.t) : int = fst (Cmarkit.Textloc.first_line loc)
+let line_of_loc (loc : Djot.Textloc.t) : int = fst (Djot.Textloc.first_line loc)
 
 (* The authored fragment, rendered back to the syntax it was written in. *)
 let json_of_fragment : Note.Link.Ref.fragment option -> Yojson.Safe.t = function

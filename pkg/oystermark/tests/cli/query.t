@@ -80,8 +80,8 @@ exact=false allows sub-path matching
 tabs.
 
   $ oyster query n.md '[Descendant(where=[Is(code_block)])]' -print kind -print line -print path
-  code_block	8	0.0.1
-  code_block	12	0.0.2
+  code_block	8	0.1.2
+  code_block	12	0.1.3
 
   $ oyster query n.md '[Descendant(where=[Is(code_block)])]' -print prop:lang
   sh
@@ -93,7 +93,7 @@ tabs.
   2
   $ oyster query n.md '[Descendant(where=[Is(code_block)])]' -quiet
   $ oyster query n.md '[Descendant]' -count
-  8
+  11
 
 Nothing matched: exit 1, and stderr names the step that emptied the sequence.
 

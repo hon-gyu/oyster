@@ -1,7 +1,14 @@
 (executable
  (name oystermark_js)
- (modules oystermark_js)
- (libraries oystermark oymarkit.mdast js_of_ocaml yojson)
+ (modules oystermark_js mdast)
+ (libraries
+  oystermark
+  oystermark.parse
+  oystermark.note
+  djot
+  core
+  js_of_ocaml
+  yojson)
  (modes js)
  (js_of_ocaml
   (javascript_files runtime.js)))

@@ -13,14 +13,14 @@ let files =
   [ ( "note-a.md"
     , "# Alpha\n\n\
        ## Section One\n\n\
-       Body text ^block1\n\n\
+       [Body text]{#block1}\n\n\
        ## Section Two\n\n\
        More content.\n" )
   ; ( "note-b.md"
     , "# Beta\n\n\
        Link to [[note-a]] here.\n\n\
        See [[note-a#Section One]].\n\n\
-       Also [[note-a#^block1]].\n\n\
+       Also [[note-a#block1]].\n\n\
        Markdown [link](note-a).\n\n\
        Unresolved [[missing-note]].\n" )
   ; "subdir/nested.md", "# Nested\n\nLink to [[note-a]] from subdirectory.\n"
@@ -141,10 +141,7 @@ let%expect_test "an id written twice is reported at both sites" =
     |}]
 ;;
 
-(* A heading whose id is written rather than derived is one anchor, reachable
-   two ways.  It reaches the collection twice — as the heading's slug, which
-   the parser resolves from the attribute, and as the attribute line — and
-   that is not a collision. *)
+(* A heading whose id is written rather than derived is one anchor. *)
 let%expect_test "an explicit id on a heading is not a duplicate of itself" =
   show ~rel_path:"note-b.md" ~content:"{#intro}\n## Overview\n\nBody.\n";
   [%expect {| |}]
@@ -153,10 +150,10 @@ let%expect_test "an explicit id on a heading is not a duplicate of itself" =
 (* The cross-kind collision the check exists for still fires: a derived slug
    and an unrelated hand-written id that happen to be the same string. *)
 let%expect_test "a derived slug colliding with a hand-written id is reported" =
-  show ~rel_path:"note-b.md" ~content:"## Overview\n\n{#overview}\nAn unrelated block.\n";
+  show ~rel_path:"note-b.md" ~content:"## Overview\n\n{#Overview}\nAn unrelated block.\n";
   [%expect
     {|
-    ((first_byte 0) (last_byte 10) (message "duplicate anchor id: overview"))
-    ((first_byte 13) (last_byte 43) (message "duplicate anchor id: overview"))
+    ((first_byte 0) (last_byte 10) (message "duplicate anchor id: Overview"))
+    ((first_byte 13) (last_byte 43) (message "duplicate anchor id: Overview"))
     |}]
 ;;

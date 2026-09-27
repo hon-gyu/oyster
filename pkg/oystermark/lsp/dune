@@ -25,6 +25,7 @@
  (libraries
   oystermark
   oystermark.vault_fs
+  djot
   core
   core_unix.time_float_unix
   yojson

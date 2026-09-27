@@ -11,13 +11,9 @@ let option f = function
   | Some value -> f value
 ;;
 
-let json_of_fragment = function
-  | Oystermark.Note.Link.Ref.Hash_path path ->
-    `Assoc
-      [ "kind", `String "hash-path"
-      ; "path", `List (List.map path ~f:(fun s -> `String s))
-      ]
-  | Caret_id id -> `Assoc [ "kind", `String "caret-id"; "id", `String id ]
+let json_of_fragment (path : Oystermark.Note.Link.Ref.fragment) =
+  `Assoc
+    [ "kind", `String "hash-path"; "path", `List (List.map path ~f:(fun s -> `String s)) ]
 ;;
 
 let json_of_reference (reference : Oystermark.Note.Link.Ref.t) =
@@ -29,8 +25,8 @@ let json_of_reference (reference : Oystermark.Note.Link.Ref.t) =
 
 let json_of_loc loc =
   `Assoc
-    [ "firstByte", `Int (Cmarkit.Textloc.first_byte loc)
-    ; "lastByte", `Int (Cmarkit.Textloc.last_byte loc)
+    [ "firstByte", `Int (Djot.Textloc.first_byte loc)
+    ; "lastByte", `Int (Djot.Textloc.last_byte loc)
     ]
 ;;
 
@@ -42,8 +38,6 @@ let json_of_anchor_definition = function
       ; "level", `Int level
       ; "slug", `String slug
       ]
-  | Caret id ->
-    `Assoc [ "kind", `String "block"; "id", `String id; "syntax", `String "caret" ]
   | Attr { id; inline = false } ->
     `Assoc [ "kind", `String "block"; "id", `String id; "syntax", `String "attribute" ]
   | Attr { id; inline = true } -> `Assoc [ "kind", `String "inline"; "id", `String id ]
@@ -88,7 +82,7 @@ let json_of_note vault (note : Index.Entry.t) =
   let doc = Option.value_exn (Vault.find_doc vault path) in
   `Assoc
     [ "path", `String path
-    ; "mdast", Json.from_string (Cmarkit_mdast.of_doc ~strip_block_id:false doc)
+    ; "mdast", Mdast.of_doc doc.doc
     ; "anchors", `List (List.map (Index.Entry.anchors note) ~f:json_of_anchor)
     ; ( "links"
       , `List (List.map (Index.Entry.links note) ~f:(json_of_link vault.index path)) )
@@ -122,8 +116,7 @@ let index request =
 ;;
 
 let parse markdown =
-  Oystermark.Parse.of_string ~locs:true markdown
-  |> Cmarkit_mdast.of_doc ~strip_block_id:false
+  (Oystermark.Parse.of_string ~locs:true markdown).doc |> Mdast.of_doc |> Json.to_string
 ;;
 
 let expose name f =

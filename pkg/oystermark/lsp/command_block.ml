@@ -61,9 +61,7 @@ type entry =
 
 let info_string = "oysterlsp"
 
-(** Whether a code block's info string opens a command block.  Only the first
-    word is considered, so [oysterlsp \{#id\}] — the attribute syntax any code
-    block may carry — still counts. *)
+(** Whether a code block's info string opens a command block. *)
 let is_command_block (info : string) : bool =
   match String.split (String.strip info) ~on:' ' with
   | first :: _ -> String.equal first info_string
@@ -83,55 +81,50 @@ let is_ignorable (text : string) : bool =
 let fold_command_blocks
       (content : string)
       ~(init : 'a)
-      ~(f : 'a -> Cmarkit.Block.Code_block.t -> 'a)
+      ~(f : 'a -> Djot.Doc.t -> Djot.Block.t Djot.node -> code:string -> 'a)
   : 'a
   =
-  let doc = Lsp_util.parse_doc content in
+  let { Oystermark.Parse.doc; _ } = Lsp_util.parse_doc content in
   let folder =
-    Cmarkit.Folder.make
-      ~block:(fun _folder acc (b : Cmarkit.Block.t) ->
-        match b with
-        | Cmarkit.Block.Code_block (cb, _meta) ->
-          let info =
-            match Cmarkit.Block.Code_block.info_string cb with
-            | Some (info, _) -> info
-            | None -> ""
-          in
-          if not (is_command_block info)
-          then Cmarkit.Folder.default
-          else Cmarkit.Folder.ret (f acc cb)
-        | _ -> Cmarkit.Folder.default)
-        (* Inlines cannot contain a code block, so skip them wholesale rather
-         than teach the folder every inline extension Oystermark adds. *)
-      ~inline:(fun _folder acc _i -> Cmarkit.Folder.ret acc)
-      ~inline_ext_default:(fun _folder acc _i -> acc)
-        (* Reached only for AST extensions the folder does not already know —
-         it knows callouts, divs and tables, and descends into them. Returning
-         the accumulator keeps an unknown future extension from raising, at
-         the cost of not seeing blocks nested inside it. *)
-      ~block_ext_default:(fun _folder acc _b -> acc)
+    Djot.Folder.make
+      ~block:(fun _folder acc (Node (_, _, block) as node) ->
+        match block with
+        | CodeBlock (info, code) when is_command_block info ->
+          Djot.Folder.ret (f acc doc node ~code)
+        | _ -> Djot.Folder.default) (* Inlines cannot contain a code block. *)
+      ~inline:(fun _folder acc _i -> Djot.Folder.ret acc)
       ()
   in
-  Cmarkit.Folder.fold_doc folder init doc
+  Djot.Folder.fold_doc folder init doc
 ;;
 
 (** Every line of every command block in [content], blanks and comments
-    included, as [(line, stripped text)]. *)
+    included, as [(line, stripped text)]. A block's code starts on the line
+    after its opening fence. *)
 let block_lines (content : string) : (int * string) list =
   List.rev
-    (fold_command_blocks content ~init:[] ~f:(fun acc cb ->
-       List.fold (Cmarkit.Block.Code_block.code cb) ~init:acc ~f:(fun acc bl ->
-         let line, _character =
-           Lsp_util.position_of_textloc ~content (Cmarkit.Meta.textloc (snd bl))
-         in
-         (line, String.strip (Cmarkit.Block_line.to_string bl)) :: acc)))
+    (fold_command_blocks content ~init:[] ~f:(fun acc doc node ~code ->
+       match
+         List.find_map (Djot.Doc.syntax_locs doc node) ~f:(fun (role, loc) ->
+           match role with
+           | ROpenFence -> Some loc
+           | RAttrSpec | RCloseFence -> None)
+       with
+       | None -> acc
+       | Some fence ->
+         (* 1-based fence line = 0-based line of the first code line. *)
+         let first = fst (Djot.Textloc.first_line fence) in
+         String.chop_suffix_if_exists code ~suffix:"\n"
+         |> String.split ~on:'\n'
+         |> List.foldi ~init:acc ~f:(fun i acc line ->
+           (first + i, String.strip line) :: acc)))
 ;;
 
 (** Whether [content] already holds a block.  Asked before offering to insert
     one; not [block_lines], which cannot tell an empty block from no block.
     See {!page-"feature-command-block".insert}. *)
 let has_command_block (content : string) : bool =
-  fold_command_blocks content ~init:false ~f:(fun _acc _cb -> true)
+  fold_command_blocks content ~init:false ~f:(fun _acc _doc _node ~code:_ -> true)
 ;;
 
 (** [entries content] is every meaningful line of every command block, in
@@ -234,14 +227,15 @@ daily/today
 daily/today
 ```
 
-```oysterlsp {#panel}
+{#panel}
+```oysterlsp
 daily/next
 ```
 |};
       [%expect
         {|
         1 daily/today        daily/today
-        9 daily/next         daily/next
+        10 daily/next         daily/next
         |}]
     ;;
 

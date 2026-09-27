@@ -67,10 +67,10 @@ let detect_target
          })
   | None ->
     (* Not on a link — is the cursor on an anchor?  The anchors come from the
-       same [doc] the links did, so a [#] or a [ ^id] inside a code block is
+       same [doc] the links did, so a [#] inside a code block is
        not one, and a heading's identifier is the one the parser assigned
        rather than a slug re-derived here.  See {!page-"feature-index"}. *)
-    Anchors.at_line (Anchors.of_doc doc) ~line
+    Anchors.at_line (Anchors.of_doc doc.doc) ~line
     |> Option.map ~f:(fun a -> { path = rel_path; address = Some (Anchors.address a) })
 ;;
 
@@ -112,24 +112,24 @@ let collect_from_doc
       ~(index : Oystermark.Vault.Index.t)
       ~(source_rel_path : string)
       (ref_target : target)
-      (doc : Cmarkit.Doc.t)
+      ({ doc; _ } : Oystermark.Note.t)
   : reference list
   =
-  let check_link acc link_ref (meta : Cmarkit.Meta.t) =
+  let check_link acc link_ref node =
     match Oystermark.Vault.Index.resolve index source_rel_path link_ref with
     | Error _ -> acc
     | Ok resolved ->
       if resolved_matches ref_target resolved
       then (
-        let loc = Cmarkit.Meta.textloc meta in
-        if Cmarkit.Textloc.is_none loc
+        let loc = Djot.Doc.textloc doc node in
+        if Djot.Textloc.is_none loc
         then acc
         else
           { acc with
             refs =
               { rel_path = source_rel_path
-              ; first_byte = Cmarkit.Textloc.first_byte loc
-              ; last_byte = Cmarkit.Textloc.last_byte loc
+              ; first_byte = Djot.Textloc.first_byte loc
+              ; last_byte = Djot.Textloc.last_byte loc
               ; in_toc = acc.in_toc
               }
               :: acc.refs
@@ -137,45 +137,39 @@ let collect_from_doc
       else acc
   in
   let folder =
-    Cmarkit.Folder.make
-      ~block:(fun f acc (b : Cmarkit.Block.t) ->
-        match b with
-        | Cmarkit.Block.Ext_div (d, _) when Toc.is_toc d ->
+    Djot.Folder.make
+      ~block:(fun f acc (Node (_, _, block) as node) ->
+        match block with
+        | Div blocks when Toc.is_toc node ->
           (* Descend with the flag raised, then restore it: a region may sit
              inside anything, and anything may follow it. *)
           let inner =
-            Cmarkit.Folder.fold_block
-              f
-              { acc with in_toc = true }
-              (Cmarkit.Block.Div.block d)
+            List.fold
+              blocks
+              ~init:{ acc with in_toc = true }
+              ~f:(Djot.Folder.fold_block f)
           in
-          Cmarkit.Folder.ret { inner with in_toc = acc.in_toc }
-        | _ -> Cmarkit.Folder.default)
-      ~inline:(fun _f acc i ->
-        match i with
-        | Cmarkit.Inline.Link (link, meta) | Cmarkit.Inline.Image (link, meta) ->
-          (match
-             Oystermark.Note.Link.Ref.of_cmark_reference
-               (Cmarkit.Inline.Link.reference link)
-           with
-           | Some link_ref -> Cmarkit.Folder.ret (check_link acc link_ref meta)
-           | None -> Cmarkit.Folder.default)
-        | _ -> Cmarkit.Folder.default)
-      ~inline_ext_default:(fun _f acc i ->
-        match i with
-        | Cmarkit.Inline.Ext_wikilink (w, meta) ->
-          check_link acc (Oystermark.Note.Link.Ref.of_wikilink w) meta
-        | _ -> acc)
-      ~block_ext_default:(fun _f acc _b -> acc)
+          Djot.Folder.ret { inner with in_toc = acc.in_toc }
+        | _ -> Djot.Folder.default)
+      ~inline:(fun _f acc (Node (_, _, inline) as node) ->
+        match inline with
+        | Link (_, target) | Image (_, target) ->
+          (match Oystermark.Note.Link.Ref.of_link_target doc target with
+           | Some link_ref -> Djot.Folder.ret (check_link acc link_ref node)
+           | None -> Djot.Folder.default)
+        | Ext_wikilink (_, target, _) ->
+          Djot.Folder.ret
+            (check_link acc (Oystermark.Note.Link.Ref.of_wikilink_target target) node)
+        | _ -> Djot.Folder.default)
       ()
   in
-  List.rev (Cmarkit.Folder.fold_doc folder { refs = []; in_toc = false } doc).refs
+  List.rev (Djot.Folder.fold_doc folder { refs = []; in_toc = false } doc).refs
 ;;
 
 (** Scan all vault documents for references matching [ref_target]. *)
 let scan_vault
       ~(index : Oystermark.Vault.Index.t)
-      ~(docs : (string * Cmarkit.Doc.t) list)
+      ~(docs : (string * Oystermark.Note.t) list)
       (ref_target : target)
   : reference list
   =
@@ -207,7 +201,7 @@ let scan_vault
     cursor is not on a link, heading, or block ID. *)
 let find_references
       ~(index : Oystermark.Vault.Index.t)
-      ~(docs : (string * Cmarkit.Doc.t) list)
+      ~(docs : (string * Oystermark.Note.t) list)
       ~(rel_path : string)
       ~(content : string)
       ~(line : int)
@@ -232,14 +226,16 @@ let find_references
     Used by {!Inlay_hints} for reference count computation. *)
 
 (** Count how many links across the vault resolve to [path] (any fragment). *)
-let count_file_refs ~index ~(docs : (string * Cmarkit.Doc.t) list) ~(path : string) : int =
+let count_file_refs ~index ~(docs : (string * Oystermark.Note.t) list) ~(path : string)
+  : int
+  =
   List.length (scan_vault ~index ~docs { path; address = None })
 ;;
 
 (** Count how many links across the vault resolve to [path] with heading [slug]. *)
 let count_heading_refs
       ~index
-      ~(docs : (string * Cmarkit.Doc.t) list)
+      ~(docs : (string * Oystermark.Note.t) list)
       ~(path : string)
       ~(slug : string)
   : int
@@ -252,7 +248,7 @@ let count_heading_refs
 (** Helper: build an index and parsed docs for testing. *)
 module For_test = struct
   let make_vault (files : (string * string) list)
-    : Oystermark.Vault.Index.t * (string * Cmarkit.Doc.t) list
+    : Oystermark.Vault.Index.t * (string * Oystermark.Note.t) list
     =
     let md_docs =
       List.filter_map files ~f:(fun (rel_path, content) ->
@@ -272,7 +268,7 @@ end
 let%test_module "detect_target" =
   (module struct
     let files =
-      [ "note-a.md", "# Alpha\n\n## Section One\n\nBody text ^block1\n"
+      [ "note-a.md", "# Alpha\n\n## Section One\n\n{#block1}\nBody text\n"
       ; "note-b.md", "# Beta\n\nLink to [[note-a]] here.\n"
       ; "note-h.md", "# Theta\n\nSome text.\n\n{#aside}\n> An aside block.\n"
       ; "note-i.md", "# Iota\n\nRef [[note-h#aside]].\n"
@@ -286,7 +282,6 @@ let%test_module "detect_target" =
       | None -> print_endline "<none>"
       | Some { path; address = None } -> printf "Note %s\n" path
       | Some { path; address = Some (Heading slug) } -> printf "Heading %s#%s\n" path slug
-      | Some { path; address = Some (Caret id) } -> printf "Caret %s#^%s\n" path id
       | Some { path; address = Some (Attr id) } -> printf "Attr %s#%s\n" path id
     ;;
 
@@ -299,13 +294,13 @@ let%test_module "detect_target" =
     let%expect_test "cursor on heading" =
       let content = List.Assoc.find_exn files ~equal:String.equal "note-a.md" in
       show ~rel_path:"note-a.md" ~content ~line:2 ~character:3;
-      [%expect {| Heading note-a.md#section-one |}]
+      [%expect {| Heading note-a.md#Section-One |}]
     ;;
 
-    let%expect_test "cursor on block id line" =
+    let%expect_test "cursor on block attribute line" =
       let content = List.Assoc.find_exn files ~equal:String.equal "note-a.md" in
       show ~rel_path:"note-a.md" ~content ~line:4 ~character:5;
-      [%expect {| Caret note-a.md#^block1 |}]
+      [%expect {| Attr note-a.md#block1 |}]
     ;;
 
     (* Cursor on a link resolving to an attribute anchor ([{#aside}] in note-h).
@@ -333,10 +328,9 @@ let%test_module "detect_target" =
 let%test_module "find_references" =
   (module struct
     let files =
-      [ "note-a.md", "# Alpha\n\n## Section One\n\nBody text ^block1\n"
+      [ "note-a.md", "# Alpha\n\n## Section One\n\n{#block1}\nBody text\n"
       ; "note-b.md", "# Beta\n\nLink to [[note-a]] here.\n"
-      ; ( "note-c.md"
-        , "# Gamma\n\nSee [[note-a#Section One]].\n\nAlso [[note-a#^block1]].\n" )
+      ; "note-c.md", "# Gamma\n\nSee [[note-a#Section One]].\n\nAlso [[note-a#block1]].\n"
       ; "note-d.md", "# Delta\n\nSelf ref [[#Alpha]] in note-a.\n"
       ; "note-e.md", "# Epsilon\n\nThe [key]{#the-key} span.\n"
       ; "note-f.md", "# Zeta\n\nOne [[note-e#the-key]] and two [[note-e#the-key]].\n"
@@ -358,7 +352,7 @@ let%test_module "find_references" =
         {|
         note-b.md [16-25]
         note-c.md [13-34]
-        note-c.md [43-60]
+        note-c.md [43-59]
         |}]
     ;;
 
@@ -368,10 +362,10 @@ let%test_module "find_references" =
       [%expect {| note-c.md [13-34] |}]
     ;;
 
-    let%expect_test "references to block id from cursor on block line" =
+    let%expect_test "references to a block attribute from cursor on its line" =
       let content = List.Assoc.find_exn files ~equal:String.equal "note-a.md" in
       show ~rel_path:"note-a.md" ~content ~line:4 ~character:5;
-      [%expect {| note-c.md [43-60] |}]
+      [%expect {| note-c.md [43-59] |}]
     ;;
 
     (* From a link targeting an attribute anchor, find all links resolving to

@@ -84,14 +84,14 @@ let files =
        - a [markdown link](#Section-Two) to a heading below.\n\n\
        ## Section Two\n\
        - a list butted against the heading.\n\n\
-       Cross-file [[note-b#Section One]] and [[note-b#^block1]] and [[note-b#anchor]].\n\n\
+       Cross-file [[note-b#Section One]] and [[note-b#block1]] and [[note-b#anchor]].\n\n\
        Attributes [[note-b#aside]] and [[note-b#intro]].\n\n\
        Whole note [[note-b]].\n\n\
        Self [[#Alpha]].\n" )
   ; ( "note-b.md"
     , "# Beta\n\n\
        ## Section One\n\n\
-       Body text ^block1\n\n\
+       [Body text]{#block1}\n\n\
        The [key term]{#anchor} is defined here.\n\n\
        {#aside}\n\
        > An aside block.\n\n\
@@ -109,7 +109,7 @@ let%expect_test "hover and definition name the same anchor" =
     check "(#Section-Two)";
     check "[[#Alpha]]";
     check "[[note-b#Section One]]";
-    check "[[note-b#^block1]]";
+    check "[[note-b#block1]]";
     check "[[note-b#anchor]]";
     check "[[note-b#aside]]";
     check "[[note-b#intro]]";
@@ -119,7 +119,7 @@ let%expect_test "hover and definition name the same anchor" =
     (#Section-Two)           agree    note-a.md:3 "## Section Two" | hover note-a.md "## Section Two"
     [[#Alpha]]               agree    note-a.md:0 "# Alpha" | hover note-a.md "# Alpha"
     [[note-b#Section One]]   agree    note-b.md:2 "## Section One" | hover note-b.md "## Section One"
-    [[note-b#^block1]]       agree    note-b.md:4 "Body text ^block1" | hover note-b.md "Body text ^block1"
+    [[note-b#block1]]        agree    note-b.md:4 "[Body text]{#block1}" | hover note-b.md "[Body text]{#block1}"
     [[note-b#anchor]]        agree    note-b.md:6 "The [key term]{#anchor} is defined here." | hover note-b.md "The [key term]{#anchor} is defined here."
     [[note-b#aside]]         agree    note-b.md:8 "{#aside}" | hover note-b.md "{#aside}"
     [[note-b#intro]]         agree    note-b.md:12 "## Introduction" | hover note-b.md "{#intro}"

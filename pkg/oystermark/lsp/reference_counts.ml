@@ -64,7 +64,7 @@ let headings_in_range
   Anchors.of_content content
   |> List.filter_map ~f:(fun (a : Anchors.t) ->
     match a.value with
-    | Caret _ | Attr _ -> None
+    | Attr _ -> None
     | Heading heading ->
       if a.first_line < range_start_line || a.first_line >= range_end_line
       then None
@@ -91,7 +91,7 @@ let headings_in_range
     {!page-"feature-codelens-reference-counts".self}. *)
 let entries
       ~(index : Oystermark.Vault.Index.t)
-      ~(docs : (string * Cmarkit.Doc.t) list)
+      ~(docs : (string * Oystermark.Note.t) list)
       ~(rel_path : string)
       ~(content : string)
       ~(range_start_line : int)
@@ -167,10 +167,9 @@ let%test_module "reference_counts" =
   (module struct
     let files =
       [ ( "note-a.md"
-        , "# Alpha\n\n## Section One\n\nBody text ^block1\n\n## Untouched\n\nEnd.\n" )
+        , "# Alpha\n\n## Section One\n\n{#block1}\nBody text\n\n## Untouched\n\nEnd.\n" )
       ; "note-b.md", "# Beta\n\nLink to [[note-a]] here.\n"
-      ; ( "note-c.md"
-        , "# Gamma\n\nSee [[note-a#Section One]].\n\nAlso [[note-a#^block1]].\n" )
+      ; "note-c.md", "# Gamma\n\nSee [[note-a#Section One]].\n\nAlso [[note-a#block1]].\n"
       ]
     ;;
 

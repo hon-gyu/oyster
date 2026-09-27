@@ -8,7 +8,7 @@
 
 open! Core
 
-type loc = Cmarkit.Textloc.t
+type loc = Djot.Textloc.t
 
 val sexp_of_loc : loc -> Sexp.t
 val loc_of_sexp : Sexp.t -> loc
@@ -59,7 +59,6 @@ type file_stat =
 (** See {!Note.Anchor.type-definition}. *)
 type anchor_definition = Note.Anchor.definition =
   | Heading of heading
-  | Caret of string
   | Attr of
       { id : string
       ; inline : bool
@@ -95,10 +94,10 @@ module Entry : sig
   type t
 
   (** @return [Error] if the document is not parsed with source locations enabled (missing location information) *)
-  val of_doc : file_stat -> Cmarkit.Doc.t -> (t, string) result
+  val of_doc : file_stat -> Parse.t -> (t, string) result
 
   (** Like {!of_doc}, raising on a document missing source locations. *)
-  val of_doc_exn : file_stat -> Cmarkit.Doc.t -> t
+  val of_doc_exn : file_stat -> Parse.t -> t
 
   val path : t -> Path.t
   val file_stat : t -> file_stat

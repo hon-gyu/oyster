@@ -3,7 +3,7 @@
  (libraries
   oystermark
   oystermark.vault_fs
-  oymarkit
+  djot
   core
   core_unix
   yojson

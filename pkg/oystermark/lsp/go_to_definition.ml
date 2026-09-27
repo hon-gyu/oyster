@@ -10,11 +10,11 @@ open Core
     See {!page-"feature-go-to-definition".resolution}. *)
 
 (** Extract a 0-based [(line, character)] position from an optional
-    {!Cmarkit.Textloc.t}.  When [content] (the target file's content, whose
+    {!Djot.Textloc.t}.  When [content] (the target file's content, whose
     positions [Textloc]s are relative to) is given, [character] is a UTF-16
     column; otherwise a byte column.  Returns [(0, 0)] if [None].
     See {!page-"feature-go-to-definition".target_position}. *)
-let position_of_textloc ?content (tl : Cmarkit.Textloc.t option) : int * int =
+let position_of_textloc ?content (tl : Djot.Textloc.t option) : int * int =
   match tl with
   | Some tl -> Lsp_util.position_of_textloc ?content tl
   | None -> 0, 0
@@ -122,10 +122,9 @@ let%test_module "go_to_definition" =
     ;;
 
     let files =
-      [ "note-a.md", "# Alpha\n\n## Section One\n\nBody text ^block1\n"
+      [ "note-a.md", "# Alpha\n\n## Section One\n\n{#block1}\nBody text\n"
       ; "note-b.md", "# Beta\n\nLink to [[note-a]] here.\n"
-      ; ( "note-c.md"
-        , "# Gamma\n\nSee [[note-a#Section One]].\n\nAlso [[note-a#^block1]].\n" )
+      ; "note-c.md", "# Gamma\n\nSee [[note-a#Section One]].\n\nAlso [[note-a#block1]].\n"
       ; "note-d.md", "# Delta\n\nMarkdown [link](note-a)\n"
       ; "note-e.md", "# Epsilon\n\nSelf ref [[#Alpha]].\n"
       ; "note-f.md", "# Zeta\n\nThe [key term]{#key-term} is defined here.\n"
@@ -175,7 +174,7 @@ let%test_module "go_to_definition" =
       [%expect {| (((path note-a.md) (line 2) (character 0))) |}]
     ;;
 
-    let%expect_test "wikilink to block id" =
+    let%expect_test "wikilink to block attribute" =
       let content = List.Assoc.find_exn files ~equal:String.equal "note-c.md" in
       show ~rel_path:"note-c.md" ~content ~line:4 ~character:8;
       [%expect {| (((path note-a.md) (line 4) (character 0))) |}]

@@ -1,6 +1,6 @@
 ::: toc
-- [Alpha](#alpha)
-- [Method](#method)
+- [Alpha](#Alpha)
+- [Method](#Method)
 :::
 
 # Alpha

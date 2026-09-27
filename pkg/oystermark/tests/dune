@@ -1,6 +1,6 @@
 (library
  (name test_query)
- (libraries core oystermark)
+ (libraries core oystermark djot)
  (inline_tests)
  (preprocess
   (pps ppx_jane ppx_expect)))

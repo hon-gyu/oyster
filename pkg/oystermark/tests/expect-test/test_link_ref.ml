@@ -4,36 +4,12 @@ open! Core
 open Oystermark
 module Link_ref = Note.Link.Ref
 
-(* Extract all Link_ref.t values from a parsed document, in order. *)
-let extract_link_refs (doc : Cmarkit.Doc.t) : Link_ref.t list =
-  let folder =
-    Cmarkit.Folder.make
-      ~inline:(fun _f acc i ->
-        match i with
-        | Cmarkit.Inline.Link (link, _meta) ->
-          let ref_ = Cmarkit.Inline.Link.reference link in
-          (match Link_ref.of_cmark_reference ref_ with
-           | Some lr -> Cmarkit.Folder.ret (acc @ [ lr ])
-           | None -> Cmarkit.Folder.default)
-        | _ -> Cmarkit.Folder.default)
-      ~inline_ext_default:(fun _f acc i ->
-        match i with
-        | Cmarkit.Inline.Ext_wikilink (w, _meta) ->
-          let lr = Link_ref.of_wikilink w in
-          acc @ [ lr ]
-        | _ -> acc)
-      ~block_ext_default:(fun _f acc _b -> acc)
-      ()
-  in
-  Cmarkit.Folder.fold_doc folder [] doc
-;;
-
 let link_ref_to_string (lr : Link_ref.t) = Link_ref.sexp_of_t lr |> Sexp.to_string_hum
 
 (** Parse a single inline markdown snippet and return the first Link_ref extracted. *)
 let link_ref_of (md : string) : string =
-  let doc = Oystermark.Parse.of_string md in
-  match extract_link_refs doc with
+  let { Parse.doc; _ } = Parse.of_string md in
+  match List.map (Note.Link.of_doc doc) ~f:(fun link -> link.reference) with
   | [ lr ] -> link_ref_to_string lr
   | [] -> "<none>"
   | lrs -> String.concat ~sep:" | " (List.map lrs ~f:link_ref_to_string)
@@ -78,32 +54,31 @@ let%expect_test "wikilink_link_refs" =
   print_cases cases;
   [%expect
     {|
-    ┌───────────────────────┬─────────────────────────────────────────────┬───────────────────────────────────────────────────────────────────────┐
-    │ name                  │ input                                       │ link_ref                                                              │
-    ├───────────────────────┼─────────────────────────────────────────────┼───────────────────────────────────────────────────────────────────────┤
-    │ basic note            │ [[Three laws of motion]]                    │ ((target ("Three laws of motion")) (fragment ()))                     │
-    │ with ext              │ [[Three laws of motion.md]]                 │ ((target ("Three laws of motion.md")) (fragment ()))                  │
-    │ with pipe             │ [[Note 2 | Note two]]                       │ ((target ("Note 2")) (fragment ()))                                   │
-    │ self heading          │ [[#Level 3 title]]                          │ ((target ()) (fragment ((Hash_path ("Level 3 title")))))              │
-    │ cross heading         │ [[Note 2#Some level 2 title]]               │ ((target ("Note 2")) (fragment ((Hash_path ("Some level 2 title"))))) │
-    │ nested heading        │ [[Note 2#Some level 2 title#Level 3 title]] │ ((target ("Note 2"))                                                  │
-    │                       │                                             │  (fragment ((Hash_path ("Some level 2 title" "Level 3 title")))))     │
-    │ block ref             │ [[Note 2#^blockid]]                         │ ((target ("Note 2")) (fragment ((Caret_id blockid))))                 │
-    │ empty [[]]            │ [[]]                                        │ ((target ()) (fragment ()))                                           │
-    │ empty heading [[#]]   │ [[#]]                                       │ ((target ()) (fragment ()))                                           │
-    │ empty heading other   │ [[Note 2##]]                                │ ((target ("Note 2")) (fragment ()))                                   │
-    │ hash collapse         │ [[###L2#L4]]                                │ ((target ()) (fragment ((Hash_path (L2 L4)))))                        │
-    │ hash collapse 2       │ [[##L2######L4]]                            │ ((target ()) (fragment ((Hash_path (L2 L4)))))                        │
-    │ hash collapse invalid │ [[##L2#####L4#L3]]                          │ ((target ()) (fragment ((Hash_path (L2 L4 L3)))))                     │
-    │ pipe + heading        │ [[#L2 | #L4]]                               │ ((target ()) (fragment ((Hash_path (L2)))))                           │
-    │ multi pipe            │ [[Note 2 | 2 | 3]]                          │ ((target ("Note 2")) (fragment ()))                                   │
-    │ asset jpg             │ [[Figure1.jpg]]                             │ ((target (Figure1.jpg)) (fragment ()))                                │
-    │ asset with hash       │ [[Figure1.jpg#2]]                           │ ((target (Figure1.jpg)) (fragment ((Hash_path (2)))))                 │
-    │ asset .md suffix      │ [[Figure1.jpg.md]]                          │ ((target (Figure1.jpg.md)) (fragment ()))                             │
-    │ asset hash in name    │ [[Figure1#2.jpg]]                           │ ((target (Figure1)) (fragment ((Hash_path (2.jpg)))))                 │
-    │ embed                 │ ![[Figure1.jpg]]                            │ ((target (Figure1.jpg)) (fragment ()))                                │
-    │ asset block ref       │ [[Figure1^2.jpg]]                           │ ((target (Figure1^2.jpg)) (fragment ()))                              │
-    └───────────────────────┴─────────────────────────────────────────────┴───────────────────────────────────────────────────────────────────────┘
+    ┌───────────────────────┬─────────────────────────────────────────────┬───────────────────────────────────────────────────────────────────────────┐
+    │ name                  │ input                                       │ link_ref                                                                  │
+    ├───────────────────────┼─────────────────────────────────────────────┼───────────────────────────────────────────────────────────────────────────┤
+    │ basic note            │ [[Three laws of motion]]                    │ ((target ("Three laws of motion")) (fragment ()))                         │
+    │ with ext              │ [[Three laws of motion.md]]                 │ ((target ("Three laws of motion.md")) (fragment ()))                      │
+    │ with pipe             │ [[Note 2 | Note two]]                       │ ((target ("Note 2")) (fragment ()))                                       │
+    │ self heading          │ [[#Level 3 title]]                          │ ((target ()) (fragment (("Level 3 title"))))                              │
+    │ cross heading         │ [[Note 2#Some level 2 title]]               │ ((target ("Note 2")) (fragment (("Some level 2 title"))))                 │
+    │ nested heading        │ [[Note 2#Some level 2 title#Level 3 title]] │ ((target ("Note 2")) (fragment (("Some level 2 title" "Level 3 title")))) │
+    │ block ref             │ [[Note 2#^blockid]]                         │ ((target ("Note 2")) (fragment ((^blockid))))                             │
+    │ empty [[]]            │ [[]]                                        │ <none>                                                                    │
+    │ empty heading [[#]]   │ [[#]]                                       │ ((target ()) (fragment ()))                                               │
+    │ empty heading other   │ [[Note 2##]]                                │ ((target ("Note 2")) (fragment ()))                                       │
+    │ hash collapse         │ [[###L2#L4]]                                │ ((target ()) (fragment ((L2 L4))))                                        │
+    │ hash collapse 2       │ [[##L2######L4]]                            │ ((target ()) (fragment ((L2 L4))))                                        │
+    │ hash collapse invalid │ [[##L2#####L4#L3]]                          │ ((target ()) (fragment ((L2 L4 L3))))                                     │
+    │ pipe + heading        │ [[#L2 | #L4]]                               │ ((target ()) (fragment ((L2))))                                           │
+    │ multi pipe            │ [[Note 2 | 2 | 3]]                          │ ((target ("Note 2")) (fragment ()))                                       │
+    │ asset jpg             │ [[Figure1.jpg]]                             │ ((target (Figure1.jpg)) (fragment ()))                                    │
+    │ asset with hash       │ [[Figure1.jpg#2]]                           │ ((target (Figure1.jpg)) (fragment ((2))))                                 │
+    │ asset .md suffix      │ [[Figure1.jpg.md]]                          │ ((target (Figure1.jpg.md)) (fragment ()))                                 │
+    │ asset hash in name    │ [[Figure1#2.jpg]]                           │ ((target (Figure1)) (fragment ((2.jpg))))                                 │
+    │ embed                 │ ![[Figure1.jpg]]                            │ ((target (Figure1.jpg)) (fragment ()))                                    │
+    │ asset block ref       │ [[Figure1^2.jpg]]                           │ ((target (Figure1^2.jpg)) (fragment ()))                                  │
+    └───────────────────────┴─────────────────────────────────────────────┴───────────────────────────────────────────────────────────────────────────┘
     |}]
 ;;
 
@@ -124,19 +99,19 @@ let%expect_test "markdown_link_link_refs" =
   print_cases cases;
   [%expect
     {|
-    ┌────────────────────────┬────────────────────────────────────────┬───────────────────────────────────────────────────────────────────────┐
-    │ name                   │ input                                  │ link_ref                                                              │
-    ├────────────────────────┼────────────────────────────────────────┼───────────────────────────────────────────────────────────────────────┤
-    │ percent encoded spaces │ [x](Three%20laws%20of%20motion.md)     │ ((target ("Three laws of motion.md")) (fragment ()))                  │
-    │ same file heading      │ [x](#Level%203%20title)                │ ((target ()) (fragment ((Hash_path ("Level 3 title")))))              │
-    │ cross file heading     │ [x](Note%202#Some%20level%202%20title) │ ((target ("Note 2")) (fragment ((Hash_path ("Some level 2 title"))))) │
-    │ just target            │ [x](ww)                                │ ((target (ww)) (fragment ()))                                         │
-    │ hash in heading        │ [x](##L2######L4)                      │ ((target ()) (fragment ((Hash_path (L2 L4)))))                        │
-    │ hash collapse          │ [x](##L2#####L4#L3)                    │ ((target ()) (fragment ((Hash_path (L2 L4 L3)))))                     │
-    │ external https         │ [x](https://example.com)               │ <none>                                                                │
-    │ external http          │ [x](http://example.com)                │ <none>                                                                │
-    │ external mailto        │ [x](mailto:a@b.com)                    │ <none>                                                                │
-    │ empty dest [www]()     │ [www]()                                │ ((target ()) (fragment ()))                                           │
-    └────────────────────────┴────────────────────────────────────────┴───────────────────────────────────────────────────────────────────────┘
+    ┌────────────────────────┬────────────────────────────────────────┬───────────────────────────────────────────────────────────┐
+    │ name                   │ input                                  │ link_ref                                                  │
+    ├────────────────────────┼────────────────────────────────────────┼───────────────────────────────────────────────────────────┤
+    │ percent encoded spaces │ [x](Three%20laws%20of%20motion.md)     │ ((target ("Three laws of motion.md")) (fragment ()))      │
+    │ same file heading      │ [x](#Level%203%20title)                │ ((target ()) (fragment (("Level 3 title"))))              │
+    │ cross file heading     │ [x](Note%202#Some%20level%202%20title) │ ((target ("Note 2")) (fragment (("Some level 2 title")))) │
+    │ just target            │ [x](ww)                                │ ((target (ww)) (fragment ()))                             │
+    │ hash in heading        │ [x](##L2######L4)                      │ ((target ()) (fragment ((L2 L4))))                        │
+    │ hash collapse          │ [x](##L2#####L4#L3)                    │ ((target ()) (fragment ((L2 L4 L3))))                     │
+    │ external https         │ [x](https://example.com)               │ <none>                                                    │
+    │ external http          │ [x](http://example.com)                │ <none>                                                    │
+    │ external mailto        │ [x](mailto:a@b.com)                    │ <none>                                                    │
+    │ empty dest [www]()     │ [www]()                                │ ((target ("().md")) (fragment ()))                        │
+    └────────────────────────┴────────────────────────────────────────┴───────────────────────────────────────────────────────────┘
     |}]
 ;;

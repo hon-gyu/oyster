@@ -17,8 +17,10 @@ let test_index : Index.t =
              ### L3\n\
              #### L4\n\
              ### Another L3\n\n\
-             para ^para1\n\n\
-             block ^block-2\n" )
+             {#para1}\n\
+             para\n\n\
+             {#block-2}\n\
+             block\n" )
       ; ( "Note 2.md"
         , Parse.of_string
             ~locs:true
@@ -37,7 +39,7 @@ let test_index : Index.t =
       ; "dir/indir_same_name.md", Parse.of_string ~locs:true ""
       ; "dir/indir2.md", Parse.of_string ~locs:true ""
       ; "dir/inner_dir/note_in_inner_dir.md", Parse.of_string ~locs:true ""
-      ; "dir/inner_dir/deep.md", Parse.of_string ~locs:true "deep ^deep1\n"
+      ; "dir/inner_dir/deep.md", Parse.of_string ~locs:true "{#deep1}\ndeep\n"
       ]
     ~other_files:
       [ "Figure1.jpg"
@@ -52,21 +54,10 @@ let test_index : Index.t =
     ()
 ;;
 
-let make_link_ref
-      (target : string option)
-      (fragment : (string list * [ `Heading | `Block_ref ]) option)
+let make_link_ref (target : string option) (fragment : Link_ref.fragment option)
   : Link_ref.t
   =
-  { target
-  ; fragment =
-      (match fragment with
-       | None -> None
-       | Some (headings, `Heading) -> Some (Hash_path headings)
-       | Some (block_id, `Block_ref) ->
-         (match block_id with
-          | [ block_id ] -> Some (Caret_id block_id)
-          | _ -> invalid_arg "should only exists one block id"))
-  }
+  { target; fragment }
 ;;
 
 let resolve_and_print
@@ -89,8 +80,10 @@ let resolve_and_print
 
 (* Shorthand aliases *)
 let t s = Some s
-let h hs = Some (hs, `Heading)
-let b id = Some ([ id ], `Block_ref)
+let h hs = Some hs
+
+(* An attribute id is a fragment of one segment. *)
+let b id = Some [ id ]
 
 let%expect_test "path resolution" =
   let cases =
@@ -192,40 +185,40 @@ let%expect_test "heading resolution in note 2" =
   resolve_and_print cases;
   [%expect
     {|
-    ┌───────────────────────┬──────────────────────────────────────────────────────────────────────────┬──────────────────────────────────────────────────────────────────────────────────┐
-    │ name                  │ input                                                                    │ result                                                                           │
-    ├───────────────────────┼──────────────────────────────────────────────────────────────────────────┼──────────────────────────────────────────────────────────────────────────────────┤
-    │ single heading        │ ((target ("Note 2")) (fragment ((Hash_path ("Some level 2 title")))))    │ (Anchor (note_path "Note 2.md")                                                  │
-    │                       │                                                                          │  (anchor                                                                         │
-    │                       │                                                                          │   ((definition                                                                   │
-    │                       │                                                                          │     (Heading                                                                     │
-    │                       │                                                                          │      ((text "Some level 2 title") (level 2) (slug some-level-2-title))))         │
-    │                       │                                                                          │    (loc ((first_byte 0) (last_byte 20) (first_line (1 0)) (last_line (1 0))))))) │
-    │ nested heading        │ ((target ("Note 2"))                                                     │ (Anchor (note_path "Note 2.md")                                                  │
-    │                       │  (fragment ((Hash_path ("Some level 2 title" "Level 3 title")))))        │  (anchor                                                                         │
-    │                       │                                                                          │   ((definition                                                                   │
-    │                       │                                                                          │     (Heading ((text "Level 3 title") (level 3) (slug level-3-title))))           │
-    │                       │                                                                          │    (loc                                                                          │
-    │                       │                                                                          │     ((first_byte 30) (last_byte 46) (first_line (3 30)) (last_line (3 30)))))))  │
-    │ nested skip level     │ ((target ("Note 2")) (fragment ((Hash_path ("Some level 2 title" L4))))) │ (Anchor (note_path "Note 2.md")                                                  │
-    │                       │                                                                          │  (anchor                                                                         │
-    │                       │                                                                          │   ((definition (Heading ((text L4) (level 4) (slug l4))))                        │
-    │                       │                                                                          │    (loc                                                                          │
-    │                       │                                                                          │     ((first_byte 22) (last_byte 28) (first_line (2 22)) (last_line (2 22)))))))  │
-    │ L3 directly           │ ((target ("Note 2")) (fragment ((Hash_path ("Level 3 title")))))         │ (Anchor (note_path "Note 2.md")                                                  │
-    │                       │                                                                          │  (anchor                                                                         │
-    │                       │                                                                          │   ((definition                                                                   │
-    │                       │                                                                          │     (Heading ((text "Level 3 title") (level 3) (slug level-3-title))))           │
-    │                       │                                                                          │    (loc                                                                          │
-    │                       │                                                                          │     ((first_byte 30) (last_byte 46) (first_line (3 30)) (last_line (3 30)))))))  │
-    │ L4 directly           │ ((target ("Note 2")) (fragment ((Hash_path (L4)))))                      │ (Anchor (note_path "Note 2.md")                                                  │
-    │                       │                                                                          │  (anchor                                                                         │
-    │                       │                                                                          │   ((definition (Heading ((text L4) (level 4) (slug l4))))                        │
-    │                       │                                                                          │    (loc                                                                          │
-    │                       │                                                                          │     ((first_byte 22) (last_byte 28) (first_line (2 22)) (last_line (2 22)))))))  │
-    │ random -> fallback    │ ((target ("Note 2")) (fragment ((Hash_path (random)))))                  │ (Missing_anchor Note 2.md)                                                       │
-    │ random#L3 -> fallback │ ((target ("Note 2")) (fragment ((Hash_path (random "Level 3 title")))))  │ (Missing_anchor Note 2.md)                                                       │
-    └───────────────────────┴──────────────────────────────────────────────────────────────────────────┴──────────────────────────────────────────────────────────────────────────────────┘
+    ┌───────────────────────┬───────────────────────────────────────────────────────────────────────────┬──────────────────────────────────────────────────────────────────────────────────┐
+    │ name                  │ input                                                                     │ result                                                                           │
+    ├───────────────────────┼───────────────────────────────────────────────────────────────────────────┼──────────────────────────────────────────────────────────────────────────────────┤
+    │ single heading        │ ((target ("Note 2")) (fragment (("Some level 2 title"))))                 │ (Anchor (note_path "Note 2.md")                                                  │
+    │                       │                                                                           │  (anchor                                                                         │
+    │                       │                                                                           │   ((definition                                                                   │
+    │                       │                                                                           │     (Heading                                                                     │
+    │                       │                                                                           │      ((text "Some level 2 title") (level 2) (slug Some-level-2-title))))         │
+    │                       │                                                                           │    (loc ((first_byte 0) (last_byte 20) (first_line (1 0)) (last_line (1 0))))))) │
+    │ nested heading        │ ((target ("Note 2")) (fragment (("Some level 2 title" "Level 3 title")))) │ (Anchor (note_path "Note 2.md")                                                  │
+    │                       │                                                                           │  (anchor                                                                         │
+    │                       │                                                                           │   ((definition                                                                   │
+    │                       │                                                                           │     (Heading ((text "Level 3 title") (level 3) (slug Level-3-title))))           │
+    │                       │                                                                           │    (loc                                                                          │
+    │                       │                                                                           │     ((first_byte 30) (last_byte 46) (first_line (3 30)) (last_line (3 30)))))))  │
+    │ nested skip level     │ ((target ("Note 2")) (fragment (("Some level 2 title" L4))))              │ (Anchor (note_path "Note 2.md")                                                  │
+    │                       │                                                                           │  (anchor                                                                         │
+    │                       │                                                                           │   ((definition (Heading ((text L4) (level 4) (slug L4))))                        │
+    │                       │                                                                           │    (loc                                                                          │
+    │                       │                                                                           │     ((first_byte 22) (last_byte 28) (first_line (2 22)) (last_line (2 22)))))))  │
+    │ L3 directly           │ ((target ("Note 2")) (fragment (("Level 3 title"))))                      │ (Anchor (note_path "Note 2.md")                                                  │
+    │                       │                                                                           │  (anchor                                                                         │
+    │                       │                                                                           │   ((definition                                                                   │
+    │                       │                                                                           │     (Heading ((text "Level 3 title") (level 3) (slug Level-3-title))))           │
+    │                       │                                                                           │    (loc                                                                          │
+    │                       │                                                                           │     ((first_byte 30) (last_byte 46) (first_line (3 30)) (last_line (3 30)))))))  │
+    │ L4 directly           │ ((target ("Note 2")) (fragment ((L4))))                                   │ (Anchor (note_path "Note 2.md")                                                  │
+    │                       │                                                                           │  (anchor                                                                         │
+    │                       │                                                                           │   ((definition (Heading ((text L4) (level 4) (slug L4))))                        │
+    │                       │                                                                           │    (loc                                                                          │
+    │                       │                                                                           │     ((first_byte 22) (last_byte 28) (first_line (2 22)) (last_line (2 22)))))))  │
+    │ random -> fallback    │ ((target ("Note 2")) (fragment ((random))))                               │ (Missing_anchor Note 2.md)                                                       │
+    │ random#L3 -> fallback │ ((target ("Note 2")) (fragment ((random "Level 3 title"))))               │ (Missing_anchor Note 2.md)                                                       │
+    └───────────────────────┴───────────────────────────────────────────────────────────────────────────┴──────────────────────────────────────────────────────────────────────────────────┘
     |}]
 ;;
 
@@ -245,34 +238,34 @@ let%expect_test "heading resolution in note 1" =
   resolve_and_print cases;
   [%expect
     {|
-    ┌──────────────────────────────┬─────────────────────────────────────────────────────────────────────┬─────────────────────────────────────────────────────────────────────────────────┐
-    │ name                         │ input                                                               │ result                                                                          │
-    ├──────────────────────────────┼─────────────────────────────────────────────────────────────────────┼─────────────────────────────────────────────────────────────────────────────────┤
-    │ L2                           │ ((target ("Note 1")) (fragment ((Hash_path (L2)))))                 │ (Anchor (note_path "Note 1.md")                                                 │
-    │                              │                                                                     │  (anchor                                                                        │
-    │                              │                                                                     │   ((definition (Heading ((text L2) (level 2) (slug l2))))                       │
-    │                              │                                                                     │    (loc                                                                         │
-    │                              │                                                                     │     ((first_byte 59) (last_byte 63) (first_line (4 59)) (last_line (4 59))))))) │
-    │ L2 L3                        │ ((target ("Note 1")) (fragment ((Hash_path (L2 L3)))))              │ (Anchor (note_path "Note 1.md")                                                 │
-    │                              │                                                                     │  (anchor                                                                        │
-    │                              │                                                                     │   ((definition (Heading ((text L3) (level 3) (slug l3))))                       │
-    │                              │                                                                     │    (loc                                                                         │
-    │                              │                                                                     │     ((first_byte 65) (last_byte 70) (first_line (5 65)) (last_line (5 65))))))) │
-    │ L2 L4                        │ ((target ("Note 1")) (fragment ((Hash_path (L2 L4)))))              │ (Anchor (note_path "Note 1.md")                                                 │
-    │                              │                                                                     │  (anchor                                                                        │
-    │                              │                                                                     │   ((definition (Heading ((text L4) (level 4) (slug l4))))                       │
-    │                              │                                                                     │    (loc                                                                         │
-    │                              │                                                                     │     ((first_byte 72) (last_byte 78) (first_line (6 72)) (last_line (6 72))))))) │
-    │ L2 L3 L4                     │ ((target ("Note 1")) (fragment ((Hash_path (L2 L3 L4)))))           │ (Anchor (note_path "Note 1.md")                                                 │
-    │                              │                                                                     │  (anchor                                                                        │
-    │                              │                                                                     │   ((definition (Heading ((text L4) (level 4) (slug l4))))                       │
-    │                              │                                                                     │    (loc                                                                         │
-    │                              │                                                                     │     ((first_byte 72) (last_byte 78) (first_line (6 72)) (last_line (6 72))))))) │
-    │ L2 L4 L3 -> fallback         │ ((target ("Note 1")) (fragment ((Hash_path (L2 L4 L3)))))           │ (Missing_anchor Note 1.md)                                                      │
-    │ L2 L4 Another L3 -> fallback │ ((target ("Note 1")) (fragment ((Hash_path (L2 L4 "Another L3"))))) │ (Missing_anchor Note 1.md)                                                      │
-    │ NoSuch -> fallback           │ ((target ("Note 1")) (fragment ((Hash_path (NoSuch)))))             │ (Missing_anchor Note 1.md)                                                      │
-    │ heading unresolved file      │ ((target (nonexistent)) (fragment ((Hash_path (L2)))))              │ Missing_path                                                                    │
-    └──────────────────────────────┴─────────────────────────────────────────────────────────────────────┴─────────────────────────────────────────────────────────────────────────────────┘
+    ┌──────────────────────────────┬─────────────────────────────────────────────────────────┬─────────────────────────────────────────────────────────────────────────────────┐
+    │ name                         │ input                                                   │ result                                                                          │
+    ├──────────────────────────────┼─────────────────────────────────────────────────────────┼─────────────────────────────────────────────────────────────────────────────────┤
+    │ L2                           │ ((target ("Note 1")) (fragment ((L2))))                 │ (Anchor (note_path "Note 1.md")                                                 │
+    │                              │                                                         │  (anchor                                                                        │
+    │                              │                                                         │   ((definition (Heading ((text L2) (level 2) (slug L2))))                       │
+    │                              │                                                         │    (loc                                                                         │
+    │                              │                                                         │     ((first_byte 59) (last_byte 63) (first_line (4 59)) (last_line (4 59))))))) │
+    │ L2 L3                        │ ((target ("Note 1")) (fragment ((L2 L3))))              │ (Anchor (note_path "Note 1.md")                                                 │
+    │                              │                                                         │  (anchor                                                                        │
+    │                              │                                                         │   ((definition (Heading ((text L3) (level 3) (slug L3))))                       │
+    │                              │                                                         │    (loc                                                                         │
+    │                              │                                                         │     ((first_byte 65) (last_byte 70) (first_line (5 65)) (last_line (5 65))))))) │
+    │ L2 L4                        │ ((target ("Note 1")) (fragment ((L2 L4))))              │ (Anchor (note_path "Note 1.md")                                                 │
+    │                              │                                                         │  (anchor                                                                        │
+    │                              │                                                         │   ((definition (Heading ((text L4) (level 4) (slug L4))))                       │
+    │                              │                                                         │    (loc                                                                         │
+    │                              │                                                         │     ((first_byte 72) (last_byte 78) (first_line (6 72)) (last_line (6 72))))))) │
+    │ L2 L3 L4                     │ ((target ("Note 1")) (fragment ((L2 L3 L4))))           │ (Anchor (note_path "Note 1.md")                                                 │
+    │                              │                                                         │  (anchor                                                                        │
+    │                              │                                                         │   ((definition (Heading ((text L4) (level 4) (slug L4))))                       │
+    │                              │                                                         │    (loc                                                                         │
+    │                              │                                                         │     ((first_byte 72) (last_byte 78) (first_line (6 72)) (last_line (6 72))))))) │
+    │ L2 L4 L3 -> fallback         │ ((target ("Note 1")) (fragment ((L2 L4 L3))))           │ (Missing_anchor Note 1.md)                                                      │
+    │ L2 L4 Another L3 -> fallback │ ((target ("Note 1")) (fragment ((L2 L4 "Another L3")))) │ (Missing_anchor Note 1.md)                                                      │
+    │ NoSuch -> fallback           │ ((target ("Note 1")) (fragment ((NoSuch))))             │ (Missing_anchor Note 1.md)                                                      │
+    │ heading unresolved file      │ ((target (nonexistent)) (fragment ((L2))))              │ Missing_path                                                                    │
+    └──────────────────────────────┴─────────────────────────────────────────────────────────┴─────────────────────────────────────────────────────────────────────────────────┘
     |}]
 ;;
 
@@ -288,27 +281,28 @@ let%expect_test "resolve_blocks" =
   resolve_and_print cases;
   [%expect
     {|
-    ┌─────────────────────────────┬───────────────────────────────────────────────────────┬──────────────────────────────────────────────────────────────────────────────────┐
-    │ name                        │ input                                                 │ result                                                                           │
-    ├─────────────────────────────┼───────────────────────────────────────────────────────┼──────────────────────────────────────────────────────────────────────────────────┤
-    │ block found                 │ ((target ("Note 1")) (fragment ((Caret_id para1))))   │ (Anchor (note_path "Note 1.md")                                                  │
-    │                             │                                                       │  (anchor                                                                         │
-    │                             │                                                       │   ((definition (Caret para1))                                                    │
-    │                             │                                                       │    (loc                                                                          │
-    │                             │                                                       │     ((first_byte 96) (last_byte 106) (first_line (9 96)) (last_line (9 96))))))) │
-    │ block with hyphen           │ ((target ("Note 1")) (fragment ((Caret_id block-2)))) │ (Anchor (note_path "Note 1.md")                                                  │
-    │                             │                                                       │  (anchor                                                                         │
-    │                             │                                                       │   ((definition (Caret block-2))                                                  │
-    │                             │                                                       │    (loc                                                                          │
-    │                             │                                                       │     ((first_byte 109) (last_byte 122) (first_line (11 109))                      │
-    │                             │                                                       │      (last_line (11 109)))))))                                                   │
-    │ block not found -> fallback │ ((target ("Note 1")) (fragment ((Caret_id nope))))    │ (Missing_anchor Note 1.md)                                                       │
-    │ block in deep file          │ ((target (deep)) (fragment ((Caret_id deep1))))       │ (Anchor (note_path dir/inner_dir/deep.md)                                        │
-    │                             │                                                       │  (anchor                                                                         │
-    │                             │                                                       │   ((definition (Caret deep1))                                                    │
-    │                             │                                                       │    (loc ((first_byte 0) (last_byte 10) (first_line (1 0)) (last_line (1 0))))))) │
-    │ block in unresolved file    │ ((target (nonexistent)) (fragment ((Caret_id x))))    │ Missing_path                                                                     │
-    └─────────────────────────────┴───────────────────────────────────────────────────────┴──────────────────────────────────────────────────────────────────────────────────┘
+    ┌─────────────────────────────┬──────────────────────────────────────────────┬──────────────────────────────────────────────────────────────────────────────────┐
+    │ name                        │ input                                        │ result                                                                           │
+    ├─────────────────────────────┼──────────────────────────────────────────────┼──────────────────────────────────────────────────────────────────────────────────┤
+    │ block found                 │ ((target ("Note 1")) (fragment ((para1))))   │ (Anchor (note_path "Note 1.md")                                                  │
+    │                             │                                              │  (anchor                                                                         │
+    │                             │                                              │   ((definition (Attr (id para1) (inline false)))                                 │
+    │                             │                                              │    (loc                                                                          │
+    │                             │                                              │     ((first_byte 96) (last_byte 108) (first_line (9 96))                         │
+    │                             │                                              │      (last_line (10 105)))))))                                                   │
+    │ block with hyphen           │ ((target ("Note 1")) (fragment ((block-2)))) │ (Anchor (note_path "Note 1.md")                                                  │
+    │                             │                                              │  (anchor                                                                         │
+    │                             │                                              │   ((definition (Attr (id block-2) (inline false)))                               │
+    │                             │                                              │    (loc                                                                          │
+    │                             │                                              │     ((first_byte 111) (last_byte 126) (first_line (12 111))                      │
+    │                             │                                              │      (last_line (13 122)))))))                                                   │
+    │ block not found -> fallback │ ((target ("Note 1")) (fragment ((nope))))    │ (Missing_anchor Note 1.md)                                                       │
+    │ block in deep file          │ ((target (deep)) (fragment ((deep1))))       │ (Anchor (note_path dir/inner_dir/deep.md)                                        │
+    │                             │                                              │  (anchor                                                                         │
+    │                             │                                              │   ((definition (Attr (id deep1) (inline false)))                                 │
+    │                             │                                              │    (loc ((first_byte 0) (last_byte 12) (first_line (1 0)) (last_line (2 9))))))) │
+    │ block in unresolved file    │ ((target (nonexistent)) (fragment ((x))))    │ Missing_path                                                                     │
+    └─────────────────────────────┴──────────────────────────────────────────────┴──────────────────────────────────────────────────────────────────────────────────┘
     |}]
 ;;
 
@@ -317,38 +311,39 @@ let%expect_test "resolve_self_references" =
     [ "[[]] -> curr file", make_link_ref None None
     ; "[[#L2]]", make_link_ref None (h [ "L2" ])
     ; "[[#L2#L3]]", make_link_ref None (h [ "L2"; "L3" ])
-    ; "[[#^para1]]", make_link_ref None (b "para1")
+    ; "[[#para1]]", make_link_ref None (b "para1")
     ; "[[#NoSuch]] -> fallback", make_link_ref None (h [ "NoSuch" ])
-    ; "[[#^nope]] -> fallback", make_link_ref None (b "nope")
+    ; "[[#nope]] -> fallback", make_link_ref None (b "nope")
     ; "[[#]] empty heading", make_link_ref None None
     ]
   in
   resolve_and_print cases;
   [%expect
     {|
-    ┌─────────────────────────┬─────────────────────────────────────────────────┬──────────────────────────────────────────────────────────────────────────────────┐
-    │ name                    │ input                                           │ result                                                                           │
-    ├─────────────────────────┼─────────────────────────────────────────────────┼──────────────────────────────────────────────────────────────────────────────────┤
-    │ [[]] -> curr file       │ ((target ()) (fragment ()))                     │ (Note "Note 1.md")                                                               │
-    │ [[#L2]]                 │ ((target ()) (fragment ((Hash_path (L2)))))     │ (Anchor (note_path "Note 1.md")                                                  │
-    │                         │                                                 │  (anchor                                                                         │
-    │                         │                                                 │   ((definition (Heading ((text L2) (level 2) (slug l2))))                        │
-    │                         │                                                 │    (loc                                                                          │
-    │                         │                                                 │     ((first_byte 59) (last_byte 63) (first_line (4 59)) (last_line (4 59)))))))  │
-    │ [[#L2#L3]]              │ ((target ()) (fragment ((Hash_path (L2 L3)))))  │ (Anchor (note_path "Note 1.md")                                                  │
-    │                         │                                                 │  (anchor                                                                         │
-    │                         │                                                 │   ((definition (Heading ((text L3) (level 3) (slug l3))))                        │
-    │                         │                                                 │    (loc                                                                          │
-    │                         │                                                 │     ((first_byte 65) (last_byte 70) (first_line (5 65)) (last_line (5 65)))))))  │
-    │ [[#^para1]]             │ ((target ()) (fragment ((Caret_id para1))))     │ (Anchor (note_path "Note 1.md")                                                  │
-    │                         │                                                 │  (anchor                                                                         │
-    │                         │                                                 │   ((definition (Caret para1))                                                    │
-    │                         │                                                 │    (loc                                                                          │
-    │                         │                                                 │     ((first_byte 96) (last_byte 106) (first_line (9 96)) (last_line (9 96))))))) │
-    │ [[#NoSuch]] -> fallback │ ((target ()) (fragment ((Hash_path (NoSuch))))) │ (Missing_anchor Note 1.md)                                                       │
-    │ [[#^nope]] -> fallback  │ ((target ()) (fragment ((Caret_id nope))))      │ (Missing_anchor Note 1.md)                                                       │
-    │ [[#]] empty heading     │ ((target ()) (fragment ()))                     │ (Note "Note 1.md")                                                               │
-    └─────────────────────────┴─────────────────────────────────────────────────┴──────────────────────────────────────────────────────────────────────────────────┘
+    ┌─────────────────────────┬─────────────────────────────────────┬─────────────────────────────────────────────────────────────────────────────────┐
+    │ name                    │ input                               │ result                                                                          │
+    ├─────────────────────────┼─────────────────────────────────────┼─────────────────────────────────────────────────────────────────────────────────┤
+    │ [[]] -> curr file       │ ((target ()) (fragment ()))         │ (Note "Note 1.md")                                                              │
+    │ [[#L2]]                 │ ((target ()) (fragment ((L2))))     │ (Anchor (note_path "Note 1.md")                                                 │
+    │                         │                                     │  (anchor                                                                        │
+    │                         │                                     │   ((definition (Heading ((text L2) (level 2) (slug L2))))                       │
+    │                         │                                     │    (loc                                                                         │
+    │                         │                                     │     ((first_byte 59) (last_byte 63) (first_line (4 59)) (last_line (4 59))))))) │
+    │ [[#L2#L3]]              │ ((target ()) (fragment ((L2 L3))))  │ (Anchor (note_path "Note 1.md")                                                 │
+    │                         │                                     │  (anchor                                                                        │
+    │                         │                                     │   ((definition (Heading ((text L3) (level 3) (slug L3))))                       │
+    │                         │                                     │    (loc                                                                         │
+    │                         │                                     │     ((first_byte 65) (last_byte 70) (first_line (5 65)) (last_line (5 65))))))) │
+    │ [[#para1]]              │ ((target ()) (fragment ((para1))))  │ (Anchor (note_path "Note 1.md")                                                 │
+    │                         │                                     │  (anchor                                                                        │
+    │                         │                                     │   ((definition (Attr (id para1) (inline false)))                                │
+    │                         │                                     │    (loc                                                                         │
+    │                         │                                     │     ((first_byte 96) (last_byte 108) (first_line (9 96))                        │
+    │                         │                                     │      (last_line (10 105)))))))                                                  │
+    │ [[#NoSuch]] -> fallback │ ((target ()) (fragment ((NoSuch)))) │ (Missing_anchor Note 1.md)                                                      │
+    │ [[#nope]] -> fallback   │ ((target ()) (fragment ((nope))))   │ (Missing_anchor Note 1.md)                                                      │
+    │ [[#]] empty heading     │ ((target ()) (fragment ()))         │ (Note "Note 1.md")                                                              │
+    └─────────────────────────┴─────────────────────────────────────┴─────────────────────────────────────────────────────────────────────────────────┘
     |}]
 ;;
 
@@ -361,11 +356,11 @@ let%expect_test "resolve_asset_with_fragment" =
   resolve_and_print cases;
   [%expect
     {|
-    ┌───────────────────────────┬───────────────────────────────────────────────────────┬──────────────────────────────┐
-    │ name                      │ input                                                 │ result                       │
-    ├───────────────────────────┼───────────────────────────────────────────────────────┼──────────────────────────────┤
-    │ Figure1.jpg#2 -> fallback │ ((target (Figure1.jpg)) (fragment ((Hash_path (2))))) │ (Missing_anchor Figure1.jpg) │
-    │ Note 2## -> empty heading │ ((target ("Note 2")) (fragment ()))                   │ (Note "Note 2.md")           │
-    └───────────────────────────┴───────────────────────────────────────────────────────┴──────────────────────────────┘
+    ┌───────────────────────────┬───────────────────────────────────────────┬──────────────────────────────┐
+    │ name                      │ input                                     │ result                       │
+    ├───────────────────────────┼───────────────────────────────────────────┼──────────────────────────────┤
+    │ Figure1.jpg#2 -> fallback │ ((target (Figure1.jpg)) (fragment ((2)))) │ (Missing_anchor Figure1.jpg) │
+    │ Note 2## -> empty heading │ ((target ("Note 2")) (fragment ()))       │ (Note "Note 2.md")           │
+    └───────────────────────────┴───────────────────────────────────────────┴──────────────────────────────┘
     |}]
 ;;

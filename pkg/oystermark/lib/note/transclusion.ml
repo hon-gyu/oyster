@@ -1,259 +1,178 @@
 open Core
 
+type block = Djot.Block.t Djot.node
+
 type embed_meta =
   { depth : int
   ; source_path : string
-  ; fragment : Cmarkit.Inline.Wikilink.fragment option
+  ; fragment : Link.Ref.fragment option
   }
 
-let embed_meta_key : embed_meta Cmarkit.Meta.key = Cmarkit.Meta.key ()
 let embed_class = "embed"
 
-(* Embed metadata as text
-   ====================== *)
+(* Embed metadata as attributes
+   ============================ *)
 
-(** A fragment as it is written after the ['#'] of a wikilink, which is how the
-    [fragment] attribute stores it. Parsing goes back through
-    {!Cmarkit.Inline.Wikilink}, so the attribute and the wikilink cannot drift
-    apart: a heading whose text contains a ['#'] is split by both alike. *)
-let fragment_to_string : Cmarkit.Inline.Wikilink.fragment -> string = function
-  | Heading path -> String.concat ~sep:"#" path
-  | Block_ref id -> "^" ^ id
+(** The [fragment] attribute holds a fragment as it is written after the first
+    ['#'] of a wikilink, and is read back the same way, so the attribute and the
+    wikilink cannot drift apart. *)
+let attrs_of_embed_meta ({ depth; source_path; fragment } : embed_meta) : Djot.Attr.t =
+  [ "class", embed_class; "source", source_path ]
+  @ Option.value_map fragment ~default:[] ~f:(fun fragment ->
+    [ "fragment", String.concat ~sep:"#" fragment ])
+  @ [ "depth", Int.to_string depth ]
 ;;
 
-let fragment_of_string (text : string) : Cmarkit.Inline.Wikilink.fragment option =
-  Cmarkit.Inline.Wikilink.fragment
-    (Cmarkit.Inline.Wikilink.make ~embed:false ("#" ^ text))
-;;
-
-let attribute_of_embed_meta ({ depth; source_path; fragment } : embed_meta)
-  : Cmarkit.Attribute.t
-  =
-  Cmarkit.Attribute.of_bindings
-    ([ `Key_value ("source", source_path) ]
-     @ Option.value_map fragment ~default:[] ~f:(fun fragment ->
-       [ `Key_value ("fragment", fragment_to_string fragment) ])
-     @ [ `Key_value ("depth", Int.to_string depth) ])
-;;
-
-let embed_meta_of_attribute (attribute : Cmarkit.Attribute.t) : embed_meta option =
-  let key_values = Cmarkit.Attribute.key_values attribute in
-  let find name = List.Assoc.find key_values name ~equal:String.equal in
-  Option.map (find "source") ~f:(fun source_path ->
-    { depth = Option.value_map (find "depth") ~default:1 ~f:Int.of_string
-    ; source_path
-    ; fragment = Option.bind (find "fragment") ~f:fragment_of_string
-    })
-;;
-
-(** The transclusion [block] is, from the meta a same-process expansion left on
-    it or, failing that, from the attribute written on it, which is all a
-    document read back from text has. *)
-let embed_meta_of_block (block : Cmarkit.Block.t) : embed_meta option =
-  let rec go (block : Cmarkit.Block.t) (attribute : Cmarkit.Attribute.t option) =
-    match block with
-    | Cmarkit.Block.Ext_attributes (a, _) ->
-      let attributes = Cmarkit.Block.Attributes.attributes a in
-      go
-        (Cmarkit.Block.Attributes.block a)
-        (Some
-           (Option.value_map attribute ~default:attributes ~f:(fun attribute ->
-              Cmarkit.Attribute.merge attribute attributes)))
-    | Cmarkit.Block.Ext_div (d, meta) ->
-      let is_embed =
-        Option.value_map (Cmarkit.Block.Div.class' d) ~default:false ~f:(fun (c, _) ->
-          String.equal c embed_class)
-      in
-      if not is_embed
-      then None
-      else (
-        match Cmarkit.Meta.find embed_meta_key meta with
-        | Some meta -> Some meta
-        | None -> Option.bind attribute ~f:embed_meta_of_attribute)
-    | _ -> None
-  in
-  go block None
-;;
-
-let non_fm_blocks (doc : Cmarkit.Doc.t) : Cmarkit.Block.t list =
-  match Cmarkit.Doc.block doc with
-  | block when Option.is_some (embed_meta_of_block block) -> [ block ]
-  | Cmarkit.Block.Blocks (bs, _) ->
-    (match bs with
-     | Parse.Frontmatter.Frontmatter _ :: rest -> rest
-     | _ -> bs)
-  | other -> [ other ]
-;;
-
-type embed_source =
-  | Wikilink_embed of Cmarkit.Inline.Wikilink.t * Cmarkit.Meta.t
-  | Image_embed of Link.Ref.t
-
-let embed_source_of_inline (inline : Cmarkit.Inline.t) : embed_source option =
-  let check_one (i : Cmarkit.Inline.t) : embed_source option =
-    match i with
-    | Cmarkit.Inline.Ext_wikilink (w, meta) when Cmarkit.Inline.Wikilink.embed w ->
-      Some (Wikilink_embed (w, meta))
-    | Cmarkit.Inline.Image (link, _) ->
-      Link.Ref.of_cmark_reference (Cmarkit.Inline.Link.reference link)
-      |> Option.map ~f:(fun link_ref -> Image_embed link_ref)
-    | _ -> None
-  in
-  match inline with
-  | Cmarkit.Inline.Inlines ([ i ], _) -> check_one i
-  | i -> check_one i
-;;
-
-let is_expandable_embed_paragraph
-      (block : Cmarkit.Block.t)
-      ~(siblings : Cmarkit.Block.t list)
-  : embed_source option
-  =
-  let all_siblings_blank : bool =
-    List.for_all siblings ~f:(fun b ->
-      match b with
-      | Cmarkit.Block.Blank_line _ -> true
-      | b' -> phys_equal b' block)
-  in
+let embed_meta_of_block (Djot.Node (_, attrs, block) : block) : embed_meta option =
   match block with
-  | Cmarkit.Block.Paragraph (p, _) when all_siblings_blank ->
-    embed_source_of_inline (Cmarkit.Block.Paragraph.inline p)
+  | Div _ when List.mem (Djot.Attr.classes attrs) embed_class ~equal:String.equal ->
+    Option.map (Djot.Attr.find "source" attrs) ~f:(fun source_path ->
+      { depth =
+          Option.value_map (Djot.Attr.find "depth" attrs) ~default:1 ~f:Int.of_string
+      ; source_path
+      ; fragment =
+          Option.bind (Djot.Attr.find "fragment" attrs) ~f:(fun text ->
+            (Link.Ref.of_wikilink_target ("#" ^ text)).fragment)
+      })
   | _ -> None
 ;;
 
-let fallback_block (wl : Cmarkit.Inline.Wikilink.t) (meta : Cmarkit.Meta.t)
-  : Cmarkit.Block.t
+type embed_source =
+  | Wikilink_embed of string
+  | Image_embed of Link.Ref.t
+
+let embed_source_of_inlines (doc : Djot.Doc.t) (inlines : Djot.Inline.t Djot.node list)
+  : embed_source option
   =
-  let wl_link =
-    Cmarkit.Inline.Wikilink.make ~embed:false (Cmarkit.Inline.Wikilink.content wl)
-  in
-  let link_inline = Cmarkit.Inline.Ext_wikilink (wl_link, meta) in
-  let p =
-    Cmarkit.Block.Paragraph.make
-      (Cmarkit.Inline.Inlines ([ link_inline ], Cmarkit.Meta.none))
-  in
-  Cmarkit.Block.Paragraph (p, Cmarkit.Meta.none)
+  match inlines with
+  | [ Node (_, _, Ext_wikilink (true, target, _)) ] -> Some (Wikilink_embed target)
+  | [ Node (_, _, Image (_, target)) ] ->
+    Link.Ref.of_link_target doc target
+    |> Option.map ~f:(fun link_ref -> Image_embed link_ref)
+  | _ -> None
 ;;
 
-let fragment : Anchor.definition -> Cmarkit.Inline.Wikilink.fragment option = function
-  | Heading heading -> Some (Heading [ heading.text ])
-  | Caret id -> Some (Block_ref id)
-  | Attr _ -> None
-;;
-
-let transclude ~depth ~source_path ~fragment (blocks : Cmarkit.Block.t list)
-  : Cmarkit.Block.t
+let is_expandable_embed_paragraph
+      (doc : Djot.Doc.t)
+      (Djot.Node (_, _, contents) as block : block)
+      ~(siblings : block list)
+  : embed_source option
   =
-  let embed_meta = { depth; source_path; fragment } in
-  let div =
-    Cmarkit.Block.Div.make
-      ~class':(embed_class, Cmarkit.Meta.none)
-      (Cmarkit.Block.Blocks (blocks, Cmarkit.Meta.none))
-  in
-  (* The meta is what the same-process consumers read; the attribute is the
-     same thing in text, for whoever only gets the rendered note back. *)
-  let div =
-    Cmarkit.Block.Ext_div
-      (div, Cmarkit.Meta.add embed_meta_key embed_meta Cmarkit.Meta.none)
-  in
-  Cmarkit.Block.Ext_attributes
-    ( Cmarkit.Block.Attributes.make ~specs:[ attribute_of_embed_meta embed_meta ] div
-    , Cmarkit.Meta.none )
+  match contents with
+  | Para inlines when List.for_all siblings ~f:(phys_equal block) ->
+    embed_source_of_inlines doc inlines
+  | _ -> None
 ;;
 
-let reverse_embed_doc (doc : Cmarkit.Doc.t) : Cmarkit.Doc.t =
+let fallback_block (target : string) : block =
+  Djot.Node.make
+    (Djot.Block.Para [ Djot.Node.make (Djot.Inline.Ext_wikilink (false, target, None)) ])
+;;
+
+let fragment : Anchor.definition -> Link.Ref.fragment = function
+  | Heading heading -> [ heading.text ]
+  | Attr { id; _ } -> [ id ]
+;;
+
+let transclude ~depth ~source_path ~fragment (blocks : block list) : block =
+  Djot.Node.make
+    ~attrs:(attrs_of_embed_meta { depth; source_path; fragment })
+    (Djot.Block.Div blocks)
+;;
+
+let reverse_embed_doc (doc : Djot.Doc.t) : Djot.Doc.t =
   let strip_md (path : string) : string =
-    match String.chop_suffix path ~suffix:".md" with
-    | Some s -> s
-    | None -> path
+    Option.value (String.chop_suffix path ~suffix:".md") ~default:path
   in
   let mapper =
-    Cmarkit.Mapper.make
-      ~block_ext_default:(fun _m b -> Some b)
-      ~inline_ext_default:(fun _m i -> Some i)
-      ~block:(fun _mapper block ->
-        match block with
-        | Cmarkit.Block.Ext_attributes _ | Cmarkit.Block.Ext_div _ ->
-          (match embed_meta_of_block block with
-           | None -> Cmarkit.Mapper.default
-           | Some { source_path; fragment; _ } ->
-             let target =
-               if String.is_empty source_path then None else Some (strip_md source_path)
-             in
-             let wl =
-               Parse.Common.wikilink_of_fields ~target ~fragment ~display:None ~embed:true
-             in
-             let inline = Cmarkit.Inline.Ext_wikilink (wl, Cmarkit.Meta.none) in
-             let p =
-               Cmarkit.Block.Paragraph.make
-                 (Cmarkit.Inline.Inlines ([ inline ], Cmarkit.Meta.none))
-             in
-             Cmarkit.Mapper.ret (Cmarkit.Block.Paragraph (p, Cmarkit.Meta.none)))
-        | _ -> Cmarkit.Mapper.default)
+    Djot.Mapper.make
+      ~block:(fun _ block ->
+        match embed_meta_of_block block with
+        | None -> Djot.Mapper.default
+        | Some { source_path; fragment; _ } ->
+          let target =
+            Link.Ref.to_wikilink_target
+              { target =
+                  (if String.is_empty source_path
+                   then None
+                   else Some (strip_md source_path))
+              ; fragment
+              }
+          in
+          Djot.Mapper.ret
+            (Djot.Node.make
+               (Djot.Block.Para
+                  [ Djot.Node.make (Djot.Inline.Ext_wikilink (true, target, None)) ])))
       ()
   in
-  Cmarkit.Mapper.map_doc mapper doc
+  Djot.Mapper.map_doc mapper doc
 ;;
 
 (* Test
    ==== *)
 
-module For_testing = struct
-  let parse_blocks (md : string) : Cmarkit.Block.t list =
-    non_fm_blocks (Parse.of_string md)
-  ;;
+let%test_module "is_expandable_embed_paragraph" =
+  (module struct
+    let expandable content ~nth =
+      let { Parse.doc; _ } = Parse.of_string content in
+      let blocks = Djot.Doc.blocks doc in
+      is_expandable_embed_paragraph doc (List.nth_exn blocks nth) ~siblings:blocks
+      |> Option.is_some
+      |> printf "%b\n"
+    ;;
 
-  let doc_of_blocks (blocks : Cmarkit.Block.t list) : Cmarkit.Doc.t =
-    Cmarkit.Doc.make (Cmarkit.Block.Blocks (blocks, Cmarkit.Meta.none))
-  ;;
+    let%expect_test "sole embed paragraph" =
+      expandable "![[target]]" ~nth:0;
+      [%expect {| true |}]
+    ;;
 
-  let print_blocks (blocks : Cmarkit.Block.t list) : unit =
-    let doc = doc_of_blocks blocks in
-    print_endline (Parse.commonmark_of_doc doc)
-  ;;
-end
+    let%expect_test "embed mixed with text" =
+      expandable "See ![[target]] here." ~nth:0;
+      [%expect {| false |}]
+    ;;
 
-let%expect_test "is_expandable_embed_paragraph: sole embed paragraph" =
-  let blocks = For_testing.parse_blocks "![[target]]" in
-  let block = List.hd_exn blocks in
-  let result = is_expandable_embed_paragraph block ~siblings:blocks in
-  printf "%b\n" (Option.is_some result);
-  [%expect {| true |}]
+    let%expect_test "blank lines around" =
+      expandable "\n![[target]]\n" ~nth:0;
+      [%expect {| true |}]
+    ;;
+
+    let%expect_test "non-embed wikilink" =
+      expandable "[[target]]" ~nth:0;
+      [%expect {| false |}]
+    ;;
+
+    let%expect_test "embed among other blocks" =
+      expandable "Some text.\n\n![[target]]\n\nMore text." ~nth:1;
+      [%expect {| false |}]
+    ;;
+  end)
 ;;
 
-let%expect_test "is_expandable_embed_paragraph: embed mixed with text" =
-  let blocks = For_testing.parse_blocks "See ![[target]] here." in
-  let block = List.hd_exn blocks in
-  let result = is_expandable_embed_paragraph block ~siblings:blocks in
-  printf "%b\n" (Option.is_some result);
-  [%expect {| false |}]
-;;
-
-let%expect_test "is_expandable_embed_paragraph: embed with blank siblings only" =
-  let blocks = For_testing.parse_blocks "\n![[target]]\n" in
-  let block =
-    List.find_exn blocks ~f:(fun b ->
-      match b with
-      | Cmarkit.Block.Paragraph _ -> true
-      | _ -> false)
+let%expect_test "transclude, then reverse" =
+  let { Parse.doc; _ } = Parse.of_string "# A\n\nbody\n" in
+  let div =
+    transclude
+      ~depth:1
+      ~source_path:"notes/a.md"
+      ~fragment:(Some [ "A" ])
+      (Djot.Doc.blocks doc)
   in
-  let result = is_expandable_embed_paragraph block ~siblings:blocks in
-  printf "%b\n" (Option.is_some result);
-  [%expect {| true |}]
-;;
+  print_string (Parse.source_of_blocks [ div ]);
+  [%expect
+    {|
+    {source="notes/a.md" fragment="A" depth="1"}
+    ::: embed
+    # A
 
-let%expect_test "is_expandable_embed_paragraph: non-embed wikilink" =
-  let blocks = For_testing.parse_blocks "[[target]]" in
-  let block = List.hd_exn blocks in
-  let result = is_expandable_embed_paragraph block ~siblings:blocks in
-  printf "%b\n" (Option.is_some result);
-  [%expect {| false |}]
-;;
-
-let%expect_test "is_expandable_embed_paragraph: embed among other blocks" =
-  let blocks = For_testing.parse_blocks "Some text.\n\n![[target]]\n\nMore text." in
-  let embed_block = List.nth_exn blocks 1 in
-  let result = is_expandable_embed_paragraph embed_block ~siblings:blocks in
-  printf "%b\n" (Option.is_some result);
-  [%expect {| false |}]
+    body
+    :::
+    |}];
+  print_s
+    [%sexp
+      (Option.map (embed_meta_of_block div) ~f:(fun m ->
+         m.depth, m.source_path, m.fragment)
+       : (int * string * string list option) option)];
+  [%expect {| ((1 notes/a.md ((A)))) |}];
+  print_string (Djot.Source.of_doc (reverse_embed_doc (Parse.doc_of_blocks [ div ])));
+  [%expect {| ![[notes/a#A]] |}]
 ;;

@@ -105,7 +105,7 @@ let position_of_byte_offset ?(encoding = Utf16) (content : string) (offset : int
   !line, !units
 ;;
 
-(** Convert a [Cmarkit.Textloc.t] to a 0-based [(line, character)] position for
+(** Convert a [Djot.Textloc.t] to a 0-based [(line, character)] position for
     its first byte.  [line] comes from the [Textloc] directly.
 
     [character] depends on [content], which must be the {e same string the
@@ -113,18 +113,18 @@ let position_of_byte_offset ?(encoding = Utf16) (content : string) (offset : int
     - given, it is a code-unit offset within the line in [encoding] (default
       {!Utf16}), decoded from that line's bytes;
     - omitted, it degrades to a byte offset within the line (correct for
-      ASCII), needing no content — [Cmarkit.Textloc.line_pos] carries the
+      ASCII), needing no content — [Djot.Textloc.line_pos] carries the
       line's start byte.
 
     A [none] location maps to [(0, 0)].  See
     {!page-"feature-utf16-positions"} and
     {!page-"feature-go-to-definition".target_position}. *)
-let position_of_textloc ?content ?(encoding = Utf16) (tl : Cmarkit.Textloc.t) : int * int =
-  if Cmarkit.Textloc.is_none tl
+let position_of_textloc ?content ?(encoding = Utf16) (tl : Djot.Textloc.t) : int * int =
+  if Djot.Textloc.is_none tl
   then 0, 0
   else (
-    let line_num, line_start = Cmarkit.Textloc.first_line tl in
-    let first_byte = Cmarkit.Textloc.first_byte tl in
+    let line_num, line_start = Djot.Textloc.first_line tl in
+    let first_byte = Djot.Textloc.first_byte tl in
     let character =
       match content with
       | Some c
@@ -145,17 +145,12 @@ let position_of_textloc ?content ?(encoding = Utf16) (tl : Cmarkit.Textloc.t) : 
 
 (** {1 Parsing} *)
 
-(** Parse [content] into a [Cmarkit.Doc.t] with locations enabled.
-
-    [layout] (default [false]) additionally keeps the source's layout nodes.
-    A feature needs it when it reads a block's {e delimiters} rather than its
-    content — the fences of a div carry no location without it. See
-    {!page-"feature-toc".region}. *)
-let parse_doc ?(layout = false) (content : string) : Cmarkit.Doc.t =
+(** Parse [content] with locations enabled. *)
+let parse_doc (content : string) : Oystermark.Parse.t =
   Trace_core.with_span ~__FILE__ ~__LINE__ "parse_doc"
   @@ fun _sp ->
   Trace_core.add_data_to_span _sp [ "content_len", `Int (String.length content) ];
-  Oystermark.Parse.of_string ~locs:true ~layout content
+  Oystermark.Parse.of_string ~locs:true content
 ;;
 
 (* Tests
@@ -223,28 +218,18 @@ let%test_module "utf-16 position encoding" =
 
 let%test_module "position_of_textloc" =
   (module struct
-    (* Build a doc and pull the textloc of the sole inline attribute anchor,
-       exercising the byte-column derivation on real parser output. *)
+    (* The location of the sole inline attribute anchor, exercising the
+       byte-column derivation on real parser output. *)
+    let inline_attr_loc (content : string) : Djot.Textloc.t =
+      let { Oystermark.Parse.doc; _ } = Oystermark.Parse.of_string ~locs:true content in
+      List.find_map_exn (Oystermark.Note.Anchor.of_doc doc) ~f:(fun anchor ->
+        match anchor.definition with
+        | Attr { inline = true; _ } -> Some anchor.loc
+        | Attr _ | Heading _ -> None)
+    ;;
+
     let pos_of_inline_attr (content : string) : int * int =
-      let doc = Oystermark.Parse.of_string ~locs:true content in
-      let found = ref None in
-      let folder =
-        Cmarkit.Folder.make
-          ~inline:(fun _f acc i ->
-            match i with
-            | Cmarkit.Inline.Ext_attributes (a, meta) ->
-              (match Cmarkit.Attribute.id (Cmarkit.Inline.Attributes.attributes a) with
-               | Some _ ->
-                 found := Some (Cmarkit.Meta.textloc meta);
-                 Cmarkit.Folder.ret acc
-               | None -> Cmarkit.Folder.default)
-            | _ -> Cmarkit.Folder.default)
-          ~inline_ext_default:(fun _f acc _i -> acc)
-          ~block_ext_default:(fun _f acc _b -> acc)
-          ()
-      in
-      let (_ : unit) = Cmarkit.Folder.fold_doc folder () doc in
-      position_of_textloc (Option.value_exn !found)
+      position_of_textloc (inline_attr_loc content)
     ;;
 
     (* [key]{#k} starts at byte 15 on line 3 (0-based line 2); the line begins
@@ -256,31 +241,13 @@ let%test_module "position_of_textloc" =
     ;;
 
     let%test "none location maps to origin" =
-      [%equal: int * int] (position_of_textloc Cmarkit.Textloc.none) (0, 0)
+      [%equal: int * int] (position_of_textloc Djot.Textloc.none) (0, 0)
     ;;
 
     (* With content, the column is UTF-16: two CJK chars (3 bytes each, 1 unit)
        precede the inline anchor, so its byte column (6) becomes UTF-16 column 2. *)
     let pos_of_inline_attr_with_content (content : string) : int * int =
-      let doc = Oystermark.Parse.of_string ~locs:true content in
-      let found = ref None in
-      let folder =
-        Cmarkit.Folder.make
-          ~inline:(fun _f acc i ->
-            match i with
-            | Cmarkit.Inline.Ext_attributes (a, meta) ->
-              (match Cmarkit.Attribute.id (Cmarkit.Inline.Attributes.attributes a) with
-               | Some _ ->
-                 found := Some (Cmarkit.Meta.textloc meta);
-                 Cmarkit.Folder.ret acc
-               | None -> Cmarkit.Folder.default)
-            | _ -> Cmarkit.Folder.default)
-          ~inline_ext_default:(fun _f acc _i -> acc)
-          ~block_ext_default:(fun _f acc _b -> acc)
-          ()
-      in
-      let (_ : unit) = Cmarkit.Folder.fold_doc folder () doc in
-      position_of_textloc ~content (Option.value_exn !found)
+      position_of_textloc ~content (inline_attr_loc content)
     ;;
 
     let%expect_test "content gives UTF-16 column" =

@@ -270,19 +270,16 @@ let truncate ~max_chars (s : string) : string =
     shown ^ "\n\n" ^ notice)
 ;;
 
-(** The source text of the node [address] names in [content], or [None].
+(** The source text of the blocks [address] names in [content], or [None].
 
-    The node is found by {!Oystermark.Note.Query.of_address} and shown as
-    written in the file ({!Oystermark.Note.Node.source_text}). See
-    {!page-"feature-hover"}. *)
+    The blocks are found by {!Oystermark.Note.Private.Address_utils.find} and
+    shown as written in the file. See {!page-"feature-hover"}. *)
 let read_address (address : Oystermark.Note.Anchor.Address.t) (content : string)
   : string option
   =
-  let open Oystermark.Note in
-  let doc = Lsp_util.parse_doc content in
-  (Query.run (Query.of_address address) doc).matches
-  |> List.hd
-  |> Option.bind ~f:(Node.source_text content)
+  let module Address_utils = Oystermark.Note.Private.Address_utils in
+  let { Oystermark.Parse.doc; _ } = Lsp_util.parse_doc content in
+  Address_utils.source_text doc content (Address_utils.find doc address)
 ;;
 
 (** {2 Formatting} *)
@@ -362,7 +359,7 @@ let hover
           | None -> file_content
           | Some fragment ->
             Oystermark.Note.Link.Ref.resolve_fragment
-              (Oystermark.Note.Anchor.of_doc (Lsp_util.parse_doc file_content))
+              (Oystermark.Note.Anchor.of_doc (Lsp_util.parse_doc file_content).doc)
               fragment
             |> Option.bind ~f:(fun (anchor : Oystermark.Note.Anchor.t) ->
               read_address (Oystermark.Note.Anchor.address anchor.definition) file_content)
@@ -485,7 +482,7 @@ let%test_module "read_address: heading" =
     ;;
 
     let%expect_test "extracts first section" =
-      show ~slug:"section-one" content;
+      show ~slug:"Section-One" content;
       [%expect
         {|
         ## Section One
@@ -495,7 +492,7 @@ let%test_module "read_address: heading" =
     ;;
 
     let%expect_test "top-level heading stops at next h1" =
-      show ~slug:"title" content;
+      show ~slug:"Title" content;
       [%expect
         {|
         # Title
@@ -514,17 +511,26 @@ let%test_module "read_address: heading" =
   end)
 ;;
 
-let%test_module "read_address: caret" =
+let%test_module "read_address: attribute" =
   (module struct
-    let content = "First para.\n\nSecond para ^abc\n\nThird para.\n"
+    let content = "First para.\n\n{#abc}\nSecond para\n\nThird [para]{#inl}.\n"
 
     let%expect_test "finds block" =
-      print_s [%sexp (read_address (Caret "abc") content : string option)];
-      [%expect {| ("Second para ^abc") |}]
+      print_s [%sexp (read_address (Attr "abc") content : string option)];
+      [%expect
+        {|
+        ( "{#abc}\
+         \nSecond para")
+        |}]
+    ;;
+
+    let%expect_test "an attribute on inlines finds their paragraph" =
+      print_s [%sexp (read_address (Attr "inl") content : string option)];
+      [%expect {| ("Third [para]{#inl}.") |}]
     ;;
 
     let%expect_test "missing block returns None" =
-      print_s [%sexp (read_address (Caret "nope") content : string option)];
+      print_s [%sexp (read_address (Attr "nope") content : string option)];
       [%expect {| () |}]
     ;;
   end)
@@ -694,10 +700,15 @@ let%test_module "hover" =
   (module struct
     let files =
       [ ( "note-a.md"
-        , "# Alpha\n\n## Section One\n\nBody text. ^block1\n\n## Section Two\n\nMore.\n" )
+        , "# Alpha\n\n\
+           ## Section One\n\n\
+           {#block1}\n\
+           Body text.\n\n\
+           ## Section Two\n\n\
+           More.\n" )
       ; "note-b.md", "# Beta\n\nSee [[note-a]].\n"
       ; "note-c.md", "# Gamma\n\nSee [[note-a#Section One]].\n"
-      ; "note-d.md", "# Delta\n\nSee [[note-a#^block1]].\n"
+      ; "note-d.md", "# Delta\n\nSee [[note-a#block1]].\n"
       ; "note-e.md", "# Epsilon\n\nSelf [[#Epsilon]].\n"
       ; "empty.md", ""
       ; "note-f.md", "# Zeta\n\nSee [[empty]].\n"
@@ -744,7 +755,8 @@ let%test_module "hover" =
 
         ## Section One
 
-        Body text. ^block1
+        {#block1}
+        Body text.
 
         ## Section Two
 
@@ -762,7 +774,8 @@ let%test_module "hover" =
 
         ## Section One
 
-        Body text. ^block1
+        {#block1}
+        Body text.
         |}]
     ;;
 
@@ -771,10 +784,11 @@ let%test_module "hover" =
       show ~rel_path:"note-d.md" ~content ~line:2 ~character:8;
       [%expect
         {|
-        [13-30]
+        [13-29]
         *Path*:note-a.md
 
-        Body text. ^block1
+        {#block1}
+        Body text.
         |}]
     ;;
 
@@ -839,7 +853,8 @@ let%test_module "hover" =
 
         ## Section One
 
-        Body text. ^block1
+        {#block1}
+        Body text.
 
         ## Section Two
 
@@ -998,7 +1013,7 @@ let%test_module "hover" =
         ## Section One
 
 
-        *(truncated: showing 3 of 9 lines, 33%)*
+        *(truncated: showing 3 of 10 lines, 30%)*
         |}]
     ;;
   end)

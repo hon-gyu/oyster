@@ -435,7 +435,6 @@ let document_symbol_local (t : t) ~(rel_path : string) : DocumentSymbol.t list o
       let kind, detail =
         match symbol.kind with
         | Heading level -> SymbolKind.Namespace, sprintf "heading %d" level
-        | Block_id -> SymbolKind.Key, "block id"
         | Attribute_id -> SymbolKind.Key, "attribute id"
       in
       DocumentSymbol.create

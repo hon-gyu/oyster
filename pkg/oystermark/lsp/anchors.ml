@@ -1,8 +1,7 @@
 (** Anchor positions in a note, taken from the parser.
 
     Features that need anchor positions, such as finding the anchor under the
-    cursor, use this module instead of scanning lines for [#], [ ^id] or
-    [\{#id\}]. A line scan disagrees with the parser: it finds headings inside
+    cursor, use this module instead of scanning lines for [#] or [\{#id\}]. A line scan disagrees with the parser: it finds headings inside
     fenced code blocks, and it cannot find a heading with an authored
     [ \{#id\} ] or a deduplicated identifier such as [heading-1].
 
@@ -18,12 +17,11 @@ open Core
 (** An anchor with its position.
 
     For a heading, {!address} uses the identifier the parser assigned: an
-    authored [ \{#id\} ], or a slug deduplicated with [-1], [-2]. It is not
+    authored [ \{#id\} ], or one deduplicated with [-1], [-2]. It is not
     recomputed from the heading text.
 
-    [first_line] and [last_line] are 0-based. An attribute anchor starts at its
-    [ \{#id\} ] line and ends with the block it applies to; a caret anchor
-    spans its whole paragraph. *)
+    [first_line] and [last_line] are 0-based. An attribute anchor spans its
+    [ \{#id\} ] and what it applies to. *)
 type t =
   { value : Oystermark.Note.Anchor.definition
   ; first_line : int
@@ -38,27 +36,23 @@ let address (a : t) : Oystermark.Note.Anchor.Address.t =
 ;;
 
 (** The line the id is written on, where a rename edits and go-to-definition
-    lands: the paragraph's last line for a caret id, the first line otherwise. *)
-let write_line (a : t) : int =
-  match a.value with
-  | Heading _ | Attr _ -> a.first_line
-  | Caret _ -> a.last_line
-;;
+    lands. *)
+let write_line (a : t) : int = a.first_line
 
-let of_loc (loc : Cmarkit.Textloc.t option) : (int * int * int * int) option =
+let of_loc (loc : Djot.Textloc.t option) : (int * int * int * int) option =
   match loc with
-  | Some tl when not (Cmarkit.Textloc.is_none tl) ->
+  | Some tl when not (Djot.Textloc.is_none tl) ->
     Some
-      ( fst (Cmarkit.Textloc.first_line tl) - 1
-      , fst (Cmarkit.Textloc.last_line tl) - 1
-      , Cmarkit.Textloc.first_byte tl
-      , Cmarkit.Textloc.last_byte tl + 1 )
+      ( fst (Djot.Textloc.first_line tl) - 1
+      , fst (Djot.Textloc.last_line tl) - 1
+      , Djot.Textloc.first_byte tl
+      , Djot.Textloc.last_byte tl + 1 )
   | _ -> None
 ;;
 
 (** Every anchor of [doc] in source order. Anchors without a location are
-    dropped. An attribute anchor's location includes its [ \{#id\} ] line. *)
-let of_doc (doc : Cmarkit.Doc.t) : t list =
+    dropped. *)
+let of_doc (doc : Djot.Doc.t) : t list =
   Oystermark.Note.Anchor.of_doc doc
   |> List.filter_map ~f:(fun (anchor : Oystermark.Note.Anchor.t) ->
     of_loc (Some anchor.loc)
@@ -66,39 +60,29 @@ let of_doc (doc : Cmarkit.Doc.t) : t list =
       { value = anchor.definition; first_line; last_line; first_byte; last_byte }))
 ;;
 
-let of_content (content : string) : t list = of_doc (Lsp_util.parse_doc content)
+let of_content (content : string) : t list = of_doc (Lsp_util.parse_doc content).doc
 
 (** {1 Lookup} *)
 
 (** The anchor the cursor is on, [None] when the line holds none.
 
-    Line-granular rather than byte-granular on purpose: asking the reader to
-    put the cursor exactly on a [ ^id] would be a worse question than "which
-    line are you on".  A heading and an attribute answer anywhere in their own
-    extent — for an attribute that is its [ \{#id\} ] line and the block it
-    attributes, both of which are that anchor.  A caret id answers only on the
-    line it is written on: its paragraph is ordinary prose that happens to end
-    with a marker, not an anchor throughout.
+    Line-granular rather than byte-granular on purpose: "which line are you
+    on" is an easier question than asking for the cursor on the id itself. An
+    anchor answers anywhere in its own extent — for an attribute that is its
+    [ \{#id\} ] and what it attributes, both of which are that anchor.
 
-    Headings come first, then caret ids, then attributes — the order fragments
-    resolve in.  See {!page-"feature-find-references".activation}. *)
+    Headings come first, then attributes — the order fragments resolve in.
+    See {!page-"feature-find-references".activation}. *)
 let at_line (ts : t list) ~(line : int) : t option =
-  let covers (a : t) =
-    match a.value with
-    | Heading _ | Attr _ -> a.first_line <= line && line <= a.last_line
-    | Caret _ -> a.last_line = line
-  in
+  let covers (a : t) = a.first_line <= line && line <= a.last_line in
   let on_line k = List.find ts ~f:(fun a -> covers a && k a.value) in
   List.find_map
     [ (function
         | Oystermark.Note.Anchor.Heading _ -> true
-        | _ -> false)
+        | Attr _ -> false)
     ; (function
-        | Caret _ -> true
-        | _ -> false)
-    ; (function
-        | Attr _ -> true
-        | _ -> false)
+        | Oystermark.Note.Anchor.Attr _ -> true
+        | Heading _ -> false)
     ]
     ~f:on_line
 ;;
@@ -115,16 +99,14 @@ let%test_module "of_content" =
       List.iter (of_content content) ~f:(fun a -> print_s [%sexp (a : t)])
     ;;
 
-    let%expect_test "headings, caret ids and attributes together" =
-      show "# Alpha\n\nBody ^b1\n\nThe [key]{#kt} span.\n";
+    let%expect_test "headings and attributes together" =
+      show "# Alpha\n\nBody\n\nThe [key]{#kt} span.\n";
       [%expect
         {|
-        ((value (Heading ((text Alpha) (level 1) (slug alpha)))) (first_line 0)
+        ((value (Heading ((text Alpha) (level 1) (slug Alpha)))) (first_line 0)
          (last_line 0) (first_byte 0) (last_byte 7))
-        ((value (Caret b1)) (first_line 2) (last_line 2) (first_byte 9)
-         (last_byte 17))
         ((value (Attr (id kt) (inline true))) (first_line 4) (last_line 4)
-         (first_byte 23) (last_byte 33))
+         (first_byte 19) (last_byte 29))
         |}]
     ;;
 
@@ -135,8 +117,6 @@ let%test_module "of_content" =
       show "{#intro}\n# Introduction\n";
       [%expect
         {|
-        ((value (Attr (id intro) (inline false))) (first_line 0) (last_line 1)
-         (first_byte 0) (last_byte 23))
         ((value (Heading ((text Introduction) (level 1) (slug intro))))
          (first_line 1) (last_line 1) (first_byte 9) (last_byte 23))
         |}]
@@ -146,9 +126,9 @@ let%test_module "of_content" =
       show "# Same\n\n# Same\n";
       [%expect
         {|
-        ((value (Heading ((text Same) (level 1) (slug same)))) (first_line 0)
+        ((value (Heading ((text Same) (level 1) (slug Same)))) (first_line 0)
          (last_line 0) (first_byte 0) (last_byte 6))
-        ((value (Heading ((text Same) (level 1) (slug same-1)))) (first_line 2)
+        ((value (Heading ((text Same) (level 1) (slug Same-1)))) (first_line 2)
          (last_line 2) (first_byte 8) (last_byte 14))
         |}]
     ;;
@@ -162,7 +142,7 @@ let%test_module "of_content" =
       show "::: warning\n# Inside\n:::\n";
       [%expect
         {|
-        ((value (Heading ((text Inside) (level 1) (slug inside)))) (first_line 1)
+        ((value (Heading ((text Inside) (level 1) (slug Inside)))) (first_line 1)
          (last_line 1) (first_byte 12) (last_byte 20))
         |}]
     ;;
@@ -178,28 +158,21 @@ let%test_module "at_line" =
     ;;
 
     let%expect_test "on a heading" =
-      show "# Alpha\n\ntext ^b\n" ~line:0;
+      show "# Alpha\n\ntext\n" ~line:0;
       [%expect
         {|
-        ((value (Heading ((text Alpha) (level 1) (slug alpha)))) (first_line 0)
+        ((value (Heading ((text Alpha) (level 1) (slug Alpha)))) (first_line 0)
          (last_line 0) (first_byte 0) (last_byte 7))
         |}]
     ;;
 
-    (* The caret is on the paragraph's last line, which is where the reader
-       sees it — not on the line the paragraph started. *)
-    let%expect_test "on the caret line of a multi-line paragraph" =
-      show "one\ntwo ^b\n" ~line:1;
+    let%expect_test "on a block attribute's spec line" =
+      show "{#blk}\nA paragraph.\n" ~line:0;
       [%expect
         {|
-        ((value (Caret b)) (first_line 0) (last_line 1) (first_byte 0)
-         (last_byte 10))
+        ((value (Attr (id blk) (inline false))) (first_line 0) (last_line 1)
+         (first_byte 0) (last_byte 19))
         |}]
-    ;;
-
-    let%expect_test "on the first line of that paragraph" =
-      show "one\ntwo ^b\n" ~line:0;
-      [%expect {| <none> |}]
     ;;
 
     let%expect_test "on an inline attribute's line" =

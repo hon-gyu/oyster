@@ -13,14 +13,14 @@ let files =
   [ ( "note-a.md"
     , "# Alpha\n\n\
        ## Section One\n\n\
-       Body text ^block1\n\n\
+       [Body text]{#block1}\n\n\
        ## Section Two\n\n\
        More content.\n" )
   ; ( "note-b.md"
     , "# Beta\n\n\
        Link to [[note-a]] here.\n\n\
        See [[note-a#Section One]].\n\n\
-       Also [[note-a#^block1]].\n\n\
+       Also [[note-a#block1]].\n\n\
        Markdown [link](note-a).\n\n\
        Unresolved [[missing-note]].\n" )
   ; "subdir/nested.md", "# Nested\n\nLink to [[note-a]] from subdirectory.\n"
@@ -46,7 +46,7 @@ let%expect_test "server: hover on wikilink to note" =
      \n\
      \n## Section One\
      \n\
-     \nBody text ^block1\
+     \n[Body text]{#block1}\
      \n\
      \n## Section Two\
      \n\
@@ -67,21 +67,21 @@ let%expect_test "server: hover on heading fragment" =
      \n\
      \n## Section One\
      \n\
-     \nBody text ^block1")
+     \n[Body text]{#block1}")
     |}]
 ;;
 
 let%expect_test "server: hover on block fragment" =
   let s = start_server ~vault_root () in
   did_open s ~rel_path:"note-b.md";
-  (* Line 6: "Also [[note-a#^block1]]." *)
+  (* Line 6: "Also [[note-a#block1]]." *)
   let result = Server.hover s ~rel_path:"note-b.md" ~line:6 ~character:10 |> hover_text in
   print_s [%sexp (result : string option)];
   [%expect
     {|
     ( "*Path*:note-a.md\
      \n\
-     \nBody text ^block1")
+     \n[Body text]{#block1}")
     |}]
 ;;
 
@@ -124,7 +124,7 @@ let%expect_test "server: hover cursor not on link" =
 let%expect_test "fragment missing from a stale index is read from the file" =
   let stale =
     [ "target.md", "# Target\n"
-    ; "source.md", "[[target#Parent#Child]] [[target#Solo]] [[target#^fresh]]\n"
+    ; "source.md", "[[target#Parent#Child]] [[target#Solo]] [[target#fresh]]\n"
     ]
   in
   let fresh =
@@ -135,7 +135,7 @@ let%expect_test "fragment missing from a stale index is read from the file" =
      child body\n\n\
      ## Solo\n\n\
      solo body\n\n\
-     new para ^fresh\n"
+     [new para]{#fresh}\n"
   in
   let index = Vault_helper.make_index stale in
   let read_file = function
@@ -143,7 +143,7 @@ let%expect_test "fragment missing from a stale index is read from the file" =
     | path -> List.Assoc.find stale ~equal:String.equal path
   in
   let content = List.Assoc.find_exn stale ~equal:String.equal "source.md" in
-  List.iter [ "Parent#Child"; "Solo"; "^fresh" ] ~f:(fun needle ->
+  List.iter [ "Parent#Child"; "Solo"; "fresh" ] ~f:(fun needle ->
     let offset = Option.value_exn (String.substr_index content ~pattern:needle) in
     let line, character = Lsp_lib.Util.position_of_byte_offset content offset in
     Lsp_lib.Hover.hover
@@ -171,10 +171,10 @@ let%expect_test "fragment missing from a stale index is read from the file" =
 
     solo body
 
-    new para ^fresh
-    == ^fresh
+    [new para]{#fresh}
+    == fresh
     *Path*:target.md
 
-    new para ^fresh
+    [new para]{#fresh}
     |}]
 ;;

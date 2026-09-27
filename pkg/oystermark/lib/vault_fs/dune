@@ -1,6 +1,6 @@
 (library
  (name vault_fs)
  (public_name oystermark.vault_fs)
- (libraries vault parse oymarkit core core_unix core_unix.sys_unix)
+ (libraries vault parse core core_unix core_unix.sys_unix)
  (preprocess
   (pps ppx_jane ppx_string)))

@@ -49,7 +49,7 @@
   ocaml
   (dune
    (>= 3.22))
-  oymarkit
+  djot
   merlin-extend
   core
   core_unix

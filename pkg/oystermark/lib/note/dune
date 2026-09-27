@@ -1,9 +1,9 @@
+(include_subdirs qualified)
+
 (library
  (name note)
  (public_name oystermark.note)
- (libraries parse oymarkit core)
+ (libraries parse djot core)
  (inline_tests)
  (preprocess
   (pps ppx_jane ppx_inline_test ppx_expect)))
-
-(include_subdirs qualified)

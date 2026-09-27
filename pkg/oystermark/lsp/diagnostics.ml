@@ -14,61 +14,26 @@ type diagnostic =
   }
 [@@deriving sexp, equal, compare]
 
-(** Slugs of headings whose identifier was {e written} rather than derived —
-    the [ {#id} ] line above the heading.
-
-    Such an id reaches the collection below twice: once as the heading's slug,
-    which the parser resolves from the attribute, and once as the attribute
-    line {!Oystermark.Vault.Index.Entry.val-anchors} sees.  One authored anchor
-    is not a collision, so the heading occurrence is dropped and the attribute
-    line — the better place to jump to — is kept.  A genuine collision between
-    the same id written twice is still two attribute occurrences.
+(** Every anchor id in [doc] with its byte range, headings and attributes
+    alike, since they share one namespace.  Occurrences without a location
+    ([Textloc.none]) are dropped.
     See {!page-"feature-diagnostics".duplicate_ids}. *)
-let mirrored_heading_slugs (doc : Cmarkit.Doc.t) : String.Set.t =
-  let folder =
-    Cmarkit.Folder.make
-      ~block:(fun _f acc (b : Cmarkit.Block.t) ->
-        match b with
-        | Cmarkit.Block.Heading (h, _meta) ->
-          (match Cmarkit.Block.Heading.id h with
-           | Some (`Id id) -> Cmarkit.Folder.ret (Set.add acc id)
-           | Some (`Auto _) | None -> Cmarkit.Folder.default)
-        | _ -> Cmarkit.Folder.default)
-      ~inline:(fun _f acc _i -> Cmarkit.Folder.ret acc)
-      ~inline_ext_default:(fun _f acc _i -> acc)
-      ~block_ext_default:(fun _f acc _b -> acc)
-      ()
-  in
-  Cmarkit.Folder.fold_doc folder String.Set.empty doc
-;;
-
-(** Collect every anchor id in [doc] with its byte range, across the three
-    anchor kinds (heading slug, caret block id, attribute id).  Occurrences
-    without a location ([Textloc.none]) are dropped.
-    See {!page-"feature-diagnostics".duplicate_ids}. *)
-let collect_anchor_occurrences (doc : Cmarkit.Doc.t) : (string * (int * int)) list =
-  let mirrored = mirrored_heading_slugs doc in
+let collect_anchor_occurrences (doc : Oystermark.Parse.t) : (string * (int * int)) list =
   let module Index = Oystermark.Vault.Index in
   let file_stat : Index.file_stat =
     { rel_path = "__diagnostics__.md"; birthtime = None; mtime = None }
   in
   Index.Entry.of_doc_exn file_stat doc
   |> Index.Entry.anchors
-  |> List.filter_map ~f:(fun anchor ->
-    let id =
-      match anchor.definition with
-      | Index.Heading h when Set.mem mirrored h.slug -> None
-      | Index.Heading h -> Some h.slug
-      | Index.Caret id | Index.Attr { id; _ } -> Some id
-    in
-    Option.map id ~f:(fun id ->
-      id, (Cmarkit.Textloc.first_byte anchor.loc, Cmarkit.Textloc.last_byte anchor.loc)))
+  |> List.map ~f:(fun anchor ->
+    ( Oystermark.Note.Anchor.Address.id (Oystermark.Note.Anchor.address anchor.definition)
+    , (Djot.Textloc.first_byte anchor.loc, Djot.Textloc.last_byte anchor.loc) ))
 ;;
 
 (** Diagnostics for anchor ids that occur more than once in [doc]: every
     located occurrence of a duplicated id is reported.
     See {!page-"feature-diagnostics".duplicate_ids}. *)
-let duplicate_id_diagnostics (doc : Cmarkit.Doc.t) : diagnostic list =
+let duplicate_id_diagnostics (doc : Oystermark.Parse.t) : diagnostic list =
   collect_anchor_occurrences doc
   |> String.Map.of_alist_multi
   |> Map.fold ~init:[] ~f:(fun ~key:id ~data:ranges acc ->
@@ -169,7 +134,7 @@ let%test_module "compute" =
     ;;
 
     let files =
-      [ "note-a.md", "# Alpha\n\n## Section One\n\nBody text ^block1\n"
+      [ "note-a.md", "# Alpha\n\n## Section One\n\n{#block1}\nBody text\n"
       ; "note-b.md", "# Beta\n\nLink to [[note-a]] here.\n"
       ; "image.png", ""
       ]
@@ -198,8 +163,8 @@ let%test_module "compute" =
       [%expect {| |}]
     ;;
 
-    let%expect_test "unresolved block id" =
-      show ~rel_path:"note-b.md" ~content:"See [[note-a#^noblock]].";
+    let%expect_test "unresolved attribute id" =
+      show ~rel_path:"note-b.md" ~content:"See [[note-a#noblock]].";
       [%expect {| |}]
     ;;
 
@@ -288,11 +253,11 @@ let%test_module "compute" =
 
     (* Cross-kind collision: a heading whose slug equals a hand-written attr id. *)
     let%expect_test "heading slug vs attribute id collision" =
-      show ~rel_path:"note-a.md" ~content:"# Intro\n\nSee [x]{#intro} here.\n";
+      show ~rel_path:"note-a.md" ~content:"# Intro\n\nSee [x]{#Intro} here.\n";
       [%expect
         {|
-        ((first_byte 0) (last_byte 6) (message "duplicate anchor id: intro"))
-        ((first_byte 13) (last_byte 23) (message "duplicate anchor id: intro"))
+        ((first_byte 0) (last_byte 6) (message "duplicate anchor id: Intro"))
+        ((first_byte 13) (last_byte 23) (message "duplicate anchor id: Intro"))
         |}]
     ;;
 

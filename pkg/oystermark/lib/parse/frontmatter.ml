@@ -8,43 +8,11 @@
     *)
 
 open Core
-open Cmarkit
 
 type t = Yaml.value
 
-let to_commonmark (fm : Yaml.value) : string = "---\n" ^ Yaml.to_string_exn fm ^ "---\n"
-
-type Cmarkit.Block.t += Frontmatter of Yaml.value
-
-let block_commonmark_renderer : Cmarkit_renderer.block =
-  let open Cmarkit_renderer in
-  fun (c : context) (b : Block.t) ->
-    match b with
-    | Frontmatter y ->
-      Context.string c (to_commonmark y);
-      true
-    | _ -> false
-;;
-
-let sexp_of_block : Common.block_sexp =
-  fun ~recurse_inline:_ ~recurse_block:_ ~with_meta:_ b ->
-  match b with
-  | Frontmatter _ -> Some (Sexp.Atom "Frontmatter")
-  | _ -> None
-;;
-
-let make_block_mapper (f : Yaml.value -> Yaml.value option)
-  : Cmarkit.Block.t Cmarkit.Mapper.mapper
-  =
-  let open Cmarkit in
-  fun (_m : Mapper.t) (block : Block.t) ->
-    match block with
-    | Frontmatter y ->
-      (match f y with
-       | Some y -> Mapper.ret (Frontmatter y)
-       | None -> Mapper.ret (Block.Blocks ([], Meta.none)))
-    | other -> Mapper.default
-;;
+(** [fm] as the source text of a frontmatter block, delimiters included. *)
+let to_source (fm : Yaml.value) : string = "---\n" ^ Yaml.to_string_exn fm ^ "---\n"
 
 let delimiter : string = "---"
 let is_delimiter (line : string) : bool = String.equal (String.rstrip line) delimiter
@@ -87,7 +55,7 @@ let of_string (s : string) : Yaml.value option * string =
     leading frontmatter block replaced by whitespace — each non-newline byte
     becomes a space, newlines are kept — so every byte and line position is
     preserved. Parsing [input] instead of the stripped {!of_string} body keeps
-    the parsed AST's [Cmarkit.Textloc] offsets aligned with the {e original}
+    the parsed tree's locations aligned with the {e original}
     file, which LSP positions depend on. When [s] has no (closed) frontmatter,
     [input] is [s] unchanged. *)
 let blank_frontmatter (s : string) : Yaml.value option * string =
@@ -130,9 +98,12 @@ let blank_frontmatter (s : string) : Yaml.value option * string =
 ;;
 
 let escape_html (s : string) : string =
-  let buf = Buffer.create (String.length s) in
-  Cmarkit_html.buffer_add_html_escaped_string buf s;
-  Buffer.contents buf
+  String.concat_map s ~f:(function
+    | '&' -> "&amp;"
+    | '<' -> "&lt;"
+    | '>' -> "&gt;"
+    | '"' -> "&quot;"
+    | c -> String.of_char c)
 ;;
 
 (** Render a YAML value as an HTML fragment. *)
@@ -162,17 +133,6 @@ let to_html (fm : Yaml.value option) : string =
   match fm with
   | None | Some `Null -> ""
   | Some v -> value_to_html v
-;;
-
-(** Extract the frontmatter value from a doc's top-level block, if present. *)
-let of_doc (doc : Cmarkit.Doc.t) : Yaml.value option =
-  match Cmarkit.Doc.block doc with
-  | Cmarkit.Block.Blocks (blocks, _) ->
-    (match blocks with
-     | Frontmatter y :: _ -> Some y
-     | _ -> None)
-  | Frontmatter y -> Some y
-  | _ -> None
 ;;
 
 (** {2 Test} *)

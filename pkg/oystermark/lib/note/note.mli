@@ -2,8 +2,8 @@
 
     {1 Links and anchors}
 
-    A note provides a set of anchors that can be referenced by links. Anchors can
-    headings, Obsidian caret IDs, or djot attribute IDs.
+    A note provides a set of anchors that can be referenced by links. Anchors are
+    headings or djot attribute IDs.
 
     A link comes from markdown link or wikilink syntax.
 
@@ -13,14 +13,6 @@
 
     A link in one note can be resolved against another note's anchors, producing
     the address if there is a match.
-
-    {1 Node}
-
-    {!Node.t} in this module differs from Cmarkit.t node in:
-    - it has section produced by heading
-    - some non-content structures are ignored
-    - some variants have different representation for convenience (e.g. list item)
-    - ...
 
     {1 Query by path}
 
@@ -55,23 +47,19 @@ end
 
     + [select Query.empty n = n].
     + [select b (select a n)] and [select (a @ b) n] hold the same nodes when [a]
-      matches a single root, section, list item, block quote, callout, div,
-      keyed node or footnote definition. See {!Query.extract}.
+      matches a single root, list item, block quote, callout, div, keyed node
+      or footnote definition, and when it matches a single section and [b]
+      does not select the section's heading, which [select a n] leaves out.
+      See {!Query.extract}.
     + [(expand ~env ~path n).frontmatter = n.frontmatter].
-    + [Transclusion.reverse_embed_doc (expand ~env ~path n).body] is [n.body],
+    + [Transclusion.reverse_embed_doc (expand ~env ~path n).doc] is [n.doc],
       up to how each embed link is written, when no embed reaches the depth
       limit. *)
 
-type t =
+type t = Parse.t =
   { frontmatter : Yaml.value option
-  ; body : Cmarkit.Doc.t (** Without the frontmatter block. *)
+  ; doc : Djot.Doc.t (** Without the frontmatter. *)
   }
-
-(** [doc] split at its leading {!Parse.Frontmatter.Frontmatter} block. *)
-val of_doc : Cmarkit.Doc.t -> t
-
-(** Inverse of {!of_doc}. *)
-val to_doc : t -> Cmarkit.Doc.t
 
 (** The note whose root holds what [query] matches in [n], with [n]'s
     frontmatter. See {!Query.extract}. *)
@@ -80,7 +68,7 @@ val select : Query.t -> t -> t
 (** What an embed resolves to. *)
 type source =
   { path : string (** Of the note [note] is taken from. *)
-  ; fragment : Cmarkit.Inline.Wikilink.fragment option
+  ; fragment : Link.Ref.fragment option
     (** Recorded on the transclusion, see {!Transclusion.embed_meta}. *)
   ; note : t (** The part of that note the embed shows. *)
   }

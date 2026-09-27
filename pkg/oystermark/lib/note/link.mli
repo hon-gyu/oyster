@@ -7,12 +7,9 @@
 
 (** A link reference before resolution, from a wikilink or a markdown link. *)
 module Ref : sig
-  type fragment =
-    | Hash_path of string list
-    (** [#a#b]: a path of heading texts. A single segment may also name a
-        heading identifier or an attribute id. Non-empty. *)
-    | Caret_id of string (** [#^id]: an Obsidian block identifier. *)
-  [@@deriving sexp, equal, compare]
+  (** [#a#b]: a path of heading texts, [ ["a"; "b"] ]. A single segment may
+      also name a heading identifier or an attribute id. Non-empty. *)
+  type fragment = string list [@@deriving sexp, equal, compare]
 
   (**
     | Target | Fragment | Meaning |
@@ -29,28 +26,39 @@ module Ref : sig
     }
   [@@deriving sexp, equal, compare]
 
-  val of_wikilink : Cmarkit.Inline.Wikilink.t -> t
+  (** A wikilink target as written, [ note#h1#h2 ] in [ [[note#h1#h2|alias]] ],
+      split at its first [#] into a path and the [#]-separated heading texts
+      after it, as in Obsidian. Each part is stripped of blanks, and empty
+      segments are dropped. *)
+  val of_wikilink_target : string -> t
 
-  (** [None] for an external destination (HTTP, HTTPS, mail, FTP) and for
-      reference-style links, which are not supported. An empty destination
-      becomes [().md], as in Obsidian. *)
-  val of_cmark_reference : Cmarkit.Inline.Link.reference -> t option
+  (** Inverse of {!of_wikilink_target}, up to blanks and empty segments. *)
+  val to_wikilink_target : t -> string
+
+  (** A markdown link's destination, percent-decoded, split as a wikilink
+      target. [None] for an external destination (HTTP, HTTPS, mail, FTP). An
+      empty destination becomes [().md], as in Obsidian. *)
+  val of_destination : string -> t option
+
+  (** The reference a link or image [target] makes in [doc]. A reference link
+      is looked up in [doc]: [None] when its label is not defined, and a label
+      djot resolves to a heading gives a fragment of that heading's id. *)
+  val of_link_target : Djot.Doc.t -> Djot.Inline.target -> t option
 
   (** A reference to [address] in the note at [target]. *)
   val of_target_address : target:string -> Anchor.Address.t -> t
 
-  (** [fragment] in wikilink syntax: [#a#b] or [#^id]. *)
+  (** [fragment] in wikilink syntax: [#a#b]. *)
   val string_of_fragment : fragment -> string
 
   (** The anchor in [anchors] that [fragment] names, or [None].
 
-      A hash path names a heading: the last segment matches the heading and the
+      A fragment names a heading: the last segment matches the heading and the
       earlier segments match its ancestor headings, in order. Levels must increase
-      along the path but may skip. A segment matches a heading by its text or by
-      the identifier the parser would give that text. A single segment that
-      matches no heading can match an attribute id. A caret id matches the caret
-      anchor with that id. With duplicates, the first in document order is
-      returned. *)
+      along the path but may skip. A segment matches a heading by its identifier
+      or by its {!Parse.Common.heading_key}. A single segment that matches no
+      heading can match an attribute id. With duplicates, the first in document
+      order is returned. *)
   val resolve_fragment : Anchor.t list -> fragment -> Anchor.t option
 
   (** [s] with its [%XX] escapes decoded. A malformed escape is kept as written. *)
@@ -67,11 +75,11 @@ type kind =
 type t =
   { reference : Ref.t
   ; kind : kind
-  ; loc : Cmarkit.Textloc.t
-    (** [Cmarkit.Textloc.none] when the document was parsed without locations. *)
+  ; loc : Djot.Textloc.t
+    (** [Djot.Textloc.none] when the document was parsed without locations. *)
   }
 [@@deriving sexp, equal, compare]
 
 (** Every link of [doc] in document order: wikilinks, markdown links, and
     markdown images, resolved or not. *)
-val of_doc : Cmarkit.Doc.t -> t list
+val of_doc : Djot.Doc.t -> t list

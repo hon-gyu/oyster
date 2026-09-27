@@ -58,7 +58,7 @@ let label ~(delta : int) ~(side : side) : string option =
     at all.  A cross-note target, an unresolved one, and a whole-note
     self-link ([Curr_file], [Note]) alike have no direction to show. *)
 let intra_note_target ~(rel_path : string) (target : Oystermark.Vault.Index.resolution)
-  : Cmarkit.Textloc.t option
+  : Djot.Textloc.t option
   =
   let same path = String.equal path rel_path in
   let loc =
@@ -68,7 +68,7 @@ let intra_note_target ~(rel_path : string) (target : Oystermark.Vault.Index.reso
     | Ok (Anchor _ | Note _ | Asset _) | Error _ -> None
   in
   match loc with
-  | Some loc when not (Cmarkit.Textloc.is_none loc) -> Some loc
+  | Some loc when not (Djot.Textloc.is_none loc) -> Some loc
   | _ -> None
 ;;
 
@@ -115,7 +115,7 @@ let hints
         if line < range_start_line || line >= range_end_line
         then None
         else (
-          let target_first_byte = Cmarkit.Textloc.first_byte target_loc in
+          let target_first_byte = Djot.Textloc.first_byte target_loc in
           let target_line, _ =
             Lsp_util.position_of_byte_offset content target_first_byte
           in
@@ -213,15 +213,16 @@ let%test_module "hints" =
     ;;
 
     (* The map-of-content case: a list of [ [[#…]] ] tokens the arrows turn
-       into an ordering.  Lines: 0-2 the list, 4 [# Alpha two], 8 [# Baz]. *)
+       into an ordering.  Lines: 0-2 the list, 4 [# Alpha two], 9 [# Baz]. *)
     let moc =
       [ ( "moc.md"
         , "- [[#alpha-two]]\n\
            - [[#baz]]\n\n\
            # Alpha two\n\n\
-           Body ^para\n\n\
+           {#para}\n\
+           Body\n\n\
            # Baz\n\n\
-           Back to [[#alpha-two]] and [[#^para]].\n" )
+           Back to [[#alpha-two]] and [[#para]].\n" )
       ]
     ;;
 
@@ -230,9 +231,9 @@ let%test_module "hints" =
       [%expect
         {|
         (0,16) ↓3
-        (1,10) ↓6
-        (9,22) ↑6
-        (9,37) ↑4
+        (1,10) ↓7
+        (10,22) ↑7
+        (10,36) ↑5
         |}]
     ;;
 
@@ -286,16 +287,18 @@ let%test_module "hints" =
        spelling that resolves differently for one anchor kind shows up as the
        odd label out.
 
-       Lines: 0 heading, 1 block id, 2 inline attribute; targets on 4, 6, 8. *)
+       Lines: 0 heading, 1 block attribute, 2 inline attribute; targets on 4, 6,
+       9. *)
     let%expect_test "spelling x anchor kind" =
       show
         ~rel_path:"forms.md"
         [ ( "forms.md"
           , "[[#Target]] [[forms#Target]] [t](#Target) ![[#Target]]\n\
-             [[#^para]] [[forms#^para]] [b](#^para) ![[#^para]]\n\
+             [[#para]] [[forms#para]] [b](#para) ![[#para]]\n\
              [[#kt]] [[forms#kt]] [a](#kt) ![[#kt]]\n\n\
              # Target\n\n\
-             Body ^para\n\n\
+             {#para}\n\
+             Body\n\n\
              The [key]{#kt} term.\n" )
         ];
       [%expect
@@ -304,14 +307,14 @@ let%test_module "hints" =
         (0,28) ↓4
         (0,41) ↓4
         (0,54) ↓4
-        (1,10) ↓5
-        (1,26) ↓5
-        (1,38) ↓5
-        (1,50) ↓5
-        (2,7) ↓6
-        (2,20) ↓6
-        (2,29) ↓6
-        (2,38) ↓6
+        (1,9) ↓5
+        (1,24) ↓5
+        (1,35) ↓5
+        (1,46) ↓5
+        (2,7) ↓7
+        (2,20) ↓7
+        (2,29) ↓7
+        (2,38) ↓7
         |}]
     ;;
 

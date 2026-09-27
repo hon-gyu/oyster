@@ -55,7 +55,7 @@ val plan_moves
 
 val plan
   :  index:Index.t
-  -> docs:(string * Cmarkit.Doc.t) list
+  -> docs:(string * Note.t) list
   -> read_file:(string -> string option)
   -> target
   -> new_name:string
@@ -64,7 +64,7 @@ val plan
 module For_test : sig
   type vault =
     { files : (string * string) list
-    ; docs : (string * Cmarkit.Doc.t) list
+    ; docs : (string * Note.t) list
     ; index : Index.t
     }
 

@@ -37,11 +37,11 @@ type located_link =
   }
 
 (** Walk a parsed document's AST and collect all links (wikilinks and markdown
-    links/images) together with their byte ranges from [Cmarkit.Meta.textloc].
+    links/images) together with their byte ranges.
 
     Requires the document to have been parsed with [~locs:true] so that
     text locations are available on AST nodes. *)
-let collect_links ~(index : Vault.Index.t) ~(rel_path : string) (doc : Cmarkit.Doc.t)
+let collect_links ~(index : Vault.Index.t) ~(rel_path : string) (doc : Oystermark.Parse.t)
   : located_link list
   =
   Trace_core.with_span ~__FILE__ ~__LINE__ "collect_links"
@@ -67,8 +67,8 @@ let collect_links ~(index : Vault.Index.t) ~(rel_path : string) (doc : Cmarkit.D
       ; destination = resolution
       ; reference = link.reference
       ; kind
-      ; first_byte = Cmarkit.Textloc.first_byte link.loc
-      ; last_byte = Cmarkit.Textloc.last_byte link.loc
+      ; first_byte = Djot.Textloc.first_byte link.loc
+      ; last_byte = Djot.Textloc.last_byte link.loc
       })
   in
   Trace_core.add_data_to_span span [ "num_links", `Int (List.length links) ];
@@ -124,7 +124,7 @@ let%test_module "collect_links" =
 
     let%expect_test "wikilink with fragment" =
       show "go to [[Note#Heading]] now";
-      [%expect {| [6-21] ((target(Note))(fragment((Hash_path(Heading))))) |}]
+      [%expect {| [6-21] ((target(Note))(fragment((Heading)))) |}]
     ;;
 
     let%expect_test "markdown link" =

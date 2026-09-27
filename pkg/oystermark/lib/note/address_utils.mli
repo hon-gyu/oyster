@@ -1,34 +1,24 @@
-(** The blocks of a note an address names, as Cmarkit blocks, and their source
-    text. *)
+(** The blocks of a note an address names, and their source text. *)
 
-(** The blocks in [blocks] named by [address], or [ [] ] if there are none.
+(** The blocks of [doc] named by [address], or [ [] ] if there are none.
 
-    - {b Heading}: the heading and the blocks after it in the same container, up
-      to (not including) the next heading of the same or a higher level. The
-      heading can be in any container (block quote, list item, div, keyed block,
-      footnote), and the section stops at the end of that container. A container
-      that follows the heading is included whole, even if it has headings inside.
-      For a heading with a block attribute, the section starts at the heading,
-      not at the attribute.
-    - {b Caret}: one block. If the [^id] ends a paragraph with other content,
-      that paragraph. If the [^id] is the whole paragraph, the previous non-blank
-      block. If the id is on a {!Cmarkit.Block.Ext_keyed} node (the parser moves
-      it there from the paragraph or list item the node replaced), that node,
-      including its label and children.
-    - {b Attr}: one block. For a block attribute, the block it wraps. For an
-      inline attribute, the paragraph or heading that contains it. See
+    - {b Heading}: the section with that id, which holds the heading and the
+      blocks under it. A heading that opens no section, inside a block quote,
+      div, callout or list item, is found alone.
+    - {b Attr}: one block. For an attribute on a block, that block. For an
+      attribute on inlines, the paragraph or heading that holds them. See
       {!page-"feature-attribute-anchors"}.
 
-    Containers are searched recursively; the first match in document order
-    wins. *)
-val find : Cmarkit.Block.t list -> Anchor.Address.t -> Cmarkit.Block.t list
+    The blocks are searched, then the footnotes; the first match in document
+    order wins. *)
+val find : Djot.Doc.t -> Anchor.Address.t -> Djot.Block.t Djot.node list
 
-(** The source text of [blocks]: [content] from the start of the first block to
-    the end of the last, with trailing whitespace removed. [None] if no block
-    has a location.
+(** The source text of [blocks]: [content] from the start of the first block,
+    its attribute specs included, to the end of the last, with trailing
+    whitespace removed. [None] if no block has a location.
 
-    [content] must be the text [blocks] were parsed from, with locations. The
-    slice is taken byte for byte, so inside a container that prefixes each line
-    (a block quote's [>], a list item's indentation) every line but the first
-    keeps that prefix. *)
-val source_text : string -> Cmarkit.Block.t list -> string option
+    [content] must be the text [doc] was parsed from, with locations, and
+    [blocks] nodes of [doc]. The slice is taken byte for byte, so inside a
+    container that prefixes each line (a block quote's [>], a list item's
+    indentation) every line but the first keeps that prefix. *)
+val source_text : Djot.Doc.t -> string -> Djot.Block.t Djot.node list -> string option

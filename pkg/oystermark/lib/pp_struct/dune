@@ -1,8 +1,0 @@
-(library
- (name pp_struct)
- (public_name oystermark.pp_struct)
- (modules pp_struct)
- (libraries oymarkit core parse)
- (inline_tests)
- (preprocess
-  (pps ppx_jane ppx_string ppx_quick_test)))

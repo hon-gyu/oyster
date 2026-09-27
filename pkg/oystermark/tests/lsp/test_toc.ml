@@ -94,8 +94,8 @@ let%expect_test "an up-to-date region is quiet" =
        [ "# Alpha"
        ; ""
        ; start
-       ; "- [Alpha](#alpha)"
-       ; "  - [Beta](#beta)"
+       ; "- [Alpha](#Alpha)"
+       ; "  - [Beta](#Beta)"
        ; stop
        ; ""
        ; "## Beta"
@@ -124,8 +124,8 @@ let%expect_test "quick fix rewrites the body and keeps the fences" =
     # Alpha
 
     ::: toc
-    - [Alpha](#alpha)
-      - [Beta](#beta)
+    - [Alpha](#Alpha)
+      - [Beta](#Beta)
     :::
 
     ## Beta
@@ -135,7 +135,7 @@ let%expect_test "quick fix rewrites the body and keeps the fences" =
 let%expect_test "no quick fix over an up-to-date region" =
   show_actions
     ~only:[ CodeActionKind.QuickFix ]
-    (String.concat_lines [ "# Alpha"; ""; start; "- [Alpha](#alpha)"; stop ])
+    (String.concat_lines [ "# Alpha"; ""; start; "- [Alpha](#Alpha)"; stop ])
     ~line:2;
   [%expect {| |}]
 ;;
@@ -151,8 +151,8 @@ let%expect_test "insert action at the cursor's line" =
     # Alpha
 
     ::: toc
-    - [Alpha](#alpha)
-      - [Beta](#beta)
+    - [Alpha](#Alpha)
+      - [Beta](#Beta)
     :::
     prose
 
@@ -163,7 +163,7 @@ let%expect_test "insert action at the cursor's line" =
 let%expect_test "no insert action inside a region" =
   show_actions
     ~only:[ CodeActionKind.Refactor ]
-    (String.concat_lines [ start; "- [Alpha](#alpha)"; stop; ""; "# Alpha" ])
+    (String.concat_lines [ start; "- [Alpha](#Alpha)"; stop; ""; "# Alpha" ])
     ~line:1;
   [%expect {| |}]
 ;;

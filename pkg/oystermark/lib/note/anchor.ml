@@ -3,16 +3,15 @@ open Core
 module Address = struct
   type t =
     | Heading of string
-    | Caret of string
     | Attr of string
   [@@deriving sexp, equal, compare]
 
   let id = function
-    | Heading id | Caret id | Attr id -> id
+    | Heading id | Attr id -> id
   ;;
 end
 
-type loc = Cmarkit.Textloc.t
+type loc = Djot.Textloc.t
 
 let sexp_of_loc = Parse.Textloc_conv.sexp_of_t
 let loc_of_sexp = Parse.Textloc_conv.t_of_sexp
@@ -28,7 +27,6 @@ type heading =
 
 type definition =
   | Heading of heading
-  | Caret of string
   | Attr of
       { id : string
       ; inline : bool
@@ -43,56 +41,54 @@ type t =
 
 let address : definition -> Address.t = function
   | Heading h -> Heading h.slug
-  | Caret id -> Caret id
   | Attr { id; _ } -> Attr id
 ;;
 
-let of_doc (doc : Cmarkit.Doc.t) : t list =
-  let open Cmarkit in
+(** The location of [node] extended over its attribute specs, which a block's
+    precede and an inline's follow. *)
+let extent (doc : Djot.Doc.t) (node : _ Djot.node) : loc =
+  let loc = Djot.Doc.textloc doc node in
+  List.fold (Djot.Doc.syntax_locs doc node) ~init:loc ~f:(fun loc (role, spec) ->
+    match role with
+    | RAttrSpec when Djot.Textloc.first_byte spec < Djot.Textloc.first_byte loc ->
+      Djot.Textloc.reloc ~first:spec ~last:loc
+    | RAttrSpec when Djot.Textloc.last_byte spec > Djot.Textloc.last_byte loc ->
+      Djot.Textloc.reloc ~first:loc ~last:spec
+    | RAttrSpec | ROpenFence | RCloseFence -> loc)
+;;
+
+let of_doc (doc : Djot.Doc.t) : t list =
   let anchors = ref [] in
-  let add definition meta =
-    anchors := { definition; loc = Meta.textloc meta } :: !anchors
+  let add definition node =
+    let loc =
+      match definition with
+      | Heading _ -> Djot.Doc.textloc doc node
+      | Attr _ -> extent doc node
+    in
+    anchors := { definition; loc } :: !anchors
   in
-  let add_caret meta =
-    Option.iter (Block.Block_id.find meta) ~f:(fun id ->
-      add (Caret (Block.Block_id.id id)) meta)
-  in
-  let add_attr ~inline attr meta =
-    Option.iter (Attribute.id attr) ~f:(fun id -> add (Attr { id; inline }) meta)
+  let add_heading ~slug (Djot.Node (_, _, heading) as node : Djot.Block.t Djot.node) =
+    match heading with
+    | Heading (level, inlines) ->
+      add (Heading { text = Parse.Common.plain_text inlines; level; slug }) node
+    | _ -> ()
   in
   let folder =
-    Folder.make
-      ~block:(fun f acc b ->
-        match b with
-        | Block.Heading (h, meta) ->
-          let text = Parse.Common.inline_to_plain_text (Block.Heading.inline h) in
-          let slug =
-            Parse.Common.heading_id h
-            |> Option.value_exn
-                 ~message:"heading missing identifier; parse with Oystermark.Parse"
-          in
-          add (Heading { text; level = Block.Heading.level h; slug }) meta;
-          Folder.default
-        | Block.Paragraph (_, meta) ->
-          add_caret meta;
-          Folder.default
-        | Block.Ext_keyed ((_label, body), meta) ->
-          add_caret meta;
-          Folder.ret (Folder.fold_block f acc body)
-        | Block.Ext_attributes (a, meta) ->
-          add_attr ~inline:false (Block.Attributes.attributes a) meta;
-          Folder.ret (Folder.fold_block f acc (Block.Attributes.block a))
-        | _ -> Folder.default)
-      ~inline:(fun f acc i ->
-        match i with
-        | Inline.Ext_attributes (a, meta) ->
-          add_attr ~inline:true (Inline.Attributes.attributes a) meta;
-          Folder.ret (Folder.fold_inline f acc (Inline.Attributes.inline a))
-        | _ -> Folder.default)
-      ~inline_ext_default:(fun _ acc _ -> acc)
-      ~block_ext_default:(fun _ acc _ -> acc)
+    Djot.Folder.make
+      ~block:(fun _ () (Node (_, attrs, block) as node) ->
+        (match block, Djot.Attr.id attrs with
+         | Section (heading :: _), Some slug -> add_heading ~slug heading
+         | Heading _, Some slug -> add_heading ~slug node
+         | Section _, None | Heading _, None -> ()
+         | _, Some id -> add (Attr { id; inline = false }) node
+         | _, None -> ());
+        Djot.Folder.default)
+      ~inline:(fun _ () (Node (_, attrs, _) as node) ->
+        Option.iter (Djot.Attr.id attrs) ~f:(fun id ->
+          add (Attr { id; inline = true }) node);
+        Djot.Folder.default)
       ()
   in
-  Folder.fold_doc folder () doc;
+  Djot.Folder.fold_doc folder () doc;
   List.rev !anchors
 ;;

@@ -49,12 +49,12 @@ let query_command =
          try In_channel.read_all note with
          | _ -> die 2 "cannot read %s" note
        in
-       let result = Query.run query (Parse.of_string ~locs:true source) in
+       let result = Query.run query (Parse.of_string ~locs:true source).doc in
        match result.matches with
        | [] ->
          if not quiet
          then
-           Option.iter result.why_empty ~f:(fun why ->
+           Option.iter result.no_match ~f:(fun why ->
              eprintf "%s: %s\n" note (Query.no_match_to_string why));
          exit 1
        | matches ->
@@ -70,14 +70,14 @@ let query_command =
            in
            let field (found : Node.found_t) name =
              match name with
-             | "markdown" -> String.strip found.markdown
+             | "markdown" -> String.strip (Query.markdown found)
              | "source" ->
                (match found.span with
                 | Some { first_byte; last_byte; _ } ->
                   String.sub source ~pos:first_byte ~len:(last_byte - first_byte + 1)
-                | None -> String.strip found.markdown)
+                | None -> String.strip (Query.markdown found))
              | "path" -> String.concat ~sep:"." (List.map found.path ~f:Int.to_string)
-             | "kind" -> Node.kind found.node
+             | "kind" -> found.kind
              | "line" ->
                Option.value_map found.span ~default:"" ~f:(fun span ->
                  Int.to_string (span.first_line + 1))

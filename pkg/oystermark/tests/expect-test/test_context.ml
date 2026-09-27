@@ -303,8 +303,8 @@ let%expect_test "the complete context of a two-note vault" =
           "created": "2026-02-03",
           "modified": null,
           "headings": [
-            { "text": "Target", "level": 1, "slug": "target", "line": 6 },
-            { "text": "Section", "level": 2, "slug": "section", "line": 7 }
+            { "text": "Target", "level": 1, "slug": "Target", "line": 6 },
+            { "text": "Section", "level": 2, "slug": "Section", "line": 7 }
           ],
           "links": [],
           "link_count": 0,
@@ -331,7 +331,7 @@ let%expect_test "the complete context of a two-note vault" =
           "created": null,
           "modified": null,
           "headings": [
-            { "text": "Source", "level": 1, "slug": "source", "line": 1 }
+            { "text": "Source", "level": 1, "slug": "Source", "line": 1 }
           ],
           "links": [
             {
@@ -376,8 +376,8 @@ let%expect_test "the complete context of a two-note vault" =
           "created": "2026-02-03",
           "modified": null,
           "headings": [
-            { "text": "Target", "level": 1, "slug": "target", "line": 6 },
-            { "text": "Section", "level": 2, "slug": "section", "line": 7 }
+            { "text": "Target", "level": 1, "slug": "Target", "line": 6 },
+            { "text": "Section", "level": 2, "slug": "Section", "line": 7 }
           ],
           "links": [],
           "link_count": 0,
@@ -404,7 +404,7 @@ let%expect_test "the complete context of a two-note vault" =
           "created": null,
           "modified": null,
           "headings": [
-            { "text": "Source", "level": 1, "slug": "source", "line": 1 }
+            { "text": "Source", "level": 1, "slug": "Source", "line": 1 }
           ],
           "links": [
             {

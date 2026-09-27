@@ -1,4 +1,4 @@
-(** Completion: suggest note names, headings, block ids, and attribute ids as
+(** Completion: suggest note names, headings and attribute ids as
     the user types inside wikilink brackets, and vault paths and fragments
     inside the destination of a Markdown link or image.
 
@@ -81,9 +81,7 @@ let wikilink_prefix ~(content : string) ~(line : int) ~(character : int)
     See {!page-"feature-completion-markdown-links".trigger_context}. *)
 type md_dest =
   | Path of
-      { dest_start : int
-        (** Just after the [(] — so the replacement covers an opening [<] and
-          an angle-bracketed suggestion can supply its own. *)
+      { dest_start : int (** Just after the [(]. *)
       ; image : bool (** The label was introduced by [!]. *)
       }
   | Fragment of
@@ -92,23 +90,18 @@ type md_dest =
       }
 
 (** Detection is textual and single-line, matching {!wikilink_prefix}.
-    [None] when the cursor is not inside an open destination.
-
-    The angle-bracket form is where the two shapes differ: whitespace is legal
-    inside the brackets, and the [>] ends the {e path} without ending the
-    destination — [\[a\](<my note.md>#|)] is a fragment position, and has to be
-    one, or the feature would abandon a spaced path the moment it wrote one.
+    [None] when the cursor is not inside an open destination: the destination
+    opens at the last [\](] before the cursor, may hold blanks and balanced
+    parentheses, and a [)] that balances none closes it.
     See {!page-"feature-completion-markdown-links".trigger_context}. *)
 let markdown_dest ~(content : string) ~(line : int) ~(character : int) : md_dest option =
   let offset = Lsp_util.byte_offset_of_position content ~line ~character in
   let before, line_start = line_before ~content ~offset in
-  match String.rindex before '(' with
+  match List.last (String.substr_index_all before ~may_overlap:false ~pattern:"](") with
   | None -> None
-  (* An ordinary parenthesis: only [\]\(] opens a destination. *)
-  | Some i when i = 0 || not (Char.equal before.[i - 1] ']') -> None
   | Some i ->
-    let dest_start = line_start + i + 1 in
-    let raw = String.subo before ~pos:(i + 1) in
+    let dest_start = line_start + i + 2 in
+    let raw = String.subo before ~pos:(i + 2) in
     (* The label's own brackets need not be well-formed; only the [!]
        immediately before its [\[] is consulted. *)
     let image =
@@ -116,38 +109,26 @@ let markdown_dest ~(content : string) ~(line : int) ~(character : int) : md_dest
       | Some j -> j > 0 && Char.equal before.[j - 1] '!'
       | None -> false
     in
-    (* [path_start] is where the path text begins, past any [<]; [extra] is
-       what separates the path from a [#] (the [>], when there is one). *)
-    let split ~path_start ~extra text =
-      match String.lsplit2 text ~on:'#' with
-      | None -> Some (Path { dest_start; image })
-      | Some (note_part, fragment) ->
-        if String.exists fragment ~f:Char.is_whitespace
-        then None
-        else
-          Some
-            (Fragment
-               { note_part
-               ; frag_start = path_start + String.length note_part + extra + 1
-               })
+    let closed =
+      String.fold_until
+        raw
+        ~init:0
+        ~f:(fun depth c ->
+          match c with
+          | '(' -> Continue (depth + 1)
+          | ')' when depth = 0 -> Stop true
+          | ')' -> Continue (depth - 1)
+          | _ -> Continue depth)
+        ~finish:(fun _ -> false)
     in
-    if String.contains raw ')'
+    if closed
     then None
-    else if not (String.is_prefix raw ~prefix:"<")
-    then
-      if String.exists raw ~f:Char.is_whitespace
-      then None
-      else split ~path_start:dest_start ~extra:0 raw
     else (
-      let inside = String.subo raw ~pos:1 in
-      match String.lsplit2 inside ~on:'>' with
-      (* Still between the brackets: whitespace is fine here. *)
-      | None -> split ~path_start:(dest_start + 1) ~extra:0 inside
-      (* Past the closing [>]: only a fragment may follow. *)
-      | Some (path, after) ->
-        if not (String.is_prefix after ~prefix:"#")
-        then None
-        else split ~path_start:(dest_start + 1) ~extra:1 (path ^ after))
+      match String.lsplit2 raw ~on:'#' with
+      | None -> Some (Path { dest_start; image })
+      | Some (note_part, _) ->
+        Some
+          (Fragment { note_part; frag_start = dest_start + String.length note_part + 1 }))
 ;;
 
 (** {2 Note-name mode} *)
@@ -191,11 +172,6 @@ let note_name_items (index : Oystermark.Vault.Index.t) : item list =
     Markdown destinations only.  See
     {!page-"feature-completion-markdown-links".path_completion}. *)
 
-(** Whether [path] can be written as a bare CommonMark destination. *)
-let needs_angles (path : string) : bool =
-  String.exists path ~f:(fun c -> Char.is_whitespace c || Char.is_print c |> not)
-;;
-
 let parens_balanced (path : string) : bool =
   let rec loop i depth =
     if depth < 0
@@ -211,29 +187,20 @@ let parens_balanced (path : string) : bool =
   loop 0 0
 ;;
 
-(** [path] as a Markdown destination.
+(** [path] as a link destination.
 
-    A path containing whitespace goes in angle brackets, the form CommonMark
-    defines and the parser strips before the resolver ever sees it.  Otherwise
-    only what would end the destination early is backslash-escaped: [<] and
-    [>], and parentheses when they do not balance.  Balanced parentheses are
-    legal unescaped and are left legible.
+    Whitespace is legal in a djot destination, and so are balanced
+    parentheses, which are left legible. Only what would end the destination
+    early or be read as an escape is backslash-escaped: [\\], and parentheses
+    when they do not balance.
 
-    Every escape here is undone by the parser — angle brackets by
-    [Match.link_destination], backslashes by its unescaping — so the
-    destination reaching {!Oystermark.Vault.Index.resolve} is [path] itself.
+    The parser undoes every escape, so the destination reaching
+    {!Oystermark.Vault.Index.resolve} is [path] itself.
     See {!page-"feature-completion-markdown-links".destination_escaping}. *)
 let escape_destination (path : string) : string =
-  let escape chars s =
-    String.concat_map s ~f:(fun c ->
-      if List.mem chars c ~equal:Char.equal then sprintf "\\%c" c else String.of_char c)
-  in
-  if needs_angles path
-  then "<" ^ escape [ '\\'; '<'; '>' ] path ^ ">"
-  else
-    escape
-      ('\\' :: '<' :: '>' :: (if parens_balanced path then [] else [ '('; ')' ]))
-      path
+  let escaped = '\\' :: (if parens_balanced path then [] else [ '('; ')' ]) in
+  String.concat_map path ~f:(fun c ->
+    if List.mem escaped c ~equal:Char.equal then sprintf "\\%c" c else String.of_char c)
 ;;
 
 (** Most paths a single [(] may offer before the response is cut short and
@@ -314,8 +281,8 @@ let target_entry
     | Ok (Asset _ | Anchor _) | Error _ -> None)
 ;;
 
-(** Heading, block-id, and attribute-id suggestions for a file entry.  All three
-    kinds share one fragment namespace (see {!page-"feature-attribute-anchors"}).
+(** Heading and attribute-id suggestions for a file entry.  Both kinds share
+    one fragment namespace (see {!page-"feature-attribute-anchors"}).
     See {!page-"feature-completion".fragment_completion}. *)
 let fragment_items (entry : Oystermark.Vault.Index.Entry.t) : item list =
   let module Index = Oystermark.Vault.Index in
@@ -327,13 +294,6 @@ let fragment_items (entry : Oystermark.Vault.Index.Entry.t) : item list =
       ; detail = None
       ; filter_text = Some h.slug
       ; insert_text = Some h.slug
-      ; kind = Reference
-      }
-    | Index.Caret id ->
-      { label = "^" ^ id
-      ; detail = None
-      ; filter_text = Some id
-      ; insert_text = Some ("^" ^ id)
       ; kind = Reference
       }
     | Index.Attr { id; _ } ->
@@ -423,7 +383,7 @@ let%test_module "completion" =
 
     let files =
       [ ( "note-a.md"
-        , "# Alpha\n\n## Section One\n\nBody text ^block1\n\nThe [key]{#kt} span.\n" )
+        , "# Alpha\n\n## Section One\n\n{#block1}\nBody text\n\nThe [key]{#kt} span.\n" )
       ; "note-b.md", "# Beta\n\nText.\n"
       ; "sub/note-a.md", "# Sub Alpha\n\nText.\n"
       ]
@@ -464,16 +424,16 @@ let%test_module "completion" =
         |}]
     ;;
 
-    let%expect_test "fragment mode: headings, block ids, attribute ids" =
+    let%expect_test "fragment mode: headings and attribute ids" =
       show ~rel_path:"note-b.md" ~content:"See [[note-a#" ~line:0 ~character:13;
       [%expect
         {|
-        ((label Alpha) (detail ()) (filter_text (alpha)) (insert_text (alpha))
+        ((label Alpha) (detail ()) (filter_text (Alpha)) (insert_text (Alpha))
          (kind Reference))
-        ((label "Section One") (detail ()) (filter_text (section-one))
-         (insert_text (section-one)) (kind Reference))
-        ((label ^block1) (detail ()) (filter_text (block1)) (insert_text (^block1))
-         (kind Reference))
+        ((label "Section One") (detail ()) (filter_text (Section-One))
+         (insert_text (Section-One)) (kind Reference))
+        ((label #block1) (detail (attribute)) (filter_text (block1))
+         (insert_text (block1)) (kind Reference))
         ((label #kt) (detail (attribute)) (filter_text (kt)) (insert_text (kt))
          (kind Reference))
         replaces ""
@@ -485,9 +445,9 @@ let%test_module "completion" =
       show ~rel_path:"note-a.md" ~content ~line:4 ~character:3;
       [%expect
         {|
-        ((label Self) (detail ()) (filter_text (self)) (insert_text (self))
+        ((label Self) (detail ()) (filter_text (Self)) (insert_text (Self))
          (kind Reference))
-        ((label Sec) (detail ()) (filter_text (sec)) (insert_text (sec))
+        ((label Sec) (detail ()) (filter_text (Sec)) (insert_text (Sec))
          (kind Reference))
         replaces ""
         |}]
@@ -497,12 +457,12 @@ let%test_module "completion" =
       show ~rel_path:"note-b.md" ~content:"![[note-a#" ~line:0 ~character:10;
       [%expect
         {|
-        ((label Alpha) (detail ()) (filter_text (alpha)) (insert_text (alpha))
+        ((label Alpha) (detail ()) (filter_text (Alpha)) (insert_text (Alpha))
          (kind Reference))
-        ((label "Section One") (detail ()) (filter_text (section-one))
-         (insert_text (section-one)) (kind Reference))
-        ((label ^block1) (detail ()) (filter_text (block1)) (insert_text (^block1))
-         (kind Reference))
+        ((label "Section One") (detail ()) (filter_text (Section-One))
+         (insert_text (Section-One)) (kind Reference))
+        ((label #block1) (detail (attribute)) (filter_text (block1))
+         (insert_text (block1)) (kind Reference))
         ((label #kt) (detail (attribute)) (filter_text (kt)) (insert_text (kt))
          (kind Reference))
         replaces ""
@@ -531,7 +491,7 @@ let%test_module "markdown links" =
     (** Spec: {!page-"feature-completion-markdown-links"}. *)
 
     let files =
-      [ "note-a.md", "# Alpha\n\n## Section One\n\nBody ^block1\n"
+      [ "note-a.md", "# Alpha\n\n## Section One\n\n{#block1}\nBody\n"
       ; "sub/note-b.md", "# Beta\n\nText.\n"
       ; "untitled.md", "No heading here.\n"
       ; "assets/diagram.png", ""
@@ -590,7 +550,7 @@ let%test_module "markdown links" =
       [%expect
         {|
         assets/paper.pdf -> assets/paper.pdf
-        my note.md -> <my note.md>   (Spaced)
+        my note.md -> my note.md   (Spaced)
         note-a.md -> note-a.md   (Alpha)
         sub/note-b.md -> sub/note-b.md   (Beta)
         untitled.md -> untitled.md
@@ -607,7 +567,7 @@ let%test_module "markdown links" =
         {|
         assets/diagram.png -> assets/diagram.png
         assets/paper.pdf -> assets/paper.pdf
-        my note.md -> <my note.md>   (Spaced)
+        my note.md -> my note.md   (Spaced)
         note-a.md -> note-a.md   (Alpha)
         sub/note-b.md -> sub/note-b.md   (Beta)
         untitled.md -> untitled.md
@@ -623,7 +583,7 @@ let%test_module "markdown links" =
       [%expect
         {|
         assets/paper.pdf -> assets/paper.pdf
-        my note.md -> <my note.md>   (Spaced)
+        my note.md -> my note.md   (Spaced)
         note-a.md -> note-a.md   (Alpha)
         sub/note-b.md -> sub/note-b.md   (Beta)
         untitled.md -> untitled.md
@@ -638,7 +598,7 @@ let%test_module "markdown links" =
       [%expect
         {|
         assets/paper.pdf -> assets/paper.pdf
-        my note.md -> <my note.md>   (Spaced)
+        my note.md -> my note.md   (Spaced)
         note-a.md -> note-a.md   (Alpha)
         sub/note-b.md -> sub/note-b.md   (Beta)
         untitled.md -> untitled.md
@@ -647,34 +607,26 @@ let%test_module "markdown links" =
         |}]
     ;;
 
-    (** {2 Angle brackets} *)
+    (** {2 Blanks} *)
 
-    (* The replacement covers the [<] the user typed, so the suggestion's own
-       brackets do not double it. *)
-    let%expect_test "an opened angle bracket is part of the replaced span" =
-      show "See [label](<my no";
+    (* A djot destination may hold blanks, so a spaced path completes, fragment
+       included. *)
+    let%expect_test "blanks are part of the destination" =
+      show "See [label](my no";
       [%expect
         {|
         assets/paper.pdf -> assets/paper.pdf
-        my note.md -> <my note.md>   (Spaced)
+        my note.md -> my note.md   (Spaced)
         note-a.md -> note-a.md   (Alpha)
         sub/note-b.md -> sub/note-b.md   (Beta)
         untitled.md -> untitled.md
         assets/diagram.png -> assets/diagram.png
-        replaces "<my no"
-        |}]
-    ;;
-
-    (* Whitespace ends a bare destination but not an angle-bracketed one —
-       without which a spaced path could never be completed again, fragment
-       included. *)
-    let%expect_test "whitespace: fatal bare, harmless inside brackets" =
-      show "See [label](my no";
-      [%expect {| |}];
-      show "See [label](<my note.md>#";
+        replaces "my no"
+        |}];
+      show "See [label](my note.md#";
       [%expect
         {|
-        Spaced -> spaced
+        Spaced -> Spaced
         replaces ""
         |}]
     ;;
@@ -682,7 +634,7 @@ let%test_module "markdown links" =
     let%expect_test "a closed destination offers nothing" =
       show "See [label](note-a.md) ";
       [%expect {| |}];
-      show "See [label](<my note.md> ";
+      show "See [label](x (y).md) ";
       [%expect {| |}]
     ;;
 
@@ -692,9 +644,9 @@ let%test_module "markdown links" =
       show "See [label](note-a.md#";
       [%expect
         {|
-        Alpha -> alpha
-        Section One -> section-one
-        ^block1 -> ^block1
+        Alpha -> Alpha
+        Section One -> Section-One
+        #block1 -> block1   (attribute)
         replaces ""
         |}]
     ;;
@@ -703,8 +655,8 @@ let%test_module "markdown links" =
       show ~rel_path:"note-a.md" "# Alpha\n\n## Section One\n\nSee [label](#sec";
       [%expect
         {|
-        Alpha -> alpha
-        Section One -> section-one
+        Alpha -> Alpha
+        Section One -> Section-One
         replaces "sec"
         |}]
     ;;
@@ -744,11 +696,11 @@ let%test_module "markdown links" =
       [%expect
         {|
         plain.md -> plain.md
-        my note.md -> <my note.md>
+        my note.md -> my note.md
         a(b)c.md -> a(b)c.md
         a(b.md -> a\(b.md
-        less<than>.md -> less\<than\>.md
-        with space (and parens).md -> <with space (and parens).md>
+        less<than>.md -> less<than>.md
+        with space (and parens).md -> with space (and parens).md
         |}]
     ;;
 

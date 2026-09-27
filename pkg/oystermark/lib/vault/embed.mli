@@ -28,5 +28,5 @@
 val expand_docs
   :  ?max_depth:int
   -> index:Index.t
-  -> (string * Cmarkit.Doc.t) list
-  -> (string * Cmarkit.Doc.t) list
+  -> (string * Note.t) list
+  -> (string * Note.t) list

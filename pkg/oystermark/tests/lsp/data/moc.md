@@ -3,8 +3,8 @@
 
 # Alpha two
 
-Body ^para
+[Body]{#para}
 
 # Baz
 
-Back to [[#alpha-two]] and [[#^para]].
+Back to [[#alpha-two]] and [[#para]].

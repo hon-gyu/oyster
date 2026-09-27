@@ -1,715 +1,187 @@
-(** {1 Pre-resolution file-level parsing}
-
-Each module provides a single-pass mapper that might
-- introduce new inline or block extensions
-- rewrite Cmarkit.Doc AST
-- add metadata to AST nodes
-- {!Frontmatter} operates on the raw file content before Cmarkit.Doc parsing.
-  Every other mapper operates on the Cmarkit.Doc AST.
-- Some mappers operate on node of Cmarkit AST, i.e. [Block.t] or [Inline.t]. Their
-  provided mapper follows the signature of [Cmarkit.Inline.t Cmarkit.Mapper.mapper]
-  or [Cmarkit.Block.t Cmarkit.Mapper.mapper]
-- `-> other mappers rely on multiple nodes as input, thus operates on the whole
-  [Cmarkit.Doc.t]. E.g., div fences (see [Cmarkit.Block.Ext_div]) and {!Struct}
-
-*)
-
 open Core
-open Common
 module Common = Common
 module Frontmatter = Frontmatter
 module Textloc_conv = Textloc_conv
-module Struct = Struct
 
-type block_id =
-  | Caret of Cmarkit.Block.Block_id.t
-  | Heading of string
-
-(** [of_string ?strict ?layout ?enable_struct s] parses markdown string [s] into a
-    [Cmarkit.Doc.t] with frontmatter embedded as a {!Frontmatter.Frontmatter}
-    block and wikilinks/block IDs parsed. Heading identifiers are assigned by the
-    parser ([~heading_auto_ids:true]) and read via {!Common.heading_id}.
-    [enable_struct] controls the post-parse structured-list rewrite. *)
-let of_string
-      (* Cmarkit config *)
-      ?(strict = false)
-      ?(layout = false)
-      ?(locs = true)
-      ?(enable_struct = true)
-      (s : string)
-  : Cmarkit.Doc.t
-  =
-  let open Cmarkit in
-  (* Blank (not strip) the frontmatter so parsed [Textloc]s stay aligned with
-     the original file's byte/line positions. See {!Frontmatter.blank_frontmatter}. *)
-  let yaml_opt, body = Frontmatter.blank_frontmatter s in
-  let cmarkit_doc =
-    Doc.of_string
-      ~strict
-      ~layout
-      ~locs:true
-      ~heading_auto_ids:true
-      ~block_id:true
-      ~wikilink:true
-      ~callout:(Block.Callout.Config.make ())
-        (* CommonMark behaviors the djot preset would disable. Kept on. *)
-      ~intraword_emphasis:true
-      ~underscore_thematic_break:true (* Djot extensions begin *)
-      ~div:true
-      ~inline_attributes:true
-      ~block_attributes:true
-      ~marked_emphasis_delims:true
-      ~extra_inline_containers:Inline.Extra_inline_container.Config.djot
-      ~colon_symbols:true
-      ~extended_ordered_list_styles:true
-      ~table_captions:true
-      ~smart_punctuation:true
-        (* Djot extensions end *)
-        (* A heading is exactly its own line, as in CommonMark. *)
-      ~multiline_atx_headings:false
-      body
-  in
-  let body_doc = if enable_struct then Struct.rewrite_doc cmarkit_doc else cmarkit_doc in
-  (* The frontmatter region was blanked (not stripped) to keep [Textloc]s
-     aligned with the original file, so the parsed body begins with blank lines
-     standing in for those rows. Drop them: leading blank lines carry no content,
-     and keeping them would render as spurious gaps after the frontmatter block.
-     The real blocks keep their (now full-file-relative) locations. *)
-  let rec drop_leading_blanks = function
-    | Cmarkit.Block.Blank_line _ :: rest -> drop_leading_blanks rest
-    | bs -> bs
-  in
-  match yaml_opt, Doc.block body_doc with
-  | None, _ -> body_doc
-  | Some yaml, Block.Blocks (blocks, meta) ->
-    let blocks' = Frontmatter.Frontmatter yaml :: drop_leading_blanks blocks in
-    Doc.make (Block.Blocks (blocks', meta))
-  | Some yaml, other ->
-    Doc.make (Block.Blocks ([ Frontmatter.Frontmatter yaml; other ], Meta.none))
+let profile : Djot.Profile.t =
+  Djot.Profile.(
+    markdown_like
+    |> with_ext_wikilinks true
+    |> with_ext_keyed true
+    |> with_ext_callouts true)
 ;;
 
-let commonmark_of_doc (doc : Cmarkit.Doc.t) : string =
-  let r =
-    List.fold
-      ~f:Cmarkit_renderer.compose
-      ~init:(Cmarkit_commonmark.renderer ())
-      [ Cmarkit_renderer.make ~block:Frontmatter.block_commonmark_renderer () ]
-  in
-  Cmarkit_renderer.doc_to_string r doc
+type t =
+  { frontmatter : Yaml.value option
+  ; doc : Djot.Doc.t
+  }
+
+let of_string ?(locs = true) (s : string) : t =
+  let frontmatter, body = Frontmatter.blank_frontmatter s in
+  { frontmatter; doc = Djot.Doc.of_string ~profile ~locs body }
 ;;
 
-(* {1 sexp of Cmarkit.{Meta.t, Block.t, Inline.t} }
-
-   Each submodule that introduces an extension constructor or a meta key
-   provides a converter of type {!Common.inline_sexp} / {!Common.block_sexp}
-   / {!Common.meta_sexp}. Here we compose them, placing the core converters
-   last so extensions win on their constructors. *)
-
-(* Wikilinks are represented by {!Cmarkit.Inline.Wikilink} when the [~wikilink]
-   parser knob is enabled. *)
-let wikilink_sexp_of_inline : Common.inline_sexp =
-  fun _recurse ~with_meta:_ i ->
-  match i with
-  | Cmarkit.Inline.Ext_wikilink (wl, _) ->
-    Some (Sexp.List [ Atom "Wikilink"; Common.sexp_of_wikilink wl ])
-  | _ -> None
+let to_string ({ frontmatter; doc } : t) : string =
+  Option.value_map frontmatter ~default:"" ~f:Frontmatter.to_source
+  ^ Djot.Source.of_doc doc
 ;;
 
-(* Div fences are represented by {!Cmarkit.Block.Div} when the [~div] parser
-   knob is enabled. *)
-let div_sexp_of_block : Common.block_sexp =
-  fun ~recurse_inline:_ ~recurse_block ~with_meta b ->
-  match b with
-  | Cmarkit.Block.Ext_div (d, meta) ->
-    let class_sexp =
-      match Cmarkit.Block.Div.class' d with
-      | Some (cls, _) -> Sexp.List [ Atom "class"; Atom cls ]
-      | None -> Sexp.List [ Atom "class" ]
-    in
-    Some
-      (with_meta
-         meta
-         (Sexp.List [ Atom "Div"; class_sexp; recurse_block (Cmarkit.Block.Div.block d) ]))
-  | _ -> None
+let doc_of_blocks (blocks : Djot.Block.t Djot.node list) : Djot.Doc.t =
+  Djot.Doc.of_blocks ~profile blocks
 ;;
 
-(* Block IDs are attached to paragraph metadata as {!Cmarkit.Block.Block_id}
-   values when the [~block_id] parser knob is enabled. *)
-let block_id_sexp_of_meta : Common.meta_sexp =
-  fun meta ->
-  Cmarkit.Block.Block_id.find meta
-  |> Option.map ~f:(fun bid ->
-    Sexp.List [ Atom "block-id"; Atom (Cmarkit.Block.Block_id.id bid) ])
+let source_of_blocks (blocks : Djot.Block.t Djot.node list) : string =
+  Djot.Source.of_doc (doc_of_blocks blocks)
 ;;
 
-(* Inline/block attributes are wrapper nodes carrying the merged
-   {!Cmarkit.Attribute.t} and the target. *)
-let inline_attributes_sexp_of_inline : Common.inline_sexp =
-  fun recurse ~with_meta i ->
-  match i with
-  | Cmarkit.Inline.Ext_attributes (a, m) ->
-    let attrs = Cmarkit.Inline.Attributes.attributes a in
-    Some
-      (with_meta
-         m
-         (Sexp.List
-            [ Atom "Attributes"
-            ; Atom (Cmarkit.Attribute.to_string attrs)
-            ; recurse (Cmarkit.Inline.Attributes.inline a)
-            ]))
-  | _ -> None
-;;
+(* Sexp
+   ==== *)
 
-let block_attributes_sexp_of_block : Common.block_sexp =
-  fun ~recurse_inline:_ ~recurse_block ~with_meta b ->
-  match b with
-  | Cmarkit.Block.Ext_attributes (a, m) ->
-    let attrs = Cmarkit.Block.Attributes.attributes a in
-    Some
-      (with_meta
-         m
-         (Sexp.List
-            [ Atom "Attributes"
-            ; Atom (Cmarkit.Attribute.to_string attrs)
-            ; recurse_block (Cmarkit.Block.Attributes.block a)
-            ]))
-  | _ -> None
-;;
-
-(* Callout metadata carries only kind and fold; the title lives in the
-   block-quote body. *)
-let callout_sexp_of_meta : Common.meta_sexp =
-  fun meta ->
-  Cmarkit.Block.Callout.find meta
-  |> Option.map ~f:(fun c ->
-    let fold =
-      match Cmarkit.Block.Callout.fold c with
-      | None -> Sexp.List []
-      | Some Cmarkit.Block.Callout.Foldable_open -> Sexp.Atom "Foldable_open"
-      | Some Cmarkit.Block.Callout.Foldable_closed -> Sexp.Atom "Foldable_closed"
-    in
+let with_attrs (attrs : Djot.Attr.t) (sexp : Sexp.t) : Sexp.t =
+  match attrs, sexp with
+  | [], _ -> sexp
+  | _, Sexp.List items ->
     Sexp.List
-      [ Atom "callout"
+      (items
+       @ [ Sexp.List
+             (Atom "@" :: List.map attrs ~f:(fun (k, v) -> Sexp.List [ Atom k; Atom v ]))
+         ])
+  | _, Sexp.Atom _ ->
+    Sexp.List
+      [ sexp
       ; Sexp.List
-          [ Sexp.List [ Atom "kind"; Atom (Cmarkit.Block.Callout.kind c) ]
-          ; Sexp.List [ Atom "fold"; fold ]
-          ]
-      ])
-;;
-
-let sexp_of_ =
-  Common.make_sexp_of
-    ~inlines:[ wikilink_sexp_of_inline; inline_attributes_sexp_of_inline ]
-    ~blocks:
-      [ Frontmatter.sexp_of_block
-      ; div_sexp_of_block
-      ; Struct.sexp_of_block
-      ; block_attributes_sexp_of_block
+          (Atom "@" :: List.map attrs ~f:(fun (k, v) -> Sexp.List [ Atom k; Atom v ]))
       ]
-    ~metas:[ block_id_sexp_of_meta; callout_sexp_of_meta ]
-    ()
 ;;
 
-let sexp_of_inline = sexp_of_.inline
-let sexp_of_block = sexp_of_.block
-let sexp_of_meta = sexp_of_.meta
-let sexp_of_doc = sexp_of_.doc
+let rec sexp_of_inline (Djot.Node (_, attrs, inline) : Djot.Inline.t Djot.node) : Sexp.t =
+  let tag name children = Sexp.List (Atom name :: List.map children ~f:sexp_of_inline) in
+  let target : Djot.Inline.target -> Sexp.t = function
+    | Direct url -> Atom url
+    | Reference label -> List [ Atom "ref"; Atom label ]
+  in
+  with_attrs
+    attrs
+    (match inline with
+     | Str s -> Atom s
+     | Emph l -> tag "Emph" l
+     | Strong l -> tag "Strong" l
+     | Highlight l -> tag "Highlight" l
+     | Insert l -> tag "Insert" l
+     | Delete l -> tag "Delete" l
+     | Superscript l -> tag "Superscript" l
+     | Subscript l -> tag "Subscript" l
+     | Verbatim s -> List [ Atom "Verbatim"; Atom s ]
+     | Symbol s -> List [ Atom "Symbol"; Atom s ]
+     | Math (DisplayMath, s) -> List [ Atom "Display_math"; Atom s ]
+     | Math (InlineMath, s) -> List [ Atom "Math"; Atom s ]
+     | Link (l, t) -> List [ Atom "Link"; target t; tag "text" l ]
+     | Image (l, t) -> List [ Atom "Image"; target t; tag "alt" l ]
+     | Span l -> tag "Span" l
+     | FootnoteReference label -> List [ Atom "Footnote_ref"; Atom label ]
+     | UrlLink url -> List [ Atom "Url"; Atom url ]
+     | EmailLink email -> List [ Atom "Email"; Atom email ]
+     | Ext_wikilink (embed, target, alias) ->
+       List
+         (Atom (if embed then "Embed" else "Wikilink")
+          :: Atom target
+          :: Option.value_map alias ~default:[] ~f:(fun a -> [ Sexp.Atom a ]))
+     | RawInline (format, s) -> List [ Atom "Raw"; Atom format; Atom s ]
+     | NonBreakingSpace -> Atom "Nbsp"
+     | Quoted (SingleQuotes, l) -> tag "Single_quoted" l
+     | Quoted (DoubleQuotes, l) -> tag "Double_quoted" l
+     | SoftBreak -> Atom "Soft_break"
+     | HardBreak -> Atom "Hard_break")
+;;
 
-(** {1:test Test}
-====================
-*)
+let rec sexp_of_block (Djot.Node (_, attrs, block) : Djot.Block.t Djot.node) : Sexp.t =
+  let inlines l = List.map l ~f:sexp_of_inline in
+  let blocks l = List.map l ~f:sexp_of_block in
+  let item bs = Sexp.List (Atom "item" :: blocks bs) in
+  with_attrs
+    attrs
+    (match block with
+     | Para l -> List (Atom "Para" :: inlines l)
+     | Section l -> List (Atom "Section" :: blocks l)
+     | Heading (level, l) ->
+       List (Atom "Heading" :: Atom (Int.to_string level) :: inlines l)
+     | BlockQuote l -> List (Atom "Block_quote" :: blocks l)
+     | CodeBlock (lang, text) -> List [ Atom "Code_block"; Atom lang; Atom text ]
+     | Div l -> List (Atom "Div" :: blocks l)
+     | OrderedList (_, _, items) -> List (Atom "Ordered_list" :: List.map items ~f:item)
+     | BulletList (_, items) -> List (Atom "Bullet_list" :: List.map items ~f:item)
+     | TaskList (_, items) ->
+       List
+         (Atom "Task_list"
+          :: List.map items ~f:(fun (status, bs) ->
+            Sexp.List
+              (Atom
+                 (match status with
+                  | Complete -> "[x]"
+                  | Incomplete -> "[ ]")
+               :: blocks bs)))
+     | DefinitionList (_, items) ->
+       List
+         (Atom "Definition_list"
+          :: List.map items ~f:(fun (term, bs) ->
+            Sexp.List [ List (Atom "term" :: inlines term); item bs ]))
+     | ThematicBreak -> Atom "Thematic_break"
+     | Table _ -> Atom "Table"
+     | RawBlock (format, s) -> List [ Atom "Raw_block"; Atom format; Atom s ]
+     | FootnoteDef (label, l) -> List (Atom "Footnote_def" :: Atom label :: blocks l)
+     | RefDef (label, dest) -> List [ Atom "Ref_def"; Atom label; Atom dest ]
+     | Ext_keyed (label, b) ->
+       List [ Atom "Keyed"; List (Atom "label" :: inlines label); sexp_of_block b ]
+     | Ext_callout (kind, fold, title, body) ->
+       List
+         ((Sexp.Atom "Callout"
+           :: Sexp.Atom kind
+           ::
+           (match fold with
+            | None -> []
+            | Some FoldExpanded -> [ Sexp.Atom "+" ]
+            | Some FoldCollapsed -> [ Sexp.Atom "-" ]))
+          @ [ Sexp.List (Atom "title" :: inlines title) ]
+          @ blocks body))
+;;
+
+let sexp_of_doc (doc : Djot.Doc.t) : Sexp.t =
+  let footnotes =
+    List.map (Djot.Doc.footnotes doc) ~f:(fun (label, bs) ->
+      Sexp.List (Atom "Footnote" :: Atom label :: List.map bs ~f:sexp_of_block))
+  in
+  Sexp.List (List.map (Djot.Doc.blocks doc) ~f:sexp_of_block @ footnotes)
+;;
 
 module For_test = struct
-  let make_block (s : string) : Cmarkit.Block.t =
-    let doc = of_string s in
-    Cmarkit.Doc.block doc
-  ;;
-
-  let pp_doc (ppf : Format.formatter) (doc : Cmarkit.Doc.t) : unit =
-    let block = Cmarkit.Doc.block doc in
-    block |> sexp_of_block |> Sexp.to_string_hum ~indent:2 |> Format.fprintf ppf "%s@\n"
+  let pp_doc (ppf : Format.formatter) (doc : Djot.Doc.t) : unit =
+    Format.fprintf ppf "%s@\n" (Sexp.to_string_hum ~indent:2 (sexp_of_doc doc))
   ;;
 end
 
-(** {2 Interactions}
-
-{3 Div fences and Struct}
-
-Tests for interaction between div fences ([Cmarkit.Block.Ext_div]) and {!module-"Struct"}
-
-The open and closing fence of div should not be keyed.
-
-*)
-
-let%test_module "Oy_div and Struct" =
-  (module struct
-    let full_commonmark_of_doc = commonmark_of_doc
-
-    open Common.For_test
-    open For_test
-
-    let example_basic =
-      ( "basic"
-      , {|::: warning
-Here is a paragraph.
-
-And here is another.
-:::|}
-      , 1 )
-    ;;
-
-    let example_no_class =
-      ( "no_class"
-      , {|:::
-content
-:::
-|}
-      , 1 )
-    ;;
-
-    let example_nested_divs =
-      ( "nested_divs"
-      , {|:::: outer
-::: inner
-content
-:::
-::::
-|}
-      , 2 )
-    ;;
-
-    let example_nested_divs_same_length =
-      ( "nested_divs_same_length"
-      , {|::: warning
-content
-:::
-:::|}
-      , 2 )
-    ;;
-
-    let example_EOF_closes =
-      ( "EOF_closes"
-      , {|::: warning
-unclosed content|}
-      , 1 )
-    ;;
-
-    let example_extra_closing_fence =
-      ( "extra_closing_fence"
-      , {|::: warning
-content
-:::
-:::|}
-      , 2 )
-    ;;
-
-    let non_example_less_than_3_colons =
-      ( "less_than_3_colons"
-      , {|:: not-a-div
-content
-::|}
-      , 0 )
-    ;;
-
-    let non_example_extra_words_after_class =
-      ( "extra_words_after_class"
-      , {|::: warning extra
-content
-:::|}
-      , 0 )
-    ;;
-
-    let non_example_div_does_not_interfere_with_code_blocks =
-      ( "div_does_not_interfere_with_code_blocks"
-      , {|```
-::: not-a-div
-```|}
-      , 0 )
-    ;;
-
-    let example_closing_fence_must_be_at_least_as_long =
-      ( "closing_fence_must_be_at_least_as_long"
-      , {|:::: warning
-content
-:::
-::::|}
-      , 2 )
-    ;;
-
-    let examples =
-      [ example_basic
-      ; example_no_class
-      ; example_nested_divs
-      ; example_nested_divs_same_length
-      ; example_EOF_closes
-      ; example_extra_closing_fence
-      ; non_example_less_than_3_colons
-      ; non_example_div_does_not_interfere_with_code_blocks
-      ; example_closing_fence_must_be_at_least_as_long
-      ]
-    ;;
-
-    let count_div (doc : Cmarkit.Doc.t) : int =
-      let folder =
-        Cmarkit.Folder.make
-          ~block:(fun f acc -> function
-             | Cmarkit.Block.Ext_div (d, _) ->
-               Cmarkit.Folder.ret
-                 (1 + Cmarkit.Folder.fold_block f acc (Cmarkit.Block.Div.block d))
-             | Cmarkit.Block.Ext_keyed ((_label, block), _) ->
-               Cmarkit.Folder.ret (Cmarkit.Folder.fold_block f acc block)
-             | _ -> Cmarkit.Folder.default)
-          ()
-      in
-      Cmarkit.Folder.fold_doc folder 0 doc
-    ;;
-
-    let count_keyed (doc : Cmarkit.Doc.t) : int =
-      let folder =
-        Cmarkit.Folder.make
-          ~block:(fun f acc -> function
-             | Cmarkit.Block.Ext_div (d, _) ->
-               Cmarkit.Folder.ret
-                 (Cmarkit.Folder.fold_block f acc (Cmarkit.Block.Div.block d))
-             | Cmarkit.Block.Ext_keyed ((_label, block), _) ->
-               Cmarkit.Folder.ret (1 + Cmarkit.Folder.fold_block f acc block)
-             | _ -> Cmarkit.Folder.default)
-          ()
-      in
-      Cmarkit.Folder.fold_doc folder 0 doc
-    ;;
-
-    let pp_src ppf src = Format.fprintf ppf "```md {#original}@\n%s@\n```@\n" src
-
-    (* [n_div]/[n_keyed] are ignored: the actual counts are printed so the expect
-       output reflects the parser configuration. *)
-    let test ?(n_div : int = 0) ?(n_keyed : int = 0) (_name, src, _expected_n_div) =
-      ignore (n_div : int);
-      ignore (n_keyed : int);
-      Format.printf "%a%!" pp_src src;
-      let doc = of_string src in
-      print_endline "```sexp";
-      Format.printf "%a%!" pp_doc doc;
-      print_endline "```";
-      Printf.printf "n_div=%d n_keyed=%d\n" (count_div doc) (count_keyed doc)
-    ;;
-
-    let%expect_test _ =
-      example_basic |> test ~n_div:1;
-      [%expect
-        {|
-        ```md {#original}
-        ::: warning
-        Here is a paragraph.
-
-        And here is another.
-        :::
-        ```
-        ```sexp
-        (Div (class warning)
-          (Blocks (Paragraph (Text "Here is a paragraph.")) Blank_line
-            (Paragraph (Text "And here is another."))))
-        ```
-        n_div=1 n_keyed=0
-        |}]
-    ;;
-
-    let%expect_test _ =
-      example_no_class |> test ~n_div:1;
-      [%expect
-        {|
-        ```md {#original}
-        :::
-        content
-        :::
-
-        ```
-        ```sexp
-        (Blocks (Div (class) (Paragraph (Text content))) Blank_line)
-        ```
-        n_div=1 n_keyed=0
-        |}]
-    ;;
-
-    let%expect_test _ =
-      example_nested_divs |> test ~n_div:2;
-      [%expect
-        {|
-        ```md {#original}
-        :::: outer
-        ::: inner
-        content
-        :::
-        ::::
-
-        ```
-        ```sexp
-        (Blocks (Div (class outer) (Div (class inner) (Paragraph (Text content))))
-          Blank_line)
-        ```
-        n_div=2 n_keyed=0
-        |}]
-    ;;
-
-    let%expect_test _ =
-      example_nested_divs_same_length |> test ~n_div:2;
-      [%expect
-        {|
-        ```md {#original}
-        ::: warning
-        content
-        :::
-        :::
-        ```
-        ```sexp
-        (Blocks (Div (class warning) (Paragraph (Text content)))
-          (Div (class) (Blocks)))
-        ```
-        n_div=2 n_keyed=0
-        |}]
-    ;;
-
-    let%expect_test _ =
-      example_EOF_closes |> test ~n_div:1;
-      [%expect
-        {|
-        ```md {#original}
-        ::: warning
-        unclosed content
-        ```
-        ```sexp
-        (Div (class warning) (Paragraph (Text "unclosed content")))
-        ```
-        n_div=1 n_keyed=0
-        |}]
-    ;;
-
-    let%expect_test _ =
-      example_extra_closing_fence |> test ~n_div:2;
-      [%expect
-        {|
-        ```md {#original}
-        ::: warning
-        content
-        :::
-        :::
-        ```
-        ```sexp
-        (Blocks (Div (class warning) (Paragraph (Text content)))
-          (Div (class) (Blocks)))
-        ```
-        n_div=2 n_keyed=0
-        |}]
-    ;;
-
-    let%expect_test _ =
-      non_example_less_than_3_colons |> test ~n_div:0;
-      [%expect
-        {|
-        ```md {#original}
-        :: not-a-div
-        content
-        ::
-        ```
-        ```sexp
-        (Paragraph
-          (Inlines (Text ":: not-a-div") (Break soft) (Text content) (Break soft)
-            (Text ::)))
-        ```
-        n_div=0 n_keyed=0
-        |}]
-    ;;
-
-    let%expect_test _ =
-      non_example_extra_words_after_class |> test ~n_div:1 ~n_keyed:1;
-      [%expect
-        {|
-        ```md {#original}
-        ::: warning extra
-        content
-        :::
-        ```
-        ```sexp
-        (Blocks
-          (Keyed (Text "::: ")
-            (Paragraph (Inlines (Text "warning extra") (Break soft) (Text content))))
-          (Div (class) (Blocks)))
-        ```
-        n_div=1 n_keyed=1
-        |}]
-    ;;
-
-    let%expect_test _ =
-      non_example_div_does_not_interfere_with_code_blocks |> test ~n_div:0;
-      [%expect
-        {|
-        ```md {#original}
-        ```
-        ::: not-a-div
-        ```
-        ```
-        ```sexp
-        (Code_block no-info "::: not-a-div")
-        ```
-        n_div=0 n_keyed=0
-        |}]
-    ;;
-
-    let%expect_test _ =
-      example_closing_fence_must_be_at_least_as_long |> test ~n_div:2;
-      [%expect
-        {|
-        ```md {#original}
-        :::: warning
-        content
-        :::
-        ::::
-        ```
-        ```sexp
-        (Div (class warning)
-          (Blocks (Paragraph (Text content)) (Div (class) (Blocks))))
-        ```
-        n_div=2 n_keyed=0
-        |}]
-    ;;
-
-    let example_absorb_two_codeblocks =
-      {|- foo
-- bar:
-::: two-example
-```py
-code1
-```
-```js
-code2
-```
-:::|}
-    ;;
-
-    let%expect_test _ =
-      test ~n_div:1 ~n_keyed:1 ("", example_absorb_two_codeblocks, 0);
-      [%expect
-        {|
-        ```md {#original}
-        - foo
-        - bar:
-        ::: two-example
-        ```py
-        code1
-        ```
-        ```js
-        code2
-        ```
-        :::
-        ```
-        ```sexp
-        (Blocks
-          (List (Paragraph (Text foo))
-            (Keyed (Text bar:)
-              (Div (class two-example)
-                (Blocks (Code_block py code1) (Code_block js code2))))))
-        ```
-        n_div=1 n_keyed=1
-        |}]
-    ;;
-
-    let%test_unit "roundtrip: commonmark output is idempotent" =
-      List.iter
-        (List.map examples ~f:(fun (_, content, _) -> content))
-        ~f:
-          (commonmark_of_doc_idempotent
-             ~doc_of_string:of_string
-             ~commonmark_of_doc:full_commonmark_of_doc)
-    ;;
-  end)
+let%expect_test "frontmatter is kept out of the tree, locations stay in the file" =
+  let { frontmatter; doc } = of_string "---\ntitle: T\n---\n# Kap\n" in
+  print_s [%sexp (Option.is_some frontmatter : bool)];
+  For_test.pp_doc Format.std_formatter doc;
+  let (Djot.Node (_, _, section) as node) = List.hd_exn (Djot.Doc.blocks doc) in
+  ignore (section : Djot.Block.t);
+  Format.printf "%a@." Djot.Textloc.pp (Djot.Doc.textloc doc node);
+  [%expect
+    {|
+    true
+    ((Section (Heading 1 Kap) (@ (id Kap))))
+    4.0-4.4
+    |}]
 ;;
 
-let%test_module "Block attribute" =
-  (module struct
-    open For_test
-
-    let%expect_test "attaches to div" =
-      let doc =
-        of_string
-          {|{#foo}
-::: warning
-body
-:::|}
-      in
-      Format.printf "%a%!" pp_doc doc;
-      [%expect {| (Attributes #foo (Div (class warning) (Paragraph (Text body)))) |}]
-    ;;
-
-    let%expect_test "attaches to keyed block" =
-      let doc =
-        of_string
-          {|{#foo}
-key:
-- bar|}
-      in
-      Format.printf "%a%!" pp_doc doc;
-      [%expect
-        {| (Blocks (Attributes #foo (Keyed (Text key:) (List (Paragraph (Text bar)))))) |}]
-    ;;
-
-    let%expect_test "attaches to keyed list" =
-      let doc =
-        of_string
-          {|{#foo}
-- key:
-  - bar|}
-      in
-      Format.printf "%a%!" pp_doc doc;
-      [%expect
-        {| (Attributes #foo (List (Keyed (Text key:) (List (Paragraph (Text bar)))))) |}]
-    ;;
-
-    let%expect_test "no attribute" =
-      let doc = of_string "foo" in
-      Format.printf "%a%!" pp_doc doc;
-      [%expect {| (Paragraph (Text foo)) |}]
-    ;;
-
-    (* A djot inline attribute inside a keyable paragraph rides on the inline it
-       follows (the fork's [keyed_last_pass] attaches it like the normal inline
-       pass). It is content-invisible: keying is unaffected on the value side,
-       and the key itself may carry one. *)
-    let%expect_test "inline attribute on keyed value" =
-      let doc = of_string "key: value{.x}" in
-      Format.printf "%a%!" pp_doc doc;
-      [%expect {| (Keyed (Text "key: ") (Paragraph (Attributes .x (Text value)))) |}]
-    ;;
-
-    let%expect_test "inline attribute on keyed key" =
-      let doc = of_string "key{.x}: value" in
-      Format.printf "%a%!" pp_doc doc;
-      [%expect
-        {|
-        (Keyed (Inlines (Attributes .x (Text key)) (Text ": "))
-          (Paragraph (Text value)))
-        |}]
-    ;;
-
-    (* The CommonMark renderer re-emits [{...}] specifiers from the wrapper, so
-       block/inline attributes (and an attribute wrapping a keyed node) round-trip
-       through [commonmark_of_doc] idempotently. *)
-    let%test_unit "commonmark roundtrip is idempotent" =
-      List.iter
-        [ "{#foo .bar}\nkey:\n- bar"
-        ; "_em_{#x .y}"
-        ; "{source=\"Iliad\"}\n> Sing, muse"
-        ; "word{lang=fr}{.blue}"
-        ; "{#water .important key=\"my val\"}\nDon't forget!"
-        ; "{#custom .big}\n# Hello world"
-        ; (* inline attribute inside a keyable paragraph: value-side and key-side *)
-          "key: value{.x}"
-        ; "key{.x}: value"
-        ; "a: b{.x}: c"
-        ]
-        ~f:
-          (Common.For_test.commonmark_of_doc_idempotent
-             ~doc_of_string:of_string
-             ~commonmark_of_doc)
-    ;;
-  end)
+let%expect_test "extensions" =
+  of_string "[[note#A#B|alias]] ![[img.png]]\n\n> [!note]- Title\n> body\n\nkey: value\n"
+  |> fun { doc; _ } ->
+  For_test.pp_doc Format.std_formatter doc;
+  [%expect
+    {|
+    ((Para (Wikilink note#A#B alias) " " (Embed img.png))
+      (Callout note - (title Title) (Para body))
+      (Keyed (label key) (Para value)))
+    |}]
 ;;

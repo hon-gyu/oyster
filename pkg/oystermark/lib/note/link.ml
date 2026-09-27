@@ -1,35 +1,37 @@
 open Core
 
 module Ref = struct
-  type fragment =
-    | Hash_path of string list
-    (** May resolves to headings, or Djot attribute anchors (when length = 1). Non-empty *)
-    | Caret_id of string (** Obsidian block id *)
-  [@@deriving sexp, equal, compare]
+  type fragment = string list [@@deriving sexp, equal, compare]
 
-  (**
-    | Target | Fragment | Meaning |
-    |---|---|---|
-    | `Some target` | `None` | Another note or asset |
-    | `Some target` | `Some fragment` | An anchor in another note |
-    | `None` | `Some fragment` | An anchor in the current note |
-    | `None` | `None` | Current note or normalized empty reference |
-  *)
   type t =
     { target : string option
-      (** Authored target name or path. [None] means the current note. *)
     ; fragment : fragment option
     }
   [@@deriving sexp, equal, compare]
 
-  let of_wikilink (w : Cmarkit.Inline.Wikilink.t) : t =
-    let fragment =
-      match Cmarkit.Inline.Wikilink.fragment w with
-      | None -> None
-      | Some (Cmarkit.Inline.Wikilink.Heading hs) -> Some (Hash_path hs)
-      | Some (Cmarkit.Inline.Wikilink.Block_ref s) -> Some (Caret_id s)
-    in
-    { target = Cmarkit.Inline.Wikilink.target w; fragment }
+  let of_wikilink_target (raw : string) : t =
+    let non_empty s = Option.some_if (not (String.is_empty s)) s in
+    match String.lsplit2 raw ~on:'#' with
+    | None -> { target = non_empty (String.strip raw); fragment = None }
+    | Some (target, fragment) ->
+      { target = non_empty (String.strip target)
+      ; fragment =
+          (match
+             String.split fragment ~on:'#'
+             |> List.filter_map ~f:(fun segment -> non_empty (String.strip segment))
+           with
+           | [] -> None
+           | segments -> Some segments)
+      }
+  ;;
+
+  let string_of_fragment (fragment : fragment) : string =
+    "#" ^ String.concat fragment ~sep:"#"
+  ;;
+
+  let to_wikilink_target ({ target; fragment } : t) : string =
+    Option.value target ~default:""
+    ^ Option.value_map fragment ~default:"" ~f:string_of_fragment
   ;;
 
   let is_external (s : string) : bool =
@@ -63,52 +65,36 @@ module Ref = struct
     loop 0
   ;;
 
-  let of_cmark_dest (dest : string) : t option =
-    let decoded = percent_decode dest in
-    if is_external decoded
-    then None
+  let of_destination (dest : string) : t option =
+    if String.is_empty (String.strip dest)
+    then Some { target = Some "().md"; fragment = None }
     else (
-      let wikilink = Cmarkit.Inline.Wikilink.make ~embed:false decoded in
-      Some (of_wikilink wikilink))
+      let decoded = percent_decode dest in
+      if is_external decoded then None else Some (of_wikilink_target decoded))
   ;;
 
-  let of_cmark_reference (ref : Cmarkit.Inline.Link.reference) : t option =
-    match ref with
-    | `Ref _ ->
-      (* TODO: we should support this case? *)
-      None
-    | `Inline (ld, _ld_meta) ->
-      (match Cmarkit.Link_definition.dest ld with
-       | None ->
-         (* When destination is empty, Obsidian resolves it to a file named "().md". *)
-         Some { target = Some "().md"; fragment = None }
-       | Some (dest, dest_meta) -> of_cmark_dest dest)
+  let of_link_target (doc : Djot.Doc.t) (target : Djot.Inline.target) : t option =
+    match target with
+    | Direct dest -> of_destination dest
+    | Reference label ->
+      Option.bind (Djot.Doc.reference doc label) ~f:(fun (dest, _) -> of_destination dest)
   ;;
 
   let of_target_address ~(target : string) (address : Anchor.Address.t) : t =
-    let fragment =
-      match address with
-      | Heading id | Attr id -> Hash_path [ id ]
-      | Caret id -> Caret_id id
-    in
-    { target = Some target; fragment = Some fragment }
-  ;;
-
-  let string_of_fragment : fragment -> string = function
-    | Hash_path segments -> "#" ^ String.concat segments ~sep:"#"
-    | Caret_id id -> "#^" ^ id
+    { target = Some target; fragment = Some [ Anchor.Address.id address ] }
   ;;
 
   let resolve_fragment (anchors : Anchor.t list) (fragment : fragment) : Anchor.t option =
     let heading_matches (h : Anchor.heading) q =
-      String.equal h.text q || String.equal h.slug (Parse.Common.heading_id_of_text q)
+      String.equal h.slug q
+      || String.equal (Parse.Common.heading_key h.text) (Parse.Common.heading_key q)
     in
     let resolve_heading query =
       let hs =
         List.filter_map anchors ~f:(fun (a : Anchor.t) ->
           match a.definition with
           | Heading h -> Some (h, a)
-          | Caret _ | Attr _ -> None)
+          | Attr _ -> None)
         |> Array.of_list
       in
       let qs = Array.of_list query in
@@ -129,26 +115,19 @@ module Ref = struct
       in
       if Array.is_empty qs then None else search 0 0 0
     in
-    match fragment with
-    | Hash_path hs ->
-      Option.first_some
-        (resolve_heading hs)
-        (match hs with
-         | [ id ] ->
-           List.find anchors ~f:(fun (a : Anchor.t) ->
-             match a.definition with
-             | Attr { id = x; _ } -> String.equal x id
-             | Heading _ | Caret _ -> false)
-         | _ -> None)
-    | Caret_id id ->
-      List.find anchors ~f:(fun (a : Anchor.t) ->
-        match a.definition with
-        | Caret x -> String.equal x id
-        | Heading _ | Attr _ -> false)
+    Option.first_some
+      (resolve_heading fragment)
+      (match fragment with
+       | [ id ] ->
+         List.find anchors ~f:(fun (a : Anchor.t) ->
+           match a.definition with
+           | Attr { id = x; _ } -> String.equal x id
+           | Heading _ -> false)
+       | _ -> None)
   ;;
 end
 
-type loc = Cmarkit.Textloc.t
+type loc = Djot.Textloc.t
 
 let sexp_of_loc = Parse.Textloc_conv.sexp_of_t
 let loc_of_sexp = Parse.Textloc_conv.t_of_sexp
@@ -167,42 +146,25 @@ type t =
   }
 [@@deriving sexp, equal, compare]
 
-let of_doc (doc : Cmarkit.Doc.t) : t list =
-  let open Cmarkit in
+let of_doc (doc : Djot.Doc.t) : t list =
   let links = ref [] in
-  let add reference kind meta =
-    links := { reference; kind; loc = Meta.textloc meta } :: !links
+  let add reference kind node =
+    links := { reference; kind; loc = Djot.Doc.textloc doc node } :: !links
   in
   let folder =
-    Folder.make
-      ~block:(fun f acc b ->
-        match b with
-        | Block.Ext_keyed ((_label, body), _) -> Folder.ret (Folder.fold_block f acc body)
-        | Block.Ext_attributes (a, _) ->
-          Folder.ret (Folder.fold_block f acc (Block.Attributes.block a))
-        | _ -> Folder.default)
-      ~inline:(fun f acc i ->
-        match i with
-        | Inline.Ext_wikilink (w, meta) ->
-          add (Ref.of_wikilink w) (if Inline.Wikilink.embed w then Embed else Link) meta;
-          Folder.default
-        | Inline.Link (l, meta) ->
-          Option.iter
-            (Ref.of_cmark_reference (Inline.Link.reference l))
-            ~f:(fun r -> add r Link meta);
-          Folder.default
-        | Inline.Image (l, meta) ->
-          Option.iter
-            (Ref.of_cmark_reference (Inline.Link.reference l))
-            ~f:(fun r -> add r Embed meta);
-          Folder.default
-        | Inline.Ext_attributes (a, _) ->
-          Folder.ret (Folder.fold_inline f acc (Inline.Attributes.inline a))
-        | _ -> Folder.default)
-      ~inline_ext_default:(fun _ acc _ -> acc)
-      ~block_ext_default:(fun _ acc _ -> acc)
+    Djot.Folder.make
+      ~inline:(fun _ () (Node (_, _, inline) as node) ->
+        (match inline with
+         | Ext_wikilink (embed, target, _) ->
+           add (Ref.of_wikilink_target target) (if embed then Embed else Link) node
+         | Link (_, target) ->
+           Option.iter (Ref.of_link_target doc target) ~f:(fun r -> add r Link node)
+         | Image (_, target) ->
+           Option.iter (Ref.of_link_target doc target) ~f:(fun r -> add r Embed node)
+         | _ -> ());
+        Djot.Folder.default)
       ()
   in
-  Folder.fold_doc folder () doc;
+  Djot.Folder.fold_doc folder () doc;
   List.rev !links
 ;;

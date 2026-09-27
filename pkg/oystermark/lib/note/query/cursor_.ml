@@ -1,113 +1,82 @@
 open Core
-module B = Cmarkit.Block
+
+type block = Djot.Block.t Djot.node
 
 type view =
   | V_root
-  | V_block of B.t
-  | V_item of B.List_item.t Cmarkit.node
-  | V_section of
-      { heading : B.t
-      ; body : B.t list
+  | V_block of block
+  | V_item of { list : block } (** The [index]th item of [list]. *)
+  | V_footnote of
+      { label : string
+      ; blocks : block list
       }
 
 type t =
-  { doc : Cmarkit.Doc.t
-  ; named : (B.t * Anchor.Address.t) list
+  { doc : Djot.Doc.t
   ; view : view
   ; index : int
   ; parent : t option
   }
 
-let rec unwrap_attributes (block : B.t) : B.t =
-  match block with
-  | B.Ext_attributes (a, _) -> unwrap_attributes (B.Attributes.block a)
-  | block -> block
-;;
-
-let rec attributes_of (block : B.t) : Cmarkit.Attribute.t list =
-  match block with
-  | B.Ext_attributes (a, _) ->
-    B.Attributes.attributes a :: attributes_of (B.Attributes.block a)
-  | _ -> []
-;;
-
-let node_of_block_exn (block : B.t) : Node.t =
-  Option.value_exn (Node.of_block (unwrap_attributes block))
-;;
-
-let rec blocks_of (block : B.t) : B.t list =
-  match block with
-  | B.Blocks (blocks, _) -> List.concat_map blocks ~f:blocks_of
-  | block ->
-    if Option.is_some (Node.of_block (unwrap_attributes block)) then [ block ] else []
-;;
+let root (doc : Djot.Doc.t) : t = { doc; view = V_root; index = 0; parent = None }
 
 (* Navigation
    ========== *)
 
-(** Group a container's blocks into views: what comes before the first heading
-    stays as it is, and every heading becomes a section covering the blocks up
-    to the next heading of its level or higher. A section never crosses a
-    container boundary, since grouping only ever sees one container's blocks. *)
-let group_sections (blocks : B.t list) : view list =
-  let level_of block =
-    match unwrap_attributes block with
-    | B.Heading (h, _) -> Some (B.Heading.level h)
-    | _ -> None
-  in
-  let rec go acc blocks =
-    match blocks with
-    | [] -> List.rev acc
-    | block :: rest ->
-      (match level_of block with
-       | None -> go (V_block block :: acc) rest
-       | Some level ->
-         let body, after =
-           List.split_while rest ~f:(fun b ->
-             match level_of b with
-             | Some l -> l > level
-             | None -> true)
-         in
-         go (V_section { heading = block; body } :: acc) after)
-  in
-  go [] blocks
+let items (Djot.Node (_, _, block) : block)
+  : (Djot.Block.task_status option * block list) list option
+  =
+  match block with
+  | BulletList (_, items) | OrderedList (_, _, items) ->
+    Some (List.map items ~f:(fun blocks -> None, blocks))
+  | TaskList (_, items) ->
+    Some (List.map items ~f:(fun (status, blocks) -> Some status, blocks))
+  | _ -> None
 ;;
 
-(** The blocks inside a node: what its children are grouped from. [None] for a
-    list, whose children are its items, and for a node with no children. *)
-let inner_blocks (doc : Cmarkit.Doc.t) (view : view) : B.t list option =
-  match view with
-  | V_root -> Some [ Cmarkit.Doc.block doc ]
-  | V_section { body; _ } -> Some body
-  | V_item (item, _) -> Some [ B.List_item.block item ]
-  | V_block block ->
-    (match unwrap_attributes block with
-     | B.Block_quote (bq, meta) ->
-       let body = B.Block_quote.block bq in
-       (match B.Callout.find meta with
-        | Some _ -> Some [ B.Callout.strip_header body ]
-        | None -> Some [ body ])
-     | B.Ext_div (d, _) -> Some [ B.Div.block d ]
-     | B.Ext_keyed ((_label, body), _) -> Some [ body ]
-     | B.Ext_footnote_definition (fn, _) -> Some [ B.Footnote.block fn ]
+let item (cursor : t) : (Djot.Block.task_status option * block list) option =
+  match cursor.view with
+  | V_item { list } ->
+    Option.bind (items list) ~f:(fun items -> List.nth items cursor.index)
+  | V_root | V_block _ | V_footnote _ -> None
+;;
+
+let is_node (Djot.Node (_, _, block) : block) : bool =
+  match block with
+  | RefDef _ | FootnoteDef _ -> false
+  | _ -> true
+;;
+
+(** The blocks a node holds. [None] for a list, whose children are its items,
+    and for a node that holds no blocks. *)
+let inner_blocks (cursor : t) : block list option =
+  match cursor.view with
+  | V_root -> Some (Djot.Doc.blocks cursor.doc)
+  | V_footnote { blocks; _ } -> Some blocks
+  | V_item _ -> Option.map (item cursor) ~f:snd
+  | V_block (Node (_, _, block)) ->
+    (match block with
+     | Section blocks | BlockQuote blocks | Div blocks | Ext_callout (_, _, _, blocks) ->
+       Some blocks
+     | Ext_keyed (_, block) -> Some [ block ]
      | _ -> None)
 ;;
 
-let child_views (doc : Cmarkit.Doc.t) (view : view) : view list =
-  match view with
-  | V_section { body; _ } -> group_sections body
-  | V_block block ->
-    (match unwrap_attributes block, inner_blocks doc view with
-     | B.List (l, _), _ -> List.map (B.List'.items l) ~f:(fun item -> V_item item)
-     | _, Some blocks -> group_sections (List.concat_map blocks ~f:blocks_of)
-     | _, None -> [])
-  | V_root | V_item _ ->
-    group_sections
-      (List.concat_map (Option.value_exn (inner_blocks doc view)) ~f:blocks_of)
+let child_views (cursor : t) : view list =
+  let blocks = Option.value (inner_blocks cursor) ~default:[] in
+  let blocks = List.filter blocks ~f:is_node |> List.map ~f:(fun b -> V_block b) in
+  match cursor.view with
+  | V_root ->
+    blocks
+    @ List.map (Djot.Doc.footnotes cursor.doc) ~f:(fun (label, blocks) ->
+      V_footnote { label; blocks })
+  | V_block list when Option.is_some (items list) ->
+    List.map (Option.value_exn (items list)) ~f:(fun _ -> V_item { list })
+  | V_block _ | V_item _ | V_footnote _ -> blocks
 ;;
 
 let children (cursor : t) : t list =
-  List.mapi (child_views cursor.doc cursor.view) ~f:(fun index view ->
+  List.mapi (child_views cursor) ~f:(fun index view ->
     { cursor with view; index; parent = Some cursor })
 ;;
 
@@ -124,99 +93,129 @@ let rec path (cursor : t) : int list =
   | Some parent -> path parent @ [ cursor.index ]
 ;;
 
-(** Each address of [doc] with the block {!Address_utils.find} resolves it to. Cursors
-    look through [Ext_attributes] wrappers, so the block is unwrapped to
-    match. *)
-let root (doc : Cmarkit.Doc.t) : t =
-  let blocks = [ Cmarkit.Doc.block doc ] in
-  let named =
-    Anchor.of_doc doc
-    |> List.filter_map ~f:(fun (anchor : Anchor.t) ->
-      let address = Anchor.address anchor.definition in
-      List.hd (Address_utils.find blocks address)
-      |> Option.map ~f:(fun block -> unwrap_attributes block, address))
-  in
-  { doc; named; view = V_root; index = 0; parent = None }
-;;
-
-(* Nodes and properties
+(* Kinds and properties
    ==================== *)
 
-let shallow_node (cursor : t) : Node.t =
+let kind (cursor : t) : string =
   match cursor.view with
-  | V_root -> Node.Root
-  | V_block block -> node_of_block_exn block
-  | V_item item -> Node.of_item item
-  | V_section { heading; _ } ->
-    Node.Section { heading = node_of_block_exn heading; children = [] }
+  | V_root -> "root"
+  | V_item _ -> "list_item"
+  | V_footnote _ -> "footnote_definition"
+  | V_block (Node (_, _, block)) ->
+    (match block with
+     | Para _ -> "paragraph"
+     | Section _ -> "section"
+     | Heading _ -> "heading"
+     | BlockQuote _ -> "block_quote"
+     | CodeBlock _ -> "code_block"
+     | Div _ -> "div"
+     | OrderedList _ | BulletList _ | TaskList _ -> "list"
+     | DefinitionList _ -> "definition_list"
+     | ThematicBreak -> "thematic_break"
+     | Table _ -> "table"
+     | RawBlock _ -> "raw_block"
+     | FootnoteDef _ -> "footnote_definition"
+     | RefDef _ -> "reference_definition"
+     | Ext_keyed _ -> "keyed"
+     | Ext_callout _ -> "callout")
 ;;
 
-let rec node (cursor : t) : Node.t =
+let key_of_label (label : Djot.Inline.t Djot.node list) : string =
+  String.strip (Parse.Common.plain_text label)
+;;
+
+(** The heading of a section, or the heading itself. *)
+let heading (cursor : t) : Anchor.heading option =
   match cursor.view with
-  | V_section { heading; _ } ->
-    Node.Section
-      { heading = node_of_block_exn heading
-      ; children = List.map (children cursor) ~f:node
+  | V_block
+      (Node
+         ( _
+         , attrs
+         , ( Section (Node (_, _, Heading (level, inlines)) :: _)
+           | Heading (level, inlines) ) )) ->
+    Some
+      { text = Parse.Common.plain_text inlines
+      ; level
+      ; slug = Option.value (Djot.Attr.id attrs) ~default:""
       }
-  | V_root | V_block _ | V_item _ -> shallow_node cursor
+  | V_root | V_block _ | V_item _ | V_footnote _ -> None
 ;;
 
-let names (cursor : t) : Anchor.Address.t list =
-  let named_by block =
-    cursor.named
-    |> List.filter_map ~f:(fun (named, address) ->
-      Option.some_if (phys_equal named (unwrap_attributes block)) address)
-    |> List.dedup_and_sort ~compare:Anchor.Address.compare
-  in
+(** A code block's text without the newline that ends its last line. *)
+let code_text (text : string) : string = String.chop_suffix_if_exists text ~suffix:"\n"
+
+let own_props (cursor : t) : (string * Node.value) list =
+  let string s = Node.String s in
   match cursor.view with
-  | V_root | V_item _ -> []
-  | V_block block -> named_by block
-  | V_section { heading; _ } -> named_by heading
+  | V_root -> []
+  | V_footnote { label; _ } -> [ "label", string label ]
+  | V_item _ ->
+    let status, blocks = Option.value_exn (item cursor) in
+    List.filter_opt
+      [ Option.map status ~f:(fun status ->
+          ( "task"
+          , string
+              (match status with
+               | Complete -> "checked"
+               | Incomplete -> "unchecked") ))
+      ; (match blocks with
+         | [ Node (_, _, Ext_keyed (label, _)) ] ->
+           Some ("key", string (key_of_label label))
+         | _ -> None)
+      ]
+  | V_block (Node (_, _, block)) ->
+    (match block with
+     | Section _ | Heading _ ->
+       Option.value_map (heading cursor) ~default:[] ~f:(fun { text; level; _ } ->
+         [ "level", Node.Int level; "text", string text ])
+     | CodeBlock (lang, text) ->
+       (if String.is_empty lang then [] else [ "lang", string lang ])
+       @ [ "text", string (code_text text) ]
+     | RawBlock (format, text) ->
+       [ "format", string format; "text", string (code_text text) ]
+     | Ext_callout (type_, _, title, _) ->
+       ("type", string (String.lowercase type_))
+       ::
+       (match String.strip (Parse.Common.plain_text title) with
+        | "" -> []
+        | title -> [ "title", string title ])
+     | OrderedList (_, spacing, items) | BulletList (spacing, items) ->
+       [ ( "ordered"
+         , Node.Bool
+             (match block with
+              | OrderedList _ -> true
+              | _ -> false) )
+       ; "tight", Node.Bool (Poly.equal spacing Djot.Block.Tight)
+       ; "length", Node.Int (List.length items)
+       ]
+     | TaskList (spacing, items) ->
+       [ "ordered", Node.Bool false
+       ; "tight", Node.Bool (Poly.equal spacing Djot.Block.Tight)
+       ; "length", Node.Int (List.length items)
+       ]
+     | Ext_keyed (label, _) -> [ "key", string (key_of_label label) ]
+     | FootnoteDef (label, _) -> [ "label", string label ]
+     | Para _
+     | BlockQuote _
+     | Div _
+     | DefinitionList _
+     | ThematicBreak
+     | Table _
+     | RefDef _ -> [])
 ;;
 
-(** A djot attribute value is written without a type, so it is offered under
-    both readings: the text as written, then the number or boolean it spells,
-    if it spells one. A name may therefore carry two values, which
-    {!prop_values} returns both of and a predicate is satisfied by either, so
-    [Prop(depth, =, 1)] and [Prop(depth, =, "1")] both hold for [depth=1]. The
-    text comes first, so printing a property shows what the source says. *)
-let attribute_values (text : string) : Node.value list =
-  Node.String text
-  ::
-  (match Int.of_string_opt text, text with
-   | Some n, _ -> [ Node.Int n ]
-   | None, ("true" | "false") -> [ Node.Bool (Bool.of_string text) ]
-   | None, _ -> [])
+let attrs (cursor : t) : Djot.Attr.t =
+  match cursor.view with
+  | V_block node -> Djot.Node.attrs node
+  | V_root | V_item _ | V_footnote _ -> []
 ;;
 
-(** Every property of the node, its own first, then [id], [class] and the
-    attribute's key/value pairs, which a node cannot carry on its own: they come
-    from the heading, the djot attribute or the caret marker written on it. An
-    [id] is whatever names the node, so a [ ^id ] on a line of its own belongs to
-    the block before it, and heading, attribute and caret identifiers share one
-    namespace. *)
 let props (cursor : t) : (string * Node.value) list =
-  let ids =
-    names cursor
-    |> List.map ~f:Anchor.Address.id
-    |> List.dedup_and_sort ~compare:String.compare
-    |> List.map ~f:(fun id -> "id", Node.String id)
-  in
-  let attributes =
-    match cursor.view with
-    | V_root | V_item _ -> []
-    | V_block block | V_section { heading = block; _ } -> attributes_of block
-  in
-  let classes =
-    List.concat_map attributes ~f:Cmarkit.Attribute.classes
-    |> List.map ~f:(fun c -> "class", Node.String c)
-  in
-  let key_values =
-    List.concat_map attributes ~f:Cmarkit.Attribute.key_values
-    |> List.concat_map ~f:(fun (name, text) ->
-      List.map (attribute_values text) ~f:(fun value -> name, value))
-  in
-  Node.props (shallow_node cursor) @ ids @ classes @ key_values
+  let attrs = attrs cursor in
+  (("kind", Node.String (kind cursor)) :: own_props cursor)
+  @ List.map (Option.to_list (Djot.Attr.id attrs)) ~f:(fun id -> "id", Node.String id)
+  @ List.map (Djot.Attr.classes attrs) ~f:(fun c -> "class", Node.String c)
+  @ List.map (Djot.Attr.key_values attrs) ~f:(fun (k, v) -> k, Node.String v)
 ;;
 
 let prop_values (name : string) (cursor : t) : Node.value list =
@@ -224,11 +223,16 @@ let prop_values (name : string) (cursor : t) : Node.value list =
     Option.some_if (String.equal n name) value)
 ;;
 
+let names (cursor : t) : Anchor.Address.t list =
+  match cursor.view, Djot.Attr.id (attrs cursor) with
+  | V_block (Node (_, _, (Section _ | Heading _))), Some id -> [ Heading id ]
+  | _, Some id -> [ Attr id ]
+  | _, None -> []
+;;
+
 (* Reporting a match
    ================= *)
 
-(** The headings whose sections hold the cursor: its section ancestors, which a
-    container boundary stops on its own. *)
 let headings (cursor : t) : Anchor.heading list =
   let rec up cursor acc =
     match cursor.parent with
@@ -236,77 +240,66 @@ let headings (cursor : t) : Anchor.heading list =
     | Some parent ->
       let acc =
         match parent.view with
-        | V_section { heading; _ } ->
-          (match node_of_block_exn heading with
-           | Node.Heading { level; id; text } ->
-             ({ text; level; slug = id } : Anchor.heading) :: acc
-           | _ -> acc)
-        | V_root | V_block _ | V_item _ -> acc
+        | V_block (Node (_, _, Section _)) ->
+          Option.value_map (heading parent) ~default:acc ~f:(fun h -> h :: acc)
+        | V_root | V_block _ | V_item _ | V_footnote _ -> acc
       in
       up parent acc
   in
   up cursor []
 ;;
 
-let span (cursor : t) : Node.span option =
-  let textloc_of block = Cmarkit.Meta.textloc (Parse.Common.meta_of_block block) in
-  let textloc =
-    match cursor.view with
-    | V_root -> Cmarkit.Textloc.none
-    | V_block block -> textloc_of block
-    | V_item (_, meta) -> Cmarkit.Meta.textloc meta
-    | V_section { heading; body } ->
-      (* A section spans its heading and the blocks under it. *)
-      (match
-         List.filter (heading :: body) ~f:(fun block ->
-           not (Cmarkit.Textloc.is_none (textloc_of block)))
-       with
-       | [] -> Cmarkit.Textloc.none
-       | first :: _ as blocks ->
-         Cmarkit.Textloc.reloc
-           ~first:(textloc_of first)
-           ~last:(textloc_of (List.last_exn blocks)))
+let textloc (cursor : t) : Djot.Textloc.t =
+  let of_blocks blocks =
+    match
+      List.filter_map blocks ~f:(fun block ->
+        let loc = Djot.Doc.textloc cursor.doc block in
+        Option.some_if (not (Djot.Textloc.is_none loc)) loc)
+    with
+    | [] -> Djot.Textloc.none
+    | first :: _ as locs -> Djot.Textloc.reloc ~first ~last:(List.last_exn locs)
   in
-  Option.some_if (not (Cmarkit.Textloc.is_none textloc)) textloc
+  match cursor.view with
+  | V_root -> Djot.Textloc.none
+  | V_block block -> Anchor.extent cursor.doc block
+  | V_footnote { blocks; _ } -> of_blocks blocks
+  | V_item { list } ->
+    (match Djot.Doc.parts cursor.doc list with
+     | Items locs -> Option.value (List.nth locs cursor.index) ~default:Djot.Textloc.none
+     | NoParts | DefItems _ | TableRows _ -> Djot.Textloc.none)
+;;
+
+let span (cursor : t) : Node.span option =
+  let textloc = textloc cursor in
+  Option.some_if (not (Djot.Textloc.is_none textloc)) textloc
   |> Option.map ~f:(fun textloc : Node.span ->
-    { first_line = fst (Cmarkit.Textloc.first_line textloc)
-    ; last_line = fst (Cmarkit.Textloc.last_line textloc)
-    ; first_byte = Cmarkit.Textloc.first_byte textloc
-    ; last_byte = Cmarkit.Textloc.last_byte textloc
+    { first_line = fst (Djot.Textloc.first_line textloc)
+    ; last_line = fst (Djot.Textloc.last_line textloc)
+    ; first_byte = Djot.Textloc.first_byte textloc
+    ; last_byte = Djot.Textloc.last_byte textloc
     })
 ;;
 
-let markdown (cursor : t) : string =
-  let render blocks =
-    let blank = B.Blank_line ("", Cmarkit.Meta.none) in
-    Parse.commonmark_of_doc
-      (Cmarkit.Doc.make
-         ~defs:(Cmarkit.Doc.defs cursor.doc)
-         (B.Blocks (List.intersperse blocks ~sep:blank, Cmarkit.Meta.none)))
-  in
-  match cursor.view with
-  | V_root -> render (blocks_of (Cmarkit.Doc.block cursor.doc))
-  | V_block block -> render [ block ]
-  | V_item (item, _) -> render (blocks_of (B.List_item.block item))
-  | V_section { heading; body } -> render (heading :: body)
-;;
-
-(** The blocks a note rooted at the cursor holds: its {!inner_blocks}, or the
-    block itself for a list or a node with no children. *)
-let contents (cursor : t) : B.t list =
-  match inner_blocks cursor.doc cursor.view, cursor.view with
-  | Some blocks, _ -> blocks
-  | None, V_block block -> [ block ]
-  | None, (V_root | V_section _ | V_item _) -> []
+(** The blocks a note rooted at the cursor holds: its {!inner_blocks} without a
+    section's heading, or the block itself for a node that holds none. *)
+let contents (cursor : t) : block list =
+  match cursor.view, inner_blocks cursor with
+  | V_block (Node (_, _, Section (_ :: blocks))), _ -> blocks
+  | _, Some blocks -> blocks
+  | V_block block, None -> [ block ]
+  | (V_root | V_item _ | V_footnote _), None -> []
 ;;
 
 let found (cursor : t) : Node.found_t =
-  { node = node cursor
+  { kind = kind cursor
   ; path = path cursor
   ; names = names cursor
   ; headings = headings cursor
   ; span = span cursor
-  ; markdown = markdown cursor
   ; props = props cursor
+  ; blocks =
+      (match cursor.view with
+       | V_block block -> [ block ]
+       | V_root | V_item _ | V_footnote _ -> contents cursor)
   }
 ;;

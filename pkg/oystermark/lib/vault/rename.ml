@@ -106,8 +106,8 @@ let destination_bounds slice =
 (** The link's style, the byte offset of its destination, and the destination
     as written. *)
 let authored_destination ~read_file source (link : Index.Link.t) =
-  let first_byte = Cmarkit.Textloc.first_byte link.loc in
-  let last_byte = Cmarkit.Textloc.last_byte link.loc in
+  let first_byte = Djot.Textloc.first_byte link.loc in
+  let last_byte = Djot.Textloc.last_byte link.loc in
   read_file source
   |> Option.bind ~f:(fun content ->
     let len = last_byte - first_byte + 1 in
@@ -126,18 +126,13 @@ let encode style text =
   | `Markdown -> String.substr_replace_all text ~pattern:" " ~with_:"%20"
 ;;
 
-let reference_edit ~read_file { address; _ } ~new_name (source, (link : Index.Link.t), _) =
+let reference_edit ~read_file (_ : target) ~new_name (source, (link : Index.Link.t), _) =
   authored_destination ~read_file source link
   |> Option.bind ~f:(fun (style, destination_first, destination) ->
     String.index destination '#'
     |> Option.map ~f:(fun hash ->
-      let marker_length =
-        match address with
-        | Some (Note.Anchor.Address.Caret _) -> 1
-        | None | Some (Heading _ | Attr _) -> 0
-      in
       { rel_path = source
-      ; first_byte = destination_first + hash + 1 + marker_length
+      ; first_byte = destination_first + hash + 1
       ; last_byte = destination_first + String.length destination
       ; new_text = encode style new_name
       }))
@@ -307,41 +302,62 @@ let line_bounds content line =
   loop 0 0
 ;;
 
-let attr_id_offset ~(id : string) line =
-  let is_id_char c = Char.is_alphanum c || Char.equal c '-' || Char.equal c '_' in
-  let rec scan i =
-    if i >= String.length line
+(** The ranges of the attribute specs [ {...} ] on the first node of [doc]
+    whose id is [id]. *)
+let attr_spec_ranges (doc : Djot.Doc.t) ~(id : string) : Djot.Textloc.t list =
+  let spec_ranges node =
+    let has_id =
+      Option.equal String.equal (Djot.Attr.id (Djot.Node.attrs node)) (Some id)
+    in
+    if not has_id
     then None
-    else if Char.equal line.[i] '{'
-    then (
-      match String.index_from line i '}' with
-      | None -> None
-      | Some close ->
-        let body = String.sub line ~pos:(i + 1) ~len:(close - i - 1) in
-        (match Cmarkit.Attribute.of_string body with
-         | Some attr
-           when Option.value_map
-                  (Cmarkit.Attribute.id attr)
-                  ~default:false
-                  ~f:(String.equal id) ->
-           let pattern = "#" ^ id in
-           let rec seek from =
-             match String.substr_index body ~pos:from ~pattern with
-             | None -> scan (close + 1)
-             | Some p ->
-               let after = p + String.length pattern in
-               if after >= String.length body || not (is_id_char body.[after])
-               then Some (i + 1 + p + 1)
-               else seek (p + 1)
-           in
-           seek 0
-         | _ -> scan (close + 1)))
-    else scan (i + 1)
+    else
+      Some
+        (List.filter_map (Djot.Doc.syntax_locs doc node) ~f:(fun (role, loc) ->
+           match role with
+           | RAttrSpec -> Some loc
+           | ROpenFence | RCloseFence -> None))
   in
-  scan 0
+  let visit node found =
+    match found with
+    | Some _ -> Djot.Folder.ret found
+    | None ->
+      (match spec_ranges node with
+       | Some _ as found -> Djot.Folder.ret found
+       | None -> Djot.Folder.default)
+  in
+  Djot.Folder.fold_doc
+    (Djot.Folder.make
+       ~block:(fun _ found node -> visit node found)
+       ~inline:(fun _ found node -> visit node found)
+       ())
+    None
+    doc
+  |> Option.value ~default:[]
 ;;
 
-let definition_edit ~index ~read_file { path; address } ~new_name =
+(** The byte offset of [id] in the first [#id] within [ranges] of [content]. *)
+let attr_id_offset ~(id : string) (content : string) (ranges : Djot.Textloc.t list)
+  : int option
+  =
+  let is_id_char c = Char.is_alphanum c || Char.equal c '-' || Char.equal c '_' in
+  let pattern = "#" ^ id in
+  List.find_map ranges ~f:(fun range ->
+    let first = Djot.Textloc.first_byte range in
+    let stop = Int.min (Djot.Textloc.last_byte range + 1) (String.length content) in
+    let rec seek from =
+      match String.substr_index content ~pos:from ~pattern with
+      | Some p when p + String.length pattern <= stop ->
+        let after = p + String.length pattern in
+        if after >= stop || not (is_id_char content.[after])
+        then Some (p + 1)
+        else seek (p + 1)
+      | Some _ | None -> None
+    in
+    if first < 0 then None else seek first)
+;;
+
+let definition_edit ~index ~docs ~read_file { path; address } ~new_name =
   Option.bind address ~f:(fun (address : Note.Anchor.Address.t) ->
     Index.find_note index path
     |> Option.bind ~f:(fun note ->
@@ -350,16 +366,11 @@ let definition_edit ~index ~read_file { path; address } ~new_name =
     |> Option.bind ~f:(fun (anchor : Index.Anchor.t) ->
       read_file path
       |> Option.bind ~f:(fun content ->
-        let source_line =
-          match address with
-          | Caret _ -> fst (Cmarkit.Textloc.last_line anchor.loc) - 1
-          | Heading _ | Attr _ -> fst (Cmarkit.Textloc.first_line anchor.loc) - 1
-        in
-        line_bounds content source_line
-        |> Option.bind ~f:(fun (start, stop) ->
-          let line = String.sub content ~pos:start ~len:(stop - start) in
-          match address with
-          | Heading _ ->
+        match address with
+        | Heading _ ->
+          line_bounds content (fst (Djot.Textloc.first_line anchor.loc) - 1)
+          |> Option.map ~f:(fun (start, stop) ->
+            let line = String.sub content ~pos:start ~len:(stop - start) in
             let hashes =
               String.length line
               - String.length (String.lstrip line ~drop:(Char.equal '#'))
@@ -370,32 +381,22 @@ let definition_edit ~index ~read_file { path; address } ~new_name =
               else i
             in
             let text_start = skip hashes in
-            let text_stop =
-              String.substr_index line ~pos:text_start ~pattern:" {"
-              |> Option.value ~default:(String.length line)
-            in
-            Some
-              { rel_path = path
-              ; first_byte = start + text_start
-              ; last_byte = start + text_stop
-              ; new_text = new_name
-              }
-          | Caret id ->
-            String.substr_index line ~pattern:("^" ^ id)
-            |> Option.map ~f:(fun pos ->
-              { rel_path = path
-              ; first_byte = start + pos + 1
-              ; last_byte = start + pos + 1 + String.length id
-              ; new_text = new_name
-              })
-          | Attr id ->
-            attr_id_offset ~id line
-            |> Option.map ~f:(fun pos ->
-              { rel_path = path
-              ; first_byte = start + pos
-              ; last_byte = start + pos + String.length id
-              ; new_text = new_name
-              })))))
+            let text_stop = String.length (String.rstrip line) in
+            { rel_path = path
+            ; first_byte = start + text_start
+            ; last_byte = start + text_stop
+            ; new_text = new_name
+            })
+        | Attr id ->
+          List.Assoc.find docs path ~equal:String.equal
+          |> Option.bind ~f:(fun (note : Note.t) ->
+            attr_id_offset ~id content (attr_spec_ranges note.doc ~id))
+          |> Option.map ~f:(fun pos ->
+            { rel_path = path
+            ; first_byte = pos
+            ; last_byte = pos + String.length id
+            ; new_text = new_name
+            }))))
 ;;
 
 (** {2 Change planning} *)
@@ -436,7 +437,7 @@ let plan ~index ~docs ~read_file ({ path; address } as target) ~new_name =
     | None -> valid_note_name new_name
     | Some (Note.Anchor.Address.Heading _) ->
       not (String.is_empty (String.strip new_name))
-    | Some (Caret _ | Attr _) -> valid_id new_name
+    | Some (Attr _) -> valid_id new_name
   in
   if not valid
   then Error "invalid new name"
@@ -450,7 +451,7 @@ let plan ~index ~docs ~read_file ({ path; address } as target) ~new_name =
         |> List.filter_map ~f:(reference_edit ~read_file target ~new_name)
       in
       let definition =
-        Option.to_list (definition_edit ~index ~read_file target ~new_name)
+        Option.to_list (definition_edit ~index ~docs ~read_file target ~new_name)
       in
       Ok { edits = List.sort (definition @ edits) ~compare:compare_edit; moves = [] })
 ;;
@@ -458,7 +459,7 @@ let plan ~index ~docs ~read_file ({ path; address } as target) ~new_name =
 module For_test = struct
   type vault =
     { files : (string * string) list
-    ; docs : (string * Cmarkit.Doc.t) list
+    ; docs : (string * Note.t) list
     ; index : Index.t
     }
 
@@ -522,7 +523,7 @@ let%expect_test "plan note and heading renames" =
     b.md
       [[renamed]] [[renamed#Alpha|label]] [x](renamed.md#Alpha)
     |}];
-  show { path = "a.md"; address = Some (Heading "alpha") } "New title";
+  show { path = "a.md"; address = Some (Heading "Alpha") } "New title";
   [%expect
     {|
     a.md
@@ -531,6 +532,42 @@ let%expect_test "plan note and heading renames" =
     Body
     b.md
       [[a]] [[a#New title|label]] [x](a.md#New%20title)
+    |}]
+;;
+
+let%expect_test "plan attribute id renames" =
+  let open For_test in
+  let v =
+    vault
+      [ "a.md", "{#blk .c}\nBlock with #blk in text.\n\nThe [term]{.x #tm} here.\n"
+      ; "b.md", "[[a#blk]] [[a#tm]]\n"
+      ]
+  in
+  let show target new_name =
+    plan ~index:v.index ~docs:v.docs ~read_file:(read_file v) target ~new_name
+    |> show_change v
+  in
+  show { path = "a.md"; address = Some (Attr "blk") } "block";
+  [%expect
+    {|
+    a.md
+      {#block .c}
+    Block with #blk in text.
+
+    The [term]{.x #tm} here.
+    b.md
+      [[a#block]] [[a#tm]]
+    |}];
+  show { path = "a.md"; address = Some (Attr "tm") } "term";
+  [%expect
+    {|
+    a.md
+      {#blk .c}
+    Block with #blk in text.
+
+    The [term]{.x #term} here.
+    b.md
+      [[a#blk]] [[a#term]]
     |}]
 ;;
 

@@ -40,11 +40,7 @@ let of_root_path
   in
   let index = Vault.build_index ~stat_of_path ~md_docs:parsed_docs ~other_files () in
   let vault : Vault.t =
-    { vault_root
-    ; index
-    ; documents = String.Map.of_alist_exn parsed_docs
-    ; vault_meta = Cmarkit.Meta.none
-    }
+    { vault_root; index; documents = String.Map.of_alist_exn parsed_docs }
   in
   if skip_expand
   then vault

@@ -17,14 +17,14 @@ let files =
   [ ( "note-a.md"
     , "# Alpha\n\n\
        ## Section One\n\n\
-       Body text ^block1\n\n\
+       [Body text]{#block1}\n\n\
        ## Section Two\n\n\
        More content.\n" )
   ; ( "note-b.md"
     , "# Beta\n\n\
        Link to [[note-a]] here.\n\n\
        See [[note-a#Section One]].\n\n\
-       Also [[note-a#^block1]].\n\n\
+       Also [[note-a#block1]].\n\n\
        Markdown [link](note-a).\n\n\
        Unresolved [[missing-note]].\n" )
   ; "subdir/nested.md", "# Nested\n\nLink to [[note-a]] from subdirectory.\n"
@@ -36,9 +36,9 @@ let files =
     , "- [[#alpha-two]]\n\
        - [[#baz]]\n\n\
        # Alpha two\n\n\
-       Body ^para\n\n\
+       [Body]{#para}\n\n\
        # Baz\n\n\
-       Back to [[#alpha-two]] and [[#^para]].\n" )
+       Back to [[#alpha-two]] and [[#para]].\n" )
   ]
 ;;
 
@@ -68,7 +68,7 @@ let%expect_test "unit: arrows on a note that links into itself" =
     (0,16) ↓3
     (1,10) ↓6
     (9,22) ↑6
-    (9,37) ↑4
+    (9,36) ↑4
     |}]
 ;;
 
@@ -122,7 +122,7 @@ let%expect_test "server: arrows on an intra-note link list" =
     (0,16) ↓3
     (1,10) ↓6
     (9,22) ↑6
-    (9,37) ↑4
+    (9,36) ↑4
     |}]
 ;;
 

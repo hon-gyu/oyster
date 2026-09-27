@@ -1,26 +1,20 @@
 open Core
 open Common_
-module B = Cmarkit.Block
 module Cursor = Cursor_
 
 (* Axes
    ==== *)
 
-let is_list (cursor : Cursor.t) : bool =
-  match cursor.view with
-  | V_block block ->
-    (match Cursor.unwrap_attributes block with
-     | B.List _ -> true
-     | _ -> false)
-  | V_root | V_item _ | V_section _ -> false
-;;
+let is_list (cursor : Cursor.t) : bool = String.equal (Cursor.kind cursor) "list"
 
 (** The key a keyed node holds, from the keyed syntax: the label of a keyed
     paragraph, or the one a list item starts with. *)
 let key_of (cursor : Cursor.t) : string option =
-  match Cursor.shallow_node cursor with
-  | Node.Keyed_paragraph { key } -> Some key
-  | Node.List_item { key; _ } -> key
+  match Cursor.kind cursor with
+  | "keyed" | "list_item" ->
+    (match Cursor.prop_values "key" cursor with
+     | Node.String key :: _ -> Some key
+     | _ -> None)
   | _ -> None
 ;;
 
@@ -45,8 +39,8 @@ let keyed_under ~(key : string) (cursor : Cursor.t) : Cursor.t list =
     section or a div a list is content of its own. *)
 let field_axis ~(key : string) (cursor : Cursor.t) : Cursor.t list =
   let describing =
-    match Cursor.shallow_node cursor with
-    | Node.List_item _ | Node.Keyed_paragraph _ ->
+    match Cursor.kind cursor with
+    | "list_item" | "keyed" ->
       List.filter (Cursor.children cursor) ~f:is_list
       |> List.concat_map ~f:(keyed_under ~key)
     | _ -> []
@@ -54,25 +48,25 @@ let field_axis ~(key : string) (cursor : Cursor.t) : Cursor.t list =
   keyed_under ~key cursor @ describing |> List.concat_map ~f:Cursor.children
 ;;
 
-let section_id (cursor : Cursor.t) : string option =
-  match Cursor.shallow_node cursor with
-  | Node.Section { heading = Node.Heading { id; _ }; _ } -> Some id
+(** The key of a section's heading, see {!Parse.Common.heading_key}. *)
+let section_key (cursor : Cursor.t) : string option =
+  match Cursor.kind cursor, Cursor.heading cursor with
+  | "section", Some { text; _ } -> Some (Parse.Common.heading_key text)
   | _ -> None
 ;;
 
-(** The sections under [cursor] matching [path], compared by heading
-    identifier. A name is read as one, so both [Setup] and [setup] match the
-    heading [## Setup]. This axis walks sections only: a heading inside a
-    container is reached through the child or field axis first. *)
+(** The sections under [cursor] matching [path], compared by
+    {!Parse.Common.heading_key}, the rule wikilink fragments use, so both
+    [Setup] and [setup] match the heading [## Setup]. *)
 let section_axis ~(path : string list) ~(exact : bool) (cursor : Cursor.t) : Cursor.t list
   =
-  let wanted = List.map path ~f:Parse.Common.heading_id_of_text in
+  let wanted = List.map path ~f:Parse.Common.heading_key in
   let sections cursor =
     List.filter (Cursor.children cursor) ~f:(fun child ->
-      Option.is_some (section_id child))
+      Option.is_some (section_key child))
   in
   let matches name section =
-    Option.value_map (section_id section) ~default:false ~f:(String.equal name)
+    Option.value_map (section_key section) ~default:false ~f:(String.equal name)
   in
   let rec exactly cursor remaining =
     match remaining with
@@ -109,12 +103,17 @@ let holds_cmp (cmp : cmp) (order : int) : bool =
   | Ge -> order >= 0
 ;;
 
-let compare_values (a : Node.value) (b : Node.value) : int option =
-  match a, b with
+(** An attribute value is a string: compared with a number or a boolean, it is
+    read as one. *)
+let compare_values (actual : Node.value) (wanted : Node.value) : int option =
+  match actual, wanted with
   | Int a, Int b -> Some (Int.compare a b)
   | String a, String b -> Some (String.compare a b)
   | Bool a, Bool b -> Some (Bool.compare a b)
-  | (Int _ | String _ | Bool _), _ -> None
+  | String a, Int b -> Option.map (Int.of_string_opt a) ~f:(fun a -> Int.compare a b)
+  | String a, Bool b ->
+    Option.map (Stdlib.bool_of_string_opt a) ~f:(fun a -> Bool.compare a b)
+  | (Int _ | Bool _), _ -> None
 ;;
 
 let rec holds (pred : pred) (cursor : Cursor.t) : bool =
@@ -174,22 +173,22 @@ and eval (steps : steps) (input : Cursor.t list) : Cursor.t list =
 
 type stage =
   | No_candidate
-  | Filtered_out of Node.t list
+  | Filtered_out of Node.found_t list
   | Out_of_range of { length : int }
 
 type no_match =
   { index : int
   ; step : step
-  ; reached : Node.t list
+  ; reached : Node.found_t list
   ; stage : stage
   }
 
 type result =
   { matches : Node.found_t list
-  ; why_empty : no_match option
+  ; no_match : no_match option
   }
 
-let run (query : t) (doc : Cmarkit.Doc.t) : result =
+let run (query : t) (doc : Djot.Doc.t) : result =
   let rec go index input failure steps =
     match steps with
     | [] -> input, failure
@@ -204,12 +203,12 @@ let run (query : t) (doc : Cmarkit.Doc.t) : result =
             Some
               { index
               ; step
-              ; reached = List.map input ~f:Cursor.node
+              ; reached = List.map input ~f:Cursor.found
               ; stage =
                   (if List.is_empty candidates
                    then No_candidate
                    else if List.is_empty kept
-                   then Filtered_out (List.map candidates ~f:Cursor.node)
+                   then Filtered_out (List.map candidates ~f:Cursor.found)
                    else Out_of_range { length = List.length kept })
               }
           else None
@@ -218,25 +217,21 @@ let run (query : t) (doc : Cmarkit.Doc.t) : result =
   in
   let final, failure = go 0 [ Cursor.root doc ] None query in
   { matches = List.map final ~f:Cursor.found
-  ; why_empty = (if List.is_empty final then failure else None)
+  ; no_match = (if List.is_empty final then failure else None)
   }
 ;;
 
-let extract (query : t) (doc : Cmarkit.Doc.t) : Cmarkit.Doc.t =
-  let blank = B.Blank_line ("", Cmarkit.Meta.none) in
-  let block =
-    match
-      eval query [ Cursor.root doc ]
-      |> List.map ~f:Cursor.contents
-      |> List.concat_map ~f:(fun blocks -> [ blank ] :: List.map blocks ~f:List.return)
-      |> List.tl
-      |> Option.value_map ~default:[] ~f:(fun blocks ->
-        List.concat (List.intersperse blocks ~sep:[ blank ]))
-    with
-    | [ block ] -> block
-    | blocks -> B.Blocks (blocks, Cmarkit.Meta.none)
+let markdown (found : Node.found_t) : string = Parse.source_of_blocks found.blocks
+
+let extract (query : t) (doc : Djot.Doc.t) : Djot.Doc.t =
+  let blocks = eval query [ Cursor.root doc ] |> List.concat_map ~f:Cursor.contents in
+  let definitions =
+    List.map (Djot.Doc.references doc) ~f:(fun (label, (dest, attrs)) ->
+      Djot.Node.make ~attrs (Djot.Block.RefDef (label, dest)))
+    @ List.map (Djot.Doc.footnotes doc) ~f:(fun (label, blocks) ->
+      Djot.Node.make (Djot.Block.FootnoteDef (label, blocks)))
   in
-  Cmarkit.Doc.make ~defs:(Cmarkit.Doc.defs doc) block
+  Parse.doc_of_blocks (blocks @ definitions)
 ;;
 
 let no_match_to_string ({ index; step; reached; stage } : no_match) : string =
@@ -245,7 +240,9 @@ let no_match_to_string ({ index; step; reached; stage } : no_match) : string =
     | [] -> "none"
     | values -> String.concat values ~sep:", "
   in
-  let kinds_of nodes = listing (List.map nodes ~f:Node.kind) in
+  let kinds_of (nodes : Node.found_t list) =
+    listing (List.map nodes ~f:(fun node -> node.kind))
+  in
   let where = sprintf "step %d (%s)" index (Syntax_.step_to_string step) in
   match stage with
   | No_candidate -> sprintf "%s: nothing to move to from %s" where (kinds_of reached)

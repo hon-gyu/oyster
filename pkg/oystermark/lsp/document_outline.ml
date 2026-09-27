@@ -6,7 +6,6 @@ open Core
 
 type kind =
   | Heading of int
-  | Block_id
   | Attribute_id
 [@@deriving sexp, equal, compare]
 
@@ -36,11 +35,11 @@ type node =
 
 let event_of_loc ~name ~kind = function
   | None -> None
-  | Some loc when Cmarkit.Textloc.is_none loc -> None
+  | Some loc when Djot.Textloc.is_none loc -> None
   | Some loc ->
     Some
-      { first_byte = Cmarkit.Textloc.first_byte loc
-      ; last_byte = Cmarkit.Textloc.last_byte loc + 1
+      { first_byte = Djot.Textloc.first_byte loc
+      ; last_byte = Djot.Textloc.last_byte loc + 1
       ; name
       ; kind
       }
@@ -48,38 +47,29 @@ let event_of_loc ~name ~kind = function
 
 let events (entry : Oystermark.Vault.Index.Entry.t) =
   let module Index = Oystermark.Vault.Index in
-  let headings, blocks, attrs =
+  let headings, attrs =
     Index.Entry.anchors entry
-    |> List.fold ~init:([], [], []) ~f:(fun (headings, blocks, attrs) anchor ->
+    |> List.fold ~init:([], []) ~f:(fun (headings, attrs) anchor ->
       match anchor.definition with
       | Index.Heading h ->
         ( Option.to_list
             (event_of_loc ~name:h.text ~kind:(Heading h.level) (Some anchor.loc))
           @ headings
-        , blocks
-        , attrs )
-      | Index.Caret id ->
-        ( headings
-        , Option.to_list (event_of_loc ~name:("^" ^ id) ~kind:Block_id (Some anchor.loc))
-          @ blocks
         , attrs )
       | Index.Attr { id; _ } ->
         ( headings
-        , blocks
         , Option.to_list
             (event_of_loc ~name:("#" ^ id) ~kind:Attribute_id (Some anchor.loc))
           @ attrs ))
   in
-  List.sort
-    (headings @ blocks @ attrs)
-    ~compare:(fun a b ->
-      match Int.compare a.first_byte b.first_byte with
-      | 0 ->
-        (match a.kind, b.kind with
-         | Heading _, (Block_id | Attribute_id) -> -1
-         | (Block_id | Attribute_id), Heading _ -> 1
-         | _ -> Int.compare a.last_byte b.last_byte)
-      | c -> c)
+  List.sort (headings @ attrs) ~compare:(fun a b ->
+    match Int.compare a.first_byte b.first_byte with
+    | 0 ->
+      (match a.kind, b.kind with
+       | Heading _, Attribute_id -> -1
+       | Attribute_id, Heading _ -> 1
+       | _ -> Int.compare a.last_byte b.last_byte)
+    | c -> c)
 ;;
 
 let symbols ~(entry : Oystermark.Vault.Index.Entry.t) ~(content_length : int)
@@ -108,7 +98,7 @@ let symbols ~(entry : Oystermark.Vault.Index.Entry.t) ~(content_length : int)
       let node = { event; section_last_byte = content_length; children_rev = [] } in
       attach node;
       heading_stack := (level, node) :: !heading_stack
-    | Block_id | Attribute_id ->
+    | Attribute_id ->
       attach { event; section_last_byte = event.last_byte; children_rev = [] });
   List.iter !heading_stack ~f:(fun (_, node) -> node.section_last_byte <- content_length);
   let rec freeze node =

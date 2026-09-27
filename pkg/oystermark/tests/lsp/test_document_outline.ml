@@ -9,7 +9,7 @@ let content =
   "{#preamble}\n\
    Before.\n\n\
    # Title\n\n\
-   Root text ^root\n\n\
+   [Root text]{#root}\n\n\
    ## Child\n\n\
    The [key]{#key} term.\n\n\
    #### Deep\n\n\
@@ -39,12 +39,12 @@ let%expect_test "heading hierarchy with block and attribute anchors" =
   [%expect
     {|
     #preamble [0-19] select[0-19]
-    Title [21-103] select[21-28]
-      ^root [30-45] select[30-45]
-      Child [47-103] select[47-55]
-        #key [61-72] select[61-72]
-        Deep [80-91] select[80-89]
-        Sibling [91-103] select[91-102]
+    Title [21-106] select[21-28]
+      #root [30-48] select[30-48]
+      Child [50-106] select[50-58]
+        #key [64-75] select[64-75]
+        Deep [83-94] select[83-92]
+        Sibling [94-106] select[94-105]
     |}]
 ;;
 
@@ -75,7 +75,7 @@ let%expect_test "server: documentSymbol returns a hierarchical result" =
     {|
     Alpha
       Section One
-        ^block1
+        #block1
       Section Two
     |}]
 ;;

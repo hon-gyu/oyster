@@ -6,7 +6,7 @@
     server turns the results into diagnostics and code actions.
 
     A region is found by the parser, never by reading the text a second time:
-    {!scan_doc} matches {!Cmarkit.Block.Ext_div} on the same AST {!entries}
+    {!scan_doc} matches a {!Djot.Block.Div} on the same tree {!entries}
     takes its headings from. Recognizing fences here instead would be a second
     implementation of div syntax, free to drift from the one that decides what
     the note actually {e is} — and it did, in the first version of this file:
@@ -61,7 +61,7 @@ type region =
     There is no {e stray closing fence} case, unlike a paired-comment scheme:
     a lone [:::] closes some other div and is none of this feature's
     business.  A [::: toc] the parser closed at the end of the document
-    instead — {!Cmarkit.Block.Div.closing_fence} is [None] — is kept: a region
+    instead — it has no {!Djot.Doc.RCloseFence} — is kept: a region
     that swallows the rest of the file is not one to rewrite silently. *)
 type scan =
   { regions : region list
@@ -69,78 +69,82 @@ type scan =
   }
 [@@deriving sexp, equal, compare]
 
-(** The div's opening fence and class as one span — what a diagnostic points
-    at, and what tells the body which line to start on. *)
-let open_fence_span (d : Cmarkit.Block.Div.t) : span option =
-  let textloc node = Cmarkit.Meta.textloc (snd node) in
-  let fence = textloc (Cmarkit.Block.Div.opening_fence d) in
-  match Cmarkit.Block.Div.class' d with
-  | None -> None
-  | Some class' ->
-    let class' = textloc class' in
-    if Cmarkit.Textloc.is_none fence || Cmarkit.Textloc.is_none class'
-    then None
-    else
-      Some
-        { line = fst (Cmarkit.Textloc.first_line fence) - 1
-        ; first_byte = Cmarkit.Textloc.first_byte fence
-        ; last_byte = Cmarkit.Textloc.last_byte class' + 1
-        }
+let fence_loc (doc : Djot.Doc.t) (node : Djot.Block.t Djot.node) (role : Djot.Doc.syntax)
+  : Djot.Textloc.t option
+  =
+  List.find_map (Djot.Doc.syntax_locs doc node) ~f:(fun (r, loc) ->
+    Option.some_if (Poly.equal r role) loc)
 ;;
 
-(** Whether [d] is a region: a div whose class is exactly {!div_class}.  The
+(** The div's opening fence, class included, without trailing blanks — what a
+    diagnostic points at, and what tells the body which line to start on. *)
+let open_fence_span (doc : Djot.Doc.t) (node : Djot.Block.t Djot.node) ~(content : string)
+  : span option
+  =
+  fence_loc doc node ROpenFence
+  |> Option.map ~f:(fun fence ->
+    let first_byte = Djot.Textloc.first_byte fence in
+    let rec last_byte i =
+      if i > first_byte && Char.is_whitespace content.[i - 1]
+      then last_byte (i - 1)
+      else i
+    in
+    { line = fst (Djot.Textloc.first_line fence) - 1
+    ; first_byte
+    ; last_byte = last_byte (Djot.Textloc.last_byte fence + 1)
+    })
+;;
+
+(** Whether [node] is a region: a div whose only class is {!div_class}.  The
     class comes from the parser, so [::::toc], an indented fence and a fence
     nested in a list item are all recognized, and [::: toc] written inside a
     code block is not a div at all. *)
-let is_toc (d : Cmarkit.Block.Div.t) : bool =
-  match Cmarkit.Block.Div.class' d with
-  | Some (name, _) -> String.equal name div_class
-  | None -> false
+let is_toc (Djot.Node (_, attrs, block) : Djot.Block.t Djot.node) : bool =
+  match block, Djot.Attr.classes attrs with
+  | Div _, [ name ] -> String.equal name div_class
+  | _ -> false
 ;;
 
 (** The [::: toc] divs of [doc], in document order.
 
     Recognition is the parser's, not a second reading of the text: the same
-    fold the rest of the vault uses, matching {!Cmarkit.Block.Ext_div}.  A
-    [::: toc] nested inside another one is body text rather than a region of
-    its own — the fold stops at the outer div, exactly as the parser nests
-    them.  See {!page-"feature-toc".region}. *)
-let scan_doc (doc : Cmarkit.Doc.t) ~(content : string) : scan =
+    fold the rest of the vault uses, matching {!Djot.Block.Div}.  A [::: toc]
+    nested inside another one is body text rather than a region of its own —
+    the fold stops at the outer div, exactly as the parser nests them.  See
+    {!page-"feature-toc".region}. *)
+let scan_doc (doc : Djot.Doc.t) ~(content : string) : scan =
   let folder =
-    Cmarkit.Folder.make
-      ~block:(fun _f (regions, unterminated) (b : Cmarkit.Block.t) ->
-        match b with
-        | Cmarkit.Block.Ext_div (d, meta) when is_toc d ->
-          let div = Cmarkit.Meta.textloc meta in
-          (match open_fence_span d, Cmarkit.Textloc.is_none div with
-           | None, _ | _, true -> Cmarkit.Folder.ret (regions, unterminated)
-           | Some open_fence, false ->
-             (* Stop here either way: a [::: toc] inside this one is content. *)
-             Cmarkit.Folder.ret
-               (match Cmarkit.Block.Div.closing_fence d with
-                | None -> regions, open_fence :: unterminated
-                | Some closing ->
-                  let closing = Cmarkit.Meta.textloc (snd closing) in
-                  let end_line, close_line_start = Cmarkit.Textloc.first_line closing in
-                  let region =
-                    { start_line = open_fence.line
-                    ; end_line = end_line - 1
-                    ; first_byte = Cmarkit.Textloc.first_byte div
-                    ; last_byte = Cmarkit.Textloc.last_byte div + 1
-                    ; open_fence
-                    ; body_first_byte =
-                        Lsp_util.line_start_byte content ~line:(open_fence.line + 1)
-                    ; body_last_byte = close_line_start
-                    }
-                  in
-                  region :: regions, unterminated))
-        | _ -> Cmarkit.Folder.default)
-      ~inline:(fun _f acc _i -> Cmarkit.Folder.ret acc)
-      ~inline_ext_default:(fun _f acc _i -> acc)
-      ~block_ext_default:(fun _f acc _b -> acc)
+    Djot.Folder.make
+      ~block:(fun _f (regions, unterminated) node ->
+        if not (is_toc node)
+        then Djot.Folder.default
+        else (
+          let div = Djot.Doc.textloc doc node in
+          match open_fence_span doc node ~content, Djot.Textloc.is_none div with
+          | None, _ | _, true -> Djot.Folder.ret (regions, unterminated)
+          | Some open_fence, false ->
+            (* Stop here either way: a [::: toc] inside this one is content. *)
+            Djot.Folder.ret
+              (match fence_loc doc node RCloseFence with
+               | None -> regions, open_fence :: unterminated
+               | Some closing ->
+                 let end_line, close_line_start = Djot.Textloc.first_line closing in
+                 let region =
+                   { start_line = open_fence.line
+                   ; end_line = end_line - 1
+                   ; first_byte = Djot.Textloc.first_byte div
+                   ; last_byte = Djot.Textloc.last_byte div + 1
+                   ; open_fence
+                   ; body_first_byte =
+                       Lsp_util.line_start_byte content ~line:(open_fence.line + 1)
+                   ; body_last_byte = close_line_start
+                   }
+                 in
+                 region :: regions, unterminated)))
+      ~inline:(fun _f acc _i -> Djot.Folder.ret acc)
       ()
   in
-  let regions, unterminated = Cmarkit.Folder.fold_doc folder ([], []) doc in
+  let regions, unterminated = Djot.Folder.fold_doc folder ([], []) doc in
   { regions = List.rev regions; unterminated = List.rev unterminated }
 ;;
 
@@ -169,7 +173,7 @@ let escape_link_text (s : string) : string =
 (** The headings of [content], minus the ones a TOC should not describe:
     empty ones, and any that fall inside a region — a TOC that sits under a
     heading must not list itself.  See {!page-"feature-toc".generation}. *)
-let entries ~(doc : Cmarkit.Doc.t) ~(regions : region list) : entry list =
+let entries ~(doc : Oystermark.Parse.t) ~(regions : region list) : entry list =
   let inside first_byte =
     List.exists regions ~f:(fun r ->
       r.body_first_byte <= first_byte && first_byte < r.body_last_byte)
@@ -181,7 +185,7 @@ let entries ~(doc : Cmarkit.Doc.t) ~(regions : region list) : entry list =
   Index.Entry.of_doc_exn file_stat doc
   |> Index.Entry.headings
   |> List.filter_map ~f:(fun (h, loc) ->
-    let located_inside = inside (Cmarkit.Textloc.first_byte loc) in
+    let located_inside = inside (Djot.Textloc.first_byte loc) in
     if located_inside || String.is_empty (String.strip h.text)
     then None
     else Some { text = h.text; level = h.level; slug = h.slug })
@@ -217,14 +221,11 @@ let render (entries : entry list) : string =
     since it is a function of the headings, not of where the region sits.
 
     The four entry points below each parse exactly once, and the parse is the
-    only reading of the text: {!scan_doc} takes its divs from the same AST
+    only reading of the text: {!scan_doc} takes its divs from the same tree
     that {!entries} takes its headings from. *)
 let read (content : string) : scan * string =
-  (* [layout:true] is what gives the fences their locations: without it the
-     div is still a div, but its delimiters carry none.  See
-     {!page-"feature-toc".region}. *)
-  let doc = Lsp_util.parse_doc ~layout:true content in
-  let s = scan_doc doc ~content in
+  let doc = Lsp_util.parse_doc content in
+  let s = scan_doc doc.doc ~content in
   s, render (entries ~doc ~regions:s.regions)
 ;;
 
@@ -405,36 +406,47 @@ let%test_module "scan" =
     (* Unlike a paired-comment scheme, a nested opening fence is content: the
        parser reads it as a nested div, and the first sufficient closing fence
        ends the outer one. *)
-    let%expect_test "a nested opening fence does not start a region" =
+    let%expect_test "a nested opening fence is content of the region" =
       show "::: toc\n::: toc\n:::\n";
       [%expect
-        {| ((regions ()) (unterminated (((line 0) (first_byte 0) (last_byte 7))))) |}]
+        {|
+        ((regions
+          (((start_line 0) (end_line 2) (first_byte 0) (last_byte 19)
+            (open_fence ((line 0) (first_byte 0) (last_byte 7))) (body_first_byte 8)
+            (body_last_byte 16))))
+         (unterminated ()))
+        |}]
     ;;
 
     let%expect_test "a shorter closing fence does not close a longer one" =
       show ":::: toc\n:::\n::::\n";
       [%expect
-        {| ((regions ()) (unterminated (((line 0) (first_byte 0) (last_byte 8))))) |}]
+        {|
+        ((regions
+          (((start_line 0) (end_line 2) (first_byte 0) (last_byte 17)
+            (open_fence ((line 0) (first_byte 0) (last_byte 8))) (body_first_byte 9)
+            (body_last_byte 13))))
+         (unterminated ()))
+        |}]
     ;;
 
     let%expect_test "two independent regions" =
-      show "::: toc\n:::\nmid\n::: toc\n:::\n";
+      show "::: toc\n:::\n\nmid\n\n::: toc\n:::\n";
       [%expect
         {|
         ((regions
           (((start_line 0) (end_line 1) (first_byte 0) (last_byte 11)
             (open_fence ((line 0) (first_byte 0) (last_byte 7))) (body_first_byte 8)
             (body_last_byte 8))
-           ((start_line 3) (end_line 4) (first_byte 16) (last_byte 27)
-            (open_fence ((line 3) (first_byte 16) (last_byte 23)))
-            (body_first_byte 24) (body_last_byte 24))))
+           ((start_line 5) (end_line 6) (first_byte 18) (last_byte 29)
+            (open_fence ((line 5) (first_byte 18) (last_byte 25)))
+            (body_first_byte 26) (body_last_byte 26))))
          (unterminated ()))
         |}]
     ;;
 
-    (* Scanning does not parse, so a fence inside a code block still
-       delimits.  See {!page-"feature-toc".region}. *)
-    let%expect_test "a fence inside a code block is still a fence" =
+    (* A fence inside a code block is code.  See {!page-"feature-toc".region}. *)
+    let%expect_test "a fence inside a code block is not a fence" =
       show "```\n::: toc\n```\n:::\n";
       [%expect {| ((regions ()) (unterminated ())) |}]
     ;;
@@ -449,10 +461,10 @@ let%test_module "generate" =
       show "# Alpha\n\n## Beta\n\n### Gamma\n\n## Delta\n";
       [%expect
         {|
-        - [Alpha](#alpha)
-          - [Beta](#beta)
-            - [Gamma](#gamma)
-          - [Delta](#delta)
+        - [Alpha](#Alpha)
+          - [Beta](#Beta)
+            - [Gamma](#Gamma)
+          - [Delta](#Delta)
         |}]
     ;;
 
@@ -460,8 +472,8 @@ let%test_module "generate" =
       show "## Beta\n\n### Gamma\n";
       [%expect
         {|
-        - [Beta](#beta)
-          - [Gamma](#gamma)
+        - [Beta](#Beta)
+          - [Gamma](#Gamma)
         |}]
     ;;
 
@@ -469,8 +481,8 @@ let%test_module "generate" =
       show "## Beta\n\n#### Delta\n";
       [%expect
         {|
-        - [Beta](#beta)
-          - [Delta](#delta)
+        - [Beta](#Beta)
+          - [Delta](#Delta)
         |}]
     ;;
 
@@ -478,8 +490,8 @@ let%test_module "generate" =
       show "# Same\n\n# Same\n";
       [%expect
         {|
-        - [Same](#same)
-        - [Same](#same-1)
+        - [Same](#Same)
+        - [Same](#Same-1)
         |}]
     ;;
 
@@ -492,7 +504,7 @@ let%test_module "generate" =
 
     let%expect_test "brackets in a heading are escaped" =
       show "# See [note]\n";
-      [%expect {| - [See \[note\]](#see-note) |}]
+      [%expect {| - [See \[note\]](#See-note) |}]
     ;;
 
     let%expect_test "no headings: empty body" =
@@ -507,8 +519,8 @@ let%test_module "generate" =
       show "# Alpha\n\n::: toc\n\n# Inside\n\n:::\n\n## Beta\n";
       [%expect
         {|
-        - [Alpha](#alpha)
-          - [Beta](#beta)
+        - [Alpha](#Alpha)
+          - [Beta](#Beta)
         |}]
     ;;
   end)
@@ -525,22 +537,22 @@ let%test_module "staleness" =
     let region body = sprintf "# Alpha\n\n::: toc\n%s:::\n" body
 
     let%expect_test "matching body is fresh" =
-      stale (region "- [Alpha](#alpha)\n");
+      stale (region "- [Alpha](#Alpha)\n");
       [%expect {| false |}]
     ;;
 
     let%expect_test "trailing whitespace and blank lines are forgiven" =
-      stale (region "\n- [Alpha](#alpha)   \n\n");
+      stale (region "\n- [Alpha](#Alpha)   \n\n");
       [%expect {| false |}]
     ;;
 
     let%expect_test "edited link text is stale" =
-      stale (region "- [Renamed](#alpha)\n");
+      stale (region "- [Renamed](#Alpha)\n");
       [%expect {| true |}]
     ;;
 
     let%expect_test "missing heading is stale" =
-      stale "# Alpha\n\n::: toc\n- [Alpha](#alpha)\n:::\n\n## Beta\n";
+      stale "# Alpha\n\n::: toc\n- [Alpha](#Alpha)\n:::\n\n## Beta\n";
       [%expect {| true |}]
     ;;
 
@@ -563,7 +575,7 @@ let%test_module "diagnostics" =
     ;;
 
     let%expect_test "fresh region: nothing" =
-      show "# Alpha\n\n::: toc\n- [Alpha](#alpha)\n:::\n";
+      show "# Alpha\n\n::: toc\n- [Alpha](#Alpha)\n:::\n";
       [%expect {| |}]
     ;;
 
@@ -613,8 +625,8 @@ let%test_module "edits" =
         # Alpha
 
         ::: toc
-        - [Alpha](#alpha)
-          - [Beta](#beta)
+        - [Alpha](#Alpha)
+          - [Beta](#Beta)
         :::
         prose
 
@@ -652,8 +664,8 @@ let%test_module "edits" =
         # Alpha
 
         ::: toc
-        - [Alpha](#alpha)
-          - [Beta](#beta)
+        - [Alpha](#Alpha)
+          - [Beta](#Beta)
         :::
 
         ## Beta
@@ -661,7 +673,7 @@ let%test_module "edits" =
     ;;
 
     let%expect_test "a fresh region has no update" =
-      let content = "# Alpha\n\n::: toc\n- [Alpha](#alpha)\n:::\n" in
+      let content = "# Alpha\n\n::: toc\n- [Alpha](#Alpha)\n:::\n" in
       show content (update content ~first_byte:9 ~last_byte:9);
       [%expect {| <none> |}]
     ;;

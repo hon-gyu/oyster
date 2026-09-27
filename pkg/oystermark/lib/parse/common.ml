@@ -1,343 +1,85 @@
 open Core
-open Cmarkit
 
-let compose_block_map (m1 : Block.t Mapper.mapper) (m2 : Block.t Mapper.mapper) =
-  fun m b ->
-  match m1 m b with
-  | `Default -> m2 m b
-  | `Map None -> `Map None
-  | `Map (Some b') ->
-    (match m2 m b' with
-     | `Default -> `Map (Some b')
-     | other -> other)
+(** Whether [u], outside ASCII, is punctuation: Latin-1 punctuation, the
+    general punctuation block (curly quotes, dashes, ellipsis), and CJK and
+    fullwidth punctuation. *)
+let is_unicode_punctuation (u : Stdlib.Uchar.t) : bool =
+  let c = Stdlib.Uchar.to_int u in
+  (0xA1 <= c && c <= 0xBF && not (c = 0xAA || c = 0xB5 || c = 0xBA))
+  || (0x2010 <= c && c <= 0x205E)
+  || (0x3000 <= c && c <= 0x303F)
+  || (0xFF01 <= c && c <= 0xFF0F)
+  || (0xFF1A <= c && c <= 0xFF20)
+  || (0xFF3B <= c && c <= 0xFF40)
+  || (0xFF5B <= c && c <= 0xFF65)
 ;;
 
-let compose_inline_map (m1 : Inline.t Mapper.mapper) (m2 : Inline.t Mapper.mapper) =
-  fun m i ->
-  match m1 m i with
-  | `Default -> m2 m i
-  | `Map None -> `Map None
-  | `Map (Some i') ->
-    (match m2 m i' with
-     | `Default -> `Map (Some i')
-     | other -> other)
+(** Whether [u], outside ASCII, is a blank: no-break and typographic spaces. *)
+let is_unicode_blank (u : Stdlib.Uchar.t) : bool =
+  let c = Stdlib.Uchar.to_int u in
+  c = 0xA0 || (0x2000 <= c && c <= 0x200A) || c = 0x202F || c = 0x205F || c = 0x3000
 ;;
 
-let compose_block_maps (ms : Block.t Mapper.mapper list) =
-  List.fold_right ms ~init:(fun m b -> Mapper.default) ~f:compose_block_map
-;;
-
-let compose_inline_maps (ms : Inline.t Mapper.mapper list) =
-  List.fold_right ms ~init:(fun m i -> Mapper.default) ~f:compose_inline_map
-;;
-
-let heading_id (h : Block.Heading.t) : string option =
-  match Block.Heading.id h with
-  | Some (`Auto id | `Id id) -> Some id
-  | None -> None
-;;
-
-(** The identifier the parser would derive from heading text [s]. For resolving a
-    link fragment written as text, e.g. a wikilink [ [[note#Some Heading]] ] —
-    against {!heading_id}. Matches the first heading of that text. *)
-let heading_id_of_text (s : string) : string = Inline.id (Inline.Text (s, Meta.none))
-
-(** Render inlines to plain text, losing their markdown syntax. Used to render a
-    heading to the plain text that names it. *)
-let inline_to_plain_text (inline : Inline.t) : string =
-  let lines = Inline.to_plain_text ~break_on_soft:false inline in
-  String.concat ~sep:"\n" (List.map lines ~f:(String.concat ~sep:""))
-;;
-
-(** Like [Cmarkit.Block.meta], but returns [Meta.none] instead of raising for a
-    block extension defined outside [Cmarkit], such as
-    {!Frontmatter.Frontmatter}. *)
-let meta_of_block (block : Block.t) : Meta.t = Block.meta ~ext:(fun _ -> Meta.none) block
-
-(** The info string of a code block: [python] for [ ```python ]. [None] for a
-    block that is not a fenced code block, or a code block with no info string. *)
-let info_string_of_block (block : Block.t) : string option =
-  match block with
-  | Block.Code_block (cb, _) -> Option.map (Block.Code_block.info_string cb) ~f:fst
-  | _ -> None
-;;
-
-(** The Obsidian block identifier [ ^id ] carried on the block, if any. *)
-let caret_id_of_block (block : Block.t) : string option =
-  Option.map (Block.Block_id.find (meta_of_block block)) ~f:Block.Block_id.id
-;;
-
-(** Reconstruct a fork {!Cmarkit.Block.Div.t} with a new [body], preserving its
-    indent/fences/class so commonmark roundtrip is unaffected. Used by passes
-    that recurse into a div's body (e.g. Struct, block attributes). *)
-let div_with_body (d : Block.Div.t) (body : Block.t) : Block.Div.t =
-  Block.Div.make
-    ~indent:(Block.Div.indent d)
-    ~opening_fence:(Block.Div.opening_fence d)
-    ?class':(Block.Div.class' d)
-    ~closing_fence:(Block.Div.closing_fence d)
-    body
-;;
-
-(** Build the raw content string (the part between [ [[ ]] ], without brackets)
-    of a wikilink from its fields, mirroring {!Cmarkit.Inline.Wikilink}'s
-    surface syntax. *)
-let wikilink_content_of_fields
-      ~(target : string option)
-      ~(fragment : Inline.Wikilink.fragment option)
-      ~(display : string option)
-  : string
-  =
-  let b = Buffer.create 16 in
-  Option.iter target ~f:(Buffer.add_string b);
-  (match fragment with
-   | None -> ()
-   | Some (Inline.Wikilink.Heading hs) ->
-     Buffer.add_char b '#';
-     Buffer.add_string b (String.concat ~sep:"#" hs)
-   | Some (Inline.Wikilink.Block_ref id) -> Buffer.add_string b ("#^" ^ id));
-  Option.iter display ~f:(fun d -> Buffer.add_string b ("|" ^ d));
+(** The key a heading is matched by when it is named as text: by a wikilink
+    fragment such as [ [[note#Some Heading]] ], or by a section query. The
+    heading's plain text, ASCII letters lowercased, with punctuation other than
+    [-] and [_] removed and each run of blanks replaced by one [-]. [Some
+    Heading], [some heading] and [some-heading] have the same key, and so do
+    [It's] and [It’s]. *)
+let heading_key (text : string) : string =
+  let b = Buffer.create (String.length text) in
+  let pending_blank = ref false in
+  let add (u : Stdlib.Uchar.t) =
+    if !pending_blank && Buffer.length b > 0 then Buffer.add_char b '-';
+    pending_blank := false;
+    Stdlib.Buffer.add_utf_8_uchar b u
+  in
+  let rec loop i =
+    if i < String.length text
+    then (
+      let d = Stdlib.String.get_utf_8_uchar text i in
+      let u = Stdlib.Uchar.utf_decode_uchar d in
+      if Stdlib.Uchar.to_int u < 128
+      then (
+        match Stdlib.Uchar.to_char u with
+        | ' ' | '\t' | '\n' | '\r' -> pending_blank := true
+        | c when Char.is_alphanum c || Char.equal c '-' || Char.equal c '_' ->
+          add (Stdlib.Uchar.of_char (Char.lowercase c))
+        | _ -> ())
+      else if is_unicode_blank u
+      then pending_blank := true
+      else if not (is_unicode_punctuation u)
+      then add u;
+      loop (i + Stdlib.Uchar.utf_decode_length d))
+  in
+  loop 0;
   Buffer.contents b
 ;;
 
-(** Construct a fork {!Cmarkit.Inline.Wikilink.t} from individual fields (the
-    abstract type has no record constructor). *)
-let wikilink_of_fields ~target ~fragment ~display ~embed : Inline.Wikilink.t =
-  Inline.Wikilink.make ~embed (wikilink_content_of_fields ~target ~fragment ~display)
+(** Inlines as plain text, losing their syntax. *)
+let plain_text (inlines : Djot.Inline.t Djot.node list) : string =
+  Djot.Inline.to_plain_text inlines
 ;;
 
-(** Sexp of a fork wikilink, mirroring the old record's derived sexp shape. *)
-let sexp_of_wikilink (wl : Inline.Wikilink.t) : Sexp.t =
-  let opt = function
-    | None -> Sexp.List []
-    | Some s -> Sexp.List [ Sexp.Atom s ]
-  in
-  let frag =
-    match Inline.Wikilink.fragment wl with
-    | None -> Sexp.List []
-    | Some (Inline.Wikilink.Heading hs) ->
-      Sexp.List
-        [ Sexp.List
-            (Atom "Heading" :: [ Sexp.List (List.map hs ~f:(fun s -> Sexp.Atom s)) ])
-        ]
-    | Some (Inline.Wikilink.Block_ref id) ->
-      Sexp.List [ Sexp.List [ Atom "Block_ref"; Atom id ] ]
-  in
-  Sexp.List
-    [ Sexp.List [ Atom "target"; opt (Inline.Wikilink.target wl) ]
-    ; Sexp.List [ Atom "fragment"; frag ]
-    ; Sexp.List [ Atom "display"; opt (Inline.Wikilink.display wl) ]
-    ; Sexp.List [ Atom "embed"; Sexp.Atom (Bool.to_string (Inline.Wikilink.embed wl)) ]
+let%expect_test "heading_key" =
+  List.iter
+    [ "Some Heading"
+    ; "some-heading"
+    ; "  a  b  "
+    ; "What's new?"
+    ; "What’s “new”?"
+    ; "snake_case"
+    ; "Ünï"
     ]
+    ~f:(fun s -> print_endline (heading_key s));
+  [%expect
+    {|
+    some-heading
+    some-heading
+    a-b
+    whats-new
+    whats-new
+    snake_case
+    Ünï
+    |}]
 ;;
-
-(* {1 Sexp conversion scaffolding} *)
-
-(** A sexp-converter for inlines. Returns [None] to fall through to the
-    next converter in the composed chain. [recurse] is the fully-composed
-    [sexp_of_inline] for recursing into children.
-
-    Both core and extension converters share this type; composition is
-    just list order with [None] as the fallthrough signal, analogous to
-    [Cmarkit.Mapper]'s [`Default]. *)
-type inline_sexp =
-  (Inline.t -> Sexp.t)
-  -> with_meta:(Meta.t -> Sexp.t -> Sexp.t)
-  -> Inline.t
-  -> Sexp.t option
-
-(** A sexp-converter for blocks. Receives both [recurse_inline] and
-    [recurse_block]. [with_meta] wraps a block sexp with its metadata
-    sub-sexps — pass through to keep metadata in the output. *)
-type block_sexp =
-  recurse_inline:(Inline.t -> Sexp.t)
-  -> recurse_block:(Block.t -> Sexp.t)
-  -> with_meta:(Meta.t -> Sexp.t -> Sexp.t)
-  -> Block.t
-  -> Sexp.t option
-
-(** A sexp-converter for a single metadata key. *)
-type meta_sexp = Meta.t -> Sexp.t option
-
-type sexp_of =
-  { inline : Inline.t -> Sexp.t
-  ; block : Block.t -> Sexp.t
-  ; meta : Meta.t -> Sexp.t list
-  ; doc : Doc.t -> Sexp.t
-  }
-
-(** Core inline converter. Always returns [Some] — unknown constructors
-    emit [<unknown-inline>]. Placed last in the composed chain. *)
-let sexp_of_inline_core : inline_sexp =
-  fun recurse ~with_meta i ->
-  let meta, body =
-    match i with
-    | Inline.Text (s, m) -> m, Sexp.List [ Atom "Text"; Atom s ]
-    | Inline.Autolink (a, m) ->
-      let link = fst (Inline.Autolink.link a) in
-      m, Sexp.List [ Atom "Autolink"; Atom link ]
-    | Inline.Break (b, m) ->
-      let type_s =
-        match Inline.Break.type' b with
-        | `Hard -> "hard"
-        | `Soft -> "soft"
-      in
-      m, Sexp.List [ Atom "Break"; Atom type_s ]
-    | Inline.Code_span (cs, m) ->
-      m, Sexp.List [ Atom "Code_span"; Atom (Inline.Code_span.code cs) ]
-    | Inline.Emphasis (e, m) ->
-      m, Sexp.List [ Atom "Emphasis"; recurse (Inline.Emphasis.inline e) ]
-    | Inline.Strong_emphasis (e, m) ->
-      m, Sexp.List [ Atom "Strong_emphasis"; recurse (Inline.Emphasis.inline e) ]
-    | Inline.Link (l, m) -> m, Sexp.List [ Atom "Link"; recurse (Inline.Link.text l) ]
-    | Inline.Image (l, m) -> m, Sexp.List [ Atom "Image"; recurse (Inline.Link.text l) ]
-    | Inline.Raw_html (html, m) ->
-      let s =
-        List.map html ~f:(fun bl -> Block_line.tight_to_string bl)
-        |> String.concat ~sep:""
-      in
-      m, Sexp.List [ Atom "Raw_html"; Atom s ]
-    | Inline.Inlines (is, m) -> m, Sexp.List (Atom "Inlines" :: List.map is ~f:recurse)
-    | Inline.Ext_strikethrough (s, m) ->
-      m, Sexp.List [ Atom "Strikethrough"; recurse (Inline.Strikethrough.inline s) ]
-    | Inline.Ext_math_span (ms, m) ->
-      m, Sexp.List [ Atom "Math_span"; Atom (Inline.Math_span.tex ms) ]
-    | _ -> Meta.none, Sexp.Atom "<unknown-inline>"
-  in
-  Some (with_meta meta body)
-;;
-
-(** Core block converter. Always returns [Some]. Placed last in the chain. *)
-let sexp_of_block_core : block_sexp =
-  fun ~recurse_inline ~recurse_block ~with_meta b ->
-  let s =
-    match b with
-    | Block.Blank_line (_, meta) -> with_meta meta (Sexp.Atom "Blank_line")
-    | Block.Paragraph (p, meta) ->
-      with_meta
-        meta
-        (Sexp.List [ Atom "Paragraph"; recurse_inline (Block.Paragraph.inline p) ])
-    | Block.Heading (h, meta) ->
-      with_meta
-        meta
-        (Sexp.List
-           [ Atom "Heading"
-           ; Atom (Int.to_string (Block.Heading.level h))
-           ; recurse_inline (Block.Heading.inline h)
-           ])
-    | Block.Code_block (cb, meta) ->
-      let info =
-        match Block.Code_block.info_string cb with
-        | None -> Sexp.Atom "no-info"
-        | Some (s, _) -> Sexp.Atom s
-      in
-      let code =
-        List.map (Block.Code_block.code cb) ~f:(fun bl ->
-          Sexp.Atom (Block_line.to_string bl))
-      in
-      with_meta meta (Sexp.List (Atom "Code_block" :: info :: code))
-    | Block.Html_block (lines, meta) ->
-      let s =
-        List.map lines ~f:(fun bl -> Block_line.to_string bl) |> String.concat ~sep:"\n"
-      in
-      with_meta meta (Sexp.List [ Atom "Html_block"; Atom s ])
-    | Block.Block_quote (bq, meta) ->
-      with_meta
-        meta
-        (Sexp.List [ Atom "Block_quote"; recurse_block (Block.Block_quote.block bq) ])
-    | Block.List (l, meta) ->
-      let items =
-        List.map (Block.List'.items l) ~f:(fun (item, _item_meta) ->
-          recurse_block (Block.List_item.block item))
-      in
-      with_meta meta (Sexp.List (Atom "List" :: items))
-    | Block.Blocks (bs, meta) ->
-      with_meta meta (Sexp.List (Atom "Blocks" :: List.map bs ~f:recurse_block))
-    | Block.Link_reference_definition _ -> Sexp.Atom "Link_reference_definition"
-    | Block.Thematic_break (_, meta) -> with_meta meta (Sexp.Atom "Thematic_break")
-    | _ -> Sexp.Atom "<unknown-block>"
-  in
-  Some s
-;;
-
-(** Compose a list of extension converters with the built-in core
-    converters into a mutually-recursive triple. Extensions are tried
-    in list order; the first to return [Some] wins. The core converters
-    are always appended last — callers pass extensions only. *)
-let make_sexp_of
-      ?(inlines : inline_sexp list = [])
-      ?(blocks : block_sexp list = [])
-      ?(metas : meta_sexp list = [])
-      ()
-  : sexp_of
-  =
-  let inlines = inlines @ [ sexp_of_inline_core ] in
-  let blocks = blocks @ [ sexp_of_block_core ] in
-  let rec sexp_of_inline (i : Inline.t) : Sexp.t =
-    let rec try_ = function
-      | [] -> Sexp.Atom "<unknown-inline>"
-      | f :: rest ->
-        (match f sexp_of_inline ~with_meta i with
-         | Some s -> s
-         | None -> try_ rest)
-    in
-    try_ inlines
-  and sexp_of_block (b : Block.t) : Sexp.t =
-    let rec try_ = function
-      | [] -> Sexp.Atom "<unknown-block>"
-      | f :: rest ->
-        (match
-           f ~recurse_inline:sexp_of_inline ~recurse_block:sexp_of_block ~with_meta b
-         with
-         | Some s -> s
-         | None -> try_ rest)
-    in
-    try_ blocks
-  and sexp_of_meta (meta : Meta.t) : Sexp.t list =
-    List.filter_map metas ~f:(fun ext -> ext meta)
-  and with_meta (meta : Meta.t) (sexp : Sexp.t) : Sexp.t =
-    match sexp_of_meta meta with
-    | [] -> sexp
-    | items -> Sexp.List [ sexp; Sexp.List (Atom "meta" :: items) ]
-  in
-  let sexp_of_doc (d : Doc.t) : Sexp.t = sexp_of_block (Doc.block d) in
-  { inline = sexp_of_inline
-  ; block = sexp_of_block
-  ; meta = sexp_of_meta
-  ; doc = sexp_of_doc
-  }
-;;
-
-module For_test = struct
-  (** Assert that the commonmark roundtrip of a doc is idempotent under normalization.
-    Raises [Failure] if the roundtrip is not idempotent. *)
-  let commonmark_of_doc_idempotent
-        ~(doc_of_string : string -> Doc.t)
-        ~(commonmark_of_doc : Doc.t -> string)
-        s
-    =
-    let normalize s = String.rstrip s in
-    let cm1 = commonmark_of_doc (doc_of_string s) in
-    let cm2 = commonmark_of_doc (doc_of_string cm1) in
-    [%test_eq: string] (normalize cm1) (normalize cm2)
-  ;;
-
-  (* Helpers
-  ==================== *)
-
-  let mk_doc_of_string ?inline_ext_default ?block_ext_default ?inline ?block () s =
-    let doc = Doc.of_string s in
-    let doc' =
-      Mapper.map_doc
-        (Mapper.make ?inline_ext_default ?block_ext_default ?block ?inline ())
-        doc
-    in
-    doc'
-  ;;
-
-  let mk_pp_doc ?inlines ?blocks ?metas () ppf doc =
-    (make_sexp_of ?inlines ?blocks ?metas ()).doc doc
-    |> Sexp.to_string_hum ~indent:2
-    |> Format.fprintf ppf "%s@\n"
-  ;;
-end

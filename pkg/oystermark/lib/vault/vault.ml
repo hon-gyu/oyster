@@ -6,11 +6,10 @@ open Core
 type t =
   { vault_root : string
   ; index : Index.t
-  ; documents : Cmarkit.Doc.t String.Map.t
-  ; vault_meta : Cmarkit.Meta.t
+  ; documents : Note.t String.Map.t
   }
 
-let docs : t -> (string * Cmarkit.Doc.t) list = fun vault -> Map.to_alist vault.documents
+let docs : t -> (string * Note.t) list = fun vault -> Map.to_alist vault.documents
 let find_doc (vault : t) path = Map.find vault.documents path
 
 open struct
@@ -23,7 +22,7 @@ end
     defaults to a dateless stat, for callers that do no IO. *)
 let build_index
       ?(stat_of_path : Index.Path.t -> Index.file_stat = fun path -> file_stat path)
-      ~(md_docs : (string * Cmarkit.Doc.t) list)
+      ~(md_docs : (string * Note.t) list)
       ~(other_files : string list)
       ()
   : Index.t
@@ -68,7 +67,7 @@ let map_paths (vault : t) ~(f : string -> string) : t =
 
 (** Construct a vault from transformed documents, retaining the base vault's file dates,
     non-note assets, metadata, and root. *)
-let of_docs ~(base : t) (docs : (string * Cmarkit.Doc.t) list) : t =
+let of_docs ~(base : t) (docs : (string * Note.t) list) : t =
   let index =
     List.fold docs ~init:Index.empty ~f:(fun index (path, doc) ->
       let stat =
@@ -93,9 +92,5 @@ let of_files
     List.map md_files ~f:(fun (path, content) -> path, Parse.of_string ~locs:true content)
   in
   let index = build_index ~md_docs:parsed_docs ~other_files () in
-  { vault_root
-  ; index
-  ; documents = String.Map.of_alist_exn parsed_docs
-  ; vault_meta = Cmarkit.Meta.none
-  }
+  { vault_root; index; documents = String.Map.of_alist_exn parsed_docs }
 ;;

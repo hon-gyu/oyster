@@ -13,14 +13,14 @@ let files =
   [ ( "note-a.md"
     , "# Alpha\n\n\
        ## Section One\n\n\
-       Body text ^block1\n\n\
+       [Body text]{#block1}\n\n\
        ## Section Two\n\n\
        More content.\n" )
   ; ( "note-b.md"
     , "# Beta\n\n\
        Link to [[note-a]] here.\n\n\
        See [[note-a#Section One]].\n\n\
-       Also [[note-a#^block1]].\n\n\
+       Also [[note-a#block1]].\n\n\
        Markdown [link](note-a).\n\n\
        Unresolved [[missing-note]].\n" )
   ; "subdir/nested.md", "# Nested\n\nLink to [[note-a]] from subdirectory.\n"
@@ -51,8 +51,8 @@ let%expect_test "unit: references to note-a from wikilink in note-b" =
     {|
     note-b.md [16-25]
     note-b.md [38-59]
-    note-b.md [68-85]
-    note-b.md [98-111]
+    note-b.md [68-84]
+    note-b.md [97-110]
     subdir/nested.md [18-27]
     |}]
 ;;
@@ -73,7 +73,7 @@ let%expect_test "unit: references to heading" =
   [%expect {| note-b.md [38-59] |}]
 ;;
 
-let%expect_test "unit: references to block id" =
+let%expect_test "unit: references to an attribute id" =
   let content = List.Assoc.find_exn files ~equal:String.equal "note-a.md" in
   let refs =
     Lsp_lib.Find_references.find_references
@@ -86,7 +86,7 @@ let%expect_test "unit: references to block id" =
       ()
   in
   List.iter refs ~f:(fun r -> printf "%s [%d-%d]\n" r.rel_path r.first_byte r.last_byte);
-  [%expect {| note-b.md [68-85] |}]
+  [%expect {| note-b.md [68-84] |}]
 ;;
 
 let%expect_test "unit: cursor not on link, heading or block" =

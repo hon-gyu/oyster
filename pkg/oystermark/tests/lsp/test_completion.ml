@@ -22,7 +22,7 @@ let%expect_test "server: fragment completion offers heading and attribute id" =
   |> List.iter ~f:(fun (label, insert) -> printf "%s -> %s\n" label insert);
   [%expect
     {|
-    Target -> target
+    Target -> Target
     #key-term -> key-term
     |}]
 ;;
