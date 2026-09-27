@@ -14,7 +14,8 @@ const tree: any = parseToMdast(
 		"",
 		"## Repeated",
 		"",
-		"Second section. ^second-block",
+		"{#second-block}",
+		"Second section.",
 		"",
 		"Anchored{#inline-anchor}",
 		"",
@@ -44,7 +45,7 @@ test("slices a duplicate heading by its rendered slug through the next peer", ()
 });
 
 test("slices block and inline attribute anchors", () => {
-	expect(sliceContent(tree, "^second-block")?.nodes[0].type).toBe("paragraph");
+	expect(sliceContent(tree, "second-block")?.nodes[0].type).toBe("paragraph");
 	expect(sliceContent(tree, "inline-anchor")?.nodes[0].type).toBe("oyElement");
 	expect(sliceContent(tree, "missing")).toBeNull();
 });

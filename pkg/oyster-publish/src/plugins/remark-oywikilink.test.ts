@@ -242,7 +242,7 @@ describe("note transclusion", () => {
 		["notes/current.md", "# Current\n\n![[other#Section]]"],
 		[
 			"notes/other.md",
-			"# Other\n\n## Section\n\nSelected. ^selected\n\n![[nested]]\n\n## Later\n\nExcluded.",
+			"# Other\n\n## Section\n\n{#selected}\nSelected.\n\n![[nested]]\n\n## Later\n\nExcluded.",
 		],
 		["notes/nested.md", "# Nested\n\nNested body.\n\n![[current]]"],
 	]);
@@ -297,8 +297,8 @@ describe("note transclusion", () => {
 
 	test("embeds same-note blocks and isolates their DOM ids", () => {
 		const noteSources = new Map(sources);
-		noteSources.set("notes/current.md", "# Current\n\nLocal block. ^local");
-		const tree = transclude("![[#^local]]", "notes/current.md", noteSources);
+		noteSources.set("notes/current.md", "# Current\n\n{#local}\nLocal block.");
+		const tree = transclude("![[#local]]", "notes/current.md", noteSources);
 		expect(tree.children[0].children[0].data.hProperties.id).toBe(
 			"embed-1-local",
 		);

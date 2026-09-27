@@ -6,7 +6,7 @@ test("builds a fragment-aware static payload without the full note body", () => 
 	const note = buildVaultManifest([
 		{
 			path: "Field Notes/Example.md",
-			body: "# Example\n\nIntro text.\n\n## Details\n\nFragment context. ^context",
+			body: "# Example\n\nIntro text.\n\n## Details\n\n{#context}\nFragment context.",
 			data: { title: "An example", publish: true },
 		},
 	]).notes[0];
@@ -19,7 +19,7 @@ test("builds a fragment-aware static payload without the full note body", () => 
 	});
 	expect(payload.anchors.details).toEqual({
 		label: "Details",
-		excerpt: "Fragment context. ^context",
+		excerpt: "Fragment context.",
 	});
 	expect(payload.anchors.context.excerpt).toContain("Fragment context");
 	expect(payload.excerpt.length).toBeLessThanOrEqual(240);
