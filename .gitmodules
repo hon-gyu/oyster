@@ -11,3 +11,9 @@
 	path = vendor/djot
 	url = git@github.com:hon-gyu/djot.v.git
 	branch = ocaml
+[submodule "vendor/simple_xml"]
+	path = vendor/simple_xml
+	url = git@github.com:hon-gyu/simple_xml.git
+[submodule "vendor/xpath"]
+	path = vendor/xpath
+	url = git@github.com:hon-gyu/xpath.git
