@@ -1,8 +1,7 @@
 module Anchor = Anchor
 module Link = Link
 module Transclusion = Transclusion
-module Node = Node
-module Query = Query
+module Xml = Xml
 
 module Private = struct
   module Address_utils = Address_utils
@@ -14,8 +13,6 @@ type t = Parse.t =
   { frontmatter : Yaml.value option
   ; doc : Djot.Doc.t
   }
-
-let select (query : Query.t) (n : t) : t = { n with doc = Query.extract query n.doc }
 
 type source =
   { path : string

@@ -229,10 +229,10 @@ whether the whole [tags] list is an element of [\["bread"\]]. Sorting on
 
 {1 Executing a code block}
 
-A note can own a computation as well as prose. [oyster block] queries the nodes
-of a note and writes what it finds to stdout. Here the query selects the code
-block carrying the [hydration] id and asserts its language at the same time;
-[-print prop:text] writes the code without its fence, so the build system can
+A note can own a computation as well as prose. [oyster query] evaluates XPath
+over the parsed Djot tree. Here the query selects the code block carrying the
+[hydration] id and asserts its language at the same time; [/text()] writes the
+code without its fence, so the build system can
 pipe it wherever it belongs — here, into [uv]:
 
 {v
@@ -246,16 +246,14 @@ print(json.dumps({"hydration": {"flour": flour, "water": water, ...}}))
 v}
 
 {v
-oyster block NOTE \
-  '[Descendant(where=[Is(code_block), Prop(id, =, ID), Prop(lang, =, INFO)])]' \
-  -print prop:text
+oyster query NOTE '//code_block[@id="ID" and @lang="INFO"]/text()'
 v}
 
 The language predicate is part of the selection: if the named block is not an
 [INFO] code block, the query matches nothing. A query that matches nothing is
 an error, so a rule fails rather than feeding an interpreter an empty string.
-Nodes can also be addressed by heading, field, kind and position; repeated
-[-print] flags can write their source, path, kind, line, file or properties.
+XPath can also select headings, keyed blocks, callouts and positions in the
+XML view specified by {!Oystermark.Note.Xml}.
 
 Three rules: extract and run, snapshot the context, render the two together.
 [minijinja-cli] accepts several data files and merges them, so the script's
@@ -271,11 +269,9 @@ output arrives as ordinary template variables:
    (pipe-stdout
     (run
      %{bin:oyster}
-     block
+     query
      sourdough.md
-     "[Descendant(where=[Is(code_block), Prop(id, =, hydration), Prop(lang, =, python)])]"
-     -print
-     prop:text)
+     "//code_block[@id='hydration' and @lang='python']/text()")
     (run uv run -)))))
 
 (rule

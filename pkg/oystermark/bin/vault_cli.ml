@@ -6,32 +6,20 @@
 open Core
 open Common_
 
-(** Query the nodes of a note.
+(** Evaluate XPath 1.0 over {!Oystermark.Note.Xml.of_doc}.
 
-    QUERY is the syntax {!Oystermark.Note.Query.of_string} reads: a list of
-    steps, each written as its constructor, as
-    [ [Section([setup]), Descendant(where=[Is(code_block)])] ].
-
-    exit status:
-    - [0] when something matched
-    - [1] when nothing matched
-    - [2] when the query or the note could not be read. Check stderr *)
+    A node set prints one XML element or value per line. A scalar prints its
+    XPath string value. [-source] prints the original source for matched
+    elements with byte spans. Exit status is [0] for a truthy result, [1] for a false
+    result, and [2] for an invalid query or an unreadable note. *)
 let query_command =
   Command.basic
-    ~summary:"Print the nodes of a note that a query selects"
+    ~summary:"Run XPath over the XML view of a note"
     (let%map_open.Command (note : string) = anon ("NOTE" %: string)
-     and (query_text : string) = anon ("QUERY" %: string)
-     and (print : string list) =
-       flag
-         "-print"
-         (listed string)
-         ~doc:
-           "FIELD what to print of each match: markdown (the default), source, path, \
-            kind, line, file or prop:NAME; repeat for several, separated by tabs"
-     and (count : bool) = flag "-count" no_arg ~doc:" print how many nodes matched"
-     and (quiet : bool) =
-       flag "-quiet" no_arg ~doc:" print nothing; check exit status for matches"
-     in
+     and (query_text : string) = anon ("XPATH" %: string)
+     and (print_source : bool) =
+       flag "-source" no_arg ~doc:" print original source for matched elements"
+     and (quiet : bool) = flag "-quiet" no_arg ~doc:" print nothing; check exit status" in
      fun () ->
        let die (code : int) fmt =
          ksprintf
@@ -40,67 +28,47 @@ let query_command =
               exit code)
            fmt
        in
-       let (query : Query.steps) =
-         match Query.of_string query_text with
-         | Ok query -> query
-         | Error message -> die 2 "%s" message
-       in
        let (source : string) =
          try In_channel.read_all note with
          | _ -> die 2 "cannot read %s" note
        in
-       let result = Query.run query (Parse.of_string ~locs:true source).doc in
-       match result.matches with
-       | [] ->
-         if not quiet
-         then
-           Option.iter result.no_match ~f:(fun why ->
-             eprintf "%s: %s\n" note (Query.no_match_to_string why));
-         exit 1
-       | matches ->
-         if quiet then exit 0;
-         if count
-         then printf "%d\n" (List.length matches)
-         else (
-           let text (value : Node.value) =
-             match value with
-             | String s -> s
-             | Int n -> Int.to_string n
-             | Bool b -> Bool.to_string b
+       let query =
+         try Xpath.parse_utf8_exn query_text with
+         | exn -> die 2 "invalid XPath: %s" (Exn.to_string exn)
+       in
+       let parsed : Parse.t = Parse.of_string ~locs:true source in
+       let result =
+         try
+           Xpath.run_exn (Xpath.Context.create_exn ()) (Note.Xml.of_doc parsed.doc) query
+         with
+         | exn -> die 2 "XPath evaluation failed: %s" (Exn.to_string exn)
+       in
+       if not quiet
+       then (
+         let source_of_element (element : Simple_xml.element) =
+           let value key =
+             List.find_map element.attributes ~f:(fun (attr : Simple_xml.Attribute.t) ->
+               if String.equal attr.key key then Int.of_string_opt attr.value else None)
            in
-           let field (found : Node.found_t) name =
-             match name with
-             | "markdown" -> String.strip (Query.markdown found)
-             | "source" ->
-               (match found.span with
-                | Some { first_byte; last_byte; _ } ->
-                  String.sub source ~pos:first_byte ~len:(last_byte - first_byte + 1)
-                | None -> String.strip (Query.markdown found))
-             | "path" -> String.concat ~sep:"." (List.map found.path ~f:Int.to_string)
-             | "kind" -> found.kind
-             | "line" ->
-               Option.value_map found.span ~default:"" ~f:(fun span ->
-                 Int.to_string (span.first_line + 1))
-             | "file" -> note
-             | name when String.is_prefix name ~prefix:"prop:" ->
-               Option.value_map
-                 (List.Assoc.find
-                    found.props
-                    (String.drop_prefix name 5)
-                    ~equal:String.equal)
-                 ~default:""
-                 ~f:text
-             | other -> die 2 "unknown -print field %s" other
-           in
-           let fields = if List.is_empty print then [ "markdown" ] else print in
-           let whole =
-             List.exists fields ~f:(fun field ->
-               String.equal field "markdown" || String.equal field "source")
-           in
-           List.map matches ~f:(fun found ->
-             String.concat ~sep:"\t" (List.map fields ~f:(field found)))
-           |> String.concat ~sep:(if whole then "\n\n" else "\n")
-           |> print_endline))
+           match value "start-byte", value "end-byte" with
+           | Some first, Some last
+             when first >= 0 && last >= first && last < String.length source ->
+             Some (String.sub source ~pos:first ~len:(last - first + 1))
+           | _ -> None
+         in
+         match Xpath.Value.Cast.to_node_set result with
+         | None -> print_endline (Xpath.Value.Cast.to_string result)
+         | Some nodes ->
+           Map.iter nodes ~f:(function
+             | Xpath.Node.Root element | Element element ->
+               let output = if print_source then source_of_element element else None in
+               print_endline
+                 (match output with
+                  | Some source -> source
+                  | None -> Simple_xml.to_string ~decl:false (Element element))
+             | Attribute attribute -> print_endline attribute.value
+             | Namespace { value; _ } | Text value -> print_endline value));
+       if not (Xpath.Value.Cast.to_boolean result) then exit 1)
 ;;
 
 let command =

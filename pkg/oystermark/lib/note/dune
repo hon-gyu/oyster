@@ -3,7 +3,7 @@
 (library
  (name note)
  (public_name oystermark.note)
- (libraries parse djot core)
+ (libraries parse djot core simple_xml)
  (inline_tests)
  (preprocess
   (pps ppx_jane ppx_inline_test ppx_expect)))

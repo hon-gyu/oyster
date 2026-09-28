@@ -14,21 +14,18 @@
     A link in one note can be resolved against another note's anchors, producing
     the address if there is a match.
 
-    {1 Query by path}
+    {1 XPath}
 
-    Apart from referencing a specific anchor by address, {!Query} provides a path-like
-    query for referencing nodes in a note.
-
-    - {!Query.t} is composed of a sequence of {!Query.type-step}.
-    - {!Query.t} can be constructed from {!Query.type-step} using corresponding constructors or parsed from a string following certain syntax.
+    {!Xml.of_doc} presents the parsed Djot document as XML for [Xpath]
+    queries. The XML shape is specified by {!Xml}; XPath supplies the query
+    syntax and evaluation semantics.
 
     *)
 
 module Anchor = Anchor
 module Link = Link
 module Transclusion = Transclusion
-module Node = Node
-module Query = Query
+module Xml = Xml
 
 module Private : sig
   module Address_utils = Address_utils
@@ -38,19 +35,12 @@ end
 
     (* ai-disclosure: ai-generated *)
 
-    Notes are closed under two operations: {!select} takes part of a note, and
     {!expand} substitutes notes for the embeds of another. A note does not know
     its path. Expanding one happens at a path, since its embeds are resolved
     from there.
 
     {2 Laws}
 
-    + [select Query.empty n = n].
-    + [select b (select a n)] and [select (a @ b) n] hold the same nodes when [a]
-      matches a single root, list item, block quote, callout, div, keyed node
-      or footnote definition, and when it matches a single section and [b]
-      does not select the section's heading, which [select a n] leaves out.
-      See {!Query.extract}.
     + [(expand ~env ~path n).frontmatter = n.frontmatter].
     + [Transclusion.reverse_embed_doc (expand ~env ~path n).doc] is [n.doc],
       up to how each embed link is written, when no embed reaches the depth
@@ -60,10 +50,6 @@ type t = Parse.t =
   { frontmatter : Yaml.value option
   ; doc : Djot.Doc.t (** Without the frontmatter. *)
   }
-
-(** The note whose root holds what [query] matches in [n], with [n]'s
-    frontmatter. See {!Query.extract}. *)
-val select : Query.t -> t -> t
 
 (** What an embed resolves to. *)
 type source =
@@ -89,5 +75,5 @@ val expand
   -> t
   -> t
 (* Open: an address of [n] should name the same node in [expand n], but
-   [Query.of_address] and [Address_utils.find] look inside transclusions, so an
+   [Address_utils.find] looks inside transclusions, so an
    embedded heading can shadow one of [n]'s. *)

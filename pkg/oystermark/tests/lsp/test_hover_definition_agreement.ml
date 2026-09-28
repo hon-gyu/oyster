@@ -5,7 +5,7 @@
 
     The two use different code: go-to-definition uses
     {!Oystermark.Vault.Index.resolve}, and hover reads the note with
-    {!Oystermark.Note.Query.of_address}, also when resolution stops at the note. If they
+    {!Oystermark.Note.Private.Address_utils.find}, also when resolution stops at the note. If they
     disagree, a link previews one section and jumps to another.
 
     Checked invariant: go-to-definition lands, in the same file, on the first

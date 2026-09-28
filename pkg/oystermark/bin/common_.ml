@@ -1,6 +1,4 @@
 open Core
-module Node = Oystermark.Note.Node
-module Query = Oystermark.Note.Query
 module Parse = Oystermark.Parse
 module Vault = Oystermark.Vault
 

@@ -1,4 +1,4 @@
-(** {!Note.select} and {!Note.expand}, and the laws {!Note} states for them. *)
+(** {!Note.expand} and its reversal law. *)
 
 open! Core
 open Oystermark
@@ -6,12 +6,8 @@ open Oystermark
 let print (n : Note.t) : unit = print_string (Parse.to_string n)
 let note (content : string) : Note.t = Parse.of_string content
 
-let same (a : Note.t) (b : Note.t) : unit =
-  print_s [%sexp (String.equal (Parse.to_string a) (Parse.to_string b) : bool)]
-;;
-
-(** An [env] that resolves through a vault index, and selects the part an
-    anchor names with {!Note.Query.of_address}. *)
+(** An [env] that resolves through a vault index and takes the part an anchor
+    names with {!Note.Private.Address_utils.find}. *)
 let env_of_files (files : (string * string) list)
   : from:string -> Note.Link.Ref.t -> Note.source option
   =
@@ -29,7 +25,14 @@ let env_of_files (files : (string * string) list)
            { path
            ; fragment = Some (Note.Transclusion.fragment definition)
            ; note =
-               Note.select (Note.Query.of_address (Note.Anchor.address definition)) whole
+               (let address = Note.Anchor.address definition in
+                let blocks = Note.Private.Address_utils.find whole.doc address in
+                let blocks =
+                  List.concat_map blocks ~f:(function
+                    | Djot.Node (_, _, Djot.Block.Section (_heading :: body)) -> body
+                    | block -> [ block ])
+                in
+                { whole with doc = Parse.doc_of_blocks blocks })
            }
        | Note _ | Asset _ -> Some { path; fragment = None; note = whole })
 ;;
@@ -59,89 +62,6 @@ let%expect_test "frontmatter is split from the body and put back" =
     # A
 
     Text.
-    |}]
-;;
-
-(* select
-   ====== *)
-
-let doc =
-  "---\n\
-   title: Doc\n\
-   ---\n\n\
-   # A\n\n\
-   text\n\n\
-   ## B\n\n\
-   body\n\n\
-   > [!note] Title\n\
-   > inside\n\n\
-   # C\n\n\
-   - one\n\
-   - two"
-;;
-
-let%expect_test "a section becomes the root, without its heading" =
-  print (Note.select Note.Query.(empty |> section [ "a" ]) (note doc));
-  [%expect
-    {|
-    ---
-    title: Doc
-    ---
-    text
-
-    ## B
-
-    body
-
-    > [!note] Title
-    > inside
-    |}]
-;;
-
-let%expect_test "a callout becomes the root, without its header" =
-  print (Note.select Note.Query.(empty |> descend ~where:[ is "callout" ]) (note doc));
-  [%expect
-    {|
-    ---
-    title: Doc
-    ---
-    inside
-    |}]
-;;
-
-let%expect_test "several matches are concatenated" =
-  print (Note.select Note.Query.(empty |> descend ~where:[ is "list_item" ]) (note doc));
-  [%expect
-    {|
-    ---
-    title: Doc
-    ---
-    one
-
-    two
-    |}]
-;;
-
-let%expect_test "law 1: selecting with the empty query is the identity" =
-  let n = note doc in
-  same (Note.select Note.Query.empty n) n;
-  [%expect {| true |}]
-;;
-
-let%expect_test "law 2: selecting twice is selecting the concatenated query" =
-  let n = note doc in
-  let check a b = same (Note.select b (Note.select a n)) (Note.select (a @ b) n) in
-  let open Note.Query in
-  check (empty |> section [ "a" ]) (empty |> child ~where:[ is "paragraph" ]);
-  check (empty |> section [ "a" ]) (empty |> section [ "b" ]);
-  check (empty |> descend ~where:[ is "callout" ]) (empty |> child);
-  check (empty |> descend ~where:[ is "list_item" ] ~nth:0) (empty |> child);
-  [%expect
-    {|
-    true
-    true
-    true
-    true
     |}]
 ;;
 

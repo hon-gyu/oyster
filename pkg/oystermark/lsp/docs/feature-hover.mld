@@ -42,7 +42,7 @@ by [*(empty)*].
      then the source of the matched heading's section: the heading and what
      follows it in the same container, up to (but not including) the next
      heading of equal or higher level, found by
-     {!Oystermark.Note.Query.of_address}. A block attribute written on the
+     {!Oystermark.Note.Private.Address_utils.find}. A block attribute written on the
      heading, such as [{#intro}] on the line above it, is shown with it.}
   {- {b Resolved block-ID fragment} ([[[note#^blockid]]]): path header,
      then the paragraph that carries the block ID, or the block before a

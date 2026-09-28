@@ -1,4 +1,6 @@
-  $ cat > n.md <<'EOF'
+The CLI evaluates XPath 1.0 over the parsed Djot XML view.
+
+  $ cat > n.md <<'NOTE'
   > # Top
   > 
   > ## Setup
@@ -13,138 +15,44 @@
   > print("a")
   > ```
   > 
-  > ## Other
-  > 
-  > Some prose.
-  > EOF
+  > > [!note] A callout
+  > > Body.
+  > NOTE
 
-  $ oyster query n.md '[Section([top, setup]), Child(where=[Is(code_block)])]'
+XPath can navigate sections, blocks, and attributes.
+
+  $ oyster query n.md 'count(//section)'
+  2
+  $ oyster query n.md '//code_block/@lang'
+  sh
+  python
+  $ oyster query n.md 'string(//section[heading="Setup"]/keyed[@key="owner"]/paragraph)'
+  alice
+  $ oyster query n.md 'string(//callout[@type="note"]/title)'
+  A callout
+  $ oyster query n.md '/doc/references'
+  <references/>
+
+[-source] uses the selected element's Djot byte span.
+
+  $ oyster query n.md '//code_block[@lang="sh"]' -source
   ```sh
   echo one
   ```
-  
-  ```python
-  print("a")
-  ```
-  $ oyster query n.md '[Section([top, setup]), Child(where=[Is(code_block)]), Self(nth=1)]'
-  ```python
-  print("a")
-  ```
 
-exact=false allows sub-path matching
+An empty node set gives exit status 1. A scalar prints its XPath string value.
 
-  $ oyster query n.md '[Section([setup], exact=false), Child(where=[Is(code_block)], nth=-1)]'
-  ```python
-  print("a")
-  ```
-[Field] reads the keyed syntax.
-
-  $ oyster query n.md '[Section([top, setup]), Field(owner)]'
-  alice
-
-  $ cat > n2.md << 'EOF'
-  > - foo: bar
-  > - baz: 
-  >   - apple:
-  >     - pear
-  > - cider:
-  > ```md
-  > hi
-  > ```
-  > EOF
-
-  $ oyster query n2.md '[Field(foo)]'
-  n2.md: step 0 (Field(foo)): nothing to move to from root
+  $ oyster query n.md '//code_block[@lang="ruby"]'
   [1]
+  $ oyster query n.md 'boolean(//code_block[@lang="ruby"])'
+  false
+  [1]
+  $ oyster query n.md '//code_block[@lang="python"]' -quiet
 
-  $ oyster query n2.md '[Child(nth=0), Field(foo)]'
-  bar
+An unreadable note is an error.
 
-  $ oyster query n2.md '[Child(nth=0), Field(baz), Field(apple)]' -print kind -print source
-  list	- pear
-
-  $ oyster query n2.md '[Child(nth=0), Field(baz), Field(apple), Child(nth=0)]' -print kind -print source
-  list_item	- pear
-
-  $ oyster query n2.md '[Child(nth=0), Field(baz), Field(apple), Child(nth=0), Child(nth=0)]' -print kind -print source
-  paragraph	pear
-
-  $ oyster query n2.md '[Child(nth=0), Field(cider)]' -print source
-  ```md
-  hi
-  ```
-  $ oyster query n2.md '[Child(nth=0), Field(cider)]' -print prop:text -print prop:lang
-  hi	md
-
-[-print] chooses what to print of each match, one field per flag, separated by
-tabs.
-
-  $ oyster query n.md '[Descendant(where=[Is(code_block)])]' -print kind -print line -print path
-  code_block	8	0.1.2
-  code_block	12	0.1.3
-
-  $ oyster query n.md '[Descendant(where=[Is(code_block)])]' -print prop:lang
-  sh
-  python
-
-[-count] prints how many matched, [-quiet] nothing at all.
-
-  $ oyster query n.md '[Descendant(where=[Is(code_block)])]' -count
+  $ oyster query n.md '[' > /dev/null 2> /dev/null; echo $?
   2
-  $ oyster query n.md '[Descendant(where=[Is(code_block)])]' -quiet
-  $ oyster query n.md '[Descendant]' -count
-  11
-
-Nothing matched: exit 1, and stderr names the step that emptied the sequence.
-
-  $ oyster query n.md '[Section([missing])]'
-  n.md: step 0 (Section([missing])): nothing to move to from root
-  [1]
-
-  $ oyster query n.md '[Section([missing])]' -quiet
-  [1]
-
-A query that cannot be read, a note that cannot be read, and an unknown
-[-print] field are all exit 2.
-
-  $ oyster query n.md '[Child('
-  unexpected the end
-  [2]
-
-  $ oyster query nosuch.md '[Child]'
+  $ oyster query nosuch.md '//paragraph'
   cannot read nosuch.md
   [2]
-
-  $ oyster query n.md '[Child]' -print lang
-  unknown -print field lang
-  [2]
-
-A djot attribute is part of the node it is written on: its identifier, its
-classes and its key/value pairs are all properties, so a query can test them
-and [-print] can print them. This is the shape [oyster] writes for an expanded
-embed.
-
-  $ cat > n3.md <<'EOF'
-  > {source="notes/a.md" fragment=Intro depth=1}
-  > ::: embed
-  > Transcluded body.
-  > :::
-  > EOF
-
-  $ oyster query n3.md '[Descendant(where=[Is(div)])]' -print prop:class -print prop:source -print prop:fragment -print prop:depth
-  embed	notes/a.md	Intro	1
-
-An attribute value is written without a type, so it is offered as the text and
-as the number it spells; both comparisons hold.
-
-  $ oyster query n3.md '[Descendant(where=[Prop(depth, =, 1)])]' -print kind
-  div
-  $ oyster query n3.md '[Descendant(where=[Prop(depth, =, "1")])]' -print kind
-  div
-  $ oyster query n3.md '[Descendant(where=[Has(source)])]' -print kind
-  div
-
-The div is a node of its own, so the transcluded blocks are its children.
-
-  $ oyster query n3.md '[Descendant(where=[Is(div)]), Child]' -print kind -print path
-  paragraph	0.0

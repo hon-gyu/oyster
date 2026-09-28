@@ -27,6 +27,8 @@
   (dune
    (>= 3.22))
   djot
+  simple_xml
+  xpath
   core
   core_unix
   tyxml
