@@ -16,6 +16,30 @@ let inlines_have_id (id : string) (inlines : Djot.Inline.t Djot.node list) : boo
   List.fold inlines ~init:false ~f:(Djot.Folder.fold_inline folder)
 ;;
 
+(** The inlines [block] holds itself, outside its child blocks. *)
+let own_inlines : Djot.Block.t -> Djot.Inline.t Djot.node list = function
+  | Para inlines | Heading (_, inlines) -> inlines
+  | Table (caption, rows) ->
+    Option.value caption ~default:[]
+    @ List.concat_map
+        rows
+        ~f:(List.concat_map ~f:(fun (Djot.Block.Cell (_, _, ns)) -> ns))
+  | Ext_callout (_, _, title, _) -> title
+  | Ext_keyed (label, _) -> label
+  | DefinitionList (_, items) -> List.concat_map items ~f:fst
+  | Section _
+  | BlockQuote _
+  | CodeBlock _
+  | Div _
+  | OrderedList _
+  | BulletList _
+  | TaskList _
+  | ThematicBreak
+  | RawBlock _
+  | FootnoteDef _
+  | RefDef _ -> []
+;;
+
 (** The first block of [doc], in document order, that [matches]. *)
 let find_block (doc : Djot.Doc.t) ~(matches : block -> bool) : block option =
   let folder =
@@ -36,9 +60,7 @@ let find (doc : Djot.Doc.t) (address : Anchor.Address.t) : block list =
     match address, block with
     | Heading id, (Section _ | Heading _) -> has_id id attrs
     | Heading _, _ -> false
-    | Attr id, (Para inlines | Heading (_, inlines)) ->
-      has_id id attrs || inlines_have_id id inlines
-    | Attr id, _ -> has_id id attrs
+    | Attr id, block -> has_id id attrs || inlines_have_id id (own_inlines block)
   in
   Option.to_list (find_block doc ~matches)
 ;;
@@ -148,6 +170,71 @@ let%test_module "find" =
     let%expect_test "attr: in a footnote" =
       show "a[^1]\n\n[^1]: a [note]{#fn-x}\n" (Attr "fn-x");
       [%expect {| a [note]{#fn-x} |}]
+    ;;
+
+    let%expect_test "attr: on inlines in a table cell, the table" =
+      show "Before.\n\n| a | [x]{#c} |\n|---|---|\n| 1 | 2 |\n\nAfter.\n" (Attr "c");
+      [%expect
+        {|
+        | a | [x]{#c} |
+        |---|---|
+        | 1 | 2 |
+        |}]
+    ;;
+
+    let%expect_test "attr: on inlines in a callout title, the callout" =
+      show "> [!note] A [title]{#ct}\n> Body.\n\nAfter.\n" (Attr "ct");
+      [%expect
+        {|
+        > [!note] A [title]{#ct}
+        > Body.
+        |}]
+    ;;
+
+    let%expect_test "attr: on inlines in a keyed label, the keyed block" =
+      show "[owner]{#ok}: alice\n\nAfter.\n" (Attr "ok");
+      [%expect {| [owner]{#ok}: alice |}]
+    ;;
+
+    let%expect_test "attr: on inlines in a definition term, the definition list" =
+      show ": [term]{#dt}\n\n  Its definition.\n\nAfter.\n" (Attr "dt");
+      [%expect
+        {|
+        : [term]{#dt}
+
+          Its definition.
+        |}]
+    ;;
+
+    let%expect_test "every anchor of a note is found" =
+      let content =
+        "# H\n\n\
+         The [kt]{#kt}.\n\n\
+         | [x]{#c} |\n\
+         |---|\n\
+         | 1 |\n\n\
+         > [!note] [t]{#ct}\n\n\
+         [k]{#ok}: v\n\n\
+         : [term]{#dt}\n\n\
+        \  d\n\n\
+         [^1]: [n]{#fn}\n"
+      in
+      let { Parse.doc; _ } = Parse.of_string content in
+      Anchor.of_doc doc
+      |> List.iter ~f:(fun (a : Anchor.t) ->
+        let address = Anchor.address a.definition in
+        let found = not (List.is_empty (find doc address)) in
+        print_s [%sexp (address : Anchor.Address.t), (found : bool)]);
+      [%expect
+        {|
+        ((Heading H) true)
+        ((Attr kt) true)
+        ((Attr c) true)
+        ((Attr ct) true)
+        ((Attr ok) true)
+        ((Attr dt) true)
+        ((Attr fn) true)
+        |}]
     ;;
 
     let%expect_test "not found" =

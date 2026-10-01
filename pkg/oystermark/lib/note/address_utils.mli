@@ -6,7 +6,9 @@
       blocks under it. A heading that opens no section, inside a block quote,
       div, callout or list item, is found alone.
     - {b Attr}: one block. For an attribute on a block, that block. For an
-      attribute on inlines, the paragraph or heading that holds them. See
+      attribute on inlines, the block that holds them outside its child blocks:
+      a paragraph or heading, a table for a caption or cell, a callout for its
+      title, a keyed block for its label, a definition list for a term. See
       {!page-"feature-attribute-anchors"}.
 
     The blocks are searched, then the footnotes; the first match in document
