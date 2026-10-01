@@ -16,13 +16,11 @@ let expand_docs ?(max_depth = 5) ~(index : Index.t) (docs : (string * Note.t) li
           { path
           ; fragment = Some (Note.Transclusion.fragment definition)
           ; note =
-              { note with
-                doc =
-                  Parse.doc_of_blocks
-                    (Note.Private.Address_utils.find
-                       note.doc
-                       (Note.Anchor.address definition))
-              }
+              Note.part
+                note
+                (Note.Private.Address_utils.find
+                   note.doc
+                   (Note.Anchor.address definition))
           }
         | Note _ | Asset _ -> { path; fragment = None; note })
   in

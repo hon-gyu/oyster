@@ -59,6 +59,11 @@ type source =
   ; note : t (** The part of that note the embed shows. *)
   }
 
+(** [blocks], taken from [n], as a note of their own, with the footnotes they
+    refer to, directly or through other footnotes. For the [note] of a
+    {!source} that shows part of a note. *)
+val part : t -> Djot.Block.t Djot.node list -> t
+
 (** [n], the note at [path], with each embed replaced by a transclusion of what
     [env] resolves it to. [env ~from ref] resolves [ref] written in the note at
     [from]; an embed it gives [None] for is left as written.
@@ -67,7 +72,14 @@ type source =
     path is already being expanded: a note embedding itself, directly or through
     others, shows itself unexpanded. From [max_depth] (default 5) transclusions
     deep, a wikilink embed becomes a plain link, see
-    {!Transclusion.fallback_block}, and an image embed is left as written. *)
+    {!Transclusion.fallback_block}, and an image embed is left as written.
+
+    A transclusion brings its note's footnotes: a footnote labelled [l] in the
+    note at [p] is labelled [p:l] in the result, its definition inside the
+    transclusion. Its reference links become direct links to what they resolve
+    to there, and its reference definitions are left out, so neither meets the
+    host's labels. When anything is transcluded, the result is rebuilt from its
+    blocks and has no source locations. *)
 val expand
   :  ?max_depth:int
   -> env:(from:string -> Link.Ref.t -> source option)

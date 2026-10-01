@@ -8,7 +8,9 @@
     paragraph with a single embed source (see {!Note.Transclusion}) is replaced
     by a transclusion ({!Note.Transclusion.transclude}) of the blocks its link
     target names ({!Note.Private.Address_utils.find}), when the link resolves to a note or to an
-    anchor in a note. Frontmatter is never embedded.
+    anchor in a note. Frontmatter is never embedded; the footnotes the
+    transcluded blocks refer to are, under labels prefixed with the note's path
+    (see {!Note.expand}).
 
     The target note is expanded before it is transcluded, so nested embeds are
     expanded too. A self-reference uses the note unexpanded.

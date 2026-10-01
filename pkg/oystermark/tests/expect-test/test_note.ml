@@ -32,7 +32,7 @@ let env_of_files (files : (string * string) list)
                     | Djot.Node (_, _, Djot.Block.Section (_heading :: body)) -> body
                     | block -> [ block ])
                 in
-                { whole with doc = Parse.doc_of_blocks blocks })
+                Note.part whole blocks)
            }
        | Note _ | Asset _ -> Some { path; fragment = None; note = whole })
 ;;
@@ -133,6 +133,50 @@ let%expect_test "past the depth limit a wikilink embed becomes a link" =
     ::: embed
     [[c]]
     :::
+    |}]
+;;
+
+let%expect_test "an embedded note's footnotes come with it, under its path" =
+  print
+    (expand
+       [ "a.md", "Host[^1].\n\n![[b]]\n\n[^1]: host note"
+       ; "b.md", "B text[^1].\n\n[^1]: b note"
+       ]
+       "a.md");
+  [%expect
+    {|
+    Host[^1]\.
+
+    {source="b.md" depth="1"}
+    ::: embed
+    B text[^b.md:1]\.
+    :::
+
+    [^b.md:1]:
+      b note
+
+    [^1]:
+      host note
+    |}]
+;;
+
+let%expect_test "an embedded note's reference links keep their destinations" =
+  print
+    (expand
+       [ "a.md", "[h][r]\n\n![[b]]\n\n[r]: host.md"
+       ; "b.md", "[x][r]\n\n[r]: b-target.md"
+       ]
+       "a.md");
+  [%expect
+    {|
+    [h][r]
+
+    {source="b.md" depth="1"}
+    ::: embed
+    [x](b\-target\.md)
+    :::
+
+    [r]: host.md
     |}]
 ;;
 

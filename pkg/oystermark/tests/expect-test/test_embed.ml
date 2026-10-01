@@ -50,6 +50,26 @@ let%expect_test "heading section" =
     |}]
 ;;
 
+let%expect_test "heading section: only the footnotes it refers to" =
+  render
+    [ "a.md", "![[b#Sec]]"
+    ; "b.md", "Intro[^i].\n\n## Sec\n\nContent[^s].\n\n[^i]: intro note\n\n[^s]: sec note"
+    ]
+    "a.md";
+  [%expect
+    {|
+    {source="b.md" fragment="Sec" depth="1"}
+    ::: embed
+    ## Sec
+
+    Content[^b.md:s]\.
+    :::
+
+    [^b.md:s]:
+      sec note
+    |}]
+;;
+
 let%expect_test "block ref" =
   render
     [ "a.md", "![[b#myblock]]"; "b.md", "First.\n\n{#myblock}\nTarget.\n\nAfter." ]
