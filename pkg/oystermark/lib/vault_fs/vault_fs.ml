@@ -42,7 +42,5 @@ let of_root_path
   let vault : Vault.t =
     { vault_root; index; documents = String.Map.of_alist_exn parsed_docs }
   in
-  if skip_expand
-  then vault
-  else Vault.of_docs ~base:vault (Vault.Embed.expand_docs ~index parsed_docs)
+  if skip_expand then vault else Vault.expand vault
 ;;

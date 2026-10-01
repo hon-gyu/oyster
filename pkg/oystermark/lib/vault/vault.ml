@@ -65,21 +65,6 @@ let map_paths (vault : t) ~(f : string -> string) : t =
   }
 ;;
 
-(** Construct a vault from transformed documents, retaining the base vault's file dates,
-    non-note assets, metadata, and root. *)
-let of_docs ~(base : t) (docs : (string * Note.t) list) : t =
-  let index =
-    List.fold docs ~init:Index.empty ~f:(fun index (path, doc) ->
-      let stat =
-        Index.find_note base.index path
-        |> Option.value_map ~default:(file_stat path) ~f:Index.Entry.file_stat
-      in
-      Index.set_note index (Index.Entry.of_doc_exn stat doc))
-  in
-  let index = List.fold (Index.assets base.index) ~init:index ~f:Index.set_asset in
-  { base with index; documents = String.Map.of_alist_exn docs }
-;;
-
 (** Construct a vault from Markdown contents and asset paths without performing IO.
     Links are resolved; embeds are not expanded. *)
 let of_files
@@ -93,4 +78,9 @@ let of_files
   in
   let index = build_index ~md_docs:parsed_docs ~other_files () in
   { vault_root; index; documents = String.Map.of_alist_exn parsed_docs }
+;;
+
+let expand ?max_depth (vault : t) : t =
+  let expanded = Embed.expand_docs ?max_depth ~index:vault.index (docs vault) in
+  { vault with documents = String.Map.of_alist_exn expanded }
 ;;

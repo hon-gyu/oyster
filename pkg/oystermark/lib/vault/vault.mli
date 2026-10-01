@@ -28,10 +28,6 @@ val remove_path : t -> string -> t
     {!Index.map_paths}. *)
 val map_paths : t -> f:(string -> string) -> t
 
-(** Construct a vault from transformed documents, retaining the base vault's file dates,
-    non-note assets, metadata, and root. *)
-val of_docs : base:t -> (string * Note.t) list -> t
-
 (** Construct a vault from Markdown contents and asset paths without performing IO.
     Links are resolved; embeds are not expanded. *)
 val of_files
@@ -39,3 +35,9 @@ val of_files
   -> md_files:(string * string) list
   -> other_files:string list
   -> t
+
+(** [vault] with each document's embeds expanded, see {!Embed.expand_docs}.
+    The index is [vault]'s: an entry describes what its file says, so an
+    embed's anchors and links stay indexed in the note that wrote them, at
+    locations in that note. *)
+val expand : ?max_depth:int -> t -> t

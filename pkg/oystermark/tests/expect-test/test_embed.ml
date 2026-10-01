@@ -523,3 +523,35 @@ let%expect_test "round trip: values needing escaping" =
     ![[my notes/a note#It’s quoted, tricky]]
     |}]
 ;;
+
+(* Vault expansion
+   ===============
+
+   {!Vault.expand} replaces the documents and keeps the index: an entry
+   describes what its file says, not what it shows. *)
+
+let expanded_vault ?max_depth files =
+  Vault.expand ?max_depth (Vault.of_files ~vault_root:"" ~md_files:files ~other_files:[])
+;;
+
+let link_targets (vault : Vault.t) path =
+  Vault.Index.find_note vault.index path
+  |> Option.value_exn
+  |> Vault.Index.Entry.links
+  |> List.map ~f:(fun (l : Note.Link.t) -> l.reference.target)
+;;
+
+let%test_unit "expanding past the depth limit keeps each note's own links" =
+  let vault =
+    expanded_vault ~max_depth:1 [ "a.md", "![[b]]"; "b.md", "![[c]]"; "c.md", "C." ]
+  in
+  [%test_result: string option list] (link_targets vault "a.md") ~expect:[ Some "b" ]
+;;
+
+let%test_unit "an embed's links are not indexed in its host" =
+  let vault =
+    expanded_vault [ "a.md", "![[b]]"; "b.md", "One\n\n\n\n\n\n\n\n[[c]]"; "c.md", "C." ]
+  in
+  [%test_result: string option list] (link_targets vault "a.md") ~expect:[ Some "b" ];
+  [%test_result: string option list] (link_targets vault "b.md") ~expect:[ Some "c" ]
+;;
