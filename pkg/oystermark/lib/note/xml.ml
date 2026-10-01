@@ -105,7 +105,18 @@ and target_attrs : Djot.Inline.target -> X.Attribute.t list = function
   | Reference target -> [ string "target" target; string "target-kind" "reference" ]
 ;;
 
-let rec blocks doc ns = List.map ns ~f:(block doc)
+(* Definitions are listed once, under [footnotes] and [references], so the tree
+   skips them wherever they were written: the document pass leaves reference
+   definitions in place, and {!Djot.Doc.footnote_defs} keeps nested ones in
+   their parent. *)
+let is_definition (Djot.Node (_, _, value) : Djot.Block.t Djot.node) =
+  match value with
+  | FootnoteDef _ | RefDef _ -> true
+  | _ -> false
+;;
+
+let rec blocks doc ns =
+  List.filter_map ns ~f:(fun n -> if is_definition n then None else Some (block doc n))
 
 and block doc (Djot.Node (_, _, value) as n : Djot.Block.t Djot.node) : X.t =
   let tag, extra, children =
@@ -179,7 +190,7 @@ and block doc (Djot.Node (_, _, value) as n : Djot.Block.t Djot.node) : X.t =
     | Ext_keyed (label, value) ->
       ( "keyed"
       , [ string "key" (String.strip (Djot.Inline.to_plain_text label)) ]
-      , [ node "label" (inlines doc label); block doc value ] )
+      , node "label" (inlines doc label) :: blocks doc [ value ] )
     | Ext_callout (kind, fold, title, body) ->
       ( "callout"
       , [ string "type" kind ]
@@ -218,7 +229,9 @@ and spacing_string : Djot.Block.list_spacing -> string = function
 
 let of_doc (doc : Djot.Doc.t) : X.element =
   let content = blocks doc (Djot.Doc.blocks doc) in
-  let footnotes = Djot.Doc.footnote_defs doc |> blocks doc |> node "footnotes" in
+  let footnotes =
+    Djot.Doc.footnote_defs doc |> List.map ~f:(block doc) |> node "footnotes"
+  in
   let references =
     Djot.Doc.references doc
     |> List.map ~f:(fun (label, (destination, attrs)) ->

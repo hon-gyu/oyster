@@ -21,20 +21,22 @@ Paragraph with _emphasis_.
 |}
 ;;
 
-let doc =
+let of_source source =
   let parsed : Oystermark.Parse.t = Oystermark.Parse.of_string source in
   Oystermark.Note.Xml.of_doc parsed.doc
 ;;
 
-let eval expression =
+let doc = of_source source
+
+let eval ?(doc = doc) expression =
   Xpath.run_exn (Xpath.Context.create_exn ()) doc (Xpath.parse_utf8_exn expression)
 ;;
 
-let nodes expression =
-  eval expression |> Xpath.Value.Cast.to_node_set |> Option.value_exn |> Map.data
+let nodes ?doc expression =
+  eval ?doc expression |> Xpath.Value.Cast.to_node_set |> Option.value_exn |> Map.data
 ;;
 
-let strings expression = List.map (nodes expression) ~f:Xpath.Node.string_value
+let strings ?doc expression = List.map (nodes ?doc expression) ~f:Xpath.Node.string_value
 
 let%test_unit "XPath selects structured Djot blocks" =
   [%test_result: string list]
@@ -61,4 +63,43 @@ let%test_unit "XPath scalar expressions are available" =
   [%test_result: string]
     (Xpath.Value.Cast.to_string (eval "count(//code_block)"))
     ~expect:"1"
+;;
+
+(* Definitions
+   ===========
+
+   Each footnote and reference definition appears exactly once, under
+   [footnotes] or [references], wherever it was written. *)
+
+let%test_unit "a reference definition appears only under references" =
+  let doc = of_source "[r]: http://x\n" in
+  [%test_result: string list]
+    (strings ~doc "//reference_definition/@label")
+    ~expect:[ "r" ];
+  [%test_result: string list]
+    (strings ~doc "/doc/references/reference_definition/@label")
+    ~expect:[ "r" ]
+;;
+
+let%test_unit "a nested footnote definition is its own entry, not its parent's child" =
+  let doc = of_source "[^a]: one\n\n    [^b]: two\n" in
+  [%test_result: string list]
+    (strings ~doc "/doc/footnotes/footnote_definition/@label")
+    ~expect:[ "a"; "b" ];
+  [%test_result: string list]
+    (strings ~doc "//footnote_definition//footnote_definition/@label")
+    ~expect:[];
+  [%test_result: string list]
+    (strings ~doc "//footnote_definition[@label='a']")
+    ~expect:[ "one" ]
+;;
+
+let%test_unit "a reference definition inside a footnote appears only under references" =
+  let doc = of_source "[^a]: one\n\n    [r]: http://y\n" in
+  [%test_result: string list]
+    (strings ~doc "//reference_definition/@label")
+    ~expect:[ "r" ];
+  [%test_result: string list]
+    (strings ~doc "//footnote_definition//reference_definition/@label")
+    ~expect:[]
 ;;

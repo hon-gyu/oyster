@@ -14,7 +14,9 @@
     inlines, then their value block. Callouts have [type] and optional [fold]
     attributes, a [title] child, then body blocks. Code blocks have [lang]
     and text content. Footnotes and reference definitions are under [footnotes]
-    and [references] at the end of [doc].
+    and [references] at the end of [doc], once each, wherever they were
+    written: a definition nested in a footnote or another block is not also a
+    child of that block.
 
     For example, [# Top] followed by a Python fence produces a [doc] with a
     [section] containing [heading] and [code_block] children. The XPath
