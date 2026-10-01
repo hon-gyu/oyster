@@ -20,6 +20,14 @@ let is_unicode_blank (u : Stdlib.Uchar.t) : bool =
   c = 0xA0 || (0x2000 <= c && c <= 0x200A) || c = 0x202F || c = 0x205F || c = 0x3000
 ;;
 
+(** A footnote or reference label as Djot matches it, each run of blanks one
+    space: the kernel's [normalize_label], which [Djot] does not export. *)
+let normalize_label (label : string) : string =
+  String.split_on_chars label ~on:[ ' '; '\t'; '\r'; '\n' ]
+  |> List.filter ~f:(Fn.non String.is_empty)
+  |> String.concat ~sep:" "
+;;
+
 (** The key a heading is matched by when it is named as text: by a wikilink
     fragment such as [ [[note#Some Heading]] ], or by a section query. The
     heading's plain text, ASCII letters lowercased, with punctuation other than

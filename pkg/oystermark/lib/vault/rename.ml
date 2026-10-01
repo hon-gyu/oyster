@@ -103,8 +103,60 @@ let destination_bounds slice =
       `Markdown, start, finish start)
 ;;
 
+(** The bounds in [content] of the destination of the definition that the
+    reference-style link at [loc] resolves through: the last definition of its
+    label, as {!Djot.Doc.reference} resolves it. *)
+let reference_destination_bounds content (loc : Djot.Textloc.t) =
+  let { Parse.doc; _ } = Parse.of_string ~locs:true content in
+  let at_loc node =
+    let node_loc = Djot.Doc.textloc doc node in
+    Int.equal (Djot.Textloc.first_byte node_loc) (Djot.Textloc.first_byte loc)
+    && Int.equal (Djot.Textloc.last_byte node_loc) (Djot.Textloc.last_byte loc)
+  in
+  let label =
+    Djot.Folder.fold_doc
+      (Djot.Folder.make
+         ~inline:(fun _ found (Node (_, _, inline) as node) ->
+           match found, inline with
+           | Some _, _ -> Djot.Folder.ret found
+           | None, (Link (_, Reference label) | Image (_, Reference label))
+             when at_loc node ->
+             Djot.Folder.ret (Some (Parse.Common.normalize_label label))
+           | None, _ -> Djot.Folder.default)
+         ())
+      None
+      doc
+  in
+  let definitions label =
+    Djot.Folder.fold_doc
+      (Djot.Folder.make
+         ~block:(fun _ acc (Node (_, _, block) as node) ->
+           match block with
+           | RefDef (l, _) when String.equal (Parse.Common.normalize_label l) label ->
+             Djot.Folder.ret (Djot.Doc.textloc doc node :: acc)
+           | _ -> Djot.Folder.default)
+         ())
+      []
+      doc
+  in
+  Option.bind label ~f:(fun label ->
+    List.max_elt (definitions label) ~compare:(fun a b ->
+      Int.compare (Djot.Textloc.first_byte a) (Djot.Textloc.first_byte b)))
+  |> Option.bind ~f:(fun def ->
+    let first = Djot.Textloc.first_byte def in
+    let stop = Int.min (Djot.Textloc.last_byte def + 1) (String.length content) in
+    String.substr_index content ~pos:first ~pattern:"]:"
+    |> Option.filter ~f:(fun p -> p < stop)
+    |> Option.map ~f:(fun p ->
+      let rec skip i pred =
+        if i < stop && pred content.[i] then skip (i + 1) pred else i
+      in
+      let start = skip (p + 2) Char.is_whitespace in
+      start, skip start (Fn.non Char.is_whitespace)))
+;;
+
 (** The link's style, the byte offset of its destination, and the destination
-    as written. *)
+    as written. A reference-style link's destination is in its definition. *)
 let authored_destination ~read_file source (link : Index.Link.t) =
   let first_byte = Djot.Textloc.first_byte link.loc in
   let last_byte = Djot.Textloc.last_byte link.loc in
@@ -115,9 +167,13 @@ let authored_destination ~read_file source (link : Index.Link.t) =
     then None
     else (
       let slice = String.sub content ~pos:first_byte ~len in
-      destination_bounds slice
-      |> Option.map ~f:(fun (style, start, stop) ->
-        style, first_byte + start, String.sub slice ~pos:start ~len:(stop - start))))
+      match destination_bounds slice with
+      | Some (style, start, stop) ->
+        Some (style, first_byte + start, String.sub slice ~pos:start ~len:(stop - start))
+      | None ->
+        reference_destination_bounds content link.loc
+        |> Option.map ~f:(fun (start, stop) ->
+          `Markdown, start, String.sub content ~pos:start ~len:(stop - start))))
 ;;
 
 let encode style text =
@@ -426,7 +482,8 @@ let plan_moves ~index ~read_file moves =
     let edits =
       Index.all_backlinks index
       |> List.filter_map ~f:(move_edit ~read_file ~moved_index ~moves)
-      |> List.sort ~compare:compare_edit
+      (* Reference links sharing a definition each give its edit. *)
+      |> List.dedup_and_sort ~compare:compare_edit
     in
     { edits; moves })
 ;;
@@ -453,7 +510,10 @@ let plan ~index ~docs ~read_file ({ path; address } as target) ~new_name =
       let definition =
         Option.to_list (definition_edit ~index ~docs ~read_file target ~new_name)
       in
-      Ok { edits = List.sort (definition @ edits) ~compare:compare_edit; moves = [] })
+      Ok
+        { edits = List.dedup_and_sort (definition @ edits) ~compare:compare_edit
+        ; moves = []
+        })
 ;;
 
 module For_test = struct
@@ -625,6 +685,39 @@ let%expect_test "moves keep links that a move would capture" =
     a.md -> b.md
     src.md
       [[x/b]] [[b]]
+    |}]
+;;
+
+let%expect_test "reference links: the definition's destination is rewritten once" =
+  let open For_test in
+  let v =
+    vault [ "a.md", "# Alpha\n"; "src.md", "[x][r] and [r][]\n\n[r]: a.md#Alpha\n" ]
+  in
+  plan_moves ~index:v.index ~read_file:(read_file v) [ "a.md", "renamed.md" ]
+  |> show_change v;
+  [%expect
+    {|
+    a.md -> renamed.md
+    src.md
+      [x][r] and [r][]
+
+    [r]: renamed.md#Alpha
+    |}];
+  plan
+    ~index:v.index
+    ~docs:v.docs
+    ~read_file:(read_file v)
+    { path = "a.md"; address = Some (Heading "Alpha") }
+    ~new_name:"New title"
+  |> show_change v;
+  [%expect
+    {|
+    a.md
+      # New title
+    src.md
+      [x][r] and [r][]
+
+    [r]: a.md#New%20title
     |}]
 ;;
 
