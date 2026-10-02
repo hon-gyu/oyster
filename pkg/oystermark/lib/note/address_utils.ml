@@ -20,7 +20,7 @@ let inlines_have_id (id : string) (inlines : Djot.Inline.t Djot.node list) : boo
 let own_inlines : Djot.Block.t -> Djot.Inline.t Djot.node list = function
   | Para inlines | Heading (_, inlines) -> inlines
   | Table (caption, rows) ->
-    Option.value caption ~default:[]
+    caption
     @ List.concat_map
         rows
         ~f:(List.concat_map ~f:(fun (Djot.Block.Cell (_, _, ns)) -> ns))

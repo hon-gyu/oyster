@@ -347,8 +347,10 @@ and block doc (Node (_, attrs, contents) as node : block) : Json.t list =
                    (Option.value_map (List.hd rows) ~default:[] ~f:(List.map ~f:align)) )
              ; "children", `List (List.map rows ~f:row)
              ]
-             @ Option.value_map caption ~default:[] ~f:(fun l ->
-               [ "caption", `List (inlines doc l) ]))
+             @
+             if List.is_empty caption
+             then []
+             else [ "caption", `List (inlines doc caption) ])
         ]
       | FootnoteDef (label, l) ->
         let id = footnote_identifier label in

@@ -103,3 +103,56 @@ let%test_unit "a reference definition inside a footnote appears only under refer
     (strings ~doc "//footnote_definition//reference_definition/@label")
     ~expect:[]
 ;;
+
+(* Parts and frontmatter
+   =====================
+
+   The parts of a block that are not Djot nodes carry byte spans, and the
+   frontmatter is queryable beside the body. *)
+
+let slice source element =
+  let first, last = Oystermark.Note.Xml.span element |> Option.value_exn in
+  String.sub source ~pos:first ~len:(last - first + 1)
+;;
+
+let elements ?doc expression =
+  List.filter_map (nodes ?doc expression) ~f:(function
+    | Xpath.Node.Root element | Element element -> Some element
+    | Attribute _ | Namespace _ | Text _ -> None)
+;;
+
+let%test_unit "list items, rows, labels and titles have spans" =
+  let source = "- [ ] one\n- [x] two\n\n| a | b |\n|---|---|\n| 1 | 2 |\n\nk: v\n" in
+  let doc = of_source source in
+  let sources expression = List.map (elements ~doc expression) ~f:(slice source) in
+  [%test_result: string list] (sources "//item") ~expect:[ "- [ ] one"; "- [x] two" ];
+  [%test_result: string list] (sources "//row[2]") ~expect:[ "| 1 | 2 |" ];
+  [%test_result: string list] (sources "//label") ~expect:[ "k" ]
+;;
+
+let%test_unit "an element without a location has no span" =
+  [%test_result: (int * int) option list]
+    (List.map (elements "/doc | /doc/footnotes") ~f:Oystermark.Note.Xml.span)
+    ~expect:[ None; None ]
+;;
+
+let%test_unit "frontmatter is the first child of doc" =
+  let parsed : Oystermark.Parse.t =
+    Oystermark.Parse.of_string
+      "---\ntags: [bread, rye]\nserves: 4\nmeta:\n  draft: true\n---\n# T\n"
+  in
+  let doc = Oystermark.Note.Xml.of_doc ?frontmatter:parsed.frontmatter parsed.doc in
+  [%test_result: string]
+    (Xpath.Value.Cast.to_string (eval ~doc "name(/doc/*[1])"))
+    ~expect:"frontmatter";
+  [%test_result: string list]
+    (strings ~doc "/doc/frontmatter/field[@name='tags']/entry")
+    ~expect:[ "bread"; "rye" ];
+  [%test_result: string list]
+    (strings ~doc "/doc/frontmatter/field[@name='serves']/@type")
+    ~expect:[ "number" ];
+  [%test_result: string list]
+    (strings ~doc "/doc/frontmatter/field[@name='meta']/field[@name='draft']")
+    ~expect:[ "true" ];
+  [%test_result: string list] (strings "/doc/frontmatter") ~expect:[]
+;;

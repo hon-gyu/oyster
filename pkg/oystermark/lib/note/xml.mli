@@ -21,13 +21,29 @@
     For example, [# Top] followed by a Python fence produces a [doc] with a
     [section] containing [heading] and [code_block] children. The XPath
     expression [//section\[heading="Top"\]/code_block\[@lang="python"\]]
-    selects that block. Parsed frontmatter is outside this Djot view.
+    selects that block.
+
+    A note's frontmatter, when given, is the first child of [doc]:
+    [frontmatter], holding the YAML value. A value has a [type] attribute
+    ([null], [bool], [number], [string], [list], or [map]). A scalar's content
+    is its text. A list contains [entry] elements and a map contains [field]
+    elements with a [name] attribute, each a value in turn. For example,
+    [/doc/frontmatter/field\[@name="tags"\]/entry="bread"] tests for a tag.
 
     Djot's [id] and classes become [id] and [class] attributes. Other authored
     attributes become [attribute] children with [name] and [value] attributes,
     so they cannot collide with structural attributes. When locations are
     available, elements derived from Djot nodes have [start-byte], [end-byte],
     [start-line], and [end-line] attributes. Bytes are zero-based and inclusive;
-    lines are one-based. This view represents the parse tree, not rendered HTML. *)
+    lines are one-based. So do the parts of a node: [item], [term],
+    [definition], [caption], [row], and [cell], and [label] and [title], which
+    span their inlines. A list item's span starts at its marker, and a cell's
+    includes the pipes on both sides, so neighbouring cells share one. The
+    [frontmatter] subtree, [doc], [footnotes], and [references] have none.
+    This view represents the parse tree, not rendered HTML. *)
 
-val of_doc : Djot.Doc.t -> Simple_xml.element
+val of_doc : ?frontmatter:Yaml.value -> Djot.Doc.t -> Simple_xml.element
+
+(** The first and last source bytes of an element of {!of_doc}, zero-based
+    and inclusive. [None] when it has no location or an empty one. *)
+val span : Simple_xml.element -> (int * int) option
