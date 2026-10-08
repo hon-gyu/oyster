@@ -225,7 +225,7 @@ let render (entries : entry list) : string =
     that {!entries} takes its headings from. *)
 let read (content : string) : scan * string =
   let doc = Lsp_util.parse_doc content in
-  let s = scan_doc doc.doc ~content in
+  let s = scan_doc doc ~content in
   s, render (entries ~doc ~regions:s.regions)
 ;;
 

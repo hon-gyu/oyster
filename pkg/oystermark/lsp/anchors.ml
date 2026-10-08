@@ -60,7 +60,7 @@ let of_doc (doc : Djot.Doc.t) : t list =
       { value = anchor.definition; first_line; last_line; first_byte; last_byte }))
 ;;
 
-let of_content (content : string) : t list = of_doc (Lsp_util.parse_doc content).doc
+let of_content (content : string) : t list = of_doc (Lsp_util.parse_doc content)
 
 (** {1 Lookup} *)
 

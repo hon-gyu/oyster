@@ -1,31 +1,26 @@
 (** {1 File-level parsing}
 
     A note is djot ({!Djot}) in the {!profile} syntax, after an optional YAML
-    frontmatter block. {!Frontmatter} splits the frontmatter off the raw
-    content; everything else is djot's parser. *)
+    frontmatter block ({!Djot.Frontmatter}). *)
 
 module Common = Common
-module Frontmatter = Frontmatter
 module Textloc_conv = Textloc_conv
 
 (** [Djot.Profile.markdown_like] with wikilinks, keyed blocks and callouts. *)
 val profile : Djot.Profile.t
 
-type t =
-  { frontmatter : Yaml.value option
-  ; doc : Djot.Doc.t (** Without the frontmatter. *)
-  }
+(** A note: its blocks, and the frontmatter it started with. *)
+type t = Djot.Doc.t
 
-(** [of_string ?locs s] parses [s]. The frontmatter is blanked rather than
-    stripped before parsing (see {!Frontmatter.blank_frontmatter}), so the
-    locations in [doc] are positions in [s]. [locs] defaults to [true]. *)
+(** [of_string ?locs s] parses [s], frontmatter included. Locations are
+    positions in [s]. [locs] defaults to [true]. *)
 val of_string : ?locs:bool -> string -> t
 
-(** [t] as source text: the frontmatter, then {!Djot.Doc.to_string}. *)
-val to_string : t -> string
+(** The frontmatter's mapping as a YAML value. *)
+val frontmatter : t -> Yaml.value option
 
 (** A document of [blocks] in {!profile}, without locations. *)
-val doc_of_blocks : Djot.Block.t Djot.node list -> Djot.Doc.t
+val doc_of_blocks : ?frontmatter:Djot.Frontmatter.t -> Djot.Block.t Djot.node list -> t
 
 (** {!Djot.Doc.to_string} of {!doc_of_blocks}. *)
 val source_of_blocks : Djot.Block.t Djot.node list -> string

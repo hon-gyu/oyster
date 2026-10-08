@@ -109,7 +109,7 @@ let position_of_byte_offset ?(encoding = Utf16) (content : string) (offset : int
     its first byte.  [line] comes from the [Textloc] directly.
 
     [character] depends on [content], which must be the {e same string the
-    location refers to} (i.e. the frontmatter-stripped body the parser saw):
+    location refers to} (the whole file, frontmatter included):
     - given, it is a code-unit offset within the line in [encoding] (default
       {!Utf16}), decoded from that line's bytes;
     - omitted, it degrades to a byte offset within the line (correct for
@@ -221,7 +221,7 @@ let%test_module "position_of_textloc" =
     (* The location of the sole inline attribute anchor, exercising the
        byte-column derivation on real parser output. *)
     let inline_attr_loc (content : string) : Djot.Textloc.t =
-      let { Oystermark.Parse.doc; _ } = Oystermark.Parse.of_string ~locs:true content in
+      let doc = Oystermark.Parse.of_string ~locs:true content in
       List.find_map_exn (Oystermark.Note.Anchor.of_doc doc) ~f:(fun anchor ->
         match anchor.definition with
         | Attr { inline = true; _ } -> Some anchor.loc

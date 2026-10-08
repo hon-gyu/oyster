@@ -1,6 +1,5 @@
 open Core
 module Common = Common
-module Frontmatter = Frontmatter
 module Textloc_conv = Textloc_conv
 
 let profile : Djot.Profile.t =
@@ -11,23 +10,18 @@ let profile : Djot.Profile.t =
     |> with_ext_callouts true)
 ;;
 
-type t =
-  { frontmatter : Yaml.value option
-  ; doc : Djot.Doc.t
-  }
+type t = Djot.Doc.t
 
 let of_string ?(locs = true) (s : string) : t =
-  let frontmatter, body = Frontmatter.blank_frontmatter s in
-  { frontmatter; doc = Djot.Doc.of_string ~profile ~locs body }
+  Djot.Doc.of_string ~profile ~locs ~frontmatter:true s
 ;;
 
-let to_string ({ frontmatter; doc } : t) : string =
-  Option.value_map frontmatter ~default:"" ~f:Frontmatter.to_source
-  ^ Djot.Doc.to_string doc
+let frontmatter (doc : t) : Yaml.value option =
+  Option.map (Djot.Doc.frontmatter doc) ~f:(fun fm -> `O fm.fields)
 ;;
 
-let doc_of_blocks (blocks : Djot.Block.t Djot.node list) : Djot.Doc.t =
-  Djot.Doc.make ~profile blocks
+let doc_of_blocks ?(frontmatter : Djot.Frontmatter.t option) blocks : t =
+  Djot.Doc.make ~profile ?frontmatter blocks
 ;;
 
 let source_of_blocks (blocks : Djot.Block.t Djot.node list) : string =
@@ -211,8 +205,8 @@ module For_test = struct
 end
 
 let%expect_test "frontmatter is kept out of the tree, locations stay in the file" =
-  let { frontmatter; doc } = of_string "---\ntitle: T\n---\n# Kap\n" in
-  print_s [%sexp (Option.is_some frontmatter : bool)];
+  let doc = of_string "---\ntitle: T\n---\n# Kap\n" in
+  print_s [%sexp (Option.is_some (frontmatter doc) : bool)];
   For_test.pp_doc Format.std_formatter doc;
   let (Djot.Node (_, _, section) as node) = List.hd_exn (Djot.Doc.blocks doc) in
   ignore (section : Djot.Block.t);
@@ -227,7 +221,7 @@ let%expect_test "frontmatter is kept out of the tree, locations stay in the file
 
 let%expect_test "extensions" =
   of_string "[[note#A#B|alias]] ![[img.png]]\n\n> [!note]- Title\n> body\n\nkey: value\n"
-  |> fun { doc; _ } ->
+  |> fun doc ->
   For_test.pp_doc Format.std_formatter doc;
   [%expect
     {|

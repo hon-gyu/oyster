@@ -24,12 +24,7 @@ let parse_query (text : string) =
 
 let eval query (source : string) : Xpath.Value.t =
   let parsed : Parse.t = Parse.of_string ~locs:true source in
-  try
-    Xpath.run_exn
-      (Xpath.Context.create_exn ())
-      (Note.Xml.of_doc ?frontmatter:parsed.frontmatter parsed.doc)
-      query
-  with
+  try Xpath.run_exn (Xpath.Context.create_exn ()) (Note.Xml.of_doc parsed) query with
   | exn -> die 2 "XPath evaluation failed: %s" (Exn.to_string exn)
 ;;
 

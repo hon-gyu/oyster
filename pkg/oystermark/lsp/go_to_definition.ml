@@ -75,8 +75,8 @@ let go_to_definition
     Trace_core.add_data_to_span _sp [ "resolution", `String resolution_tag ];
     (* Cross-file: read the target so its column is UTF-16-encoded; degrade to a
        byte column if the file can't be read.  [Textloc]s are full-file-relative
-       (see {!Oystermark.Parse.Frontmatter.blank_frontmatter}), so the raw file
-       content is used directly. *)
+       (see {!Oystermark.Parse.of_string}), so the raw file content is used
+       directly. *)
     let cross ~path loc =
       let content = read_file path in
       let line, character = position_of_textloc ?content loc in
@@ -206,10 +206,9 @@ let%test_module "go_to_definition" =
       [%expect {| (((path note-i.md) (line 2) (character 3))) |}]
     ;;
 
-    (* Frontmatter: positions are full-file-relative because the parser blanks
-       rather than strips the frontmatter. note-k has 3 frontmatter lines, so
-       the anchor (heading body-line 2) is full-file line 5.
-       See {!Oystermark.Parse.Frontmatter.blank_frontmatter}. *)
+    (* Frontmatter: positions are full-file-relative, see
+       {!Oystermark.Parse.of_string}. note-k has 3 frontmatter lines, so the
+       anchor (heading body-line 2) is full-file line 5. *)
     let%expect_test "frontmatter target: full-file line and column" =
       let content = List.Assoc.find_exn files ~equal:String.equal "note-l.md" in
       show ~rel_path:"note-l.md" ~content ~line:2 ~character:8;

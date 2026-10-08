@@ -9,7 +9,7 @@ open! Core
 open Oystermark
 
 (** Print an expanded document without depending on a rendering package. *)
-let print_expanded_doc (note : Note.t) : unit = print_string (Djot.Doc.to_string note.doc)
+let print_expanded_doc (note : Note.t) : unit = print_string (Djot.Doc.to_string note)
 
 (** Build a mini-vault, run the core pipeline, and print [target].
     [max_depth] controls embed recursion depth. *)
@@ -313,7 +313,7 @@ let render_reversed ?(max_depth = 5) (files : (string * string) list) (target : 
   let index = Vault.build_index ~md_docs:docs ~other_files:[] () in
   let expanded = Vault.Embed.expand_docs ~max_depth ~index docs in
   let doc = List.Assoc.find_exn expanded ~equal:String.equal target in
-  let reversed = Note.Transclusion.reverse_embed_doc doc.doc in
+  let reversed = Note.Transclusion.reverse_embed_doc doc in
   print_string (Djot.Doc.to_string reversed)
 ;;
 
@@ -422,10 +422,12 @@ let round_trip ?(max_depth = 5) (files : (string * string) list) (target : strin
   let docs = List.map files ~f:(fun (path, content) -> path, Parse.of_string content) in
   let index = Vault.build_index ~md_docs:docs ~other_files:[] () in
   let expanded = Vault.Embed.expand_docs ~max_depth ~index docs in
-  let text = Parse.to_string (List.Assoc.find_exn expanded ~equal:String.equal target) in
+  let text =
+    Djot.Doc.to_string (List.Assoc.find_exn expanded ~equal:String.equal target)
+  in
   print_endline (String.rstrip text);
   print_endline "--- read back out of the text ---";
-  let reparsed = (Parse.of_string text).doc in
+  let reparsed = Parse.of_string text in
   let folder =
     Djot.Folder.make
       ~block:(fun _ () block ->

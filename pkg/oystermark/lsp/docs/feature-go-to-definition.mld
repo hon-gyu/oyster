@@ -82,9 +82,8 @@ The target content is obtained from the current buffer for self-file
 targets ([Curr_heading]/[Curr_block]/[Curr_attr]) and via the [read_file]
 callback for cross-file targets ([Heading]/[Block]/[Attr]). The raw file
 content is used directly: [Textloc] offsets are aligned with the original
-file, including files with YAML frontmatter, because the parser blanks
-(rather than strips) the frontmatter region — see
-{!Oystermark.Parse.Frontmatter.blank_frontmatter}. If [read_file] returns
+file, including files with YAML frontmatter — see
+{!Oystermark.Parse.of_string}. If [read_file] returns
 [None], [character] degrades to a byte offset.
 
 Targets without a location (whole-file [Note]/[File], self-reference

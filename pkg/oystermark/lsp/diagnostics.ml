@@ -48,7 +48,7 @@ let duplicate_id_diagnostics (doc : Oystermark.Parse.t) : diagnostic list =
     [doc]. Every definition of a duplicated label is reported.
     See {!page-"feature-footnotes".diagnostics}. *)
 let footnote_diagnostics (doc : Oystermark.Parse.t) : diagnostic list =
-  let doc = doc.doc in
+  let doc = doc in
   let range loc =
     Option.some_if
       (not (Djot.Textloc.is_none loc))
@@ -252,11 +252,9 @@ let%test_module "compute" =
       [%expect {| |}]
     ;;
 
-    (* Frontmatter: the reported byte range is full-file-relative — the parser
-       blanks rather than strips the frontmatter, so a link after frontmatter is
-       located in the original file, not the stripped body. [[missing]] here
-       starts at byte 21 (after the 20-byte "---\ntitle: T\n---\n" + "See ").
-       See {!Oystermark.Parse.Frontmatter.blank_frontmatter}. *)
+    (* Frontmatter: the reported byte range is full-file-relative, see
+       {!Oystermark.Parse.of_string}. [[missing]] here starts at byte 21 (after
+       the 20-byte "---\ntitle: T\n---\n" + "See "). *)
     let%expect_test "link range is full-file-relative under frontmatter" =
       show ~rel_path:"note-b.md" ~content:"---\ntitle: T\n---\nSee [[missing]].";
       [%expect

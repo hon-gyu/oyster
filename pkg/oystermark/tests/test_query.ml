@@ -23,7 +23,7 @@ Paragraph with _emphasis_.
 
 let of_source source =
   let parsed : Oystermark.Parse.t = Oystermark.Parse.of_string source in
-  Oystermark.Note.Xml.of_doc parsed.doc
+  Oystermark.Note.Xml.of_doc parsed
 ;;
 
 let doc = of_source source
@@ -141,7 +141,7 @@ let%test_unit "frontmatter is the first child of doc" =
     Oystermark.Parse.of_string
       "---\ntags: [bread, rye]\nserves: 4\nmeta:\n  draft: true\n---\n# T\n"
   in
-  let doc = Oystermark.Note.Xml.of_doc ?frontmatter:parsed.frontmatter parsed.doc in
+  let doc = Oystermark.Note.Xml.of_doc parsed in
   [%test_result: string]
     (Xpath.Value.Cast.to_string (eval ~doc "name(/doc/*[1])"))
     ~expect:"frontmatter";

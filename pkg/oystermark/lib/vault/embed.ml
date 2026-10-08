@@ -18,9 +18,7 @@ let expand_docs ?(max_depth = 5) ~(index : Index.t) (docs : (string * Note.t) li
           ; note =
               Note.part
                 note
-                (Note.Private.Address_utils.find
-                   note.doc
-                   (Note.Anchor.address definition))
+                (Note.Private.Address_utils.find note (Note.Anchor.address definition))
           }
         | Note _ | Asset _ -> { path; fragment = None; note })
   in

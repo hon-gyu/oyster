@@ -88,7 +88,7 @@ let source_text (doc : Djot.Doc.t) (content : string) (blocks : block list)
 let%test_module "find" =
   (module struct
     let show content (address : Anchor.Address.t) =
-      let { Parse.doc; _ } = Parse.of_string content in
+      let doc = Parse.of_string content in
       find doc address
       |> source_text doc content
       |> Option.value ~default:"<none>"
@@ -221,7 +221,7 @@ let%test_module "find" =
         \  d\n\n\
          [^1]: [n]{#fn}\n"
       in
-      let { Parse.doc; _ } = Parse.of_string content in
+      let doc = Parse.of_string content in
       Anchor.of_doc doc
       |> List.iter ~f:(fun (a : Anchor.t) ->
         let address = Anchor.address a.definition in

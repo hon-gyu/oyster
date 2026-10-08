@@ -3,7 +3,7 @@
 open! Core
 open Oystermark
 
-let print (n : Note.t) : unit = print_string (Parse.to_string n)
+let print (n : Note.t) : unit = print_string (Djot.Doc.to_string n)
 let note (content : string) : Note.t = Parse.of_string content
 
 (** An [env] that resolves through a vault index and takes the part an anchor
@@ -26,7 +26,7 @@ let env_of_files (files : (string * string) list)
            ; fragment = Some (Note.Transclusion.fragment definition)
            ; note =
                (let address = Note.Anchor.address definition in
-                let blocks = Note.Private.Address_utils.find whole.doc address in
+                let blocks = Note.Private.Address_utils.find whole address in
                 let blocks =
                   List.concat_map blocks ~f:(function
                     | Djot.Node (_, _, Djot.Block.Section (_heading :: body)) -> body
@@ -45,20 +45,17 @@ let expand ?max_depth (files : (string * string) list) (path : string) : Note.t 
 (* Frontmatter
    =========== *)
 
-let%expect_test "frontmatter is split from the body and put back" =
+let%expect_test "frontmatter is read off the text and written back" =
   let n = note "---\ntitle: A\n---\n\n# A\n\nText." in
-  print_s [%sexp (Option.is_some n.frontmatter : bool)];
-  print_endline (Djot.Doc.to_string n.doc);
+  print_s [%sexp (Option.is_some (Parse.frontmatter n) : bool)];
   print n;
   [%expect
     {|
     true
-    # A
-
-    Text.
     ---
     title: A
     ---
+
     # A
 
     Text.
@@ -81,6 +78,7 @@ let%expect_test "an embed of a note and of a heading" =
     ---
     title: A
     ---
+
     {source="b.md" depth="1"}
     ::: embed
     From b.
@@ -186,8 +184,8 @@ let%expect_test "law 3: expanding keeps the frontmatter" =
     [%sexp
       (Option.equal
          Yaml.equal
-         (expand files "a.md").frontmatter
-         (note (List.Assoc.find_exn files ~equal:String.equal "a.md")).frontmatter
+         (Parse.frontmatter (expand files "a.md"))
+         (Parse.frontmatter (note (List.Assoc.find_exn files ~equal:String.equal "a.md")))
        : bool)];
   [%expect {| true |}]
 ;;
@@ -198,7 +196,7 @@ let%expect_test "law 4: reversing the embeds gives the note back" =
       [ "a.md", "Before.\n\n![[b]]\n\nAfter."; "b.md", "![[c]]"; "c.md", "C text." ]
       "a.md"
   in
-  print_string (Djot.Doc.to_string (Note.Transclusion.reverse_embed_doc n.doc));
+  print_string (Djot.Doc.to_string (Note.Transclusion.reverse_embed_doc n));
   [%expect
     {|
     Before.

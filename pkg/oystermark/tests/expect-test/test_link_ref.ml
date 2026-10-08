@@ -8,7 +8,7 @@ let link_ref_to_string (lr : Link_ref.t) = Link_ref.sexp_of_t lr |> Sexp.to_stri
 
 (** Parse a single inline markdown snippet and return the first Link_ref extracted. *)
 let link_ref_of (md : string) : string =
-  let { Parse.doc; _ } = Parse.of_string md in
+  let doc = Parse.of_string md in
   match List.map (Note.Link.of_doc doc) ~f:(fun link -> link.reference) with
   | [ lr ] -> link_ref_to_string lr
   | [] -> "<none>"

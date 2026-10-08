@@ -107,7 +107,7 @@ let destination_bounds slice =
     reference-style link at [loc] resolves through: the last definition of its
     label, as {!Djot.Doc.reference} resolves it. *)
 let reference_destination_bounds content (loc : Djot.Textloc.t) =
-  let { Parse.doc; _ } = Parse.of_string ~locs:true content in
+  let doc = Parse.of_string ~locs:true content in
   let at_loc node =
     let node_loc = Djot.Doc.textloc doc node in
     Int.equal (Djot.Textloc.first_byte node_loc) (Djot.Textloc.first_byte loc)
@@ -446,7 +446,7 @@ let definition_edit ~index ~docs ~read_file { path; address } ~new_name =
         | Attr id ->
           List.Assoc.find docs path ~equal:String.equal
           |> Option.bind ~f:(fun (note : Note.t) ->
-            attr_id_offset ~id content (attr_spec_ranges note.doc ~id))
+            attr_id_offset ~id content (attr_spec_ranges note ~id))
           |> Option.map ~f:(fun pos ->
             { rel_path = path
             ; first_byte = pos

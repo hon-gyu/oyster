@@ -70,7 +70,7 @@ let detect_target
        same [doc] the links did, so a [#] inside a code block is
        not one, and a heading's identifier is the one the parser assigned
        rather than a slug re-derived here.  See {!page-"feature-index"}. *)
-    Anchors.at_line (Anchors.of_doc doc.doc) ~line
+    Anchors.at_line (Anchors.of_doc doc) ~line
     |> Option.map ~f:(fun a -> { path = rel_path; address = Some (Anchors.address a) })
 ;;
 
@@ -112,7 +112,7 @@ let collect_from_doc
       ~(index : Oystermark.Vault.Index.t)
       ~(source_rel_path : string)
       (ref_target : target)
-      ({ doc; _ } : Oystermark.Note.t)
+      (doc : Oystermark.Note.t)
   : reference list
   =
   let check_link acc link_ref node =

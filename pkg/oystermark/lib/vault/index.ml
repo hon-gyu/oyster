@@ -144,15 +144,14 @@ module Entry = struct
     ; links : Link.t list
     }
 
-  let of_doc (file_stat : file_stat) ({ frontmatter; doc } : Parse.t) : (t, string) result
-    =
+  let of_doc (file_stat : file_stat) (doc : Parse.t) : (t, string) result =
     let anchors = Note.Anchor.of_doc doc in
     let links = Note.Link.of_doc doc in
     if
       List.exists anchors ~f:(fun a -> Djot.Textloc.is_none a.loc)
       || List.exists links ~f:(fun l -> Djot.Textloc.is_none l.loc)
     then Error "document is missing source locations"
-    else Ok { file_stat; frontmatter; anchors; links }
+    else Ok { file_stat; frontmatter = Parse.frontmatter doc; anchors; links }
   ;;
 
   let of_doc_exn (file_stat : file_stat) (doc : Parse.t) : t =

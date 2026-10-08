@@ -278,7 +278,7 @@ let read_address (address : Oystermark.Note.Anchor.Address.t) (content : string)
   : string option
   =
   let module Address_utils = Oystermark.Note.Private.Address_utils in
-  let { Oystermark.Parse.doc; _ } = Lsp_util.parse_doc content in
+  let doc = Lsp_util.parse_doc content in
   Address_utils.source_text doc content (Address_utils.find doc address)
 ;;
 
@@ -359,7 +359,7 @@ let hover
           | None -> file_content
           | Some fragment ->
             Oystermark.Note.Link.Ref.resolve_fragment
-              (Oystermark.Note.Anchor.of_doc (Lsp_util.parse_doc file_content).doc)
+              (Oystermark.Note.Anchor.of_doc (Lsp_util.parse_doc file_content))
               fragment
             |> Option.bind ~f:(fun (anchor : Oystermark.Note.Anchor.t) ->
               read_address (Oystermark.Note.Anchor.address anchor.definition) file_content)

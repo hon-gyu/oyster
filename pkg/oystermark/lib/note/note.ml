@@ -9,10 +9,7 @@ end
 
 open Core
 
-type t = Parse.t =
-  { frontmatter : Yaml.value option
-  ; doc : Djot.Doc.t
-  }
+type t = Parse.t
 
 type source =
   { path : string
@@ -35,7 +32,7 @@ let part (n : t) (blocks : Djot.Block.t Djot.node list) : t =
           | _ -> Djot.Mapper.default)
         ()
     in
-    Parse.without_derived_ids n.doc blocks
+    Parse.without_derived_ids n blocks
     |> List.filter_map ~f:(Djot.Mapper.map_block without_definitions)
   in
   let referenced_labels =
@@ -52,7 +49,7 @@ let part (n : t) (blocks : Djot.Block.t Djot.node list) : t =
     | [] -> List.rev seen
     | label :: rest when List.mem seen label ~equal:String.equal -> close seen rest
     | label :: rest ->
-      (match Djot.Doc.footnote n.doc label with
+      (match Djot.Doc.footnote n label with
        | None -> close seen rest
        | Some body ->
          let labels =
@@ -67,10 +64,9 @@ let part (n : t) (blocks : Djot.Block.t Djot.node list) : t =
   in
   let footnotes =
     List.filter_map labels ~f:(fun label ->
-      Djot.Doc.footnote n.doc label
-      |> Option.map ~f:(fun body -> footnote_def (label, body)))
+      Djot.Doc.footnote n label |> Option.map ~f:(fun body -> footnote_def (label, body)))
   in
-  { n with doc = Parse.doc_of_blocks (blocks @ footnotes) }
+  Parse.doc_of_blocks ?frontmatter:(Djot.Doc.frontmatter n) (blocks @ footnotes)
 ;;
 
 (** [doc]'s blocks and footnote definitions, to be transcluded into another
@@ -139,13 +135,13 @@ let expand
       | Some source ->
         let doc =
           if List.mem expanding source.path ~equal:String.equal
-          then source.note.doc
+          then source.note
           else
             go
               ~depth:(depth + 1)
               ~expanding:(source.path :: expanding)
               ~from:source.path
-              source.note.doc
+              source.note
         in
         transcluded := true;
         Some
@@ -179,8 +175,11 @@ let expand
     (* Transcluded blocks hold positions in another text: a document without
        locations reads none of them. *)
     if !transcluded
-    then Parse.doc_of_blocks (Parse.without_derived_ids mapped (Djot.Doc.blocks mapped))
+    then
+      Parse.doc_of_blocks
+        ?frontmatter:(Djot.Doc.frontmatter mapped)
+        (Parse.without_derived_ids mapped (Djot.Doc.blocks mapped))
     else mapped
   in
-  { n with doc = go ~depth:0 ~expanding:[ path ] ~from:path n.doc }
+  go ~depth:0 ~expanding:[ path ] ~from:path n
 ;;

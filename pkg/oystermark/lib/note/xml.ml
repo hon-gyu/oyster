@@ -302,10 +302,10 @@ let rec yaml : Yaml.value -> X.Attribute.t list * X.t list = function
         node "field" ~attributes:(string "name" name :: attributes) children) )
 ;;
 
-let of_doc ?(frontmatter : Yaml.value option) (doc : Djot.Doc.t) : X.element =
+let of_doc (doc : Djot.Doc.t) : X.element =
   let frontmatter =
     Option.to_list
-      (Option.map frontmatter ~f:(fun value ->
+      (Option.map (Parse.frontmatter doc) ~f:(fun value ->
          let attributes, children = yaml value in
          node "frontmatter" ~attributes children))
   in

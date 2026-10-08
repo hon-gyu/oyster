@@ -114,7 +114,7 @@ let reverse_embed_doc (doc : Djot.Doc.t) : Djot.Doc.t =
 let%test_module "is_expandable_embed_paragraph" =
   (module struct
     let expandable content ~nth =
-      let { Parse.doc; _ } = Parse.of_string content in
+      let doc = Parse.of_string content in
       let blocks = Djot.Doc.blocks doc in
       is_expandable_embed_paragraph doc (List.nth_exn blocks nth) ~siblings:blocks
       |> Option.is_some
@@ -149,7 +149,7 @@ let%test_module "is_expandable_embed_paragraph" =
 ;;
 
 let%expect_test "transclude, then reverse" =
-  let { Parse.doc; _ } = Parse.of_string "# A\n\nbody\n" in
+  let doc = Parse.of_string "# A\n\nbody\n" in
   let div =
     transclude
       ~depth:1

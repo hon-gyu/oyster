@@ -82,7 +82,7 @@ let json_of_note vault (note : Index.Entry.t) =
   let doc = Option.value_exn (Vault.find_doc vault path) in
   `Assoc
     [ "path", `String path
-    ; "mdast", Mdast.of_doc doc.doc
+    ; "mdast", Mdast.of_doc doc
     ; "anchors", `List (List.map (Index.Entry.anchors note) ~f:json_of_anchor)
     ; ( "links"
       , `List (List.map (Index.Entry.links note) ~f:(json_of_link vault.index path)) )
@@ -116,7 +116,7 @@ let index request =
 ;;
 
 let parse markdown =
-  (Oystermark.Parse.of_string ~locs:true markdown).doc |> Mdast.of_doc |> Json.to_string
+  Oystermark.Parse.of_string ~locs:true markdown |> Mdast.of_doc |> Json.to_string
 ;;
 
 let expose name f =

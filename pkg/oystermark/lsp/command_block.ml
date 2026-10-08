@@ -84,7 +84,7 @@ let fold_command_blocks
       ~(f : 'a -> Djot.Doc.t -> Djot.Block.t Djot.node -> code:string -> 'a)
   : 'a
   =
-  let { Oystermark.Parse.doc; _ } = Lsp_util.parse_doc content in
+  let doc = Lsp_util.parse_doc content in
   let folder =
     Djot.Folder.make
       ~block:(fun _folder acc (Node (_, _, block) as node) ->

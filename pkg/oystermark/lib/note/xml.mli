@@ -23,7 +23,7 @@
     expression [//section\[heading="Top"\]/code_block\[@lang="python"\]]
     selects that block.
 
-    A note's frontmatter, when given, is the first child of [doc]:
+    A note's frontmatter, when it has one, is the first child of [doc]:
     [frontmatter], holding the YAML value. A value has a [type] attribute
     ([null], [bool], [number], [string], [list], or [map]). A scalar's content
     is its text. A list contains [entry] elements and a map contains [field]
@@ -42,7 +42,7 @@
     [frontmatter] subtree, [doc], [footnotes], and [references] have none.
     This view represents the parse tree, not rendered HTML. *)
 
-val of_doc : ?frontmatter:Yaml.value -> Djot.Doc.t -> Simple_xml.element
+val of_doc : Djot.Doc.t -> Simple_xml.element
 
 (** The first and last source bytes of an element of {!of_doc}, zero-based
     and inclusive. [None] when it has no location or an empty one. *)

@@ -98,8 +98,8 @@ Subsections are encouraged if needed.
   feeds embed ([![[note#id]]]) and, through {!Oystermark.Note.Private.Address_utils.find},
   hover, so an attribute anchor
   previews/embeds its containing block instead of the whole file.
-- Frontmatter positions: {!Oystermark.Parse.Frontmatter.blank_frontmatter}
-  blanks (rather than strips) the frontmatter region before parsing, so
+- Frontmatter positions: {!Oystermark.Parse.of_string} reads the frontmatter
+  with djot's own reader ({!Djot.Frontmatter}), so
   every parsed [Textloc] is full-file-relative. This fixes line/byte
   positions for frontmatter files across all LSP features (gtd,
   find-references, diagnostics, hover ranges) at once.

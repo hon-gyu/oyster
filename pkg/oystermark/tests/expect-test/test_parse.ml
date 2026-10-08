@@ -68,7 +68,7 @@ let parse_cases =
 
 (* The first paragraph's inlines, each with its byte range. *)
 let parse_inlines (input : string) : string =
-  let { Parse.doc; _ } = Parse.of_string input in
+  let doc = Parse.of_string input in
   let located (node : Djot.Inline.t Djot.node) =
     let loc = Djot.Doc.textloc doc node in
     sprintf
@@ -139,9 +139,7 @@ let%expect_test "keyed" =
   in
   let rows =
     List.map keyed_cases ~f:(fun (name, input) ->
-      ( name
-      , input
-      , Sexp.to_string (Parse.sexp_of_doc (Parse.of_string ~locs:false input).doc) ))
+      name, input, Sexp.to_string (Parse.sexp_of_doc (Parse.of_string ~locs:false input)))
   in
   print_string (Ascii_table.to_string_noattr cols rows ~limit_width_to:150);
   [%expect
@@ -168,8 +166,8 @@ let%expect_test "keyed" =
 (* Rendering back to source and parsing that again gives the same tree. *)
 let%expect_test "keyed round trip" =
   List.iter keyed_cases ~f:(fun (name, input) ->
-    let tree s = Parse.sexp_of_doc (Parse.of_string ~locs:false s).doc in
-    let rendered = Djot.Doc.to_string (Parse.of_string ~locs:false input).doc in
+    let tree s = Parse.sexp_of_doc (Parse.of_string ~locs:false s) in
+    let rendered = Djot.Doc.to_string (Parse.of_string ~locs:false input) in
     if not (Sexp.equal (tree input) (tree rendered))
     then printf "%s: %s -> %s\n" name (show_newlines input) (show_newlines rendered));
   [%expect {| |}]

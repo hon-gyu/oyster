@@ -41,15 +41,12 @@ end
 
     {2 Laws}
 
-    + [(expand ~env ~path n).frontmatter = n.frontmatter].
-    + [Transclusion.reverse_embed_doc (expand ~env ~path n).doc] is [n.doc],
+    + [expand ~env ~path n] has the frontmatter of [n].
+    + [Transclusion.reverse_embed_doc (expand ~env ~path n)] is [n],
       up to how each embed link is written, when no embed reaches the depth
       limit. *)
 
-type t = Parse.t =
-  { frontmatter : Yaml.value option
-  ; doc : Djot.Doc.t (** Without the frontmatter. *)
-  }
+type t = Parse.t
 
 (** What an embed resolves to. *)
 type source =
