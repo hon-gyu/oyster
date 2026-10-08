@@ -54,15 +54,9 @@ let footnote_diagnostics (doc : Oystermark.Parse.t) : diagnostic list =
       (not (Djot.Textloc.is_none loc))
       (Djot.Textloc.first_byte loc, Djot.Textloc.last_byte loc)
   in
-  let defs = Djot.Doc.footnote_defs doc in
-  (* Each definition is walked once from [defs], so a definition nested in
-     another is skipped when met inside it. *)
+  let defs = Oystermark.Parse.Common.footnote_defs doc in
   let folder =
     Djot.Folder.make
-      ~block:(fun _ acc (Node (_, _, block)) ->
-        match block with
-        | FootnoteDef _ -> Djot.Folder.ret acc
-        | _ -> Djot.Folder.default)
       ~inline:(fun _ acc (Node (_, _, inline) as node) ->
         match inline with
         | FootnoteReference label when Option.is_none (Djot.Doc.footnote doc label) ->
@@ -75,22 +69,19 @@ let footnote_diagnostics (doc : Oystermark.Parse.t) : diagnostic list =
         | _ -> Djot.Folder.default)
       ()
   in
-  let undefined =
-    List.fold (Djot.Doc.blocks doc) ~init:[] ~f:(Djot.Folder.fold_block folder)
-    |> fun acc ->
-    List.fold defs ~init:acc ~f:(fun acc (Node (_, _, def)) ->
-      match def with
-      | FootnoteDef (_, blocks) ->
-        List.fold blocks ~init:acc ~f:(Djot.Folder.fold_block folder)
-      | _ -> acc)
+  let undefined = Oystermark.Parse.fold_doc folder [] doc in
+  (* A definition's location starts at its [[^]; the label follows. *)
+  let label_range node label =
+    Option.map
+      (range (Djot.Doc.textloc doc node))
+      ~f:(fun (first_byte, _) -> first_byte + 2, first_byte + 2 + String.length label - 1)
   in
   let duplicate =
     List.filter_map defs ~f:(fun (Node (_, _, def) as node) ->
       match def with
       | FootnoteDef (label, _) ->
-        Option.map
-          (range (Djot.Doc.footnote_label_loc doc node))
-          ~f:(fun r -> Djot.Kernel.Ast.normalize_label label, (label, r))
+        Option.map (label_range node label) ~f:(fun r ->
+          Djot.Kernel.Ast.normalize_label label, (label, r))
       | _ -> None)
     |> String.Map.of_alist_multi
     |> Map.data
@@ -335,7 +326,8 @@ let%test_module "compute" =
 
     let%expect_test "undefined footnote, case-sensitive" =
       show ~rel_path:"note-a.md" ~content:"See[^ghost] and[^A].\n\n[^a]: One.\n";
-      [%expect {|
+      [%expect
+        {|
         ((first_byte 3) (last_byte 10) (message "undefined footnote: ^ghost"))
         ((first_byte 15) (last_byte 18) (message "undefined footnote: ^A"))
         |}]
@@ -343,7 +335,8 @@ let%test_module "compute" =
 
     let%expect_test "duplicate footnote definition: every definition flagged" =
       show ~rel_path:"note-a.md" ~content:"See[^a].\n\n[^a]: One.\n\n[^a]: Two.\n";
-      [%expect {|
+      [%expect
+        {|
         ((first_byte 12) (last_byte 12)
          (message "duplicate footnote definition: ^a"))
         ((first_byte 24) (last_byte 24)
@@ -353,7 +346,8 @@ let%test_module "compute" =
 
     let%expect_test "undefined reference inside a shadowed definition" =
       show ~rel_path:"note-a.md" ~content:"See[^a].\n\n[^a]: One[^x].\n\n[^a]: Two.\n";
-      [%expect {|
+      [%expect
+        {|
         ((first_byte 12) (last_byte 12)
          (message "duplicate footnote definition: ^a"))
         ((first_byte 19) (last_byte 22) (message "undefined footnote: ^x"))

@@ -91,3 +91,19 @@ let%expect_test "heading_key" =
     Ünï
     |}]
 ;;
+
+(** Every footnote definition of [doc] in source order, repeated labels
+    included, one written inside another after it. *)
+let footnote_defs (doc : Djot.Doc.t) : Djot.Block.t Djot.node list =
+  let folder =
+    Djot.Folder.make
+      ~block:(fun folder acc (Node (_, _, block) as node) ->
+        match block with
+        | FootnoteDef (_, body) ->
+          Djot.Folder.ret
+            (List.fold body ~init:(node :: acc) ~f:(Djot.Folder.fold_block folder))
+        | _ -> Djot.Folder.default)
+      ()
+  in
+  List.fold (Djot.Doc.blocks doc) ~init:[] ~f:(Djot.Folder.fold_block folder) |> List.rev
+;;

@@ -23,15 +23,63 @@ let of_string ?(locs = true) (s : string) : t =
 
 let to_string ({ frontmatter; doc } : t) : string =
   Option.value_map frontmatter ~default:"" ~f:Frontmatter.to_source
-  ^ Djot.Source.of_doc doc
+  ^ Djot.Doc.to_string doc
 ;;
 
 let doc_of_blocks (blocks : Djot.Block.t Djot.node list) : Djot.Doc.t =
-  Djot.Doc.of_blocks ~profile blocks
+  Djot.Doc.make ~profile blocks
 ;;
 
 let source_of_blocks (blocks : Djot.Block.t Djot.node list) : string =
-  Djot.Source.of_doc (doc_of_blocks blocks)
+  Djot.Doc.to_string (doc_of_blocks blocks)
+;;
+
+let without_derived_ids (doc : Djot.Doc.t) (blocks : Djot.Block.t Djot.node list)
+  : Djot.Block.t Djot.node list
+  =
+  let derived =
+    let folder =
+      Djot.Folder.make
+        ~block:(fun folder (pending, found) (Node (_, attrs, block) as node) ->
+          match block, pending with
+          | Section children, id :: rest
+            when Option.equal String.equal (Djot.Attr.id attrs) (Some id) ->
+            Djot.Folder.ret
+              (List.fold
+                 children
+                 ~init:(rest, node :: found)
+                 ~f:(Djot.Folder.fold_block folder))
+          | Heading _, id :: rest
+            when Option.equal String.equal (Djot.Attr.id attrs) (Some id) ->
+            Djot.Folder.ret (rest, node :: found)
+          | _ -> Djot.Folder.default)
+        ()
+    in
+    List.fold
+      (Djot.Doc.blocks doc)
+      ~init:(Djot.Doc.auto_identifiers doc, [])
+      ~f:(Djot.Folder.fold_block folder)
+    |> snd
+  in
+  let mapper =
+    Djot.Mapper.make
+      ~block:(fun m (Node (pos, attrs, block) as node) ->
+        if not (List.mem derived node ~equal:phys_equal)
+        then Djot.Mapper.default
+        else (
+          let attrs = Djot.Attr.remove "id" attrs in
+          match block with
+          | Section children ->
+            let children = List.filter_map children ~f:(Djot.Mapper.map_block m) in
+            Djot.Mapper.ret (Djot.Node (pos, attrs, Djot.Block.Section children))
+          | _ -> Djot.Mapper.ret (Djot.Node (pos, attrs, block))))
+      ()
+  in
+  List.filter_map blocks ~f:(Djot.Mapper.map_block mapper)
+;;
+
+let fold_doc (folder : 'a Djot.Folder.t) (init : 'a) (doc : Djot.Doc.t) : 'a =
+  List.fold (Djot.Doc.blocks doc) ~init ~f:(Djot.Folder.fold_block folder)
 ;;
 
 (* Sexp
@@ -77,7 +125,7 @@ let rec sexp_of_inline (Djot.Node (_, attrs, inline) : Djot.Inline.t Djot.node) 
      | Math (InlineMath, s) -> List [ Atom "Math"; Atom s ]
      | Link (l, t) -> List [ Atom "Link"; target t; tag "text" l ]
      | Image (l, t) -> List [ Atom "Image"; target t; tag "alt" l ]
-     | Span l -> tag "Span" l
+     | Span (_, l) -> tag "Span" l
      | FootnoteReference label -> List [ Atom "Footnote_ref"; Atom label ]
      | UrlLink url -> List [ Atom "Url"; Atom url ]
      | EmailLink email -> List [ Atom "Email"; Atom email ]
@@ -91,13 +139,16 @@ let rec sexp_of_inline (Djot.Node (_, attrs, inline) : Djot.Inline.t Djot.node) 
      | Quoted (SingleQuotes, l) -> tag "Single_quoted" l
      | Quoted (DoubleQuotes, l) -> tag "Double_quoted" l
      | SoftBreak -> Atom "Soft_break"
-     | HardBreak -> Atom "Hard_break")
+     | HardBreak -> Atom "Hard_break"
+     | Hole e -> List [ Atom "Hole"; Atom e ])
 ;;
 
 let rec sexp_of_block (Djot.Node (_, attrs, block) : Djot.Block.t Djot.node) : Sexp.t =
   let inlines l = List.map l ~f:sexp_of_inline in
   let blocks l = List.map l ~f:sexp_of_block in
-  let item bs = Sexp.List (Atom "item" :: blocks bs) in
+  let item (Djot.Node (_, attrs, bs)) =
+    with_attrs attrs (Sexp.List (Atom "item" :: blocks bs))
+  in
   with_attrs
     attrs
     (match block with
@@ -107,24 +158,28 @@ let rec sexp_of_block (Djot.Node (_, attrs, block) : Djot.Block.t Djot.node) : S
        List (Atom "Heading" :: Atom (Int.to_string level) :: inlines l)
      | BlockQuote l -> List (Atom "Block_quote" :: blocks l)
      | CodeBlock (lang, text) -> List [ Atom "Code_block"; Atom lang; Atom text ]
-     | Div l -> List (Atom "Div" :: blocks l)
+     | Div (_, l) -> List (Atom "Div" :: blocks l)
      | OrderedList (_, _, items) -> List (Atom "Ordered_list" :: List.map items ~f:item)
-     | BulletList (_, items) -> List (Atom "Bullet_list" :: List.map items ~f:item)
+     | BulletList (_, _, items) -> List (Atom "Bullet_list" :: List.map items ~f:item)
      | TaskList (_, items) ->
        List
          (Atom "Task_list"
-          :: List.map items ~f:(fun (status, bs) ->
-            Sexp.List
-              (Atom
-                 (match status with
-                  | Complete -> "[x]"
-                  | Incomplete -> "[ ]")
-               :: blocks bs)))
+          :: List.map items ~f:(fun (Djot.Node (_, attrs, (status, bs))) ->
+            with_attrs
+              attrs
+              (Sexp.List
+                 (Atom
+                    (match status with
+                     | Complete -> "[x]"
+                     | Incomplete -> "[ ]")
+                  :: blocks bs))))
      | DefinitionList (_, items) ->
        List
          (Atom "Definition_list"
-          :: List.map items ~f:(fun (term, bs) ->
-            Sexp.List [ List (Atom "term" :: inlines term); item bs ]))
+          :: List.map
+               items
+               ~f:(fun (Djot.Node (_, _, (Djot.Node (_, _, term), definition))) ->
+                 Sexp.List [ List (Atom "term" :: inlines term); item definition ]))
      | ThematicBreak -> Atom "Thematic_break"
      | Table _ -> Atom "Table"
      | RawBlock (format, s) -> List [ Atom "Raw_block"; Atom format; Atom s ]
@@ -146,11 +201,7 @@ let rec sexp_of_block (Djot.Node (_, attrs, block) : Djot.Block.t Djot.node) : S
 ;;
 
 let sexp_of_doc (doc : Djot.Doc.t) : Sexp.t =
-  let footnotes =
-    List.map (Djot.Doc.footnotes doc) ~f:(fun (label, bs) ->
-      Sexp.List (Atom "Footnote" :: Atom label :: List.map bs ~f:sexp_of_block))
-  in
-  Sexp.List (List.map (Djot.Doc.blocks doc) ~f:sexp_of_block @ footnotes)
+  Sexp.List (List.map (Djot.Doc.blocks doc) ~f:sexp_of_block)
 ;;
 
 module For_test = struct

@@ -169,7 +169,7 @@ let%expect_test "keyed" =
 let%expect_test "keyed round trip" =
   List.iter keyed_cases ~f:(fun (name, input) ->
     let tree s = Parse.sexp_of_doc (Parse.of_string ~locs:false s).doc in
-    let rendered = Djot.Source.of_doc (Parse.of_string ~locs:false input).doc in
+    let rendered = Djot.Doc.to_string (Parse.of_string ~locs:false input).doc in
     if not (Sexp.equal (tree input) (tree rendered))
     then printf "%s: %s -> %s\n" name (show_newlines input) (show_newlines rendered));
   [%expect {| |}]

@@ -110,7 +110,7 @@ and inline doc (Node (_, attrs, contents) as node : inline) : Json.t list =
     | Insert l -> tag "ins" l
     | Superscript l -> tag "sup" l
     | Subscript l -> tag "sub" l
-    | Span l -> inlines doc l
+    | Span (_, l) -> inlines doc l
     | Quoted (quote, l) ->
       let open_, close =
         match quote with
@@ -161,6 +161,7 @@ and inline doc (Node (_, attrs, contents) as node : inline) : Json.t list =
       [ mk ~pos "footnoteReference" [ "identifier", `String id; "label", `String id ] ]
     | RawInline ("html", s) -> [ mk ~pos "html" [ "value", `String s ] ]
     | RawInline _ -> []
+    | Hole expression -> [ text ~pos ("%{" ^ expression ^ "}") ]
     | Ext_wikilink (embed, raw, alias) ->
       let reference = Note.Link.Ref.of_wikilink_target raw in
       let fragment : Json.t =
@@ -223,8 +224,11 @@ let rec blocks doc (bs : block list) : Json.t list = List.concat_map bs ~f:(bloc
 and block doc (Node (_, attrs, contents) as node : block) : Json.t list =
   let pos = position doc node in
   let children l = "children", `List (blocks doc l) in
-  let item_node ~spread ~checked bs =
-    mk "listItem" [ "spread", `Bool spread; "checked", checked; children bs ]
+  let item_node ~spread ~checked item bs =
+    mk
+      ~pos:(position doc item)
+      "listItem"
+      [ "spread", `Bool spread; "checked", checked; children bs ]
   in
   match contents with
   | Section ((Node (_, heading_attrs, Heading (level, l)) as heading) :: rest) ->
@@ -271,9 +275,9 @@ and block doc (Node (_, attrs, contents) as node : block) : Json.t list =
       | RawBlock ("html", s) -> [ mk ~pos "html" [ "value", `String s ] ]
       | RawBlock _ -> []
       | BlockQuote l -> [ mk ~pos "blockquote" [ children l ] ]
-      | Div l -> [ element ~pos ~children:(blocks doc l) "div" ]
+      | Div (_, l) -> [ element ~pos ~children:(blocks doc l) "div" ]
       | ThematicBreak -> [ mk ~pos "thematicBreak" [] ]
-      | BulletList (spacing, items) ->
+      | BulletList (_, spacing, items) ->
         let spread = Poly.equal spacing Djot.Block.Loose in
         [ mk
             ~pos
@@ -281,7 +285,10 @@ and block doc (Node (_, attrs, contents) as node : block) : Json.t list =
             [ "ordered", `Bool false
             ; "start", `Null
             ; "spread", `Bool spread
-            ; "children", `List (List.map items ~f:(item_node ~spread ~checked:`Null))
+            ; ( "children"
+              , `List
+                  (List.map items ~f:(fun item ->
+                     item_node ~spread ~checked:`Null item (Djot.Node.content item))) )
             ]
         ]
       | OrderedList ({ ol_start; _ }, spacing, items) ->
@@ -292,7 +299,10 @@ and block doc (Node (_, attrs, contents) as node : block) : Json.t list =
             [ "ordered", `Bool true
             ; "start", `Int ol_start
             ; "spread", `Bool spread
-            ; "children", `List (List.map items ~f:(item_node ~spread ~checked:`Null))
+            ; ( "children"
+              , `List
+                  (List.map items ~f:(fun item ->
+                     item_node ~spread ~checked:`Null item (Djot.Node.content item))) )
             ]
         ]
       | TaskList (spacing, items) ->
@@ -305,10 +315,11 @@ and block doc (Node (_, attrs, contents) as node : block) : Json.t list =
             ; "spread", `Bool spread
             ; ( "children"
               , `List
-                  (List.map items ~f:(fun (status, bs) ->
+                  (List.map items ~f:(fun (Djot.Node (_, _, (status, bs)) as item) ->
                      item_node
                        ~spread
                        ~checked:(`Bool (Poly.equal status Djot.Block.Complete))
+                       item
                        bs)) )
             ]
         ]
@@ -316,27 +327,39 @@ and block doc (Node (_, attrs, contents) as node : block) : Json.t list =
         [ element
             ~pos
             ~children:
-              (List.concat_map items ~f:(fun (term, bs) ->
-                 [ element ~children:(inlines doc term) "dt"
-                 ; element ~children:(blocks doc bs) "dd"
+              (List.concat_map items ~f:(fun (Djot.Node (_, _, (term, definition))) ->
+                 [ element
+                     ~pos:(position doc term)
+                     ~children:(inlines doc (Djot.Node.content term))
+                     "dt"
+                 ; element
+                     ~pos:(position doc definition)
+                     ~children:(blocks doc (Djot.Node.content definition))
+                     "dd"
                  ]))
             "dl"
         ]
       | Table (caption, rows) ->
-        let align (Djot.Block.Cell (_, align, _)) : Json.t =
+        let align (Djot.Node (_, _, Djot.Block.Cell (_, align, _))) : Json.t =
           match align with
           | AlignLeft -> `String "left"
           | AlignRight -> `String "right"
           | AlignCenter -> `String "center"
           | AlignDefault -> `Null
         in
-        let row cells =
+        let row row =
           mk
+            ~pos:(position doc row)
             "tableRow"
             [ ( "children"
               , `List
-                  (List.map cells ~f:(fun (Djot.Block.Cell (_, _, l)) ->
-                     mk "tableCell" [ "children", `List (inlines doc l) ])) )
+                  (List.map
+                     (Djot.Node.content row)
+                     ~f:(fun (Djot.Node (_, _, Djot.Block.Cell (_, _, l)) as cell) ->
+                       mk
+                         ~pos:(position doc cell)
+                         "tableCell"
+                         [ "children", `List (inlines doc l) ])) )
             ]
         in
         [ mk
@@ -344,13 +367,14 @@ and block doc (Node (_, attrs, contents) as node : block) : Json.t list =
             "table"
             ([ ( "align"
                , `List
-                   (Option.value_map (List.hd rows) ~default:[] ~f:(List.map ~f:align)) )
+                   (Option.value_map (List.hd rows) ~default:[] ~f:(fun row ->
+                      List.map (Djot.Node.content row) ~f:align)) )
              ; "children", `List (List.map rows ~f:row)
              ]
              @
-             if List.is_empty caption
-             then []
-             else [ "caption", `List (inlines doc caption) ])
+             match Djot.Node.content caption with
+             | [] -> []
+             | caption -> [ "caption", `List (inlines doc caption) ])
         ]
       | FootnoteDef (label, l) ->
         let id = footnote_identifier label in
@@ -416,9 +440,5 @@ and block doc (Node (_, attrs, contents) as node : block) : Json.t list =
 ;;
 
 let of_doc (doc : Djot.Doc.t) : Json.t =
-  let footnotes =
-    List.map (Djot.Doc.footnotes doc) ~f:(fun (label, bs) ->
-      Djot.Node.make (Djot.Block.FootnoteDef (label, bs)))
-  in
-  mk "root" [ "children", `List (blocks doc (Djot.Doc.blocks doc @ footnotes)) ]
+  mk "root" [ "children", `List (blocks doc (Djot.Doc.blocks doc)) ]
 ;;

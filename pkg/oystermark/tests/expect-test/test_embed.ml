@@ -9,7 +9,7 @@ open! Core
 open Oystermark
 
 (** Print an expanded document without depending on a rendering package. *)
-let print_expanded_doc (note : Note.t) : unit = print_string (Djot.Source.of_doc note.doc)
+let print_expanded_doc (note : Note.t) : unit = print_string (Djot.Doc.to_string note.doc)
 
 (** Build a mini-vault, run the core pipeline, and print [target].
     [max_depth] controls embed recursion depth. *)
@@ -62,11 +62,10 @@ let%expect_test "heading section: only the footnotes it refers to" =
     ::: embed
     ## Sec
 
-    Content[^b.md:s]\.
-    :::
+    Content[^b.md:s].
 
-    [^b.md:s]:
-      sec note
+    [^b.md:s]: sec note
+    :::
     |}]
 ;;
 
@@ -230,7 +229,7 @@ let%expect_test "self-reference: embed current file" =
     {|
     Hello.
 
-    \!\[\[\]\]
+    ![[]]
     |}]
 ;;
 
@@ -282,12 +281,12 @@ let%expect_test "image embed: block ref via ![](b.md#myblock)" =
 
 let%expect_test "image embed: max_depth=0 keeps original image" =
   render ~max_depth:0 [ "a.md", "![](b.md)"; "b.md", "Should not appear." ] "a.md";
-  [%expect {| ![](b\.md) |}]
+  [%expect {| ![](b.md) |}]
 ;;
 
 let%expect_test "image embed: non-note file is NOT expanded" =
   render [ "a.md", "![photo](img.png)" ] "a.md";
-  [%expect {| ![photo](img\.png) |}]
+  [%expect {| ![photo](img.png) |}]
 ;;
 
 let%expect_test "image embed: nested — image inside wikilink embed" =
@@ -315,7 +314,7 @@ let render_reversed ?(max_depth = 5) (files : (string * string) list) (target : 
   let expanded = Vault.Embed.expand_docs ~max_depth ~index docs in
   let doc = List.Assoc.find_exn expanded ~equal:String.equal target in
   let reversed = Note.Transclusion.reverse_embed_doc doc.doc in
-  print_string (Djot.Source.of_doc reversed)
+  print_string (Djot.Doc.to_string reversed)
 ;;
 
 let%expect_test "reverse_embed: full note" =
@@ -345,7 +344,7 @@ let%expect_test "reverse_embed: self-reference produces explicit path" =
     {|
     Hello.
 
-    \!\[\[\]\]
+    ![[]]
     |}]
 ;;
 
@@ -408,7 +407,7 @@ let%expect_test "block ref: keyed chain" =
     {source="b.md" fragment="k" depth="1"}
     ::: embed
     {#k}
-    outer: inner\:
+    outer: inner:
     :::
     |}]
 ;;
@@ -441,9 +440,9 @@ let round_trip ?(max_depth = 5) (files : (string * string) list) (target : strin
         Djot.Folder.default)
       ()
   in
-  Djot.Folder.fold_doc folder () reparsed;
+  Parse.fold_doc folder () reparsed;
   print_endline "--- reversed from text alone ---";
-  print_string (Djot.Source.of_doc (Note.Transclusion.reverse_embed_doc reparsed))
+  print_string (Djot.Doc.to_string (Note.Transclusion.reverse_embed_doc reparsed))
 ;;
 
 let%expect_test "round trip: full note" =
@@ -533,7 +532,7 @@ let%expect_test "round trip: values needing escaping" =
     {|
     {source="my notes/a note.md" fragment="It’s quoted, tricky" depth="1"}
     ::: embed
-    ## It’s {"quoted"}, \ tricky
+    ## It’s "quoted", \ tricky
 
     Body.
     :::

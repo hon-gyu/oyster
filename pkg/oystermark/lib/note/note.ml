@@ -25,6 +25,19 @@ let footnote_def (label, blocks) : Djot.Block.t Djot.node =
 ;;
 
 let part (n : t) (blocks : Djot.Block.t Djot.node list) : t =
+  (* The definitions written among [blocks] are not all referred to there. *)
+  let blocks =
+    let without_definitions =
+      Djot.Mapper.make
+        ~block:(fun _ (Node (_, _, block)) ->
+          match block with
+          | FootnoteDef _ -> Djot.Mapper.delete
+          | _ -> Djot.Mapper.default)
+        ()
+    in
+    Parse.without_derived_ids n.doc blocks
+    |> List.filter_map ~f:(Djot.Mapper.map_block without_definitions)
+  in
   let referenced_labels =
     Djot.Folder.make
       ~inline:(fun _ labels (Node (_, _, inline)) ->
@@ -75,9 +88,13 @@ let transcludable ~prefix (doc : Djot.Doc.t) : Djot.Block.t Djot.node list =
   in
   let mapper =
     Djot.Mapper.make
-      ~block:(fun _ (Node (_, _, block)) ->
+      ~block:(fun m (Node (pos, attrs, block)) ->
         match block with
         | RefDef _ -> Djot.Mapper.delete
+        | FootnoteDef (label, body) ->
+          let body = List.filter_map body ~f:(Djot.Mapper.map_block m) in
+          Djot.Mapper.ret
+            (Djot.Node (pos, attrs, Djot.Block.FootnoteDef (rename label, body)))
         | _ -> Djot.Mapper.default)
       ~inline:(fun m (Node (pos, attrs, inline)) ->
         let children ns = List.filter_map ns ~f:(Djot.Mapper.map_inline m) in
@@ -100,10 +117,8 @@ let transcludable ~prefix (doc : Djot.Doc.t) : Djot.Block.t Djot.node list =
         | _ -> Djot.Mapper.default)
       ()
   in
-  let map blocks = List.filter_map blocks ~f:(Djot.Mapper.map_block mapper) in
-  map (Djot.Doc.blocks doc)
-  @ List.map (Djot.Doc.footnotes doc) ~f:(fun (label, body) ->
-    footnote_def (rename label, map body))
+  Parse.without_derived_ids doc (Djot.Doc.blocks doc)
+  |> List.filter_map ~f:(Djot.Mapper.map_block mapper)
 ;;
 
 let expand
@@ -161,12 +176,10 @@ let expand
         ()
     in
     let mapped = Djot.Mapper.map_doc mapper doc in
-    (* The side tables are the parse's: rebuild them to take in the transcluded
-       footnotes. *)
+    (* Transcluded blocks hold positions in another text: a document without
+       locations reads none of them. *)
     if !transcluded
-    then
-      Parse.doc_of_blocks
-        (Djot.Doc.blocks mapped @ List.map (Djot.Doc.footnotes mapped) ~f:footnote_def)
+    then Parse.doc_of_blocks (Parse.without_derived_ids mapped (Djot.Doc.blocks mapped))
     else mapped
   in
   { n with doc = go ~depth:0 ~expanding:[ path ] ~from:path n.doc }

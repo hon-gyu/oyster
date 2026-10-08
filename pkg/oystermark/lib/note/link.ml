@@ -165,6 +165,6 @@ let of_doc (doc : Djot.Doc.t) : t list =
         Djot.Folder.default)
       ()
   in
-  Djot.Folder.fold_doc folder () doc;
+  Parse.fold_doc folder () doc;
   List.rev !links
 ;;

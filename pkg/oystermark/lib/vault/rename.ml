@@ -114,7 +114,7 @@ let reference_destination_bounds content (loc : Djot.Textloc.t) =
     && Int.equal (Djot.Textloc.last_byte node_loc) (Djot.Textloc.last_byte loc)
   in
   let label =
-    Djot.Folder.fold_doc
+    Parse.fold_doc
       (Djot.Folder.make
          ~inline:(fun _ found (Node (_, _, inline) as node) ->
            match found, inline with
@@ -128,7 +128,7 @@ let reference_destination_bounds content (loc : Djot.Textloc.t) =
       doc
   in
   let definitions label =
-    Djot.Folder.fold_doc
+    Parse.fold_doc
       (Djot.Folder.make
          ~block:(fun _ acc (Node (_, _, block) as node) ->
            match block with
@@ -382,7 +382,7 @@ let attr_spec_ranges (doc : Djot.Doc.t) ~(id : string) : Djot.Textloc.t list =
        | Some _ as found -> Djot.Folder.ret found
        | None -> Djot.Folder.default)
   in
-  Djot.Folder.fold_doc
+  Parse.fold_doc
     (Djot.Folder.make
        ~block:(fun _ found node -> visit node found)
        ~inline:(fun _ found node -> visit node found)

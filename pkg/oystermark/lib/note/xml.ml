@@ -43,16 +43,6 @@ let inlines_location (doc : Djot.Doc.t) (ns : Djot.Inline.t Djot.node list)
   | _ -> []
 ;;
 
-let with_locations (locs : 'loc list) (parts : 'a list) : ('loc option * 'a) list =
-  match List.zip locs parts with
-  | Ok pairs -> List.map pairs ~f:(fun (loc, part) -> Some loc, part)
-  | Unequal_lengths -> List.map parts ~f:(fun part -> None, part)
-;;
-
-let part_location : Djot.Textloc.t option -> X.Attribute.t list =
-  Option.value_map ~default:[] ~f:textloc
-;;
-
 let span (element : X.element) : (int * int) option =
   let value key =
     List.find_map element.attributes ~f:(fun (a : X.Attribute.t) ->
@@ -61,6 +51,11 @@ let span (element : X.element) : (int * int) option =
   match value "start-byte", value "end-byte" with
   | Some first, Some last when 0 <= first && first <= last -> Some (first, last)
   | _ -> None
+;;
+
+(* The name of a div or span; empty means unnamed. *)
+let name_attr (name : string) : X.Attribute.t list =
+  if String.is_empty name then [] else [ string "name" name ]
 ;;
 
 let authored_attrs (attrs : Djot.Attr.t) : X.Attribute.t list * X.t list =
@@ -72,7 +67,7 @@ let authored_attrs (attrs : Djot.Attr.t) : X.Attribute.t list * X.t list =
     else [ string "class" (String.concat ~sep:" " classes) ]
   in
   let other =
-    Djot.Attr.key_values attrs
+    Djot.Attr.kvs attrs
     |> List.map ~f:(fun (name, value) ->
       node "attribute" ~attributes:[ string "name" name; string "value" value ] [])
   in
@@ -98,7 +93,7 @@ and inline doc (Djot.Node (_, _, value) as n : Djot.Inline.t Djot.node) : X.t =
     | Delete ns -> "delete", [], inlines doc ns
     | Superscript ns -> "superscript", [], inlines doc ns
     | Subscript ns -> "subscript", [], inlines doc ns
-    | Span ns -> "span", [], inlines doc ns
+    | Span (name, ns) -> "span", name_attr name, inlines doc ns
     | Verbatim s -> "verbatim", [], [ X.Text s ]
     | Symbol s -> "symbol", [], [ X.Text s ]
     | Math (style, s) ->
@@ -133,6 +128,7 @@ and inline doc (Djot.Node (_, _, value) as n : Djot.Inline.t Djot.node) : X.t =
       , inlines doc ns )
     | SoftBreak -> "soft_break", [], [ X.Text "\n" ]
     | HardBreak -> "hard_break", [], [ X.Text "\n" ]
+    | Hole expression -> "hole", [], [ X.Text expression ]
   in
   let attributes, authored = with_node doc n extra in
   node tag ~attributes (authored @ children)
@@ -143,9 +139,7 @@ and target_attrs : Djot.Inline.target -> X.Attribute.t list = function
 ;;
 
 (* Definitions are listed once, under [footnotes] and [references], so the tree
-   skips them wherever they were written: the document pass leaves reference
-   definitions in place, and {!Djot.Doc.footnote_defs} keeps nested ones in
-   their parent. *)
+   skips them wherever they were written. *)
 let is_definition (Djot.Node (_, _, value) : Djot.Block.t Djot.node) =
   match value with
   | FootnoteDef _ | RefDef _ -> true
@@ -156,12 +150,6 @@ let rec blocks doc ns =
   List.filter_map ns ~f:(fun n -> if is_definition n then None else Some (block doc n))
 
 and block doc (Djot.Node (_, _, value) as n : Djot.Block.t Djot.node) : X.t =
-  let parts = Djot.Doc.parts doc n in
-  let item_locations =
-    match parts with
-    | Items locs -> locs
-    | NoParts | DefItems _ | TableRows _ -> []
-  in
   let tag, extra, children =
     match value with
     | Para ns -> "paragraph", [], inlines doc ns
@@ -169,7 +157,7 @@ and block doc (Djot.Node (_, _, value) as n : Djot.Block.t Djot.node) : X.t =
     | Heading (level, ns) -> "heading", [ number "level" level ], inlines doc ns
     | BlockQuote ns -> "block_quote", [], blocks doc ns
     | CodeBlock (lang, text) -> "code_block", [ string "lang" lang ], [ X.Text text ]
-    | Div ns -> "div", [], blocks doc ns
+    | Div (name, ns) -> "div", name_attr name, blocks doc ns
     | OrderedList (settings, spacing, items) ->
       ( "list"
       , [ string "kind" "ordered"
@@ -190,16 +178,15 @@ and block doc (Djot.Node (_, _, value) as n : Djot.Block.t Djot.node) : X.t =
              | RightParen -> "right-paren"
              | LeftRightParen -> "left-right-paren")
         ]
-      , list_items doc item_locations items )
-    | BulletList (spacing, items) ->
+      , list_items doc items )
+    | BulletList (_, spacing, items) ->
       ( "list"
       , [ string "kind" "bullet"; string "spacing" (spacing_string spacing) ]
-      , list_items doc item_locations items )
+      , list_items doc items )
     | TaskList (spacing, items) ->
       ( "list"
       , [ string "kind" "task"; string "spacing" (spacing_string spacing) ]
-      , with_locations item_locations items
-        |> List.map ~f:(fun (loc, (status, bs)) ->
+      , List.map items ~f:(fun (Djot.Node (_, _, (status, bs)) as item) ->
           node
             "item"
             ~attributes:
@@ -208,51 +195,36 @@ and block doc (Djot.Node (_, _, value) as n : Djot.Block.t Djot.node) : X.t =
                  (match status with
                   | Djot.Block.Complete -> "checked"
                   | Incomplete -> "unchecked")
-               :: part_location loc)
+               :: location doc item)
             (blocks doc bs)) )
     | DefinitionList (spacing, items) ->
       ( "definition_list"
       , [ string "spacing" (spacing_string spacing) ]
-      , with_locations
-          (match parts with
-           | DefItems locs -> locs
-           | NoParts | Items _ | TableRows _ -> [])
-          items
-        |> List.map ~f:(fun (locs, (term, definition)) ->
-          let part f = part_location (Option.map locs ~f) in
+      , List.map items ~f:(fun (Djot.Node (_, _, (term, definition)) as item) ->
           node
             "item"
-            ~attributes:(part (fun (item, _, _) -> item))
-            [ node "term" ~attributes:(part (fun (_, term, _) -> term)) (inlines doc term)
+            ~attributes:(location doc item)
+            [ node
+                "term"
+                ~attributes:(location doc term)
+                (inlines doc (Djot.Node.content term))
             ; node
                 "definition"
-                ~attributes:(part (fun (_, _, definition) -> definition))
-                (blocks doc definition)
+                ~attributes:(location doc definition)
+                (blocks doc (Djot.Node.content definition))
             ]) )
     | ThematicBreak -> "thematic_break", [], []
     | Table (caption, rows) ->
       ( "table"
       , []
-      , let caption_location, row_locations =
-          match parts with
-          | TableRows (caption, rows) -> caption, rows
-          | NoParts | Items _ | DefItems _ -> None, []
-        in
-        (if List.is_empty caption
-         then []
-         else
-           [ node
-               "caption"
-               ~attributes:(part_location caption_location)
-               (inlines doc caption)
-           ])
-        @ (with_locations row_locations rows
-           |> List.map ~f:(fun (locs, row) ->
-             node
-               "row"
-               ~attributes:(part_location (Option.map locs ~f:fst))
-               (with_locations (Option.value_map locs ~default:[] ~f:snd) row
-                |> List.map ~f:(fun (loc, c) -> cell doc (part_location loc) c)))) )
+      , (match Djot.Node.content caption with
+         | [] -> []
+         | ns -> [ node "caption" ~attributes:(location doc caption) (inlines doc ns) ])
+        @ List.map rows ~f:(fun row ->
+          node
+            "row"
+            ~attributes:(location doc row)
+            (List.map (Djot.Node.content row) ~f:(cell doc))) )
     | RawBlock (format, text) -> "raw_block", [ string "format" format ], [ X.Text text ]
     | FootnoteDef (label, ns) ->
       "footnote_definition", [ string "label" label ], blocks doc ns
@@ -278,12 +250,11 @@ and block doc (Djot.Node (_, _, value) as n : Djot.Block.t Djot.node) : X.t =
   let attributes, authored = with_node doc n extra in
   node tag ~attributes (authored @ children)
 
-and list_items doc locations (items : Djot.Block.t Djot.node list list) : X.t list =
-  with_locations locations items
-  |> List.map ~f:(fun (loc, bs) ->
-    node "item" ~attributes:(part_location loc) (blocks doc bs))
+and list_items doc (items : Djot.Block.t Djot.node list Djot.node list) : X.t list =
+  List.map items ~f:(fun item ->
+    node "item" ~attributes:(location doc item) (blocks doc (Djot.Node.content item)))
 
-and cell doc location (Djot.Block.Cell (kind, align, ns)) : X.t =
+and cell doc (Djot.Node (_, _, Djot.Block.Cell (kind, align, ns)) as c) : X.t =
   node
     "cell"
     ~attributes:
@@ -300,7 +271,7 @@ and cell doc location (Djot.Block.Cell (kind, align, ns)) : X.t =
             | AlignCenter -> "center"
             | AlignDefault -> "default")
        ]
-       @ location)
+       @ location doc c)
     (inlines doc ns)
 
 and spacing_string : Djot.Block.list_spacing -> string = function
@@ -340,7 +311,7 @@ let of_doc ?(frontmatter : Yaml.value option) (doc : Djot.Doc.t) : X.element =
   in
   let content = blocks doc (Djot.Doc.blocks doc) in
   let footnotes =
-    Djot.Doc.footnote_defs doc |> List.map ~f:(block doc) |> node "footnotes"
+    Parse.Common.footnote_defs doc |> List.map ~f:(block doc) |> node "footnotes"
   in
   let references =
     Djot.Doc.references doc

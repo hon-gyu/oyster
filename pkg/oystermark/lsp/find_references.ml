@@ -140,7 +140,7 @@ let collect_from_doc
     Djot.Folder.make
       ~block:(fun f acc (Node (_, _, block) as node) ->
         match block with
-        | Div blocks when Toc.is_toc node ->
+        | Div (_, blocks) when Toc.is_toc node ->
           (* Descend with the flag raised, then restore it: a region may sit
              inside anything, and anything may follow it. *)
           let inner =
@@ -163,7 +163,7 @@ let collect_from_doc
         | _ -> Djot.Folder.default)
       ()
   in
-  List.rev (Djot.Folder.fold_doc folder { refs = []; in_toc = false } doc).refs
+  List.rev (Parse.fold_doc folder { refs = []; in_toc = false } doc).refs
 ;;
 
 (** Scan all vault documents for references matching [ref_target]. *)

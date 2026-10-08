@@ -144,7 +144,7 @@ let scan_doc (doc : Djot.Doc.t) ~(content : string) : scan =
       ~inline:(fun _f acc _i -> Djot.Folder.ret acc)
       ()
   in
-  let regions, unterminated = Djot.Folder.fold_doc folder ([], []) doc in
+  let regions, unterminated = Parse.fold_doc folder ([], []) doc in
   { regions = List.rev regions; unterminated = List.rev unterminated }
 ;;
 

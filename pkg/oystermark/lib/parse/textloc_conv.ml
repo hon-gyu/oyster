@@ -42,7 +42,7 @@ let t_of_sexp (sexp : Sexp.t) : Djot.Textloc.t =
     in
     let first_line = line_pos_of_sexp (get "first_line") in
     let last_line = line_pos_of_sexp (get "last_line") in
-    Djot.Textloc.v ~first_byte ~last_byte ~first_line ~last_line
+    Djot.Textloc.make ~first_byte ~last_byte ~first_line ~last_line
   | _ -> of_sexp_error "expected record" sexp
 ;;
 

@@ -95,7 +95,7 @@ let fold_command_blocks
       ~inline:(fun _folder acc _i -> Djot.Folder.ret acc)
       ()
   in
-  Djot.Folder.fold_doc folder init doc
+  Parse.fold_doc folder init doc
 ;;
 
 (** Every line of every command block in [content], blanks and comments

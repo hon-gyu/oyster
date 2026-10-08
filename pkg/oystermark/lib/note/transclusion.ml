@@ -77,7 +77,7 @@ let fragment : Anchor.definition -> Link.Ref.fragment = function
 let transclude ~depth ~source_path ~fragment (blocks : block list) : block =
   Djot.Node.make
     ~attrs:(attrs_of_embed_meta { depth; source_path; fragment })
-    (Djot.Block.Div blocks)
+    (Djot.Block.Div ("", blocks))
 ;;
 
 let reverse_embed_doc (doc : Djot.Doc.t) : Djot.Doc.t =
@@ -155,7 +155,7 @@ let%expect_test "transclude, then reverse" =
       ~depth:1
       ~source_path:"notes/a.md"
       ~fragment:(Some [ "A" ])
-      (Djot.Doc.blocks doc)
+      (Parse.without_derived_ids doc (Djot.Doc.blocks doc))
   in
   print_string (Parse.source_of_blocks [ div ]);
   [%expect
@@ -173,6 +173,6 @@ let%expect_test "transclude, then reverse" =
          m.depth, m.source_path, m.fragment)
        : (int * string * string list option) option)];
   [%expect {| ((1 notes/a.md ((A)))) |}];
-  print_string (Djot.Source.of_doc (reverse_embed_doc (Parse.doc_of_blocks [ div ])));
+  print_string (Djot.Doc.to_string (reverse_embed_doc (Parse.doc_of_blocks [ div ])));
   [%expect {| ![[notes/a#A]] |}]
 ;;

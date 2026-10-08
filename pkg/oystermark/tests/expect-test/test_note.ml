@@ -48,7 +48,7 @@ let expand ?max_depth (files : (string * string) list) (path : string) : Note.t 
 let%expect_test "frontmatter is split from the body and put back" =
   let n = note "---\ntitle: A\n---\n\n# A\n\nText." in
   print_s [%sexp (Option.is_some n.frontmatter : bool)];
-  print_endline (Djot.Source.of_doc n.doc);
+  print_endline (Djot.Doc.to_string n.doc);
   print n;
   [%expect
     {|
@@ -145,18 +145,16 @@ let%expect_test "an embedded note's footnotes come with it, under its path" =
        "a.md");
   [%expect
     {|
-    Host[^1]\.
+    Host[^1].
 
     {source="b.md" depth="1"}
     ::: embed
-    B text[^b.md:1]\.
+    B text[^b.md:1].
+
+    [^b.md:1]: b note
     :::
 
-    [^b.md:1]:
-      b note
-
-    [^1]:
-      host note
+    [^1]: host note
     |}]
 ;;
 
@@ -173,7 +171,7 @@ let%expect_test "an embedded note's reference links keep their destinations" =
 
     {source="b.md" depth="1"}
     ::: embed
-    [x](b\-target\.md)
+    [x](b-target.md)
     :::
 
     [r]: host.md
@@ -200,7 +198,7 @@ let%expect_test "law 4: reversing the embeds gives the note back" =
       [ "a.md", "Before.\n\n![[b]]\n\nAfter."; "b.md", "![[c]]"; "c.md", "C text." ]
       "a.md"
   in
-  print_string (Djot.Source.of_doc (Note.Transclusion.reverse_embed_doc n.doc));
+  print_string (Djot.Doc.to_string (Note.Transclusion.reverse_embed_doc n.doc));
   [%expect
     {|
     Before.

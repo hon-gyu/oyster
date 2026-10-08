@@ -20,13 +20,15 @@ let inlines_have_id (id : string) (inlines : Djot.Inline.t Djot.node list) : boo
 let own_inlines : Djot.Block.t -> Djot.Inline.t Djot.node list = function
   | Para inlines | Heading (_, inlines) -> inlines
   | Table (caption, rows) ->
-    caption
-    @ List.concat_map
-        rows
-        ~f:(List.concat_map ~f:(fun (Djot.Block.Cell (_, _, ns)) -> ns))
+    Djot.Node.content caption
+    @ List.concat_map rows ~f:(fun row ->
+      List.concat_map
+        (Djot.Node.content row)
+        ~f:(fun (Djot.Node (_, _, Djot.Block.Cell (_, _, ns))) -> ns))
   | Ext_callout (_, _, title, _) -> title
   | Ext_keyed (label, _) -> label
-  | DefinitionList (_, items) -> List.concat_map items ~f:fst
+  | DefinitionList (_, items) ->
+    List.concat_map items ~f:(fun (Djot.Node (_, _, (term, _))) -> Djot.Node.content term)
   | Section _
   | BlockQuote _
   | CodeBlock _
@@ -52,7 +54,7 @@ let find_block (doc : Djot.Doc.t) ~(matches : block -> bool) : block option =
       ~inline:(fun _ found _ -> Djot.Folder.ret found)
       ()
   in
-  Djot.Folder.fold_doc folder None doc
+  Parse.fold_doc folder None doc
 ;;
 
 let find (doc : Djot.Doc.t) (address : Anchor.Address.t) : block list =

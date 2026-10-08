@@ -21,14 +21,26 @@ type t =
     locations in [doc] are positions in [s]. [locs] defaults to [true]. *)
 val of_string : ?locs:bool -> string -> t
 
-(** [t] as source text: the frontmatter, then {!Djot.Source.of_doc}. *)
+(** [t] as source text: the frontmatter, then {!Djot.Doc.to_string}. *)
 val to_string : t -> string
 
 (** A document of [blocks] in {!profile}, without locations. *)
 val doc_of_blocks : Djot.Block.t Djot.node list -> Djot.Doc.t
 
-(** {!Djot.Source.of_doc} of {!doc_of_blocks}. *)
+(** {!Djot.Doc.to_string} of {!doc_of_blocks}. *)
 val source_of_blocks : Djot.Block.t Djot.node list -> string
+
+(** [blocks], which are among the blocks of [doc], without the identifiers in
+    {!Djot.Doc.auto_identifiers}. {!doc_of_blocks} keeps an identifier it is
+    given as a written one, and derives the ones removed here again. *)
+val without_derived_ids
+  :  Djot.Doc.t
+  -> Djot.Block.t Djot.node list
+  -> Djot.Block.t Djot.node list
+
+(** Folds the blocks of a document in source order. Footnote definitions are
+    among them, where they were written. *)
+val fold_doc : 'a Djot.Folder.t -> 'a -> Djot.Doc.t -> 'a
 
 (** {1 Sexp}
 
