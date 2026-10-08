@@ -155,7 +155,7 @@ let%expect_test "transclude, then reverse" =
       ~depth:1
       ~source_path:"notes/a.md"
       ~fragment:(Some [ "A" ])
-      (Parse.without_derived_ids doc (Djot.Doc.blocks doc))
+      (Djot.Doc.source_blocks doc)
   in
   print_string (Parse.source_of_blocks [ div ]);
   [%expect

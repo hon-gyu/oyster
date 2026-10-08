@@ -28,50 +28,6 @@ let source_of_blocks (blocks : Djot.Block.t Djot.node list) : string =
   Djot.Doc.to_string (doc_of_blocks blocks)
 ;;
 
-let without_derived_ids (doc : Djot.Doc.t) (blocks : Djot.Block.t Djot.node list)
-  : Djot.Block.t Djot.node list
-  =
-  let derived =
-    let folder =
-      Djot.Folder.make
-        ~block:(fun folder (pending, found) (Node (_, attrs, block) as node) ->
-          match block, pending with
-          | Section children, id :: rest
-            when Option.equal String.equal (Djot.Attr.id attrs) (Some id) ->
-            Djot.Folder.ret
-              (List.fold
-                 children
-                 ~init:(rest, node :: found)
-                 ~f:(Djot.Folder.fold_block folder))
-          | Heading _, id :: rest
-            when Option.equal String.equal (Djot.Attr.id attrs) (Some id) ->
-            Djot.Folder.ret (rest, node :: found)
-          | _ -> Djot.Folder.default)
-        ()
-    in
-    List.fold
-      (Djot.Doc.blocks doc)
-      ~init:(Djot.Doc.auto_identifiers doc, [])
-      ~f:(Djot.Folder.fold_block folder)
-    |> snd
-  in
-  let mapper =
-    Djot.Mapper.make
-      ~block:(fun m (Node (pos, attrs, block) as node) ->
-        if not (List.mem derived node ~equal:phys_equal)
-        then Djot.Mapper.default
-        else (
-          let attrs = Djot.Attr.remove "id" attrs in
-          match block with
-          | Section children ->
-            let children = List.filter_map children ~f:(Djot.Mapper.map_block m) in
-            Djot.Mapper.ret (Djot.Node (pos, attrs, Djot.Block.Section children))
-          | _ -> Djot.Mapper.ret (Djot.Node (pos, attrs, block))))
-      ()
-  in
-  List.filter_map blocks ~f:(Djot.Mapper.map_block mapper)
-;;
-
 let fold_doc (folder : 'a Djot.Folder.t) (init : 'a) (doc : Djot.Doc.t) : 'a =
   List.fold (Djot.Doc.blocks doc) ~init ~f:(Djot.Folder.fold_block folder)
 ;;

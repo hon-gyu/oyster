@@ -25,14 +25,6 @@ val doc_of_blocks : ?frontmatter:Djot.Frontmatter.t -> Djot.Block.t Djot.node li
 (** {!Djot.Doc.to_string} of {!doc_of_blocks}. *)
 val source_of_blocks : Djot.Block.t Djot.node list -> string
 
-(** [blocks], which are among the blocks of [doc], without the identifiers in
-    {!Djot.Doc.auto_identifiers}. {!doc_of_blocks} keeps an identifier it is
-    given as a written one, and derives the ones removed here again. *)
-val without_derived_ids
-  :  Djot.Doc.t
-  -> Djot.Block.t Djot.node list
-  -> Djot.Block.t Djot.node list
-
 (** Folds the blocks of a document in source order. Footnote definitions are
     among them, where they were written. *)
 val fold_doc : 'a Djot.Folder.t -> 'a -> Djot.Doc.t -> 'a

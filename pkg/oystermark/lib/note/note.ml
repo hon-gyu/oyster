@@ -21,6 +21,32 @@ let footnote_def (label, blocks) : Djot.Block.t Djot.node =
   Djot.Node.make (Djot.Block.FootnoteDef (label, blocks))
 ;;
 
+(** The blocks of {!Djot.Doc.source_blocks} at the places [blocks] have among
+    {!Djot.Doc.blocks}, so that {!Parse.doc_of_blocks} derives heading
+    identifiers again and does not keep them as written ones. *)
+let as_written (doc : Djot.Doc.t) (blocks : Djot.Block.t Djot.node list)
+  : Djot.Block.t Djot.node list
+  =
+  let preorder (blocks : Djot.Block.t Djot.node list) : Djot.Block.t Djot.node array =
+    let nodes = Queue.create () in
+    let folder =
+      Djot.Folder.make
+        ~block:(fun _ () node ->
+          Queue.enqueue nodes node;
+          Djot.Folder.default)
+        ()
+    in
+    List.iter blocks ~f:(Djot.Folder.fold_block folder ());
+    Queue.to_array nodes
+  in
+  let derived = preorder (Djot.Doc.blocks doc)
+  and written = preorder (Djot.Doc.source_blocks doc) in
+  List.map blocks ~f:(fun block ->
+    match Array.findi derived ~f:(fun _ node -> phys_equal node block) with
+    | Some (i, _) -> written.(i)
+    | None -> block)
+;;
+
 let part (n : t) (blocks : Djot.Block.t Djot.node list) : t =
   (* The definitions written among [blocks] are not all referred to there. *)
   let blocks =
@@ -32,8 +58,7 @@ let part (n : t) (blocks : Djot.Block.t Djot.node list) : t =
           | _ -> Djot.Mapper.default)
         ()
     in
-    Parse.without_derived_ids n blocks
-    |> List.filter_map ~f:(Djot.Mapper.map_block without_definitions)
+    as_written n blocks |> List.filter_map ~f:(Djot.Mapper.map_block without_definitions)
   in
   let referenced_labels =
     Djot.Folder.make
@@ -113,8 +138,7 @@ let transcludable ~prefix (doc : Djot.Doc.t) : Djot.Block.t Djot.node list =
         | _ -> Djot.Mapper.default)
       ()
   in
-  Parse.without_derived_ids doc (Djot.Doc.blocks doc)
-  |> List.filter_map ~f:(Djot.Mapper.map_block mapper)
+  Djot.Doc.source_blocks doc |> List.filter_map ~f:(Djot.Mapper.map_block mapper)
 ;;
 
 let expand
@@ -178,7 +202,7 @@ let expand
     then
       Parse.doc_of_blocks
         ?frontmatter:(Djot.Doc.frontmatter mapped)
-        (Parse.without_derived_ids mapped (Djot.Doc.blocks mapped))
+        (Djot.Doc.source_blocks mapped)
     else mapped
   in
   go ~depth:0 ~expanding:[ path ] ~from:path n
