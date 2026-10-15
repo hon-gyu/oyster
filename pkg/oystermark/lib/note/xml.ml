@@ -214,6 +214,7 @@ and block doc (Djot.Node (_, _, value) as n : Djot.Block.t Djot.node) : X.t =
                 (blocks doc (Djot.Node.content definition))
             ]) )
     | ThematicBreak -> "thematic_break", [], []
+    | AttrBlock -> "block_attributes", [], []
     | Table (caption, rows) ->
       ( "table"
       , []

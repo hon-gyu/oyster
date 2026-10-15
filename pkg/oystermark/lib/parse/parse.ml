@@ -131,6 +131,7 @@ let rec sexp_of_block (Djot.Node (_, attrs, block) : Djot.Block.t Djot.node) : S
                ~f:(fun (Djot.Node (_, _, (Djot.Node (_, _, term), definition))) ->
                  Sexp.List [ List (Atom "term" :: inlines term); item definition ]))
      | ThematicBreak -> Atom "Thematic_break"
+     | AttrBlock -> Atom "Attr_block"
      | Table _ -> Atom "Table"
      | RawBlock (format, s) -> List [ Atom "Raw_block"; Atom format; Atom s ]
      | FootnoteDef (label, l) -> List (Atom "Footnote_def" :: Atom label :: blocks l)

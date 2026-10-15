@@ -39,7 +39,8 @@ let own_inlines : Djot.Block.t -> Djot.Inline.t Djot.node list = function
   | ThematicBreak
   | RawBlock _
   | FootnoteDef _
-  | RefDef _ -> []
+  | RefDef _
+  | AttrBlock -> []
 ;;
 
 (** The first block of [doc], in document order, that [matches]. *)

@@ -383,7 +383,7 @@ and block doc (Node (_, attrs, contents) as node : block) : Json.t list =
             "footnoteDefinition"
             [ "identifier", `String id; "label", `String id; children l ]
         ]
-      | RefDef _ -> []
+      | RefDef _ | AttrBlock -> []
       | Ext_keyed (label, value) ->
         [ element
             ~pos
