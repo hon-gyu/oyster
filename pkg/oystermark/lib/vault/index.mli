@@ -99,6 +99,10 @@ module Entry : sig
   (** Like {!of_doc}, raising on a document missing source locations. *)
   val of_doc_exn : file_stat -> Parse.t -> t
 
+  (** [note] with [frontmatter] in place of the one its document was parsed
+      with, for a client that parses the YAML itself. *)
+  val with_frontmatter : t -> Yaml.value option -> t
+
   val path : t -> Path.t
   val file_stat : t -> file_stat
 
@@ -164,9 +168,21 @@ type resolution_error =
   | Missing_path
   | Missing_anchor of Path.t
   (** the base path exists and the fragment does not resolve, whether that base target is a note or asset *)
+  | Invalid_query of string (** a query link whose query does not parse *)
+  | No_match (** a query link that no note satisfies *)
+  | Ambiguous of Path.t list
+  (** a query link that more than one note satisfies, in ascending path order *)
 
 (** Result of resolving an authored reference. *)
 type resolution = (target, resolution_error) result
+
+(** Why a reference fails to resolve, as a phrase for the author. *)
+val string_of_resolution_error : resolution_error -> string
+
+(** Whether the error is a query link's. A query link that does not resolve is
+    an error, where an ordinary unresolved link may be a note yet to be
+    written. See {!page-"query-link".resolution}. *)
+val is_query_error : resolution_error -> bool
 
 (** An authored link viewed through a resolved target *)
 type backlink =
@@ -217,7 +233,9 @@ val map_paths : t -> f:(Path.t -> Path.t) -> t
 
 (** Resolve an authored reference related to a [source] note.
 
-    On duplicated anchors, the first one in document order is returned.
+    On duplicated anchors, the first one in document order is returned. A query
+    link resolves to the one note whose frontmatter satisfies its query, see
+    {!page-"query-link".resolution}.
 
     @param source
       The path of the note containing the link reference. It doesn't need to be

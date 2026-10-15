@@ -97,7 +97,8 @@ let go_to_definition
      | Error (Missing_anchor path)
        when Lsp_config.equal_fragment_behavior config.gtd_unresolved_fragment Fallback ->
        Some { path; line = 0; character = 0 }
-     | Error (Missing_anchor _ | Missing_path) -> None)
+     | Error (Missing_anchor _ | Missing_path | Invalid_query _ | No_match | Ambiguous _)
+       -> None)
 ;;
 
 (** {1:test Test} *)

@@ -33,6 +33,7 @@
  (mld_files
   index
   template-context
+  query-link
   template-context-example
   tracking
   design-260322-lsp

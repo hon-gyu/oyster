@@ -2,7 +2,7 @@
  (public_name oyster)
  (package oystermark)
  (name vault_cli)
- (modules vault_cli stat common_ upd query)
+ (modules vault_cli stat check common_ upd query)
  (libraries
   oystermark
   oystermark.vault_fs

@@ -64,6 +64,9 @@ let string_of_link_kind : Index.Link.kind -> string = function
 let string_of_resolution_error : Index.resolution_error -> string = function
   | Missing_path -> "missing_path"
   | Missing_anchor _ -> "missing_anchor"
+  | Invalid_query _ -> "invalid_query"
+  | No_match -> "no_match"
+  | Ambiguous _ -> "ambiguous"
 ;;
 
 (* Path components

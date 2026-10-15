@@ -21,6 +21,10 @@ test("dest: scheme-less destination is internal", () => {
 	});
 });
 
+test("dest: a leading `?` is a URL query, not a vault link", () => {
+	expect(parseDestination("?id==foo")).toBeNull();
+});
+
 test("dest: fragment split and percent-decode", () => {
 	expect(parseDestination("async#Futures")).toEqual({
 		target: "async",

@@ -42,7 +42,13 @@ export function parseDestination(
 	} catch {
 		decoded = dest; // malformed escape — use as-is
 	}
-	if (/^[a-z][a-z0-9+.-]*:/i.test(decoded) || decoded.startsWith("//"))
+	// A leading `?` is a URL query on the current page, not a vault link; only a
+	// wikilink can be a query link.
+	if (
+		/^[a-z][a-z0-9+.-]*:/i.test(decoded) ||
+		decoded.startsWith("//") ||
+		decoded.startsWith("?")
+	)
 		return null;
 
 	const hash = decoded.indexOf("#");

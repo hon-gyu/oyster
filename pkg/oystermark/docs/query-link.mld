@@ -1,0 +1,110 @@
+{0 Query links}
+
+A query link names a note by its frontmatter instead of its path:
+[[[?id==foo]]] links to the one note whose frontmatter has [id: foo]. Once it
+resolves, it behaves like a wikilink to that note's name: a fragment, an
+alias and the embed form all work as usual, as in
+[![[?id==foo#Intro|the intro]]].
+
+Implemented by {!Oystermark.Note.Query} and
+{!Oystermark.Vault.Index.resolve}.
+
+{1:syntax Syntax}
+
+A wikilink whose target, after blanks are stripped, starts with [?] is a query
+link. The rest of the target, up to the fragment's [#], is an
+{{:https://github.com/jirutka/rsql-parser}RSQL} expression.
+
+{v
+expression = or
+or         = and { "," and }
+and        = constraint { ";" constraint }
+constraint = "(" or ")" | selector operator arguments
+arguments  = "(" value { "," value } ")" | value
+value      = unreserved | '"' chars '"' | "'" chars "'"
+v}
+
+{ul
+  {- A {e selector} is a top-level frontmatter key, written as unreserved
+     characters: anything but whitespace and [" ' ( ) ; , = ! ~ < >].}
+  {- The operators are [==], [!=], [=lt=] or [<], [=le=] or [<=], [=gt=] or
+     [>], [=ge=] or [>=], [=in=] and [=out=]. Only [=in=] and [=out=] take a
+     parenthesized list of several values.}
+  {- In a quoted value, a backslash escapes the next character.}
+  {- Blanks between tokens are ignored.}
+  {- [;] binds tighter than [,]: [a==1;b==2,c==3] is [(a==1;b==2),c==3].}
+}
+
+[#] and [|] cannot appear anywhere in the query, even inside quotes: a wikilink
+is split at its first [#] into target and fragment, and at its [|] into target
+and alias, before the query is read.
+
+Only wikilinks are query links. A Markdown link [[text](?id=foo)] keeps its URL
+meaning, a query on the current page, and is not a vault link.
+
+The keyword spellings [and] and [or], and wildcards in values, are not
+supported.
+
+{1:matching Matching}
+
+A note's frontmatter is matched against the query by these rules:
+
+{ul
+  {- A selector names a top-level key. A key that is absent, or frontmatter
+     that is not a mapping, gives no values.}
+  {- A sequence gives its items as values; any other value gives itself. A
+     comparison holds when it holds for {e some} value, so [tags==draft]
+     matches [tags: [draft, essay]].}
+  {- A value is compared as a YAML scalar. A number is compared numerically
+     when the argument reads as a number, so [year==2026] and [year==2026.0]
+     both match [year: 2026]. Otherwise the scalar's text is compared with the
+     argument as strings: [draft==false] matches both [draft: false] and
+     [draft: "false"], and [created=lt=2026-01-01] compares [YYYY-MM-DD] dates
+     in order.}
+  {- A null, a mapping, and a sequence nested in a sequence never match.}
+  {- [==] holds when some value equals the argument, [=in=] when some value
+     equals some argument. [!=] and [=out=] are their negations, so
+     [draft!=true] matches a note without [draft].}
+  {- The ordering operators hold when some value is ordered against the
+     argument that way.}
+}
+
+{1:resolution Resolution}
+
+The query is evaluated against every note in the vault, including the one
+that contains the link. Assets have no frontmatter and never match.
+
+{ul
+  {- Exactly one match: the link resolves to that note, and then its fragment,
+     if any, is resolved in that note as for any wikilink.}
+  {- A query that does not parse, no match, or several matches: the link does
+     not resolve, with the reason
+     {!Oystermark.Vault.Index.Invalid_query},
+     {!Oystermark.Vault.Index.No_match} or
+     {!Oystermark.Vault.Index.Ambiguous}.}
+}
+
+An ordinary link that does not resolve may name a note yet to be written. A
+query link that does not resolve cannot, so clients treat it as an error:
+
+{ul
+  {- [oyster check] reports it as an error and exits non-zero.}
+  {- The language server reports it with its reason, see
+     {!page-"feature-diagnostics".resolution_check}.}
+  {- The publisher fails the build, listing every such link in a published
+     note. It parses frontmatter itself with YAML's core schema, under which a
+     date is the string it was written as, as it is for the other clients.}
+}
+
+A query depends on every note's frontmatter, so editing one note can change
+where a link in another resolves. Every resolution is computed from the
+current vault snapshot.
+
+Moving or renaming a note never rewrites a query link: the query does not
+mention the note's path. A heading rename still rewrites the fragment of a
+query link that points at that heading.
+
+{1:display Display}
+
+The publisher displays a query link without an alias as the resolved note's
+name, not the query. An unresolved one displays the query as written.

@@ -5,6 +5,7 @@ import { displayName } from "./display-name.ts";
 import { stripObsidianComments } from "./obsidian-comments.ts";
 import {
 	buildOystermarkIndex,
+	isQueryFailure,
 	type OystermarkLink,
 	type OystermarkNote,
 	parseToMdast,
@@ -17,6 +18,7 @@ import {
 } from "./publication-selection.ts";
 import type { SearchDoc, SearchHeading } from "./search-index.ts";
 import type { AttachmentKind, VaultAttachment } from "./vault-attachments.ts";
+import { queryFrontmatter } from "./vault-note-source.ts";
 import {
 	type LinkGraph,
 	type NoteFile,
@@ -41,6 +43,10 @@ export interface NoteMetadata {
 export interface ManifestInput {
 	path: string;
 	body: string;
+	// The file as written, frontmatter included. Query links (`[[?id==foo]]`)
+	// are matched against its frontmatter; `data` has only the keys the schema
+	// knows.
+	source?: string;
 	data: NoteMetadata;
 }
 
@@ -285,7 +291,12 @@ export function buildVaultManifest(
 	} = {},
 ): VaultManifest {
 	const oystermark = buildOystermarkIndex(
-		inputs.map((input) => ({ path: input.path, content: input.body })),
+		inputs.map((input) => ({
+			path: input.path,
+			content: input.body,
+			frontmatter:
+				input.source === undefined ? undefined : queryFrontmatter(input.source),
+		})),
 		(options.attachments ?? []).map((attachment) => attachment.path),
 	);
 	const indexedByPath = new Map(
@@ -415,6 +426,19 @@ export function buildVaultManifest(
 			}
 		}
 	}
+	const queryFailures = notes.flatMap((note) =>
+		note.links.flatMap((link) =>
+			link.resolution && isQueryFailure(link.resolution)
+				? [
+						`${note.path}: [[${link.target}${link.fragment ? `#${link.fragment}` : ""}]]: ${link.resolution.reason}`,
+					]
+				: [],
+		),
+	);
+	if (queryFailures.length > 0)
+		throw new Error(
+			`Query links that do not resolve:\n  ${queryFailures.join("\n  ")}`,
+		);
 	for (const note of allNotes) {
 		for (const link of note.links) delete link.resolution;
 	}

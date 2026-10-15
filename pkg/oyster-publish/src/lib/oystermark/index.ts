@@ -6,8 +6,26 @@ type Mdast = { type: "root"; children: unknown[] };
 export type OystermarkResolution =
 	| { kind: "note" | "asset"; path: string }
 	| { kind: "anchor"; path: string; anchor: unknown }
-	| { kind: "missing-path" }
-	| { kind: "missing-anchor"; path: string };
+	| { kind: "missing-path"; reason?: string }
+	| { kind: "missing-anchor"; path: string; reason: string }
+	| OystermarkQueryFailure;
+
+// A query link (`[[?id==foo]]`) that does not resolve. Unlike a missing note,
+// which may be one yet to be written, this is an authoring error.
+export type OystermarkQueryFailure =
+	| { kind: "invalid-query"; reason: string }
+	| { kind: "no-match"; reason: string }
+	| { kind: "ambiguous"; paths: string[]; reason: string };
+
+export function isQueryFailure(
+	resolution: OystermarkResolution,
+): resolution is OystermarkQueryFailure {
+	return (
+		resolution.kind === "invalid-query" ||
+		resolution.kind === "no-match" ||
+		resolution.kind === "ambiguous"
+	);
+}
 
 export interface OystermarkLink {
 	reference: {
@@ -71,7 +89,9 @@ export function parseToMdast(markdown: string): Mdast {
 }
 
 export function buildOystermarkIndex(
-	markdownFiles: { path: string; content: string }[],
+	// `content` without its frontmatter, which goes in `frontmatter` as parsed
+	// data: the bundle cannot parse YAML.
+	markdownFiles: { path: string; content: string; frontmatter?: unknown }[],
 	otherFiles: string[],
 	vaultRoot = ".",
 ): OystermarkIndex {

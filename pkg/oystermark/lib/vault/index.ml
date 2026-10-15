@@ -158,6 +158,10 @@ module Entry = struct
     Result.ok_or_failwith (of_doc file_stat doc)
   ;;
 
+  let with_frontmatter (note : t) (frontmatter : Yaml.value option) : t =
+    { note with frontmatter }
+  ;;
+
   let path : t -> Path.t = fun note -> note.file_stat.rel_path
   let file_stat : t -> file_stat = fun note -> note.file_stat
   let frontmatter : t -> Yaml.value option = fun note -> note.frontmatter
@@ -241,8 +245,28 @@ type target =
 type resolution_error =
   | Missing_path
   | Missing_anchor of Path.t
+  | Invalid_query of string
+  | No_match
+  | Ambiguous of Path.t list
 
 type resolution = (target, resolution_error) result
+
+let string_of_resolution_error : resolution_error -> string = function
+  | Missing_path -> "no such note or file"
+  | Missing_anchor path -> sprintf "no such heading or id in %s" path
+  | Invalid_query message -> "invalid query: " ^ message
+  | No_match -> "no note matches the query"
+  | Ambiguous paths ->
+    sprintf
+      "the query matches %d notes: %s"
+      (List.length paths)
+      (String.concat paths ~sep:", ")
+;;
+
+let is_query_error : resolution_error -> bool = function
+  | Invalid_query _ | No_match | Ambiguous _ -> true
+  | Missing_path | Missing_anchor _ -> false
+;;
 
 (* TODO: we need a human-readable representation for unresolved links
 src_path, src_loc, tgt_path, tgt_fragment, reason
@@ -336,15 +360,27 @@ end
 
 open Resolve_
 
+let resolve_query index query =
+  match
+    List.filter (notes index) ~f:(fun note ->
+      Note.Query.matches query (Entry.frontmatter note))
+  with
+  | [] -> Error No_match
+  | [ note ] -> Ok (Entry.path note)
+  | notes -> Error (Ambiguous (List.map notes ~f:Entry.path))
+;;
+
 let resolve (index : t) (source : Path.t) (ref : Note.Link.Ref.t) : resolution =
   let path =
-    match ref.Note.Link.Ref.target with
-    | None -> Some source
-    | Some t -> resolve_path index ~source t
+    match Note.Link.Ref.query ref, ref.target with
+    | Some (Error message), _ -> Error (Invalid_query message)
+    | Some (Ok query), _ -> resolve_query index query
+    | None, None -> Ok source
+    | None, Some t -> Result.of_option (resolve_path index ~source t) ~error:Missing_path
   in
   match path with
-  | None -> Error Missing_path
-  | Some p ->
+  | Error _ as e -> e
+  | Ok p ->
     (match ref.fragment with
      | None ->
        if Map.mem index.notes_by_path p

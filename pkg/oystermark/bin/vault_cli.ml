@@ -15,6 +15,7 @@ let command =
     ; ( "rename-heading"
       , List.Assoc.find_exn Upd.commands ~equal:String.equal "rename-heading" )
     ; "stats", Stat.command
+    ; "check", Check.command
     ]
 ;;
 

@@ -369,7 +369,7 @@ let hover
     in
     let result_opt =
       match target with
-      | Error Missing_path -> None
+      | Error (Missing_path | Invalid_query _ | No_match | Ambiguous _) -> None
       (* A fragment naming nothing still leaves its file identified, so hover
          shows that file: an image is described, a note falls back to its full
          content.  See {!page-"feature-hover"} edge cases. *)

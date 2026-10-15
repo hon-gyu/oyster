@@ -1,5 +1,6 @@
 module Anchor = Anchor
 module Link = Link
+module Query = Query
 module Transclusion = Transclusion
 module Xml = Xml
 

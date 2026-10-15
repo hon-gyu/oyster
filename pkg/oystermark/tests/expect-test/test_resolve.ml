@@ -72,7 +72,8 @@ let resolve_and_print
         match Index.resolve test_index curr_file lr with
         | Ok target -> Index.sexp_of_target target |> Sexp.to_string_hum
         | Error Missing_path -> "Missing_path"
-        | Error (Missing_anchor path) -> sprintf "(Missing_anchor %s)" path)
+        | Error (Missing_anchor path) -> sprintf "(Missing_anchor %s)" path
+        | Error e -> Index.string_of_resolution_error e)
     ]
   in
   print_string (Ascii_table.to_string_noattr cols cases ~limit_width_to:200)

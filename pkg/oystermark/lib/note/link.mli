@@ -21,7 +21,8 @@ module Ref : sig
   *)
   type t =
     { target : string option
-      (** Authored target name or path. [None] means the current note. *)
+      (** Authored target name or path, or a query after [?]. [None] means the
+          current note. *)
     ; fragment : fragment option
     }
   [@@deriving sexp, equal, compare]
@@ -35,8 +36,13 @@ module Ref : sig
   (** Inverse of {!of_wikilink_target}, up to blanks and empty segments. *)
   val to_wikilink_target : t -> string
 
+  (** The query of a query link, a target starting with [?]: [None] for any
+      other reference. See {!page-"query-link"}. *)
+  val query : t -> (Query.t, string) result option
+
   (** A markdown link's destination, percent-decoded, split as a wikilink
-      target. [None] for an external destination (HTTP, HTTPS, mail, FTP). An
+      target. [None] for an external destination (HTTP, HTTPS, mail, FTP) and
+      for one starting with [?], a URL query rather than a query link. An
       empty destination becomes [().md], as in Obsidian. *)
   val of_destination : string -> t option
 

@@ -49,6 +49,9 @@ See {!Oystermark.Vault}.
 Shared link queries, graph statistics, and rename plans are services of this
 module, consumed by both the protocol and command-line clients.
 
+A wikilink can name a note by its frontmatter instead of its path, see
+{!page-"query-link"}.
+
 {2 Context}
 
 A vault snapshot as JSON, for a Jinja template to compute a document from —

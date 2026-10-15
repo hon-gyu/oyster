@@ -287,3 +287,42 @@ test("links inside headings are collected in document order", () => {
 	// Heading text stays out of the note's plain text/excerpt.
 	expect(note.text).not.toContain("Heading about");
 });
+
+test("query links resolve against the frontmatter in `source`", () => {
+	const target = {
+		path: "Target.md",
+		body: "Target body.",
+		source: "---\nid: t\n---\nTarget body.",
+		data: { publish: true },
+	};
+	const manifest = buildVaultManifest([
+		{ path: "Source.md", body: "[[?id==t]]", data: { publish: true } },
+		target,
+	]);
+	const [link] = manifest.notes.find(
+		(entry) => entry.path === "Source.md",
+	)!.links;
+	expect(link.status).toBe("resolved");
+	expect(link.destinationPath).toBe("Target.md");
+});
+
+test("a query link that does not resolve fails the build", () => {
+	const inputs = (body: string, publish: boolean) => [
+		{ path: "Source.md", body, data: { publish } },
+		{ path: "A.md", body: "", source: "---\ngroup: x\n---\n", data: {} },
+		{ path: "B.md", body: "", source: "---\ngroup: x\n---\n", data: {} },
+	];
+	expect(() =>
+		buildVaultManifest(inputs("[[?group==x]] [[?id==none]]", true)),
+	).toThrow(
+		"Query links that do not resolve:\n" +
+			"  Source.md: [[?group==x]]: the query matches 2 notes: A.md, B.md\n" +
+			"  Source.md: [[?id==none]]: no note matches the query",
+	);
+	// An ordinary missing link is not an error.
+	expect(() => buildVaultManifest(inputs("[[absent]]", true))).not.toThrow();
+	// Nor is a broken query link in a note that is not published.
+	expect(() =>
+		buildVaultManifest(inputs("[[?id==none]]", false), { publishedOnly: true }),
+	).not.toThrow();
+});

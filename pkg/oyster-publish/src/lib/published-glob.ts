@@ -1,6 +1,8 @@
+import fs from "node:fs";
+import path from "node:path";
 import type { Loader } from "astro/loaders";
 import { glob } from "astro/loaders";
-import { notePath } from "./project-paths.ts";
+import { notePath, vaultDir } from "./project-paths.ts";
 import type { PublicationRules } from "./publication-selection.ts";
 import { defaultPublicationRules } from "./publication-selection.ts";
 import { publishedOnly } from "./publish-policy";
@@ -39,6 +41,7 @@ export function publishedGlob(
 				entries.map(([, entry]) => ({
 					path: notePath(entry),
 					body: (entry as any).body ?? "",
+					source: fs.readFileSync(path.join(vaultDir, notePath(entry)), "utf8"),
 					data: entry.data,
 				})),
 				{ publishedOnly, publication },

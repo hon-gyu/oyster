@@ -186,6 +186,7 @@ and inline doc (Node (_, attrs, contents) as node : inline) : Json.t list =
                       [ "target", `String target
                       ; "fragment", fragment
                       ; "embed", `Bool embed
+                      ; "aliased", `Bool (Option.is_some alias)
                       ] )
                 ] )
           ; ( "children"

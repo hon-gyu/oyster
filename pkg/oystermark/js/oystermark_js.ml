@@ -50,7 +50,8 @@ let json_of_anchor (anchor : Index.Anchor.t) =
     ]
 ;;
 
-let json_of_resolution = function
+let json_of_resolution (resolution : Index.resolution) =
+  match resolution with
   | Ok (Index.Note path) -> `Assoc [ "kind", `String "note"; "path", `String path ]
   | Ok (Asset path) -> `Assoc [ "kind", `String "asset"; "path", `String path ]
   | Ok (Anchor { note_path; anchor }) ->
@@ -59,9 +60,20 @@ let json_of_resolution = function
       ; "path", `String note_path
       ; "anchor", json_of_anchor anchor
       ]
-  | Error Index.Missing_path -> `Assoc [ "kind", `String "missing-path" ]
-  | Error (Index.Missing_anchor path) ->
-    `Assoc [ "kind", `String "missing-anchor"; "path", `String path ]
+  | Error error ->
+    let reason = "reason", `String (Index.string_of_resolution_error error) in
+    `Assoc
+      (match error with
+       | Missing_path -> [ "kind", `String "missing-path"; reason ]
+       | Missing_anchor path ->
+         [ "kind", `String "missing-anchor"; "path", `String path; reason ]
+       | Invalid_query _ -> [ "kind", `String "invalid-query"; reason ]
+       | No_match -> [ "kind", `String "no-match"; reason ]
+       | Ambiguous paths ->
+         [ "kind", `String "ambiguous"
+         ; "paths", `List (List.map paths ~f:(fun p -> `String p))
+         ; reason
+         ])
 ;;
 
 let json_of_link index source (link : Index.Link.t) =
@@ -91,6 +103,21 @@ let json_of_note vault (note : Index.Entry.t) =
 
 let member_string name json = Json.Util.member name json |> Json.Util.to_string
 
+(* The YAML library binds libyaml, which JavaScript cannot run, so the caller
+   parses frontmatter and sends it as JSON. *)
+let rec yaml_of_json : Json.t -> Yaml.value = function
+  | `Null -> `Null
+  | `Bool b -> `Bool b
+  | `Int i -> `Float (Float.of_int i)
+  | `Intlit s -> `String s
+  | `Float f -> `Float f
+  | `String s -> `String s
+  | `List items -> `A (List.map items ~f:yaml_of_json)
+  | `Assoc fields -> `O (List.map fields ~f:(fun (k, v) -> k, yaml_of_json v))
+  | `Tuple items -> `A (List.map items ~f:yaml_of_json)
+  | `Variant (tag, _) -> `String tag
+;;
+
 let index request =
   let json = Json.from_string request in
   let vault_root = member_string "vaultRoot" json in
@@ -105,6 +132,23 @@ let index request =
     |> List.map ~f:Json.Util.to_string
   in
   let vault = Vault.of_files ~vault_root ~md_files ~other_files in
+  let vault =
+    Json.Util.member "markdownFiles" json
+    |> Json.Util.to_list
+    |> List.fold ~init:vault ~f:(fun (vault : Vault.t) file ->
+      match
+        ( Json.Util.member "frontmatter" file
+        , Index.find_note vault.index (member_string "path" file) )
+      with
+      | `Null, _ | _, None -> vault
+      | frontmatter, Some note ->
+        { vault with
+          index =
+            Index.set_note
+              vault.index
+              (Index.Entry.with_frontmatter note (Some (yaml_of_json frontmatter)))
+        })
+  in
   `Assoc
     [ "notes", `List (List.map (Index.notes vault.index) ~f:(json_of_note vault))
     ; ( "assets"

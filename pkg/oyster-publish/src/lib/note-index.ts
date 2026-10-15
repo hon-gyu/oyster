@@ -3,6 +3,8 @@
 // Astro, which keeps wikilink.ts framework-free and testable.
 
 import { getCollection } from "astro:content";
+import fs from "node:fs";
+import path from "node:path";
 import {
 	type ContextualBacklink,
 	contextualBacklinks,
@@ -36,6 +38,7 @@ async function buildIndex(): Promise<VaultIndex> {
 		notes.map((note) => ({
 			path: notePath(note),
 			body: note.body ?? "",
+			source: fs.readFileSync(path.join(vaultDir, notePath(note)), "utf8"),
 			data: note.data,
 		})),
 		{

@@ -34,6 +34,11 @@ module Ref = struct
     ^ Option.value_map fragment ~default:"" ~f:string_of_fragment
   ;;
 
+  let query ({ target; _ } : t) : (Query.t, string) result option =
+    Option.bind target ~f:(fun target ->
+      Option.map (String.chop_prefix target ~prefix:"?") ~f:Query.of_string)
+  ;;
+
   let is_external (s : string) : bool =
     String.is_prefix s ~prefix:"http://"
     || String.is_prefix s ~prefix:"https://"
@@ -70,7 +75,9 @@ module Ref = struct
     then Some { target = Some "().md"; fragment = None }
     else (
       let decoded = percent_decode dest in
-      if is_external decoded then None else Some (of_wikilink_target decoded))
+      if is_external decoded || String.is_prefix decoded ~prefix:"?"
+      then None
+      else Some (of_wikilink_target decoded))
   ;;
 
   let of_link_target (doc : Djot.Doc.t) (target : Djot.Inline.target) : t option =

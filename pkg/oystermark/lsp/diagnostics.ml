@@ -124,8 +124,18 @@ let compute
         match target with
         | Error (Oystermark.Vault.Index.Missing_anchor _) ->
           Lsp_config.equal_fragment_behavior config.diag_unresolved_fragment Strict
-        | Error Oystermark.Vault.Index.Missing_path -> true
+        | Error
+            Oystermark.Vault.Index.(
+              Missing_path | Invalid_query _ | No_match | Ambiguous _) -> true
         | Ok _ -> false
+      in
+      (* A query link's failure is the author's to fix, so it says why. See
+         {!page-"feature-diagnostics".resolution_check}. *)
+      let reason =
+        match target with
+        | Error e when Oystermark.Vault.Index.is_query_error e ->
+          ": " ^ Oystermark.Vault.Index.string_of_resolution_error e
+        | Ok _ | Error _ -> ""
       in
       if is_unresolved
       then (
@@ -149,7 +159,7 @@ let compute
         Some
           { first_byte = ll.first_byte
           ; last_byte = ll.last_byte
-          ; message = "unresolved " ^ category ^ ": " ^ target_str ^ fragment_str
+          ; message = "unresolved " ^ category ^ ": " ^ target_str ^ fragment_str ^ reason
           })
       else None)
   in
@@ -282,6 +292,34 @@ let%test_module "compute" =
     let%expect_test "resolved image produces no diagnostic" =
       show ~rel_path:"note-b.md" ~content:"see ![[image.png]] here";
       [%expect {| |}]
+    ;;
+
+    (* Query links. See {!page-"feature-diagnostics".resolution_check} and
+       {!page-"query-link".resolution}. *)
+    let%expect_test "query link failures carry their reason" =
+      let index =
+        make_index
+          [ "a.md", "---\nid: a\ngroup: x\n---\n# A\n"
+          ; "b.md", "---\nid: b\ngroup: x\n---\n# B\n"
+          ]
+      in
+      compute
+        ~index
+        ~rel_path:"c.md"
+        ~content:"[[?id==a]] [[?id==z]] [[?group==x]] [[?id=]] [[?id==a#Nope]]"
+        ()
+      |> List.iter ~f:(fun d -> print_s [%sexp (d : diagnostic)]);
+      [%expect
+        {|
+        ((first_byte 11) (last_byte 20)
+         (message "unresolved link: ?id==z: no note matches the query"))
+        ((first_byte 22) (last_byte 34)
+         (message
+          "unresolved link: ?group==x: the query matches 2 notes: a.md, b.md"))
+        ((first_byte 36) (last_byte 43)
+         (message
+          "unresolved link: ?id=: invalid query: expected a comparison operator after `id`"))
+        |}]
     ;;
 
     (* Duplicate anchor ids. See {!page-"feature-diagnostics".duplicate_ids}. *)

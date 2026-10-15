@@ -43,7 +43,14 @@ Each link is resolved against the vault index via
   {- The target note does not exist in the index.}
   {- A fragment ([#heading] or [#id]) matches no heading and no attribute id
      in the target file, see {!page-"feature-attribute-anchors"}.}
+  {- A query link ({!page-"query-link"}) does not parse, or its query matches
+     no note or several notes.}
 }
+
+A query link's message ends with the reason, from
+{!Oystermark.Vault.Index.string_of_resolution_error}, for example
+["unresolved link: ?id==foo: the query matches 2 notes: a.md, b.md"]. The
+other messages name only the destination.
 
 {1:duplicate_ids Duplicate anchor ids}
 

@@ -1,7 +1,8 @@
 // Rendering of links in an Oystermark-produced mdast tree.
 //
 // oymarkit now *parses* wikilinks: `[[Note#H|disp]]` arrives as a `link` node
-// carrying `data.oyWikilink = { target, fragment, embed }` (plus a raw `url`).
+// carrying `data.oyWikilink = { target, fragment, embed, aliased }` (plus a raw
+// `url`).
 // The Oystermark index supplies canonical note, anchor, and asset resolution;
 // this plugin maps those targets to publisher routes and HTML-oriented mdast.
 import fs from "node:fs";
@@ -24,7 +25,9 @@ import {
 } from "../lib/vault-attachments.ts";
 import {
 	parseNoteSource,
+	queryFrontmatter,
 	readVaultNoteSources,
+	stripFrontmatter,
 } from "../lib/vault-note-source.ts";
 import {
 	type NoteFile,
@@ -85,6 +88,7 @@ type OyWikilink = {
 		| { kind: "block"; id: string }
 		| null;
 	embed: boolean;
+	aliased?: boolean;
 };
 
 type Point = { line: number; column?: number; offset?: number };
@@ -419,6 +423,9 @@ function resolveWikilink(
 	let sameNoteAnchor = "";
 	if (dest) {
 		node.url = dest.slug + anchor;
+		// A query link shows the note it found, not the query.
+		if (wl.target.startsWith("?") && !wl.aliased)
+			node.children = [{ type: "text", value: displayName(dest.path) }];
 		if (dest.path.toLowerCase() === fromPath.toLowerCase() && anchor) {
 			sameNoteAnchor = anchor;
 		}
@@ -648,12 +655,15 @@ export default function remarkOyWikilink() {
 	const allSources = new Map(
 		allFiles.map((file) => [
 			file.path,
-			parseNoteSource(fs.readFileSync(path.join(vaultDir, file.path), "utf8"))
-				.body,
+			fs.readFileSync(path.join(vaultDir, file.path), "utf8"),
 		]),
 	);
 	const index = buildOystermarkIndex(
-		[...allSources].map(([filePath, content]) => ({ path: filePath, content })),
+		[...allSources].map(([filePath, source]) => ({
+			path: filePath,
+			content: stripFrontmatter(source),
+			frontmatter: queryFrontmatter(source),
+		})),
 		attachments.map((attachment) => attachment.path),
 		vaultDir,
 	);

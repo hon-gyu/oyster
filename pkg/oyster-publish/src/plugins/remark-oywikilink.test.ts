@@ -99,6 +99,45 @@ describe("rendered intra-note link directions", () => {
 	});
 });
 
+describe("query links", () => {
+	function transformed(markdown: string): any[] {
+		const tree: any = parseToMdast(markdown);
+		const index = buildOystermarkIndex(
+			[
+				{ path: "notes/current.md", content: markdown },
+				{
+					path: "notes/other.md",
+					content: "# Other\n",
+					frontmatter: { id: "other" },
+				},
+			],
+			[],
+		);
+		transformOyWikilinks(
+			tree,
+			files,
+			"notes/current.md",
+			[],
+			new Map(),
+			files,
+			index,
+		);
+		return tree.children[0].children.filter((n: any) => n.type === "link");
+	}
+
+	test("shows the found note's name unless aliased", () => {
+		const [plain, aliased, missing] = transformed(
+			"[[?id==other]] [[?id==other|see]] [[?id==none]]",
+		);
+		expect(plain.url).toBe("/notes/other");
+		expect(plain.children).toEqual([{ type: "text", value: "other" }]);
+		expect(aliased.url).toBe("/notes/other");
+		expect(aliased.children[0].value).toBe("see");
+		expect(missing.data.hProperties.className).toContain("wikilink-unresolved");
+		expect(missing.children[0].value).toBe("?id==none");
+	});
+});
+
 describe("vault attachment rendering", () => {
 	const attachments = [
 		attachmentRecord("notes/image one.svg"),
