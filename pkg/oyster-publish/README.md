@@ -14,6 +14,38 @@ npm install
 npm link          # puts `oyster-publish` on your PATH
 ```
 
+Or with Nix, from the flake at the repository root:
+
+```bash
+nix run github:hon-gyu/oyster#oyster-publish -- build -v ~/notes/myblog
+```
+
+In a devenv, add the flake as an input in `devenv.yaml`:
+
+```yaml
+inputs:
+  oyster:
+    url: github:hon-gyu/oyster
+    inputs:
+      nixpkgs:
+        follows: nixpkgs
+```
+
+and the package in `devenv.nix`:
+
+```nix
+packages = [ inputs.oyster.packages.${pkgs.stdenv.system}.oyster-publish ];
+```
+
+The Nix store is read-only and Astro writes `.astro/` into its project root,
+so a Nix install runs Astro from a writable copy of the package in
+`~/.cache/oyster-publish/` (or `$XDG_CACHE_HOME`), made once per install.
+After an update, the copy for the previous version can be deleted.
+
+When the npm dependencies change, update `npmDepsHash` in `package.nix`: set it
+to `lib.fakeHash`, run `nix build .#oyster-publish`, and copy the hash from the
+error.
+
 The parser is vendored as `src/lib/oystermark/oystermark.cjs`, a js_of_ocaml
 build of `pkg/oystermark/js`. To refresh it against the current OCaml sources:
 

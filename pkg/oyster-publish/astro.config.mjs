@@ -40,6 +40,11 @@ export default defineConfig({
   // (see site-config.ts). Astro serves it at the site root and copies it into
   // the build, so a vault's favicon needs no plumbing of ours.
   publicDir,
+  // Both caches default to `node_modules/`, which is read-only when installed
+  // with Nix (see bin/cli.mjs). Keep them under `.astro/` with the rest of
+  // Astro's generated state.
+  cacheDir: "./.astro/cache",
+  vite: { cacheDir: "./.astro/vite" },
   integrations: [mdx(), react()],
   markdown: {
     // Two themes so highlighted code follows the reader's colour scheme instead

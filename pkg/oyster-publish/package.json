@@ -9,6 +9,13 @@
   "bin": {
     "oyster-publish": "./bin/oyster-publish.mjs"
   },
+  "files": [
+    "bin",
+    "public",
+    "src",
+    "astro.config.mjs",
+    "tsconfig.json"
+  ],
   "scripts": {
     "dev": "astro dev",
     "publish:dev": "node ./bin/oyster-publish.mjs dev",

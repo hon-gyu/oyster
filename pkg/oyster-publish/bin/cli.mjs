@@ -1,4 +1,6 @@
+import { createHash } from "node:crypto";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import { createRequire } from "node:module";
@@ -75,6 +77,61 @@ function findAstroCli() {
   return path.resolve(path.dirname(packagePath), astroPackage.bin.astro);
 }
 
+function isWritable(dir) {
+  try {
+    fs.accessSync(dir, fs.constants.W_OK);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function makeWritable(target) {
+  const stat = fs.lstatSync(target);
+  if (stat.isSymbolicLink()) return;
+  fs.chmodSync(target, stat.mode | 0o200);
+  if (stat.isDirectory()) {
+    for (const entry of fs.readdirSync(target)) {
+      makeWritable(path.join(target, entry));
+    }
+  }
+}
+
+// Astro writes `.astro/` into its project root, so it can't run from a
+// read-only install such as the Nix store. There, run it from a writable copy
+// in the user's cache instead, one per install. The sources are copied, as
+// Astro compares module paths against `src/`; `node_modules` is linked, as its
+// caches are moved out of it (see astro.config.mjs).
+export function astroRoot() {
+  if (isWritable(packageRoot)) return packageRoot;
+
+  const realRoot = fs.realpathSync(packageRoot);
+  const key = createHash("sha256").update(realRoot).digest("hex").slice(0, 16);
+  const cacheHome = process.env.XDG_CACHE_HOME || path.join(os.homedir(), ".cache");
+  const root = path.join(cacheHome, "oyster-publish", key);
+  if (fs.existsSync(root)) return root;
+
+  fs.mkdirSync(path.dirname(root), { recursive: true });
+  const staging = fs.mkdtempSync(`${root}.tmp-`);
+  for (const entry of fs.readdirSync(realRoot)) {
+    if (entry === ".astro" || entry === "dist") continue;
+    const from = path.join(realRoot, entry);
+    const to = path.join(staging, entry);
+    if (entry === "node_modules") fs.symlinkSync(from, to);
+    else fs.cpSync(from, to, { recursive: true });
+  }
+  makeWritable(staging);
+
+  // Another run may have finished the same copy first
+  try {
+    fs.renameSync(staging, root);
+  } catch (error) {
+    fs.rmSync(staging, { recursive: true, force: true });
+    if (!fs.existsSync(root)) throw error;
+  }
+  return root;
+}
+
 export function executeCommand(parsed) {
   const env = commandEnvironment(parsed);
   if (!fs.existsSync(env.OYSTER_VAULT) || !fs.statSync(env.OYSTER_VAULT).isDirectory()) {
@@ -86,7 +143,7 @@ export function executeCommand(parsed) {
       process.execPath,
       [findAstroCli(), parsed.command, ...parsed.astroArgs],
       {
-        cwd: packageRoot,
+        cwd: astroRoot(),
         env: { ...process.env, ...env },
         stdio: "inherit",
       },
