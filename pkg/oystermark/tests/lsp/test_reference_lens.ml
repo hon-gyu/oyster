@@ -192,7 +192,7 @@ let%expect_test "command lenses come before counts" =
          "hub.md");
   [%expect
     {|
-    3: Create today's daily note -> oystermark.dailyNote.open
+    3: Create today's daily note -> oystermark.dailyNote.openDay
     0: 2 backlinks -> editor.action.showReferences
     6: 1 reference -> editor.action.showReferences
     |}]

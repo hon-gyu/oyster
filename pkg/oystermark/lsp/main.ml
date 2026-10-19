@@ -18,6 +18,10 @@ class oystermark_server ~sw =
         Set once, read by the daily-note command. *)
     val mutable can_show_document : bool = false
 
+    (** Whether the client fills in a code action's [edit] and [command] through
+        [codeAction/resolve].  Set once, read by {!on_req_code_action}. *)
+    val mutable can_resolve_code_actions : bool = false
+
     method spawn_query_handler f = Linol_eio.spawn ~sw f
     method! config_definition = Some (`Bool true)
     method! config_hover = Some (`Bool true)
@@ -30,6 +34,7 @@ class oystermark_server ~sw =
       `CodeActionOptions
         (CodeActionOptions.create
            ~codeActionKinds:[ CodeActionKind.QuickFix; CodeActionKind.Refactor ]
+           ~resolveProvider:true
            ())
 
     method! config_code_lens_options : CodeLensOptions.t option =
@@ -71,7 +76,10 @@ class oystermark_server ~sw =
                 ()))
       ; positionEncoding = Some PositionEncodingKind.UTF16
       ; executeCommandProvider =
-          Some (ExecuteCommandOptions.create ~commands:[ Server.daily_note_command ] ())
+          Some
+            (ExecuteCommandOptions.create
+               ~commands:[ Server.daily_note_command; Server.daily_note_day_command ]
+               ())
       }
 
     method! config_sync_opts : TextDocumentSyncOptions.t =
@@ -106,6 +114,15 @@ class oystermark_server ~sw =
       can_show_document
       <- (match params.capabilities.window with
           | Some { showDocument = Some { support }; _ } -> support
+          | _ -> false);
+      (* A daily-note action is resolved when picked, so that it acts on the day
+         it runs, if the client can do that.  See
+         {!page-"feature-daily-notes".midnight}. *)
+      can_resolve_code_actions
+      <- (match params.capabilities.textDocument with
+          | Some { codeAction = Some { resolveSupport = Some { properties }; _ }; _ } ->
+            List.mem properties "edit" ~equal:String.equal
+            && List.mem properties "command" ~equal:String.equal
           | _ -> false);
       (* Anything the configuration asked for and could not have is reported
          here, once.  [showMessage] is one of the few notifications the
@@ -243,6 +260,7 @@ class oystermark_server ~sw =
         Server.code_action
           server
           ?only:params.context.only
+          ~defer:can_resolve_code_actions
           ~rel_path:(self#rel_path params.textDocument.uri)
           ~start_line:params.range.start.line
           ~start_character:params.range.start.character
@@ -373,8 +391,9 @@ class oystermark_server ~sw =
         Server.did_rename_files server ~renames:(self#renames params)
       | _ -> ()
 
-    (** [references], [prepareRename], [rename] and [willRenameFiles] have no
-        dedicated hook in {!Linol_eio.Jsonrpc2.server}, so they arrive here. *)
+    (** [references], [prepareRename], [rename], [willRenameFiles] and
+        [codeAction/resolve] have no dedicated hook in
+        {!Linol_eio.Jsonrpc2.server}, so they arrive here. *)
     method! on_request_unhandled
       : type r. notify_back:_ -> id:_ -> r Linol.Lsp.Client_request.t -> r =
       fun ~notify_back ~id:_ (req : r Linol.Lsp.Client_request.t) ->
@@ -400,6 +419,8 @@ class oystermark_server ~sw =
             ~new_name:params.newName
         | Linol.Lsp.Client_request.WillRenameFiles params ->
           Some (Server.will_rename_files server ~renames:(self#renames params))
+        | Linol.Lsp.Client_request.CodeActionResolve action ->
+          Server.resolve_code_action server action
         | _ -> failwith "unhandled request"
   end
 

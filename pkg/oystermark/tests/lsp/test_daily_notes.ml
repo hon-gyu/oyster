@@ -356,3 +356,147 @@ let%expect_test "linkAction: false withdraws the action, and nothing else" =
     Insert table of contents         text-edits             no command
     |}]
 ;;
+
+(** {1 Midnight}
+
+    What is offered before midnight and acted on after must act on the new day.
+    See {!page-"feature-daily-notes".midnight}. *)
+
+(** A server whose clock reads [clock], so a test can move it between offering
+    and acting. *)
+let start_server_with_clock ~(clock : Date.t ref) ~(vault_root : string) =
+  let s = Server.create ~now:(fun () -> !clock) () in
+  Server.initialize s ~root:vault_root ~init_options:(options "YYYY-MM-DD") ();
+  s
+;;
+
+let show_action (a : CodeAction.t) =
+  let args =
+    match a.command with
+    | None -> "no command"
+    | Some c ->
+      List.map (Option.value c.arguments ~default:[]) ~f:Yojson.Safe.to_string
+      |> String.concat ~sep:" "
+  in
+  let edit =
+    match a.edit with
+    | None -> "no edit"
+    | Some edit ->
+      sprintf
+        "%s %S"
+        (String.concat ~sep:"," (document_change_kinds edit))
+        (String.concat ~sep:"|" (inserted_texts edit))
+  in
+  printf "%-34s %-24s %s\n" a.title edit args
+;;
+
+(* Offered on the 26th, when today's note exists; picked on the 27th, when it
+   does not.  The title is a day old, but the edit creates the 27th's note and
+   the link names it. *)
+let%expect_test "a deferred action is resolved for the day it is picked" =
+  with_tmp_vault ~files (fun vault_root ->
+    let clock = ref today in
+    let s = start_server_with_clock ~clock ~vault_root in
+    did_open s ~rel_path:"idea.md";
+    let offered =
+      Server.code_action
+        s
+        ~defer:true
+        ~rel_path:"idea.md"
+        ~start_line:0
+        ~start_character:0
+        ~end_line:0
+        ~end_character:0
+        ()
+      |> List.filter ~f:(fun (a : CodeAction.t) -> Option.is_some a.data)
+    in
+    print_endline "-- offered on the 26th:";
+    List.iter offered ~f:show_action;
+    clock := Date.add_days today 1;
+    print_endline "-- resolved on the 27th:";
+    List.iter offered ~f:(fun a -> show_action (Server.resolve_code_action s a)));
+  [%expect
+    {|
+    -- offered on the 26th:
+    Open today's daily note            no edit                  no command
+    Create yesterday's daily note      no edit                  no command
+    Create tomorrow's daily note       no edit                  no command
+    Insert link to today's daily note  no edit                  no command
+    -- resolved on the 27th:
+    Open today's daily note            create,text-edits ""     "journal/2026-07-27.md" false true
+    Create yesterday's daily note      no edit                  "journal/2026-07-26.md" false false
+    Create tomorrow's daily note       create,text-edits ""     "journal/2026-07-28.md" false true
+    Insert link to today's daily note  create,text-edits "[[2026-07-27]]" no command
+    |}]
+;;
+
+(* The keyboard route to a command-block line is deferred the same way. *)
+let%expect_test "a command-block line's action is resolved for the day it is picked" =
+  let files = ("panel.md", "# Panel\n\n```oysterlsp\ndaily/today\n```\n") :: files in
+  with_tmp_vault ~files (fun vault_root ->
+    let clock = ref today in
+    let s = start_server_with_clock ~clock ~vault_root in
+    did_open s ~rel_path:"panel.md";
+    let offered =
+      Server.code_action
+        s
+        ~defer:true
+        ~rel_path:"panel.md"
+        ~start_line:3
+        ~start_character:0
+        ~end_line:3
+        ~end_character:0
+        ()
+    in
+    List.iter offered ~f:show_action;
+    clock := Date.add_days today 1;
+    List.iter offered ~f:(fun a -> show_action (Server.resolve_code_action s a)));
+  [%expect
+    {|
+    Open today's daily note            no edit                  no command
+    Open today's daily note            create,text-edits ""     "journal/2026-07-27.md" false true
+    |}]
+;;
+
+(* A lens cannot be resolved into anything but its command, so the command
+   itself is dated when it runs: the path argument only routes it. *)
+let%expect_test "the openDay command is dated when it runs" =
+  with_tmp_vault ~files (fun vault_root ->
+    let clock = ref (Date.add_days today 1) in
+    let s = start_server_with_clock ~clock ~vault_root in
+    let run arguments =
+      match
+        Server.execute_command s ~command:Server.daily_note_day_command ~arguments
+      with
+      | None -> print_endline "no intent"
+      | Some { uri; create; report_unfocused } ->
+        printf
+          "%s create=%s report_unfocused=%b\n"
+          (Server.rel_path_of_uri s uri)
+          (match create with
+           | None -> "none"
+           | Some edit -> String.concat ~sep:"," (document_change_kinds edit))
+          report_unfocused
+    in
+    run (Some [ `String "idea.md"; `Int 0 ]);
+    run (Some [ `String "idea.md"; `Int (-1) ]);
+    (* A path where the days belong is not this command's shape. *)
+    run (Some [ `String "idea.md"; `String "journal/2026-07-27.md" ]));
+  [%expect
+    {|
+    journal/2026-07-27.md create=create report_unfocused=true
+    journal/2026-07-26.md create=none report_unfocused=true
+    no intent
+    |}]
+;;
+
+(* Anything that is not a deferred daily-note action comes back as it went. *)
+let%expect_test "resolving any other action changes nothing" =
+  with_tmp_vault ~files (fun vault_root ->
+    let s = start_server_with_clock ~clock:(ref today) ~vault_root in
+    let action =
+      CodeAction.create ~title:"Something else" ~data:(`Assoc [ "x", `Int 1 ]) ()
+    in
+    print_s [%sexp (Poly.equal (Server.resolve_code_action s action) action : bool)]);
+  [%expect {| true |}]
+;;

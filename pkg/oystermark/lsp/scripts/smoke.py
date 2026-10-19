@@ -33,6 +33,7 @@ from typing import IO
 
 DEFAULT_BINARY = "_build/default/pkg/oystermark/lsp/main.exe"
 DAILY_NOTE_COMMAND = "oystermark.dailyNote.open"
+DAILY_NOTE_DAY_COMMAND = "oystermark.dailyNote.openDay"
 
 NOTE = "note.md"
 NOTE_TEXT = "# Hello\n\nsome prose.\n"
@@ -153,9 +154,7 @@ def run(binary, show_document=True):
         print("\ncapabilities")
         check("codeActionProvider", caps.get("codeActionProvider") is not None)
         check("codeLensProvider", caps.get("codeLensProvider") is not None)
-        triggers = (caps.get("completionProvider") or {}).get(
-            "triggerCharacters", []
-        )
+        triggers = (caps.get("completionProvider") or {}).get("triggerCharacters", [])
         check(
             "completionProvider triggers on the Markdown destination",
             "(" in triggers,
@@ -344,6 +343,125 @@ def run(binary, show_document=True):
             any(lens.get("command", {}).get("command") for lens in lenses),
             f"got {len(lenses)} lens(es)",
         )
+        # A calendar lens names its note by days from today, so one left on
+        # screen past midnight acts on the new day.  The bare vault has no
+        # daily note, so running it creates today's.  See
+        # `docs/feature-daily-notes.mld`, section midnight.
+        lens_command = next(
+            (lens["command"] for lens in lenses if lens.get("command")), None
+        )
+        if lens_command is not None:
+            check(
+                "a calendar lens carries the openDay command",
+                lens_command["command"] == DAILY_NOTE_DAY_COMMAND,
+                f"got {lens_command['command']}",
+            )
+            before = len(s.requests)
+            result = s.request(
+                "workspace/executeCommand",
+                {
+                    "command": lens_command["command"],
+                    "arguments": lens_command["arguments"],
+                },
+            )
+            sent = s.requests[before:]
+            check("openDay reaches the handler", result is not None, f"got {result}")
+            check("openDay creates today's missing note", "workspace/applyEdit" in sent)
+    finally:
+        s.close()
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def run_resolving(binary):
+    """A client that fills in `edit` and `command` through `codeAction/resolve`.
+
+    The daily-note actions that depend on today then arrive without either, so
+    that they act on the day they are picked.  linol has no dedicated hook for
+    `codeAction/resolve`, so it is dispatched from `on_request_unhandled` —
+    exactly the kind of seam the suite cannot see.  See
+    `docs/feature-daily-notes.mld`, section midnight."""
+    root = tempfile.mkdtemp(prefix="oysterlsp-smoke-resolve-")
+    with open(os.path.join(root, NOTE), "w") as f:
+        f.write(NOTE_TEXT)
+
+    s = Session(binary, root)
+    try:
+        resolve = {"properties": ["edit", "command"]}
+        caps = s.request(
+            "initialize",
+            {
+                "processId": None,
+                "rootUri": "file://" + root,
+                "capabilities": {
+                    "textDocument": {"codeAction": {"resolveSupport": resolve}}
+                },
+            },
+        )["capabilities"]
+        s.notify("initialized", {})
+
+        print("\ncapabilities")
+        provider = caps.get("codeActionProvider") or {}
+        check(
+            "advertises resolveProvider",
+            isinstance(provider, dict) and provider.get("resolveProvider") is True,
+            f"got {provider}",
+        )
+        commands = (caps.get("executeCommandProvider") or {}).get("commands", [])
+        check(
+            "executeCommandProvider lists the openDay command",
+            DAILY_NOTE_DAY_COMMAND in commands,
+            f"got {commands}",
+        )
+
+        s.notify(
+            "textDocument/didOpen",
+            {
+                "textDocument": {
+                    "uri": s.uri(NOTE),
+                    "languageId": "markdown",
+                    "version": 1,
+                    "text": NOTE_TEXT,
+                }
+            },
+        )
+        print("\ntextDocument/codeAction")
+        actions = s.request(
+            "textDocument/codeAction",
+            {
+                "textDocument": {"uri": s.uri(NOTE)},
+                "range": {
+                    "start": {"line": 2, "character": 0},
+                    "end": {"line": 2, "character": 0},
+                },
+                "context": {"diagnostics": []},
+            },
+        )
+        today = next((a for a in actions if "today's daily note" in a["title"]), None)
+        if today is None:
+            check("today's daily-note action offered", False)
+            return
+        check(
+            "today's action is deferred",
+            "data" in today and "edit" not in today and "command" not in today,
+            f"got keys {sorted(today)}",
+        )
+
+        print("\ncodeAction/resolve")
+        resolved = s.request("codeAction/resolve", today)
+        changes = (resolved.get("edit") or {}).get("documentChanges", [])
+        kinds = [c.get("kind", "textEdit") for c in changes]
+        check(
+            "resolve fills in the create edit",
+            kinds == ["create", "textEdit"],
+            f"got {kinds}",
+            hint="an unchanged action means the request never reached the "
+            "server's resolve",
+        )
+        check(
+            "resolve fills in the open command",
+            (resolved.get("command") or {}).get("command") == DAILY_NOTE_COMMAND,
+            f"got {resolved.get('command')}",
+        )
     finally:
         s.close()
         shutil.rmtree(root, ignore_errors=True)
@@ -507,8 +625,11 @@ if __name__ == "__main__":
     # command cannot focus, and must say so rather than finish in silence.
     print("\n### client that does not support window/showDocument")
     run(binary, show_document=False)
+    # A client that resolves code actions gets the date-dependent ones deferred.
+    print("\n### client that supports codeAction/resolve")
+    run_resolving(binary)
     # The vault that asked not to be served: one message, and nothing else.
-    print("\n### vault with \"disable\": true")
+    print('\n### vault with "disable": true')
     run_disabled(binary)
     print("\n### folder moved in the editor")
     run_file_operations(binary)

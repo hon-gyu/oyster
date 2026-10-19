@@ -66,6 +66,12 @@ val rel_path_of_uri : t -> DocumentUri.t -> string
 (** The command name advertised in [executeCommandProvider]. *)
 val daily_note_command : string
 
+(** Also advertised: open the note a number of days from today, dated when it
+    runs.  Arguments are a vault-relative path, which only routes the request
+    to a project, and the number of days.  A calendar line's lens carries it.
+    See {!page-"feature-daily-notes".midnight}. *)
+val daily_note_day_command : string
+
 (** What running {!daily_note_command} decided: the note to focus, the edit that
     creates it first when it does not exist, and whether a client that cannot
     focus should be told where the note is — [false] when the calling action
@@ -196,10 +202,16 @@ val document_symbol : t -> rel_path:string -> DocumentSymbol.t list option
     The requested range is resolved against disk content — unsound if
     [rel_path] has unsaved edits — except for the table-of-contents actions,
     which read the buffer.  See {!page-"feature-document-sync".mixed_frame}
-    and {!page-"feature-toc".frame}. *)
+    and {!page-"feature-toc".frame}.
+
+    With [defer] — for a client that resolves [edit] and [command] through
+    [codeAction/resolve] — the daily-note actions that depend on today come
+    without them, for {!resolve_code_action} to compute when one is picked.
+    See {!page-"feature-daily-notes".midnight}. *)
 val code_action
   :  t
   -> ?only:CodeActionKind.t list
+  -> ?defer:bool
   -> rel_path:string
   -> start_line:int
   -> start_character:int
@@ -207,6 +219,11 @@ val code_action
   -> end_character:int
   -> unit
   -> CodeAction.t list
+
+(** Answer [codeAction/resolve]: fill in a deferred daily-note action with the
+    edit and command for the day it is picked.  Any other action is returned
+    unchanged. *)
+val resolve_code_action : t -> CodeAction.t -> CodeAction.t
 
 (** Spec: {!page-"feature-completion"} and
     {!page-"feature-completion-markdown-links"}.  Items carry a [textEdit]

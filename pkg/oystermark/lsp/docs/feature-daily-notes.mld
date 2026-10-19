@@ -217,6 +217,42 @@ it, the message stands — and a lens has no edit to carry in the first place, a
 
 The server therefore advertises [executeCommandProvider] for that command.
 
+{2:midnight Today is the day the action runs}
+
+"Today" is read from the clock when an action is {e carried out}, not when it
+was offered. A client may hold on to what it was offered: a code lens stays on
+its line until the document changes, and a code-action menu may be shown from
+a list fetched before the cursor last moved. If a server running past midnight
+put the resolved path into what it offered, [Create today's daily note] picked
+the next morning would open yesterday's note — which exists, so nothing would
+be created.
+
+So nothing the server offers names a calendar note by its path:
+
+{ul
+  {- {b Code actions} whose target depends on today — the three calendar
+     actions, {!link}, and a calendar line of a
+     {{!page-"feature-command-block"}command block} — are sent without their
+     [edit] and [command] when the client supports [codeAction/resolve] for
+     both properties. They carry only which action they are, and
+     [codeAction/resolve] computes the edit and command from the clock at the
+     moment the reader picks one. The server advertises [resolveProvider].}
+  {- A {b code lens} is a command and nothing else, so for a calendar line it
+     carries [oystermark.dailyNote.openDay] instead, whose arguments are a
+     vault-relative path used only to find the project, and a number of days
+     from today. Executing it computes the note's path then, creates the note
+     when it is missing, and opens it as [oystermark.dailyNote.open] does.}
+}
+
+The title of an action or lens was written when it was offered and may be a
+day old: [Open today's daily note] can turn out to create the note. What it
+{e does} is always right for the day it runs.
+
+A client without [codeAction/resolve] gets every action fully formed, as
+before, and may still act on a stale one; the lens is unaffected either way.
+[Open previous daily note] and [Open next daily note] are relative to the note
+they are offered in, not to today, and are always sent whole.
+
 {2:focus Focusing is the client's}
 
 Step 2 is the one effect the server cannot perform itself, and it is optional
@@ -273,6 +309,10 @@ reason the action exists.
      failure to focus; an action for a note that exists carries no edit and
      does ask. The command's own third argument is exercised both ways, and a
      fourth is refused.}
+  {- Midnight: with the clock advanced a day between offering and acting, a
+     resolved calendar action, a resolved link action and an [openDay] lens
+     command all target the new day, and a fully formed action is still what a
+     client without [codeAction/resolve] gets. See {!midnight}.}
 }
 
 Property-based testing fits the round-trip obligation and is preferred there.

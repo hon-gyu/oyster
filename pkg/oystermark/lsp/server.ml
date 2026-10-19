@@ -467,6 +467,11 @@ let document_symbol_local (t : t) ~(rel_path : string) : DocumentSymbol.t list o
     sends back as [workspace/executeCommand]. *)
 let daily_note_command = "oystermark.dailyNote.open"
 
+(** The command a calendar line's lens carries: the note a number of days from
+    today, dated when it runs rather than when the lens was made.  See
+    {!page-"feature-daily-notes".midnight}. *)
+let daily_note_day_command = "oystermark.dailyNote.openDay"
+
 (** What {!execute_command} decided should happen.  Returning an intent rather
     than performing it keeps the protocol effects — [workspace/applyEdit] and
     [window/showDocument] — in the adapter, and this decision testable. *)
@@ -538,27 +543,104 @@ let create_note_edit (uri : DocumentUri.t) : WorkspaceEdit.t =
     ()
 ;;
 
-(** One daily-note code action: a title that says whether the note will be
-    created, the edit that creates it when it is missing, and the command that
-    opens it.
+(** What a code action does to reach the daily note at [path]: the edit that
+    creates it when it is missing, and the command that opens it.
 
-    The command is asked to open only ([create = false]): the edit above has
-    already created the note by the time it runs, and a second [CreateFile]
-    would race the buffer the client just opened — unsaved, so the file may not
-    be on disk yet. *)
-let daily_note_action (t : t) ~(title : string) ~(path : string) : CodeAction.t =
+    The command is asked to open only ([create = false]): the edit has already
+    created the note by the time it runs, and a second [CreateFile] would race
+    the buffer the client just opened — unsaved, so the file may not be on disk
+    yet. *)
+let daily_note_effects (t : t) ~(title : string) ~(path : string)
+  : WorkspaceEdit.t option * Command.t
+  =
   let exists = file_exists t path in
-  CodeAction.create
-    ~title:(sprintf "%s %s" (if exists then "Open" else "Create") title)
-    ~kind:CodeActionKind.Refactor
-    ?edit:(if exists then None else Some (create_note_edit (uri_of_rel_path t path)))
-    ~command:
-      (Command.create
-         ~title
-         ~command:daily_note_command
-         ~arguments:[ `String (command_path t path); `Bool false; `Bool (not exists) ]
-         ())
-    ()
+  ( (if exists then None else Some (create_note_edit (uri_of_rel_path t path)))
+  , Command.create
+      ~title
+      ~command:daily_note_command
+      ~arguments:[ `String (command_path t path); `Bool false; `Bool (not exists) ]
+      () )
+;;
+
+(** A daily-note action whose target depends on today, sent without its edit
+    and command for [codeAction/resolve] to fill in when it is picked.  [data]
+    says which action it is; [host] is the workspace-relative path of the note
+    it was offered in, which routes the resolve to its project.  See
+    {!page-"feature-daily-notes".midnight}. *)
+type deferred =
+  | Calendar of int (** The note this many days from today. *)
+  | Link of
+      { line : int
+      ; character : int
+      } (** {!daily_note_link_actions} at this cursor. *)
+
+let json_of_deferred ~(host : string) : deferred -> Yojson.Safe.t = function
+  | Calendar days ->
+    `Assoc [ "oystermark", `String "dailyNote"; "host", `String host; "days", `Int days ]
+  | Link { line; character } ->
+    `Assoc
+      [ "oystermark", `String "dailyNoteLink"
+      ; "host", `String host
+      ; "line", `Int line
+      ; "character", `Int character
+      ]
+;;
+
+let deferred_of_json : Yojson.Safe.t -> (string * deferred) option = function
+  | `Assoc fields ->
+    let field name = List.Assoc.find fields name ~equal:String.equal in
+    (match field "oystermark", field "host" with
+     | Some (`String "dailyNote"), Some (`String host) ->
+       (match field "days" with
+        | Some (`Int days) -> Some (host, Calendar days)
+        | _ -> None)
+     | Some (`String "dailyNoteLink"), Some (`String host) ->
+       (match field "line", field "character" with
+        | Some (`Int line), Some (`Int character) -> Some (host, Link { line; character })
+        | _ -> None)
+     | _ -> None)
+  | _ -> None
+;;
+
+(** The action for the calendar note at [path], [days] from today: whole, or
+    deferred to [codeAction/resolve] when [defer]. *)
+let calendar_action
+      (t : t)
+      ~(defer : bool)
+      ~(rel_path : string)
+      ~(title : string)
+      ?(isPreferred : bool option)
+      ~(days : int)
+      ~(path : string)
+      ()
+  : CodeAction.t
+  =
+  if defer
+  then
+    CodeAction.create
+      ~title
+      ~kind:CodeActionKind.Refactor
+      ?isPreferred
+      ~data:(json_of_deferred ~host:(command_path t rel_path) (Calendar days))
+      ()
+  else (
+    let edit, command = daily_note_effects t ~title ~path in
+    CodeAction.create ~title ~kind:CodeActionKind.Refactor ?isPreferred ?edit ~command ())
+;;
+
+(** One calendar daily-note code action, titled by whether the note will be
+    created. *)
+let daily_note_action
+      (t : t)
+      ~(defer : bool)
+      ~(rel_path : string)
+      ~(title : string)
+      ~(days : int)
+      ~(path : string)
+  : CodeAction.t
+  =
+  let verb = if file_exists t path then "Open" else "Create" in
+  calendar_action t ~defer ~rel_path ~title:(sprintf "%s %s" verb title) ~days ~path ()
 ;;
 
 (** The daily-note actions available at [rel_path].
@@ -566,19 +648,25 @@ let daily_note_action (t : t) ~(title : string) ~(path : string) : CodeAction.t 
     The calendar family is always offered and creates on demand; the existing
     family is offered only from a file that is itself a daily note, and only
     when there is somewhere to go.  See {!page-"feature-daily-notes"}. *)
-let daily_note_actions (t : t) ~(rel_path : string) : CodeAction.t list =
+let daily_note_actions (t : t) ~(defer : bool) ~(rel_path : string) : CodeAction.t list =
   match daily_table t with
   | Error _ -> []
   | Ok table ->
     let settings = table.Daily_notes.Table.settings in
     let today = t.now () in
     let calendar =
-      [ "today's daily note", today
-      ; "yesterday's daily note", Date.add_days today (-1)
-      ; "tomorrow's daily note", Date.add_days today 1
+      [ "today's daily note", 0
+      ; "yesterday's daily note", -1
+      ; "tomorrow's daily note", 1
       ]
-      |> List.map ~f:(fun (title, date) ->
-        daily_note_action t ~title ~path:(Daily_notes.path_of_date settings date))
+      |> List.map ~f:(fun (title, days) ->
+        daily_note_action
+          t
+          ~defer
+          ~rel_path
+          ~title
+          ~days
+          ~path:(Daily_notes.path_of_date settings (Date.add_days today days)))
     in
     let existing =
       match Daily_notes.Table.date_of_path table rel_path with
@@ -621,15 +709,29 @@ let daily_note_actions (t : t) ~(rel_path : string) : CodeAction.t list =
     subsequence, so [ [[2026-07-26]] ] finds [2026/07/2026-07-26.md] under a
     nested format without the writer spelling out the folders.  See
     {!page-"feature-daily-notes".link}. *)
-let daily_note_link_actions (t : t) ~(rel_path : string) ~(line : int) ~(character : int)
+let daily_note_link_actions
+      (t : t)
+      ~(defer : bool)
+      ~(rel_path : string)
+      ~(line : int)
+      ~(character : int)
   : CodeAction.t list
   =
+  let title = "Insert link to today's daily note" in
   match daily_table t with
   | Error _ -> []
   (* Unlike the rest of the family this one is offered in every menu in the
      vault, wanted there or not, so it is the one worth being able to turn off
      without disabling daily notes.  See {!page-"feature-daily-notes".link}. *)
   | Ok _ when not t.config.daily_notes.link_action -> []
+  | Ok _ when defer ->
+    [ CodeAction.create
+        ~title
+        ~kind:CodeActionKind.Refactor
+        ~data:
+          (json_of_deferred ~host:(command_path t rel_path) (Link { line; character }))
+        ()
+    ]
   | Ok table ->
     let path = Daily_notes.path_of_date table.Daily_notes.Table.settings (t.now ()) in
     let name = Filename.chop_extension (Filename.basename path) in
@@ -662,7 +764,7 @@ let daily_note_link_actions (t : t) ~(rel_path : string) ~(line : int) ~(charact
     in
     (* Creation first: the link should resolve the moment it is written. *)
     [ CodeAction.create
-        ~title:"Insert link to today's daily note"
+        ~title
         ~kind:CodeActionKind.Refactor
         ~edit:(WorkspaceEdit.create ~documentChanges:(create @ [ insert ]) ())
         ()
@@ -682,22 +784,27 @@ let daily_note_link_actions (t : t) ~(rel_path : string) ~(line : int) ~(charact
 type resolved_command =
   { label : string
   ; target : (string * bool) option (** [(path, create_it)]. *)
+  ; from_today : int option
+    (** For a calendar command, its note's day counted from today: what a lens
+          or a deferred action carries instead of [target]'s path, which is only
+          right until midnight.  See {!page-"feature-daily-notes".midnight}. *)
   }
 
 let resolve_command (t : t) ~(rel_path : string) (c : Command_block.command)
   : resolved_command
   =
   match daily_table t with
-  | Error _ -> { label = "daily notes disabled"; target = None }
+  | Error _ -> { label = "daily notes disabled"; target = None; from_today = None }
   | Ok table ->
     let settings = table.Daily_notes.Table.settings in
     let today = t.now () in
     (* Calendar commands always have a target: a missing note is created. *)
-    let calendar (what : string) (date : Date.t) =
-      let path = Daily_notes.path_of_date settings date in
+    let calendar (what : string) (days : int) =
+      let path = Daily_notes.path_of_date settings (Date.add_days today days) in
       let exists = file_exists t path in
       { label = sprintf "%s %s daily note" (if exists then "Open" else "Create") what
       ; target = Some (path, not exists)
+      ; from_today = Some days
       }
     in
     (* Previous/next answer relative to the {e host} note, which is why the
@@ -705,19 +812,24 @@ let resolve_command (t : t) ~(rel_path : string) (c : Command_block.command)
     let step (what : string) f =
       match Daily_notes.Table.date_of_path table rel_path with
       | None ->
-        { label = sprintf "no %s daily note: this note is not one" what; target = None }
+        { label = sprintf "no %s daily note: this note is not one" what
+        ; target = None
+        ; from_today = None
+        }
       | Some date ->
         (match f table ~exists:(fun p -> file_exists t p) date with
-         | None -> { label = sprintf "no %s daily note" what; target = None }
+         | None ->
+           { label = sprintf "no %s daily note" what; target = None; from_today = None }
          | Some (_, path) ->
            { label = sprintf "Open %s daily note (%s)" what path
            ; target = Some (path, false)
+           ; from_today = None
            })
     in
     (match c with
-     | Daily_today -> calendar "today's" today
-     | Daily_yesterday -> calendar "yesterday's" (Date.add_days today (-1))
-     | Daily_tomorrow -> calendar "tomorrow's" (Date.add_days today 1)
+     | Daily_today -> calendar "today's" 0
+     | Daily_yesterday -> calendar "yesterday's" (-1)
+     | Daily_tomorrow -> calendar "tomorrow's" 1
      | Daily_prev -> step "previous" Daily_notes.Table.previous_existing
      | Daily_next -> step "next" Daily_notes.Table.next_existing)
 ;;
@@ -736,7 +848,7 @@ let lens_of_entry
      would only compete with it. *)
   | None -> None
   | Some c ->
-    let { label; target } = resolve_command t ~rel_path c in
+    let { label; target; from_today } = resolve_command t ~rel_path c in
     let line_start = Lsp_util.line_start_byte content ~line:e.line in
     let range =
       range_of_bytes
@@ -749,11 +861,22 @@ let lens_of_entry
          ~range
          ?command:
            (Option.map target ~f:(fun (path, create) ->
-              Command.create
-                ~title:label
-                ~command:daily_note_command
-                ~arguments:[ `String (command_path t path); `Bool create ]
-                ()))
+              (* A lens stays on screen until the note changes, so a calendar
+                 one names its note by day, not by a path dated when it was
+                 made.  See {!page-"feature-daily-notes".midnight}. *)
+              match from_today with
+              | Some days ->
+                Command.create
+                  ~title:label
+                  ~command:daily_note_day_command
+                  ~arguments:[ `String (command_path t rel_path); `Int days ]
+                  ()
+              | None ->
+                Command.create
+                  ~title:label
+                  ~command:daily_note_command
+                  ~arguments:[ `String (command_path t path); `Bool create ]
+                  ()))
          ~data:(`String label)
          ())
 ;;
@@ -841,7 +964,9 @@ let code_lens_local ?(include_references = true) (t : t) ~(rel_path : string)
 
 (** The single action for the command-block line under the cursor, if that is
     where the cursor is.  The keyboard route to what the lens offers. *)
-let command_block_actions (t : t) ~(rel_path : string) ~(line : int) : CodeAction.t list =
+let command_block_actions (t : t) ~(defer : bool) ~(rel_path : string) ~(line : int)
+  : CodeAction.t list
+  =
   let content = buffer_content t rel_path in
   match Command_block.entry_at content ~line with
   | None -> []
@@ -849,7 +974,10 @@ let command_block_actions (t : t) ~(rel_path : string) ~(line : int) : CodeActio
   | Some { command = Some c; _ } ->
     (match resolve_command t ~rel_path c with
      | { target = None; _ } -> []
-     | { label; target = Some (path, create) } ->
+     | { label; target = Some (path, _); from_today = Some days } ->
+       [ calendar_action t ~defer ~rel_path ~title:label ~isPreferred:true ~days ~path ()
+       ]
+     | { label; target = Some (path, create); from_today = None } ->
        (* Same bargain as {!daily_note_action}: an action can carry the edit,
           so creation reaches a document even where the command cannot focus
           one.  The lens beside it has only the command — a [CodeLens] carries
@@ -993,10 +1121,10 @@ let definition_local (t : t) ~(rel_path : string) ~(line : int) ~(character : in
 
 (** Handle [workspace/executeCommand].  [None] for an unknown command or
     unusable arguments — an editor is free to send either. *)
-let execute_command_local
-      (t : t)
-      ~(command : string)
-      ~(arguments : Yojson.Safe.t list option)
+let rec execute_command_local
+          (t : t)
+          ~(command : string)
+          ~(arguments : Yojson.Safe.t list option)
   : open_note option
   =
   match command, arguments with
@@ -1004,6 +1132,21 @@ let execute_command_local
      and nothing offered the command in the first place, disabled or not yet
      initialized. *)
   | _ when Option.is_none t.vault -> None
+  (* The path only routed the request to this project; the note is the one
+     [days] from today as of now.  See {!page-"feature-daily-notes".midnight}. *)
+  | cmd, Some [ `String _; `Int days ] when String.equal cmd daily_note_day_command ->
+    (match daily_table t with
+     | Error _ -> None
+     | Ok table ->
+       let path =
+         Daily_notes.path_of_date
+           table.Daily_notes.Table.settings
+           (Date.add_days (t.now ()) days)
+       in
+       execute_command_local
+         t
+         ~command:daily_note_command
+         ~arguments:(Some [ `String path; `Bool true ]))
   | cmd, Some (`String path :: `Bool create :: rest)
     when String.equal cmd daily_note_command
          &&
@@ -1127,6 +1270,7 @@ let toc_update_actions
 let code_action_local
       (t : t)
       ?(only : CodeActionKind.t list option)
+      ~(defer : bool)
       ~(rel_path : string)
       ~(start_line : int)
       ~(start_character : int)
@@ -1152,11 +1296,12 @@ let code_action_local
         (* On a command-block line the panel's own action is the answer, and the
          whole daily-note menu would bury it.  See
          {!page-"feature-command-block".surfaces}. *)
-        match command_block_actions t ~rel_path ~line:start_line with
+        match command_block_actions t ~defer ~rel_path ~line:start_line with
         | [] ->
-          daily_note_actions t ~rel_path
+          daily_note_actions t ~defer ~rel_path
           @ daily_note_link_actions
               t
+              ~defer
               ~rel_path
               ~line:start_line
               ~character:start_character
@@ -1723,18 +1868,58 @@ let execute_command t ~command ~arguments =
   | _ -> execute_command_local t ~command ~arguments
 ;;
 
-let code_action t ?only ~rel_path ~start_line ~start_character ~end_line ~end_character ()
+let code_action
+      t
+      ?only
+      ?(defer = false)
+      ~rel_path
+      ~start_line
+      ~start_character
+      ~end_line
+      ~end_character
+      ()
   =
   let project, rel_path = route t rel_path in
   code_action_local
     project
     ?only
+    ~defer
     ~rel_path
     ~start_line
     ~start_character
     ~end_line
     ~end_character
     ()
+;;
+
+(** Fill in a deferred daily-note action with what it does today. *)
+let resolve_code_action_local (t : t) ~(rel_path : string) (deferred : deferred) action
+  : CodeAction.t
+  =
+  match deferred with
+  | Calendar days ->
+    (match daily_table t with
+     | Error _ -> action
+     | Ok table ->
+       let path =
+         Daily_notes.path_of_date
+           table.Daily_notes.Table.settings
+           (Date.add_days (t.now ()) days)
+       in
+       let edit, command = daily_note_effects t ~title:action.CodeAction.title ~path in
+       { action with edit; command = Some command; data = None })
+  | Link { line; character } ->
+    (match daily_note_link_actions t ~defer:false ~rel_path ~line ~character with
+     | [ resolved ] -> { action with edit = resolved.edit; data = None }
+     | _ -> action)
+;;
+
+let resolve_code_action t (action : CodeAction.t) : CodeAction.t =
+  match Option.bind action.data ~f:deferred_of_json with
+  | None -> action
+  | Some (host, deferred) ->
+    let project, rel_path = route t host in
+    resolve_code_action_local project ~rel_path deferred action
 ;;
 
 let completion t ~rel_path ~line ~character =

@@ -70,7 +70,10 @@ Each recognized line gets all of:
 {ul
   {- a {b code lens}, carrying the same command a code action would.  Its title
      is the action's — [Create yesterday's daily note] — so the line says what
-     it is and the lens says what will happen;}
+     it is and the lens says what will happen.  A calendar line's lens names
+     its note by days from today rather than by path, so a lens left on screen
+     past midnight acts on the new day; see
+     {!page-"feature-daily-notes".midnight};}
   {- a {b code action}, when the cursor is on that line, so the panel is usable
      from the keyboard and in clients that do not render lenses.  On such a
      line it is the {e only} action offered: the ordinary daily-note menu would

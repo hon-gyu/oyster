@@ -74,8 +74,8 @@ let%expect_test "a panel inside a daily note" =
   show_lenses "journal/2026-07-26.md";
   [%expect
     {|
-    3: Open today's daily note -> "journal/2026-07-26.md" false
-    4: Create yesterday's daily note -> "journal/2026-07-25.md" true
+    3: Open today's daily note -> "journal/2026-07-26.md" 0
+    4: Create yesterday's daily note -> "journal/2026-07-26.md" -1
     5: Open previous daily note (journal/2026-07-10.md) -> "journal/2026-07-10.md" false
     6: (nothing to run)
     |}]
@@ -88,8 +88,8 @@ let%expect_test "the same panel in an ordinary note" =
   show_lenses "idea.md";
   [%expect
     {|
-    3: Open today's daily note -> "journal/2026-07-26.md" false
-    4: Create yesterday's daily note -> "journal/2026-07-25.md" true
+    3: Open today's daily note -> "idea.md" 0
+    4: Create yesterday's daily note -> "idea.md" -1
     5: (nothing to run)
     6: (nothing to run)
     |}]
@@ -109,8 +109,8 @@ let%expect_test "previous and next follow the host note" =
   show_lenses ~files "journal/2026-07-10.md";
   [%expect
     {|
-    3: Open today's daily note -> "journal/2026-07-26.md" false
-    4: Create yesterday's daily note -> "journal/2026-07-25.md" true
+    3: Open today's daily note -> "journal/2026-07-10.md" 0
+    4: Create yesterday's daily note -> "journal/2026-07-10.md" -1
     5: Open previous daily note (journal/2026-07-03.md) -> "journal/2026-07-03.md" false
     6: Open next daily note (journal/2026-07-26.md) -> "journal/2026-07-26.md" false
     |}]
