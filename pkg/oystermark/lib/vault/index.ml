@@ -344,17 +344,23 @@ module Resolve_ = struct
 
   let resolve_path index ~source target =
     let target = normalize_relative_target ~source target in
-    let normalized = if String.mem target '.' then target else target ^ ".md" in
     let paths = Map.keys index.notes_by_path @ Map.keys index.assets_by_path in
-    match List.find paths ~f:(String.equal normalized) with
-    | Some p -> Some p
-    | None ->
-      let needle = String.split normalized ~on:'/' in
-      let source_dir = Filename.dirname source in
-      List.filter paths ~f:(fun p ->
-        is_path_subsequence ~haystack:(String.split p ~on:'/') ~needle)
-      |> List.min_elt ~compare:(fun a b ->
-        [%compare: int * int] (match_rank ~source_dir a) (match_rank ~source_dir b))
+    let source_dir = Filename.dirname source in
+    let find normalized =
+      match List.find paths ~f:(String.equal normalized) with
+      | Some p -> Some p
+      | None ->
+        let needle = String.split normalized ~on:'/' in
+        List.filter paths ~f:(fun p ->
+          is_path_subsequence ~haystack:(String.split p ~on:'/') ~needle)
+        |> List.min_elt ~compare:(fun a b ->
+          [%compare: int * int] (match_rank ~source_dir a) (match_rank ~source_dir b))
+    in
+    (* A dot may be an extension ([image.png]) or part of a note's name
+       ([v1.2 notes]): the target as written is tried first, then as a note. *)
+    if String.mem target '.'
+    then Option.first_some (find target) (find (target ^ ".md"))
+    else find (target ^ ".md")
   ;;
 end
 

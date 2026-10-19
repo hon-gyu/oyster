@@ -35,6 +35,8 @@ let test_index : Index.t =
       ; "Figure1.jpg.md.md", Parse.of_string ~locs:true ""
       ; "Figure1.md", Parse.of_string ~locs:true ""
       ; "Something.md", Parse.of_string ~locs:true ""
+      ; "slop.literate-programming.md", Parse.of_string ~locs:true ""
+      ; "dir/v1.2 notes.md", Parse.of_string ~locs:true ""
       ; "indir_same_name.md", Parse.of_string ~locs:true ""
       ; "dir/indir_same_name.md", Parse.of_string ~locs:true ""
       ; "dir/indir2.md", Parse.of_string ~locs:true ""
@@ -151,22 +153,28 @@ let%expect_test "resolve_note_vs_asset_priority" =
     ; "Something -> note", make_link_ref (t "Something") None
     ; "Note 1 -> note", make_link_ref (t "Note 1") None
     ; "Figure1 -> note", make_link_ref (t "Figure1") None
+    ; "dotted name -> note", make_link_ref (t "slop.literate-programming") None
+    ; "dotted name with ext", make_link_ref (t "slop.literate-programming.md") None
+    ; "dotted name subseq", make_link_ref (t "v1.2 notes") None
     ]
   in
   resolve_and_print cases;
   [%expect
     {|
-    ┌────────────────────────┬──────────────────────────────────────────────┬──────────────────────────┐
-    │ name                   │ input                                        │ result                   │
-    ├────────────────────────┼──────────────────────────────────────────────┼──────────────────────────┤
-    │ Figure1.jpg -> asset   │ ((target (Figure1.jpg)) (fragment ()))       │ (Asset Figure1.jpg)      │
-    │ Figure1.jpg.md -> note │ ((target (Figure1.jpg.md)) (fragment ()))    │ (Note Figure1.jpg.md)    │
-    │ Figure1.jpg.md.md      │ ((target (Figure1.jpg.md.md)) (fragment ())) │ (Note Figure1.jpg.md.md) │
-    │ Figure1^2.jpg -> asset │ ((target (Figure1^2.jpg)) (fragment ()))     │ (Asset Figure1^2.jpg)    │
-    │ Something -> note      │ ((target (Something)) (fragment ()))         │ (Note Something.md)      │
-    │ Note 1 -> note         │ ((target ("Note 1")) (fragment ()))          │ (Note "Note 1.md")       │
-    │ Figure1 -> note        │ ((target (Figure1)) (fragment ()))           │ (Note Figure1.md)        │
-    └────────────────────────┴──────────────────────────────────────────────┴──────────────────────────┘
+    ┌────────────────────────┬─────────────────────────────────────────────────────────┬─────────────────────────────────────┐
+    │ name                   │ input                                                   │ result                              │
+    ├────────────────────────┼─────────────────────────────────────────────────────────┼─────────────────────────────────────┤
+    │ Figure1.jpg -> asset   │ ((target (Figure1.jpg)) (fragment ()))                  │ (Asset Figure1.jpg)                 │
+    │ Figure1.jpg.md -> note │ ((target (Figure1.jpg.md)) (fragment ()))               │ (Note Figure1.jpg.md)               │
+    │ Figure1.jpg.md.md      │ ((target (Figure1.jpg.md.md)) (fragment ()))            │ (Note Figure1.jpg.md.md)            │
+    │ Figure1^2.jpg -> asset │ ((target (Figure1^2.jpg)) (fragment ()))                │ (Asset Figure1^2.jpg)               │
+    │ Something -> note      │ ((target (Something)) (fragment ()))                    │ (Note Something.md)                 │
+    │ Note 1 -> note         │ ((target ("Note 1")) (fragment ()))                     │ (Note "Note 1.md")                  │
+    │ Figure1 -> note        │ ((target (Figure1)) (fragment ()))                      │ (Note Figure1.md)                   │
+    │ dotted name -> note    │ ((target (slop.literate-programming)) (fragment ()))    │ (Note slop.literate-programming.md) │
+    │ dotted name with ext   │ ((target (slop.literate-programming.md)) (fragment ())) │ (Note slop.literate-programming.md) │
+    │ dotted name subseq     │ ((target ("v1.2 notes")) (fragment ()))                 │ (Note "dir/v1.2 notes.md")          │
+    └────────────────────────┴─────────────────────────────────────────────────────────┴─────────────────────────────────────┘
     |}]
 ;;
 
