@@ -8,6 +8,6 @@ build:
     cd {{ root }} && dune build pkg/oystermark/lsp/main.exe
 
 install: build
-    cd {{ root }} && dune install oystermark --prefix=~/.local --sections=bin
+    cd {{ root }} && dune install oystermark --sections=bin
     @echo "installed: $(command -v oystermark-lsp)"
     @ls -l "$(command -v oystermark-lsp)"
